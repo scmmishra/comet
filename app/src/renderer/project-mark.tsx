@@ -19,7 +19,8 @@ export function ProjectMark(props: { project: string; class?: string }) {
       src={icon() ? core.iconUrl(props.project, icon()!) : undefined}
       // A project's icon is often a transparent logo, which @opencode/ui would set on a coloured, outlined tile.
       // An icon shows on its own instead. The avatar's CSS sits outside the layers, so the overrides need !.
-      class={`${props.class ?? ""} ${icon() ? ICON_ONLY : ""}`}
+      // ProjectAvatar keys a classList by this string, and Solid throws on an empty class name, so blanks are left out.
+      class={[props.class, icon() && ICON_ONLY].filter(Boolean).join(" ") || undefined}
     />
   )
 }
