@@ -1,0 +1,21 @@
+{
+  "name": "desk",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "protocol",
+    "core",
+    "app"
+  ],
+  "scripts": {
+    "dev": "bun run --cwd app dev",
+    "typecheck": "tsc -p core && tsc -p protocol && tsc -p app"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "@types/bun": "1.4.4"
+  },
+  "trustedDependencies": [
+    "electron"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "@desk/protocol",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
