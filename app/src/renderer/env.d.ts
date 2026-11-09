@@ -7,6 +7,9 @@ interface Window {
     openProject(path: string): Promise<void>
     /** Asks for a folder, then switches the window to it. */
     chooseProject(): Promise<void>
+    isFullScreen(): Promise<boolean>
+    /** Calls back when the window enters or leaves full screen. Returns a function that stops listening. */
+    onFullScreen(listener: (fullScreen: boolean) => void): () => void
     /** Commands from the app menu, such as `tab.new`. Returns a function that stops listening. */
     onCommand(listener: (command: string) => void): () => void
   }

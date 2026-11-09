@@ -44,6 +44,10 @@ function createWindow() {
     },
   })
   window.once("ready-to-show", () => window?.show())
+  // Full screen hides the window buttons, so the tab bar drops the room it keeps for them.
+  const sendFullScreen = () => window?.webContents.send("desk:full-screen", window.isFullScreen())
+  window.on("enter-full-screen", sendFullScreen)
+  window.on("leave-full-screen", sendFullScreen)
   // Links in the thread open in the browser, never inside the app window.
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("https://") || url.startsWith("http://")) void shell.openExternal(url)
@@ -71,6 +75,7 @@ app.whenReady().then(async () => {
   core = await CoreProcess.start(dir)
   rememberProject(dir)
   ipcMain.handle("desk:core", () => core?.info)
+  ipcMain.handle("desk:is-full-screen", () => window?.isFullScreen() ?? false)
   ipcMain.handle("desk:projects", () => recentProjects().map((path) => ({ path, name: basename(path) })))
   // Only a folder from the recent list opens this way. Any other folder goes through the picker.
   ipcMain.handle("desk:open-project", (_event, path: string) => (recentProjects().includes(path) ? openFolder(path) : undefined))

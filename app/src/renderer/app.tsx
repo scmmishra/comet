@@ -168,6 +168,12 @@ function PanelToggle() {
 }
 
 function TabBar() {
+  // The left padding keeps the tabs clear of the window buttons, which full screen hides.
+  const [fullScreen, setFullScreen] = createSignal(false)
+  onMount(() => {
+    void window.desk.isFullScreen().then(setFullScreen)
+    onCleanup(window.desk.onFullScreen(setFullScreen))
+  })
   // The tab opened from the + button. Only it animates in: tabs from ⌘T or the menu appear at once.
   const [entering, setEntering] = createSignal<string>()
   let strip!: HTMLDivElement
@@ -175,7 +181,7 @@ function TabBar() {
   createEffect(() => strip.querySelector(`[data-tab="${state.active}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" }))
 
   return (
-    <nav class="desk-titlebar flex h-11 shrink-0 items-center gap-1 pl-[84px] pr-2.5">
+    <nav class="desk-titlebar flex h-11 shrink-0 items-center gap-1 pr-2.5" classList={{ "pl-[84px]": !fullScreen(), "pl-2.5": fullScreen() }}>
       <div ref={strip} class="desk-no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1">
         <For each={state.tabs}>
           {(tab) => (
