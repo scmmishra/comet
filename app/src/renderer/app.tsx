@@ -4,7 +4,8 @@ import { Icon } from "./icons"
 import { ContextRing, UsageButton } from "./meters"
 import { ReviewView } from "./review"
 import { SpaceCard, SpaceChip } from "./space"
-import { activeTab, closeTab, newTab, refreshSpace, refreshUsage, selectTab, selectTabAt, state, togglePanel, type Tab } from "./store"
+import { activeTab, closePanelTab, closeTab, newTab, newTerminal, refreshSpace, refreshUsage, selectPanelTab, selectTab, selectTabAt, state, togglePanel, type Tab } from "./store"
+import { TerminalView } from "./terminal"
 import { Thread } from "./thread"
 
 const USAGE_REFRESH_MS = 5 * 60_000
@@ -15,6 +16,7 @@ export function App() {
       if (command === "tab.new") newTab()
       else if (command === "tab.close" && state.active) closeTab(state.active)
       else if (command === "panel.toggle") togglePanel()
+      else if (command === "terminal.new") newTerminal()
       else if (command.startsWith("tab.select:")) selectTabAt(Number(command.slice("tab.select:".length)))
     })
     // Coming back to the window is when files and usage most likely changed outside Desk.
@@ -73,14 +75,50 @@ export function App() {
                 </div>
               </section>
               <section class="desk-panel flex flex-col rounded-3xl border border-outline bg-panel" inert={!state.panelOpen}>
-                <div class="flex h-[46px] shrink-0 items-center gap-1 pl-2 pr-12">
-                  <span class="flex h-[30px] items-center gap-[7px] rounded-lg bg-raised px-2.5 text-fg">
-                    <Icon name="diff" />
-                    Review
-                  </span>
+                <div class="desk-no-scrollbar flex h-[46px] shrink-0 items-center gap-1 overflow-x-auto pl-2 pr-12">
+                  <For each={tab.panelTabs}>
+                    {(panelTab) => (
+                      <button
+                        class="group flex h-[30px] shrink-0 items-center gap-[7px] rounded-lg pl-2.5 text-left"
+                        classList={{ "bg-raised text-fg": panelTab.id === tab.panelActive, "text-fg-3 hover:bg-hover hover:text-fg-2": panelTab.id !== tab.panelActive, "pr-2.5": panelTab.kind === "review", "pr-1.5": panelTab.kind === "terminal" }}
+                        onClick={() => selectPanelTab(panelTab.id)}
+                      >
+                        <Icon name={panelTab.kind === "review" ? "diff" : "terminal"} />
+                        {panelTab.kind === "review" ? "Review" : panelTab.title}
+                        <Show when={panelTab.kind === "terminal"}>
+                          <span
+                            role="button"
+                            aria-label="Close terminal"
+                            class="grid size-[18px] place-items-center rounded-[5px] opacity-0 hover:bg-hover hover:opacity-100! group-hover:opacity-60"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              closePanelTab(panelTab.id)
+                            }}
+                          >
+                            <Icon name="x" />
+                          </span>
+                        </Show>
+                      </button>
+                    )}
+                  </For>
+                  <button class="grid size-[30px] shrink-0 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg" aria-label="New terminal" title="New terminal" onClick={newTerminal}>
+                    <Icon name="plus" />
+                  </button>
                 </div>
-                <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
-                  <ReviewView tab={tab} />
+                <div class="flex min-h-0 flex-1 flex-col">
+                  <Show when={tab.panelActive === "review"}>
+                    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+                      <ReviewView tab={tab} />
+                    </div>
+                  </Show>
+                  {/* Terminals stay mounted while another panel tab shows, so their screens keep their state. */}
+                  <For each={tab.panelTabs.filter((panelTab) => panelTab.kind === "terminal")}>
+                    {(panelTab) => (
+                      <div class="min-h-0 flex-1 overflow-hidden px-3 pb-3" classList={{ hidden: panelTab.id !== tab.panelActive }}>
+                        <TerminalView id={panelTab.id} />
+                      </div>
+                    )}
+                  </For>
                 </div>
               </section>
               <PanelToggle />

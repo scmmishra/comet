@@ -22,6 +22,7 @@ export function installMenu(actions: MenuActions) {
       label: "File",
       submenu: [
         { label: "New Tab", accelerator: "CmdOrCtrl+T", click: () => command("tab.new") },
+        { label: "New Terminal", accelerator: "Ctrl+`", click: () => command("terminal.new") },
         { label: "Open Folder…", accelerator: "CmdOrCtrl+O", click: actions.openFolder },
         { type: "separator" },
         { label: "Close Tab", accelerator: "CmdOrCtrl+W", click: () => command("tab.close") },

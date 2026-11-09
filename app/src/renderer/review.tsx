@@ -16,6 +16,9 @@ const DIFF_OPTIONS = {
   hunkSeparators: "line-info-basic",
   overflow: "wrap",
   disableFileHeader: true,
+  // Pierre draws in a shadow root and sets its own background there, so the override goes inside it.
+  // The diff sits on the panel itself, with no background of its own.
+  unsafeCSS: ":host { --diffs-bg: var(--color-panel); }",
 } as const
 
 /** What this tab's thread changed since its first message, file by file. */
@@ -64,7 +67,7 @@ export function ReviewView(props: { tab: Tab }) {
       </div>
       <Show when={current()} keyed>
         {(file) => (
-          <div class="mx-2 mb-2 min-h-0 flex-1 overflow-auto rounded-2xl border border-outline bg-ground">
+          <div class="min-h-0 flex-1 overflow-auto border-t border-outline">
             <Show when={file.patch} fallback={<div class="p-4 text-fg-3">Binary file. No diff to show.</div>}>
               <PatchDiff patch={file.patch} />
             </Show>
@@ -90,7 +93,6 @@ function PatchDiff(props: { patch: string }) {
         "--diffs-font-family": "var(--font-family-mono)",
         "--diffs-font-size": "12px",
         "--diffs-line-height": "20px",
-        "--diffs-bg": "var(--color-ground)",
       }}
     />
   )

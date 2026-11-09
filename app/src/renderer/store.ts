@@ -20,7 +20,14 @@ export interface Tab {
   context?: { percent: number; tokens: number; maxTokens: number }
   /** The files this tab's thread changed. Undefined until asked for. */
   review?: FileChange[]
+  /** The panel's tabs for this tab: Review first, then terminals. */
+  panelTabs: PanelTab[]
+  panelActive: string
 }
+
+export type PanelTab = { readonly kind: "review"; readonly id: "review" } | { readonly kind: "terminal"; readonly id: string; readonly title: string }
+
+const REVIEW_TAB: PanelTab = { kind: "review", id: "review" }
 
 const NEW_TAB_TITLE = "New session"
 const PANEL_KEY = "desk.panel"
@@ -40,7 +47,7 @@ export { state }
 export const activeTab = () => state.tabs.find((tab) => tab.id === state.active)
 
 export function newTab() {
-  const tab: Tab = { id: crypto.randomUUID(), title: NEW_TAB_TITLE, items: [], busy: false }
+  const tab: Tab = { id: crypto.randomUUID(), title: NEW_TAB_TITLE, items: [], busy: false, panelTabs: [REVIEW_TAB], panelActive: REVIEW_TAB.id }
   setState(produce((draft) => {
     const index = draft.tabs.findIndex((found) => found.id === draft.active)
     draft.tabs.splice(index + 1, 0, tab)
@@ -51,6 +58,9 @@ export function newTab() {
 
 export function closeTab(id: string) {
   core.send({ type: "session.close", sessionId: id })
+  for (const panelTab of state.tabs.find((tab) => tab.id === id)?.panelTabs ?? []) {
+    if (panelTab.kind === "terminal") core.send({ type: "terminal.close", id: panelTab.id })
+  }
   setState(produce((draft) => {
     const index = draft.tabs.findIndex((tab) => tab.id === id)
     if (index < 0) return
@@ -106,6 +116,35 @@ export function togglePanel() {
   refreshReview()
 }
 
+/** Opens a terminal in the active tab's panel, opening the panel if it is closed. */
+export function newTerminal() {
+  const tab = activeTab()
+  if (!tab) return
+  const id = crypto.randomUUID()
+  const count = tab.panelTabs.filter((panelTab) => panelTab.kind === "terminal").length
+  setState("tabs", (found) => found.id === tab.id, produce((draft) => {
+    draft.panelTabs.push({ kind: "terminal", id, title: count ? `Terminal ${count + 1}` : "Terminal" })
+    draft.panelActive = id
+  }))
+  if (!state.panelOpen) togglePanel()
+}
+
+export function selectPanelTab(id: string) {
+  const tab = activeTab()
+  if (tab) setState("tabs", (found) => found.id === tab.id, "panelActive", id)
+  if (id === REVIEW_TAB.id) refreshReview()
+}
+
+export function closePanelTab(id: string) {
+  const tab = activeTab()
+  if (!tab || id === REVIEW_TAB.id) return
+  core.send({ type: "terminal.close", id })
+  setState("tabs", (found) => found.id === tab.id, produce((draft) => {
+    draft.panelTabs = draft.panelTabs.filter((panelTab) => panelTab.id !== id)
+    if (draft.panelActive === id) draft.panelActive = REVIEW_TAB.id
+  }))
+}
+
 /** Asks for the active tab's changes, when the panel is open to show them. */
 export function refreshReview() {
   if (state.panelOpen && state.active) core.send({ type: "review.get", sessionId: state.active })
@@ -125,7 +164,7 @@ function saveTabs() {
 function restoreTabs(tabs: readonly TabInfo[], active: string | undefined) {
   if (tabs.length === 0) return newTab()
   setState({
-    tabs: tabs.map((tab) => ({ id: tab.id, title: tab.title, items: [], busy: false })),
+    tabs: tabs.map((tab) => ({ id: tab.id, title: tab.title, items: [], busy: false, panelTabs: [REVIEW_TAB], panelActive: REVIEW_TAB.id })),
     active: tabs.some((tab) => tab.id === active) ? active! : tabs[0]!.id,
   })
   refreshReview()
