@@ -82,6 +82,11 @@ export type ClientMessage =
   | { readonly type: "ping"; readonly id: number }
   | { readonly type: "space.get" }
   | { readonly type: "usage.get" }
+  /** Starts a terminal, or reattaches to one already running under this id. */
+  | { readonly type: "terminal.open"; readonly id: string; readonly cols: number; readonly rows: number }
+  | { readonly type: "terminal.input"; readonly id: string; readonly data: string }
+  | { readonly type: "terminal.resize"; readonly id: string; readonly cols: number; readonly rows: number }
+  | { readonly type: "terminal.close"; readonly id: string }
   /** The files a tab's thread changed since its first message. */
   | { readonly type: "review.get"; readonly sessionId: string }
   /** The app's tabs, in order, sent whenever they change. */
@@ -101,6 +106,8 @@ export type CoreMessage =
   /** `usage` is absent when Claude has no plan limits, such as with an API key. */
   | { readonly type: "usage"; readonly usage?: PlanUsage }
   | { readonly type: "review"; readonly sessionId: string; readonly files: readonly FileChange[] }
+  | { readonly type: "terminal.output"; readonly id: string; readonly data: string }
+  | { readonly type: "terminal.exit"; readonly id: string; readonly code: number }
   /** `space` is absent when the folder is not a Git repo. */
   | { readonly type: "space"; readonly space?: Space }
   | { readonly type: "session.event"; readonly sessionId: string; readonly event: ThreadEvent }

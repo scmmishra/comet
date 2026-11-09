@@ -7,6 +7,7 @@ import { loadSpaceState, saveSpaceState, type SavedTab, type SpaceState } from "
 import { openInEditor, resolveSpaceFile } from "./files"
 import { readSpace } from "./space"
 import { changesSince, snapshot } from "./checkpoints"
+import { Terminals } from "./terminals"
 import { historyEvents } from "./thread"
 import { applyRateLimit, probeUsage } from "./usage"
 
@@ -30,6 +31,10 @@ export interface CoreOptions {
 export function startCore({ token, dir }: CoreOptions): CoreServer {
   const clients = new Set<ServerWebSocket>()
   const sessions = new Map<string, Session>()
+  const terminals = new Terminals(dir, {
+    output: (id, data) => broadcast({ type: "terminal.output", id, data }),
+    exit: (id, code) => broadcast({ type: "terminal.exit", id, code }),
+  })
   let saved = loadSpaceState(dir)
   // Plan usage: probed at most once a minute, and kept current by sessions' rate-limit events.
   let usage: PlanUsage | undefined
@@ -99,6 +104,14 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
           }),
           active: message.active,
         })
+      case "terminal.open":
+        return terminals.open(message.id, message.cols, message.rows)
+      case "terminal.input":
+        return terminals.input(message.id, message.data)
+      case "terminal.resize":
+        return terminals.resize(message.id, message.cols, message.rows)
+      case "terminal.close":
+        return terminals.close(message.id)
       case "usage.get":
         return void refreshUsage()
       case "space.get":
@@ -156,6 +169,7 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
     port: server.port!,
     stop() {
       for (const found of sessions.values()) found.close()
+      terminals.closeAll()
       server.stop(true)
     },
   }
