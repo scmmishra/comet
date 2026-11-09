@@ -17,12 +17,10 @@ export function SettingsHeader(props: { title: string; description: string; acti
 }
 
 /** A titled group of settings on a page. */
-export function SettingsSection(props: { title?: JSX.Element; children: JSX.Element }) {
+export function SettingsSection(props: { title: JSX.Element; children: JSX.Element }) {
   return (
     <section class="settings-section">
-      <Show when={props.title}>
-        <h3 class="settings-section-title">{props.title}</h3>
-      </Show>
+      <h3 class="settings-section-title">{props.title}</h3>
       {props.children}
     </section>
   )
@@ -34,9 +32,9 @@ export function SettingsList(props: { children: JSX.Element }) {
 }
 
 /** One setting: its name and what it does on the left, its control on the right. After OpenCode's SettingsRow. */
-export function SettingsRow(props: { title: JSX.Element; description?: JSX.Element; align?: "start"; children?: JSX.Element }) {
+export function SettingsRow(props: { title: JSX.Element; description?: JSX.Element; children?: JSX.Element }) {
   return (
-    <div data-component="settings-row" data-align={props.align}>
+    <div data-component="settings-row">
       <div data-slot="settings-row-copy">
         <div data-slot="settings-row-title">{props.title}</div>
         <Show when={props.description}>

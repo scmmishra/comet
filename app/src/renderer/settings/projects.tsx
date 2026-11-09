@@ -4,29 +4,28 @@ import { Popover } from "@opencode/ui/popover"
 import { ProjectAvatar } from "@opencode/ui/project-avatar"
 import { TextInput } from "@opencode/ui/text-input"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createMemo, createSignal, For, Show } from "solid-js"
-import { core } from "../core"
-import { projectName } from "../format"
-import { ProjectMark, projectLabel } from "../project-mark"
-import { findProjectIcons, state, updateSettings } from "../store"
+import { createSignal, For, Show } from "solid-js"
+import { account, updateSettings } from "../account"
+import { projectName, shortPath } from "../format"
+import { ProjectMark } from "../project-mark"
+import { projectData, projectImage, projectLabel, readProject } from "../projects"
+import { openProjects } from "../workspace"
 import { SettingsHeader, SettingsList, SettingsRow, SettingsSection } from "./layout"
 
 /** How each project open in a tab shows: its name, colour and icon. */
 export function ProjectsPage() {
-  // Each project once, in the order its first tab sits.
-  const projects = createMemo(() => [...new Set(state.tabs.map((tab) => tab.project))])
   return (
     <>
       <SettingsHeader title="Projects" description="How each project open in a tab shows in tabs and menus." />
       <div class="settings-tab-body">
-        <For each={projects()}>{(project) => <ProjectSection project={project} />}</For>
+        <For each={openProjects()}>{(project) => <ProjectSection project={project} />}</For>
       </div>
     </>
   )
 }
 
 function ProjectSection(props: { project: string }) {
-  const settings = (): ProjectSettings => state.settings.projects[props.project] ?? {}
+  const settings = (): ProjectSettings => account.settings.projects[props.project] ?? {}
   // A project's settings replace what it had, so each change sends them whole.
   const save = (change: ProjectSettings) => updateSettings({ project: { dir: props.project, settings: { ...settings(), ...change } } })
   return (
@@ -35,7 +34,7 @@ function ProjectSection(props: { project: string }) {
         <span class="flex items-center gap-2">
           <ProjectMark project={props.project} class="size-[18px]" />
           {projectLabel(props.project)}
-          <span class="truncate font-normal text-fg-3">{props.project.replace(/^\/Users\/[^/]+/, "~")}</span>
+          <span class="truncate font-normal text-fg-3">{shortPath(props.project)}</span>
         </span>
       }
     >
@@ -84,7 +83,7 @@ function ColorSwatch(props: { project: string; color: ProjectColor; selected: bo
 /** A grid of the project's logo-like images. It asks the core for them each time it opens, so new files show. */
 function IconPicker(props: { project: string; current?: string; onPick: (icon: string | undefined) => void }) {
   const [open, setOpen] = createSignal(false)
-  const files = () => state.projects[props.project]?.iconFiles
+  const files = () => projectData(props.project).icons
   const pick = (icon: string | undefined) => {
     props.onPick(icon)
     setOpen(false)
@@ -93,7 +92,7 @@ function IconPicker(props: { project: string; current?: string; onPick: (icon: s
     <Popover
       open={open()}
       onOpenChange={(next) => {
-        if (next) findProjectIcons(props.project)
+        if (next) readProject(props.project, "icons")
         setOpen(next)
       }}
       placement="bottom-end"
@@ -124,7 +123,7 @@ function IconPicker(props: { project: string; current?: string; onPick: (icon: s
                         aria-label={file}
                         onClick={() => pick(file)}
                       >
-                        <img src={core.iconUrl(props.project, file)} alt="" class="size-7 object-contain" />
+                        <img src={projectImage(props.project, file)} alt="" class="size-7 object-contain" />
                       </button>
                     </Tooltip>
                   )}

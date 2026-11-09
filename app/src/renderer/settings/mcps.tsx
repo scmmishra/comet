@@ -3,12 +3,12 @@ import { Button } from "@opencode/ui/button"
 import { Collapsible } from "@opencode/ui/collapsible"
 import { Switch } from "@opencode/ui/switch"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createEffect, createSignal, For, on, Show } from "solid-js"
-import { Icon } from "../icons"
-import { projectLabel } from "../project-mark"
-import { activeProject, readMcpServers, state, toggleMcpServer } from "../store"
+import { createSignal, For, Show } from "solid-js"
+import { plural } from "../format"
+import { Chevron } from "../icons"
+import { projectLabel, reloadProject, toggleMcpServer } from "../projects"
 import { SettingsHeader, SettingsList, SettingsRow, SettingsSection } from "./layout"
-import { GLOBAL, ScopePills, type Scope } from "./scope-pills"
+import { GLOBAL, ScopePills, useScope } from "./scope-pills"
 
 /** What each status reads as, in its dot's label and the row's line. */
 const STATUS_LABEL: Record<McpServer["status"], string> = {
@@ -19,33 +19,22 @@ const STATUS_LABEL: Record<McpServer["status"], string> = {
   disabled: "Off",
 }
 
-/** Where a server is configured, when it belongs to one project: its .mcp.json, or its entry in ~/.claude.json. */
-const PROJECT_SCOPES = ["project", "local"]
-const isProjectServer = (server: McpServer) => PROJECT_SCOPES.includes(server.scope ?? "")
-
 /**
  * Claude Code's MCP servers, after OpenCode's extensions pages. Global lists the servers available to
  * all projects, with their status. A project's pill lists its own servers, then the shared ones folded
  * below them, and each switch acts in that project, as Claude Code keeps a server's on or off per project.
  */
 export function McpsPage() {
-  // The page opens on the active tab's project. Global servers read the same in any project, so they are read there.
-  const opened = activeProject()
-  const [scope, setScope] = createSignal<Scope>(opened)
-  const project = () => (scope() === GLOBAL ? opened : scope())
-  const all = () => state.projects[project()]?.mcp
-  const own = () => all()?.filter(isProjectServer) ?? []
-  const shared = () => all()?.filter((server) => !isProjectServer(server)) ?? []
-  // Opening the page reads afresh. After that, a project read once stays until Refresh, so moving between pills does not restart its servers.
-  createEffect(on(project, (dir, previous) => (previous === undefined || state.projects[dir]?.mcp === undefined) && readMcpServers(dir)))
+  const { scope, setScope, project, value: all } = useScope("mcp")
+  const own = () => all()?.filter((server) => server.ownProject) ?? []
+  const shared = () => all()?.filter((server) => !server.ownProject) ?? []
   return (
     <>
       <SettingsHeader
         title="MCP servers"
-        // One subtitle for every pill, so the header keeps its height and the list below does not jump.
         description="The servers Claude Code loads. Global ones load in every project. A project's switches act in that project only."
         actions={
-          <Button variant="ghost" onClick={() => readMcpServers(project())} disabled={all() === undefined}>
+          <Button variant="ghost" onClick={() => reloadProject(project(), "mcp")} disabled={all() === undefined}>
             Refresh
           </Button>
         }
@@ -91,7 +80,7 @@ function SharedServers(props: { project: string; servers: readonly McpServer[] }
   return (
     <Collapsible variant="ghost" open={open()} onOpenChange={setOpen} class="gap-3">
       <Collapsible.Trigger class="flex h-auto w-fit items-center gap-1.5 text-[13px] font-medium text-fg">
-        <Icon name="chevron-right" class={`size-[13px] text-fg-3 transition-transform duration-150 ${open() ? "rotate-90" : ""}`} />
+        <Chevron open={open()} class="size-[13px] text-fg-3" />
         Shared
         <span class="font-normal text-fg-3">{props.servers.length}</span>
       </Collapsible.Trigger>
@@ -108,7 +97,7 @@ function SharedServers(props: { project: string; servers: readonly McpServer[] }
 function McpRow(props: { project: string; server: McpServer; toggles: boolean }) {
   const detail = () => {
     const { status, tools, error, scope } = props.server
-    const state = status === "connected" ? `${tools} ${tools === 1 ? "tool" : "tools"}` : status === "failed" && error ? error : status === "needs-auth" ? "Sign in with /mcp in Claude Code" : STATUS_LABEL[status]
+    const state = status === "connected" ? plural(tools, "tool") : status === "failed" && error ? error : status === "needs-auth" ? "Sign in with /mcp in Claude Code" : STATUS_LABEL[status]
     return scope ? `${scope} · ${state}` : state
   }
   return (
@@ -139,7 +128,6 @@ function McpRow(props: { project: string; server: McpServer; toggles: boolean })
   )
 }
 
-/** Green when connected, red when failed, amber when it needs sign-in, hollow when off. */
 function StatusDot(props: { status: McpServer["status"] }) {
   return (
     <span class="grid size-4 shrink-0 place-items-center" role="img" aria-label={STATUS_LABEL[props.status]}>

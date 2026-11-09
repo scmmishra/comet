@@ -1,39 +1,34 @@
-import type { ThemeChoice } from "@desk/protocol"
+import { FONT_SIZES, THEMES } from "@desk/protocol"
 import { Select } from "@opencode/ui/select"
 import { TextInput } from "@opencode/ui/text-input"
-import { state, updateSettings } from "../store"
+import { account, updateSettings } from "../account"
+import { THEME_LABELS } from "../appearance"
 import { SettingsHeader, SettingsList, SettingsRow } from "./layout"
 
-const THEMES: { value: ThemeChoice; label: string }[] = [
-  { value: "dark", label: "Dark" },
-  { value: "light", label: "Light" },
-  { value: "auto", label: "Auto" },
-]
-/** The sizes the core accepts, in px. */
-const FONT_SIZES = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+const SIZES = Array.from({ length: FONT_SIZES.max - FONT_SIZES.min + 1 }, (_, index) => FONT_SIZES.min + index)
 
 /** The window's theme, fonts and thread text size. */
 export function AppearancePage() {
-  const appearance = () => state.settings.appearance
+  const appearance = () => account.settings.appearance
   return (
     <>
       <SettingsHeader title="Appearance" description="How Desk looks. Changes apply at once." />
       <div class="settings-tab-body">
         <SettingsList>
-          <SettingsRow title="Theme" description="Auto follows the system's light or dark setting.">
+          <SettingsRow title="Theme" description="System follows macOS's light or dark setting.">
             <Select
-              options={THEMES}
-              current={THEMES.find((theme) => theme.value === appearance().theme)}
-              value={(theme) => theme.value}
-              label={(theme) => theme.label}
+              options={[...THEMES]}
+              current={appearance().theme}
+              value={(theme) => theme}
+              label={(theme) => THEME_LABELS[theme]}
               placement="bottom-end"
               gutter={6}
-              onSelect={(theme) => theme && updateSettings({ appearance: { theme: theme.value } })}
+              onSelect={(theme) => theme && updateSettings({ appearance: { theme } })}
             />
           </SettingsRow>
           <SettingsRow title="Font size" description="The size of thread text. Code blocks and the message box follow it.">
             <Select
-              options={FONT_SIZES}
+              options={SIZES}
               current={appearance().fontSize}
               value={String}
               label={(size) => `${size}px`}
@@ -52,17 +47,17 @@ export function AppearancePage() {
 
 /** A font name, saved when the field loses focus or on Enter, so typing a name does not save each letter. */
 function FontRow(props: { title: string; description: string; field: "uiFont" | "codeFont"; placeholder: string }) {
-  const save = (value: string) => value.trim() !== state.settings.appearance[props.field] && updateSettings({ appearance: { [props.field]: value } })
+  const font = () => account.settings.appearance[props.field]
   return (
     <SettingsRow title={props.title} description={props.description}>
       <TextInput
         class="w-[220px]"
-        value={state.settings.appearance[props.field]}
+        value={font()}
         placeholder={props.placeholder}
         spellcheck={false}
         aria-label={props.title}
-        style={{ "font-family": state.settings.appearance[props.field] || undefined }}
-        onChange={(event) => save(event.currentTarget.value)}
+        style={{ "font-family": font() || undefined }}
+        onChange={(event) => updateSettings({ appearance: { [props.field]: event.currentTarget.value } })}
       />
     </SettingsRow>
   )
