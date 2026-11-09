@@ -316,3 +316,56 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/*
+ * The panel's open and close, after OpenCode's: the session narrows while the panel slides in from
+ * the right on the same curve, so the 8px gap between them never changes. The panel keeps its open
+ * width the whole way, so its contents never rewrap mid-flight. The curve is close to the critically
+ * damped spring OpenCode uses (0.3s, no bounce).
+ */
+.desk-split {
+  --panel-motion: 300ms cubic-bezier(0.32, 0.72, 0, 1);
+  --panel-width: calc(50% - 4px);
+}
+.desk-session {
+  width: 100%;
+  transition: width var(--panel-motion);
+}
+.desk-split[data-panel="open"] .desk-session {
+  width: var(--panel-width);
+}
+.desk-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--panel-width);
+  transform: translateX(calc(100% + 8px));
+  /* Hidden once closed, so its contents cost nothing; shown at once when it opens. */
+  visibility: hidden;
+  transition:
+    transform var(--panel-motion),
+    visibility 0s linear 300ms;
+}
+.desk-split[data-panel="open"] .desk-panel {
+  transform: none;
+  visibility: visible;
+  transition:
+    transform var(--panel-motion),
+    visibility 0s;
+}
+.desk-panel-glyph {
+  transform-origin: 14px 8px;
+  transform: scaleX(0);
+  transition: transform var(--panel-motion);
+}
+.desk-split[data-panel="open"] .desk-panel-glyph {
+  transform: scaleX(1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .desk-session,
+  .desk-panel,
+  .desk-panel-glyph {
+    transition: none;
+  }
+}

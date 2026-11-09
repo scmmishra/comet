@@ -36,51 +36,44 @@ export function App() {
       <TabBar />
       <Show when={activeTab()} keyed>
         {(tab) => (
-          <main class="flex min-h-0 flex-1 gap-2 px-2 pb-2">
-            <section class="flex min-w-0 flex-1 flex-col rounded-3xl border border-outline bg-panel">
-              <header class="flex h-[46px] shrink-0 items-center gap-2 px-4">
-                <span class="flex min-w-0 items-center gap-[7px] whitespace-nowrap text-fg-2">
-                  <SpaceAvatar />
-                  {state.space?.name ?? "No repo"}
-                  <span class="text-fg-3">/</span>
-                  <b class="truncate font-medium text-fg">{tab.title}</b>
-                </span>
-                <span class="ml-auto flex items-center gap-1">
-                  <Show when={state.panelOpen && state.space}>{(space) => <SpaceChip space={space()} />}</Show>
-                  <Show when={tab.context}>{(context) => <ContextRing {...context()} />}</Show>
-                  <button
-                    class="grid size-7 place-items-center rounded-lg text-fg-2 hover:bg-hover hover:text-fg"
-                    classList={{ "bg-hover text-fg": state.panelOpen }}
-                    aria-pressed={state.panelOpen}
-                    title="Panel (⌘\)"
-                    onClick={togglePanel}
-                  >
-                    <Icon name="panel" />
-                  </button>
-                </span>
-              </header>
-              {/* The Space card floats over the session's corner, so the thread stays centred. With the panel open, it folds into the header chip. */}
-              <div class="relative flex min-h-0 flex-1">
-                <div class="flex min-w-0 flex-1 flex-col">
-                  <Show when={tab.items.length > 0} fallback={<StartScreen tab={tab} />}>
-                    <ThreadScroll tab={tab} />
-                    <div class="shrink-0 px-4 pb-4 pt-1.5">
-                      <Composer tab={tab} />
-                    </div>
+          <main class="flex min-h-0 flex-1 px-2 pb-2">
+            {/* The session and the panel share one box. The session's width and the panel's slide run on the same curve, so the gap between them stays put while the panel opens. */}
+            <div class="desk-split relative min-h-0 flex-1 overflow-hidden" data-panel={state.panelOpen ? "open" : "closed"}>
+              <section class="desk-session flex h-full min-w-0 flex-col rounded-3xl border border-outline bg-panel">
+                {/* The right padding leaves room for the panel toggle, which sits over this corner. */}
+                <header class="flex h-[46px] shrink-0 items-center gap-2 pl-4 pr-12">
+                  <span class="flex min-w-0 items-center gap-[7px] whitespace-nowrap text-fg-2">
+                    <SpaceAvatar />
+                    {state.space?.name ?? "No repo"}
+                    <span class="text-fg-3">/</span>
+                    <b class="truncate font-medium text-fg">{tab.title}</b>
+                  </span>
+                  <span class="ml-auto flex items-center gap-1">
+                    <Show when={state.panelOpen && state.space}>{(space) => <SpaceChip space={space()} />}</Show>
+                    <Show when={tab.context}>{(context) => <ContextRing {...context()} />}</Show>
+                  </span>
+                </header>
+                {/* The Space card floats over the session's corner, so the thread stays centred. With the panel open, it folds into the header chip. */}
+                <div class="relative flex min-h-0 flex-1">
+                  <div class="flex min-w-0 flex-1 flex-col">
+                    <Show when={tab.items.length > 0} fallback={<StartScreen tab={tab} />}>
+                      <ThreadScroll tab={tab} />
+                      <div class="shrink-0 px-4 pb-4 pt-1.5">
+                        <Composer tab={tab} />
+                      </div>
+                    </Show>
+                  </div>
+                  <Show when={!state.panelOpen && state.space}>
+                    {(space) => (
+                      <aside class="desk-rail desk-no-scrollbar absolute right-2 top-0 flex max-h-full w-[264px] flex-col gap-2 overflow-y-auto pb-2">
+                        <SpaceCard space={space()} />
+                      </aside>
+                    )}
                   </Show>
                 </div>
-                <Show when={!state.panelOpen && state.space}>
-                  {(space) => (
-                    <aside class="desk-rail desk-no-scrollbar absolute right-2 top-0 flex max-h-full w-[264px] flex-col gap-2 overflow-y-auto pb-2">
-                      <SpaceCard space={space()} />
-                    </aside>
-                  )}
-                </Show>
-              </div>
-            </section>
-            <Show when={state.panelOpen}>
-              <section class="flex min-w-[340px] flex-1 flex-col rounded-3xl border border-outline bg-panel">
-                <div class="flex h-[46px] shrink-0 items-center gap-1 px-2">
+              </section>
+              <section class="desk-panel flex flex-col rounded-3xl border border-outline bg-panel" inert={!state.panelOpen}>
+                <div class="flex h-[46px] shrink-0 items-center gap-1 pl-2 pr-12">
                   <span class="flex h-[30px] items-center gap-[7px] rounded-lg bg-raised px-2.5 text-fg">
                     <Icon name="diff" />
                     Review
@@ -90,11 +83,34 @@ export function App() {
                   <ReviewView tab={tab} />
                 </div>
               </section>
-            </Show>
+              <PanelToggle />
+            </div>
           </main>
         )}
       </Show>
     </div>
+  )
+}
+
+/**
+ * Opens and closes the panel. It sits over the top-right corner of whichever card is there, so the
+ * spot that opened the panel also closes it. Its right pane fills as the panel opens, as OpenCode's does.
+ */
+function PanelToggle() {
+  return (
+    <button
+      class="desk-panel-toggle absolute right-2.5 top-[9px] z-10 grid size-7 place-items-center rounded-lg text-fg-2 hover:bg-hover hover:text-fg"
+      aria-label="Toggle panel"
+      aria-expanded={state.panelOpen}
+      title="Panel (⌘\)"
+      onClick={togglePanel}
+    >
+      <svg viewBox="0 0 16 16" class="size-[15px]" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
+        <rect x="2" y="2.5" width="12" height="11" rx="2" />
+        <path d="M10 2.5v11" />
+        <rect class="desk-panel-glyph" x="10" y="2.5" width="4" height="11" fill="currentColor" stroke="none" />
+      </svg>
+    </button>
   )
 }
 
