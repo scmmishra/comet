@@ -1,3 +1,10 @@
+import { Button } from "@opencode/ui/button"
+import { Collapsible } from "@opencode/ui/collapsible"
+import { DiffChanges } from "@opencode/ui/diff-changes"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Spinner } from "@opencode/ui/spinner"
+import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { createMemo, createSignal, For, Index, Match, Show, Switch } from "solid-js"
 import { editTexts, lineDiff } from "./diff"
 import { formatDuration, formatMessageTime } from "./format"
@@ -75,8 +82,8 @@ export function Thread(props: { tab: Tab }) {
       </Index>
       <Show when={props.tab.busy}>
         <div class="flex items-center gap-2 text-fg-3">
-          <span class="desk-spin" />
-          Working…
+          <Spinner class="size-3.5" />
+          <TextShimmer text="Working…" />
         </div>
       </Show>
     </div>
@@ -134,9 +141,9 @@ function MessageMeta(props: { text: string; at?: number }) {
   }
   return (
     <div class="flex h-6 items-center gap-1.5 text-[12px] tabular-nums text-fg-3 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/message:opacity-100">
-      <button type="button" class="grid size-6 place-items-center rounded-md hover:bg-hover hover:text-fg" aria-label="Copy message" title="Copy" onClick={() => void copy()}>
-        <Icon name={copied() ? "check" : "copy"} class="size-[13px]" />
-      </button>
+      <Tooltip value={copied() ? "Copied" : "Copy"} placement="bottom">
+        <IconButton variant="ghost-muted" size="normal" aria-label="Copy message" icon={<Icon name={copied() ? "check" : "copy"} class="size-[13px]" />} onClick={() => void copy()} />
+      </Tooltip>
       <Show when={props.at}>{(at) => <span title={new Date(at()).toLocaleString()}>{formatMessageTime(at())}</span>}</Show>
     </div>
   )
@@ -149,17 +156,15 @@ function WorkView(props: { work: WorkRow }) {
   const label = () =>
     props.work.durationMs !== undefined ? `Worked for ${formatDuration(props.work.durationMs)}` : `Worked through ${steps()} ${steps() === 1 ? "step" : "steps"}`
   return (
-    <div class="grid gap-3.5">
-      <button class="inline-flex w-fit items-center gap-1 text-fg-3 hover:text-fg-2" aria-expanded={open()} onClick={() => setOpen(!open())}>
+    <Collapsible variant="ghost" open={open()} onOpenChange={setOpen} class="gap-3.5">
+      <Collapsible.Trigger class="inline-flex h-auto w-fit items-center gap-1 text-[13px] font-normal text-fg-3 hover:text-fg-2">
         {label()}
-        <Icon name="chevron" class={`size-[15px] transition-transform duration-150 ${open() ? "rotate-90" : ""}`} />
-      </button>
-      <Show when={open()}>
-        <div class="grid gap-3.5">
-          <For each={groupTools(props.work.items)}>{(row) => <RowView row={row} />}</For>
-        </div>
-      </Show>
-    </div>
+        <Icon name="chevron-right" class={`size-[15px] transition-transform duration-150 ${open() ? "rotate-90" : ""}`} />
+      </Collapsible.Trigger>
+      <Collapsible.Content class="grid gap-3.5">
+        <For each={groupTools(props.work.items)}>{(row) => <RowView row={row} />}</For>
+      </Collapsible.Content>
+    </Collapsible>
   )
 }
 
@@ -167,37 +172,33 @@ function ToolGroup(props: { tools: ToolItem[] }) {
   const [open, setOpen] = createSignal(false)
   const names = () => [...new Set(props.tools.map((tool) => tool.name))].join(", ")
   return (
-    <div class="grid gap-1.5">
-      <button class="inline-flex w-fit items-center gap-1.5 text-fg-3 hover:[&_b]:text-fg" onClick={() => setOpen(!open())}>
-        <Icon name="chevron" class={`size-[15px] transition-transform duration-150 ${open() ? "rotate-90" : ""}`} />
+    <Collapsible variant="ghost" open={open()} onOpenChange={setOpen} class="gap-1.5">
+      <Collapsible.Trigger class="inline-flex h-auto w-fit items-center gap-1.5 text-[13px] font-normal text-fg-3 hover:[&_b]:text-fg">
+        <Icon name="chevron-right" class={`size-[15px] transition-transform duration-150 ${open() ? "rotate-90" : ""}`} />
         Used <b class="font-medium text-fg-2">{props.tools.length}</b> · {names()}
-      </button>
-      <Show when={open()}>
-        <div class="ml-[7px] grid gap-0.5 pl-[13px] shadow-[inset_1px_0_0_var(--color-line)]">
-          <For each={props.tools}>{(tool) => <ToolRow tool={tool} />}</For>
-        </div>
-      </Show>
-    </div>
+      </Collapsible.Trigger>
+      <Collapsible.Content class="ml-[7px] grid gap-0.5 pl-[13px] shadow-[inset_1px_0_0_var(--color-line)]">
+        <For each={props.tools}>{(tool) => <ToolRow tool={tool} />}</For>
+      </Collapsible.Content>
+    </Collapsible>
   )
 }
 
 function ToolRow(props: { tool: ToolItem }) {
   const [open, setOpen] = createSignal(false)
   return (
-    <div class="grid py-[3px] text-[12.5px]">
-      <button class="grid grid-cols-[auto_1fr] gap-x-2 text-left" onClick={() => setOpen(!open())}>
+    <Collapsible variant="ghost" open={open()} onOpenChange={setOpen} disabled={!props.tool.result} class="py-[3px] text-[12.5px]">
+      <Collapsible.Trigger class="grid h-auto grid-cols-[auto_1fr] gap-x-2 text-left text-[12.5px] font-normal">
         <span class="font-medium text-fg-2">{props.tool.name}</span>
         <span class="min-w-0 truncate font-mono text-[12px] text-fg-2">{summarize(props.tool.input)}</span>
         <span class="col-start-2 text-[12px] text-fg-3">{outcome(props.tool)}</span>
-      </button>
-      <Show when={open() && props.tool.result}>
-        {(result) => (
-          <pre class="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap rounded-2xl bg-ground px-3 py-2.5 font-mono text-[12px] text-fg-2 shadow-[0_0_0_1px_var(--color-line)]">
-            {result().output || "(no output)"}
-          </pre>
-        )}
-      </Show>
-    </div>
+      </Collapsible.Trigger>
+      <Collapsible.Content>
+        <pre class="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap rounded-2xl bg-ground px-3 py-2.5 font-mono text-[12px] text-fg-2 shadow-[0_0_0_1px_var(--color-line)]">
+          {props.tool.result?.output || "(no output)"}
+        </pre>
+      </Collapsible.Content>
+    </Collapsible>
   )
 }
 
@@ -210,10 +211,7 @@ function EditBlock(props: { tool: ToolItem }) {
       <div class="flex min-w-0 items-center gap-2 bg-raised px-3 py-[7px] text-[12px] text-fg-2">
         <Icon name="edit" class="size-[15px]" />
         <span class="min-w-0 truncate font-mono text-fg">{relativePath(String(props.tool.input.file_path ?? ""))}</span>
-        <span class="ml-auto flex shrink-0 gap-2 font-mono tabular-nums">
-          <span class="text-add">+{added()}</span>
-          <span class="text-del">−{removed()}</span>
-        </span>
+        <DiffChanges class="ml-auto shrink-0" changes={{ additions: added(), deletions: removed() }} />
       </div>
       <div class="max-h-80 overflow-auto font-mono text-[12px] leading-5">
         <For each={lines()}>
@@ -249,12 +247,10 @@ function PermissionCard(props: { item: PermissionItem }) {
         fallback={<div class="px-3.5 pb-3 pt-2.5 text-[12px] text-fg-3">{props.item.answer ? "Allowed" : "Declined"}</div>}
       >
         <div class="flex gap-1.5 px-3 pb-3 pt-2.5">
-          <button class="h-7 rounded-lg bg-fg px-[11px] font-medium text-ground hover:bg-[#fff]" onClick={() => answerPermission(props.item.requestId, true)}>
+          <Button variant="contrast" onClick={() => answerPermission(props.item.requestId, true)}>
             Allow
-          </button>
-          <button class="h-7 rounded-lg bg-hover px-[11px] hover:bg-[#2e2e33]" onClick={() => answerPermission(props.item.requestId, false)}>
-            Decline
-          </button>
+          </Button>
+          <Button onClick={() => answerPermission(props.item.requestId, false)}>Decline</Button>
         </div>
       </Show>
     </div>

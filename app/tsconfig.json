@@ -3,7 +3,11 @@
   "compilerOptions": {
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    // @opencode/ui ships its components as source and names the source before its types, so they
+    // compile under these settings. They import types without `import type`, and use Promise.try
+    // (ES2025), which Electron's Chromium has.
+    "verbatimModuleSyntax": false,
+    "lib": ["ES2025", "DOM", "DOM.Iterable"],
     "types": ["node", "vite/client"]
   },
   "include": ["src", "electron.vite.config.ts"],

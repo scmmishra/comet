@@ -1,9 +1,9 @@
+import { Menu } from "@opencode/ui/menu"
+import { ProjectAvatar } from "@opencode/ui/project-avatar"
 import { createResource, For, onMount, Show } from "solid-js"
-import { ProjectAvatar } from "./avatar"
 import { Composer } from "./composer"
 import { formatAgo } from "./format"
 import { Icon } from "./icons"
-import { createPopover, PopoverPanel } from "./popover"
 import { openThread, refreshThreads, state, type Tab } from "./store"
 
 /** A new tab: the composer, the project and branch it works in, and threads to pick up again. */
@@ -39,65 +39,40 @@ export function StartScreen(props: { tab: Tab }) {
  * starts a new core for that folder and reloads the page with its tabs.
  */
 function ProjectSwitcher() {
-  const popover = createPopover({ width: 280, maxHeight: 360, align: "start", side: "below" })
   const [projects, { refetch }] = createResource(() => window.desk.projects())
-  let button!: HTMLButtonElement
   const current = () => projects()?.find((project) => project.path === state.project)
 
   return (
-    <>
-      <button
-        ref={button}
-        type="button"
-        class="flex h-8 items-center gap-2 rounded-lg px-1.5 hover:bg-hover hover:text-fg"
-        classList={{ "bg-hover text-fg": popover.isOpen() }}
-        aria-haspopup="dialog"
-        aria-expanded={popover.isOpen()}
-        onClick={() => {
-          if (!popover.isOpen()) void refetch()
-          popover.toggle(button)
-        }}
-      >
-        <ProjectAvatar name={state.space?.name ?? current()?.name} />
+    <Menu placement="bottom-start" gutter={8} onOpenChange={(open) => open && void refetch()}>
+      <Menu.Trigger class="flex h-8 items-center gap-2 rounded-lg px-1.5 hover:bg-hover hover:text-fg data-[expanded]:bg-hover data-[expanded]:text-fg">
+        <ProjectAvatar fallback={state.space?.name ?? current()?.name ?? "?"} class="size-[18px]" />
         {state.space?.name ?? current()?.name ?? "No project"}
-        <Icon name="down" class="size-3 text-fg-3" />
-      </button>
-      <PopoverPanel popover={popover} label="Projects" class="flex flex-col">
-        <div class="flex h-9 shrink-0 items-center px-3.5 pt-1.5 text-[12px] text-fg-3">Projects</div>
-        <div class="desk-no-scrollbar grid min-h-0 gap-px overflow-y-auto p-1.5">
-          <For each={projects()}>
-            {(project) => (
-              <button
-                type="button"
-                class="flex h-9 min-w-0 items-center gap-2.5 rounded-lg px-2.5 text-left hover:bg-hover"
-                title={project.path}
-                onClick={() => (project === current() ? popover.close() : void window.desk.openProject(project.path))}
-              >
-                <ProjectAvatar name={project.name} />
-                <span class="min-w-0 flex-1 truncate text-fg">{project.name}</span>
-                <Show when={project === current()}>
-                  <Icon name="check" class="size-[15px] shrink-0 text-fg" />
-                </Show>
-              </button>
-            )}
-          </For>
-        </div>
-        <div class="shrink-0 border-t border-outline p-1.5">
-          <button
-            type="button"
-            class="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-fg-2 hover:bg-hover hover:text-fg"
-            onClick={() => {
-              popover.close()
-              void window.desk.chooseProject()
-            }}
-          >
-            <Icon name="folder" class="size-[15px]" />
+        <Icon name="chevron-down" class="size-3 text-fg-3" />
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Content class="w-[280px]">
+          <Menu.Group>
+            <Menu.GroupLabel>Projects</Menu.GroupLabel>
+            <Menu.RadioGroup value={current()?.path}>
+              <For each={projects()}>
+                {(project) => (
+                  <Menu.RadioItem value={project.path} title={project.path} onSelect={() => project !== current() && void window.desk.openProject(project.path)}>
+                    <span class="flex min-w-0 items-center gap-2.5">
+                      <ProjectAvatar fallback={project.name} />
+                      <span class="truncate">{project.name}</span>
+                    </span>
+                  </Menu.RadioItem>
+                )}
+              </For>
+            </Menu.RadioGroup>
+          </Menu.Group>
+          <Menu.Separator />
+          <Menu.Item shortcut="⌘O" onSelect={() => void window.desk.chooseProject()}>
             Open folder…
-            <kbd class="ml-auto font-sans text-[11px] text-fg-3">⌘O</kbd>
-          </button>
-        </div>
-      </PopoverPanel>
-    </>
+          </Menu.Item>
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu>
   )
 }
 

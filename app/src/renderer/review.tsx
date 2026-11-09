@@ -1,3 +1,4 @@
+import { DiffChanges } from "@opencode/ui/diff-changes"
 import { FileDiff, getSingularPatch } from "@pierre/diffs"
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { fileIconId, fileIconName, requestFileIcon } from "./file-icons"
@@ -45,10 +46,7 @@ export function ReviewView(props: { tab: Tab }) {
     >
       <div class="flex items-center gap-2 px-4 pb-2 pt-0.5 text-fg-2">
         {files().length} {files().length === 1 ? "file" : "files"}
-        <span class="ml-auto flex gap-2 font-mono tabular-nums">
-          <span class="text-add">+{totals().additions}</span>
-          <span class="text-del">−{totals().deletions}</span>
-        </span>
+        <DiffChanges class="ml-auto" changes={totals()} />
       </div>
       <For each={files()}>
         {(file) => {
@@ -62,7 +60,7 @@ export function ReviewView(props: { tab: Tab }) {
                 aria-expanded={isOpen(file.path)}
                 onClick={() => toggle(file.path)}
               >
-                <Icon name="chevron" class={`size-[13px] text-fg-3 transition-transform duration-150 ${isOpen(file.path) ? "rotate-90" : ""}`} />
+                <Icon name="chevron-right" class={`size-[13px] text-fg-3 transition-transform duration-150 ${isOpen(file.path) ? "rotate-90" : ""}`} />
                 <svg class="size-[14px] shrink-0" aria-hidden="true">
                   <use href={`#${fileIconId(icon)}`} />
                 </svg>
@@ -73,8 +71,7 @@ export function ReviewView(props: { tab: Tab }) {
                     <span class="ml-2 text-[12px] text-fg-3">{file.status}</span>
                   </Show>
                 </span>
-                <span class="shrink-0 font-mono text-[12px] tabular-nums text-add">+{file.additions}</span>
-                <span class="shrink-0 font-mono text-[12px] tabular-nums text-del">−{file.deletions}</span>
+                <DiffChanges class="shrink-0" changes={file} />
               </button>
               <Show when={isOpen(file.path)}>
                 <Show when={file.patch} fallback={<div class="px-4 pb-3 text-fg-3">Binary file. No diff to show.</div>}>

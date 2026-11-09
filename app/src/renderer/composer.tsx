@@ -1,3 +1,4 @@
+import { IconButton } from "@opencode/ui/icon-button"
 import { createSignal, onMount, Show } from "solid-js"
 import { Icon } from "./icons"
 import { ModelPicker } from "./model-picker"
@@ -62,20 +63,9 @@ export function Composer(props: { tab: Tab }) {
         <ModelPicker tab={props.tab} />
         <Show
           when={props.tab.busy}
-          fallback={
-            <button
-              type="submit"
-              aria-label="Send"
-              class="grid size-8 place-items-center rounded-full bg-raised text-fg-2 transition-colors"
-              classList={{ "bg-fg! text-ground!": !!text().trim() }}
-            >
-              <Icon name="up" />
-            </button>
-          }
+          fallback={<IconButton type="submit" variant="submit" size="large" class="size-8 rounded-full" aria-label="Send" disabled={!text().trim()} icon={<Icon name="arrow-up" />} />}
         >
-          <button type="button" aria-label="Stop" class="grid size-8 place-items-center rounded-full bg-fg text-ground" onClick={interrupt}>
-            <Icon name="stop" />
-          </button>
+          <IconButton variant="contrast" size="large" class="size-8 rounded-full" aria-label="Stop" icon={<Icon name="stop" />} onClick={interrupt} />
         </Show>
       </div>
     </form>

@@ -1,45 +1,44 @@
-import type { JSX } from "solid-js"
+import { Icon as OpenCodeIcon } from "@opencode/ui/icon"
+import type { IconName as OpenCodeIconName } from "@opencode/ui/icons/catalog"
+import { Show, splitProps, type JSX } from "solid-js"
 
-/** Line icons on a 16-unit grid, drawn the same way as the approved mock. Only the ones Desk uses. */
-const PATHS = {
-  branch: "M4 5.1v5.8M12 6.6c0 3-4 2.6-7.2 4.6M5.6 3.5a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0M5.6 12.5a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0M13.6 5a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0",
-  pr: "M4 5.1v5.8M12 10.9V6.5a2 2 0 0 0-2-2H7.5M9 3 7.5 4.5 9 6M5.6 3.5a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0M5.6 12.5a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0M13.6 12.5a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0",
-  folder: "M2 4.5C2 3.7 2.7 3 3.5 3h3L8 4.5h4.5c.8 0 1.5.7 1.5 1.5v5.5c0 .8-.7 1.5-1.5 1.5h-9C2.7 13 2 12.3 2 11.5z",
-  diff: "M9.5 2h-5C3.7 2 3 2.7 3 3.5v9c0 .8.7 1.5 1.5 1.5h7c.8 0 1.5-.7 1.5-1.5v-7zM8 5.5v4M6 7.5h4M6 11.5h4",
-  check: "M3.5 8.5l3 3 6-7",
-  copy: "M5.5 5.5v-2a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2M3.5 5.5h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1",
+/**
+ * Glyphs @opencode/ui has no icon for, drawn on a 16-unit grid. Everything else comes from its
+ * catalog, so names follow OpenCode's.
+ */
+const OWN = {
+  "pull-request": "M4 5.1v5.8M12 10.9V6.5a2 2 0 0 0-2-2H7.5M9 3 7.5 4.5 9 6M5.6 3.5a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0M5.6 12.5a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0M13.6 12.5a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0",
   bolt: "M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z",
   sparkle: "M8 2.5l1.4 4.1 4.1 1.4-4.1 1.4L8 13.5l-1.4-4.1L2.5 8l4.1-1.4z",
-  shieldOff: "M8 1.5l5 2v4c0 3-2.2 5.3-5 6-2.8-.7-5-3-5-6v-4zM2.5 2.5l11 11",
-  search: "M7 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10M10.6 10.6 14 14",
-  chevron: "M6 4l4 4-4 4",
-  down: "M4 6l4 4 4-4",
-  up: "M8 13V3M4 7l4-4 4 4",
-  stop: "M5 5h6v6H5z",
-  plus: "M8 3v10M3 8h10",
-  x: "M4.5 4.5l7 7M11.5 4.5l-7 7",
-  edit: "M10.5 3 13 5.5 6 12.5H3.5V10z",
-  panel: "M4 2.5h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2M10 2.5v11",
-  terminal: "M3.5 3h9a1.5 1.5 0 0 1 1.5 1.5v7a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5v-7A1.5 1.5 0 0 1 3.5 3M5 6.5l2 1.5-2 1.5M8.5 10h2.5",
+  "shield-off": "M8 1.5l5 2v4c0 3-2.2 5.3-5 6-2.8-.7-5-3-5-6v-4zM2.5 2.5l11 11",
   gauge: "M2.5 11a5.5 5.5 0 1 1 11 0M8 11l2.5-3",
-  lock: "M4.5 7.5h7a1 1 0 0 1 1 1V13a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1V8.5a1 1 0 0 1 1-1M5.5 7.5V5.5a2.5 2.5 0 0 1 5 0v2",
 } as const
 
-export type IconName = keyof typeof PATHS
+export type IconName = OpenCodeIconName | keyof typeof OWN
 
-export function Icon(props: { name: IconName; class?: string } & JSX.SvgSVGAttributes<SVGSVGElement>) {
+const isOwn = (name: IconName): name is keyof typeof OWN => Object.hasOwn(OWN, name)
+
+/** One icon by name, 15px unless a class sizes it. */
+export function Icon(props: { name: IconName; class?: string } & Omit<JSX.SvgSVGAttributes<SVGSVGElement>, "name">) {
+  const [local, rest] = splitProps(props, ["name", "class"])
+  const size = () => `size-[15px] shrink-0 ${local.class ?? ""}`
   return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.6"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class={`size-[15px] shrink-0 ${props.class ?? ""}`}
-      aria-hidden="true"
-    >
-      <path d={PATHS[props.name]} />
-    </svg>
+    <Show when={isOwn(local.name) && local.name} fallback={<OpenCodeIcon {...rest} name={local.name} class={size()} />}>
+      {(own) => (
+        <svg
+          {...rest}
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.25"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class={size()}
+          aria-hidden="true"
+        >
+          <path d={OWN[own() as keyof typeof OWN]} />
+        </svg>
+      )}
+    </Show>
   )
 }

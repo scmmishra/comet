@@ -1,5 +1,9 @@
+import { IconButton } from "@opencode/ui/icon-button"
+import { ProjectAvatar } from "@opencode/ui/project-avatar"
+import { Spinner } from "@opencode/ui/spinner"
+import { Tabs } from "@opencode/ui/tabs"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
-import { ProjectAvatar } from "./avatar"
 import { Composer } from "./composer"
 import { Icon } from "./icons"
 import { ContextRing, UsageButton } from "./meters"
@@ -9,12 +13,13 @@ import { SpaceCard, SpaceChip } from "./space"
 import { StartScreen } from "./start-screen"
 import { activeTab, closePanelTab, closeTab, newTab, newTerminal, refreshSpace, refreshUsage, selectPanelTab, selectTab, selectTabAt, state, togglePanel, type Tab } from "./store"
 import { TerminalView } from "./terminal"
-import { ThreadSearch, toggleThreadSearch } from "./thread-search"
+import { useThreadSearch } from "./thread-search"
 import { Thread } from "./thread"
 
 const USAGE_REFRESH_MS = 5 * 60_000
 
 export function App() {
+  const toggleThreadSearch = useThreadSearch()
   onMount(() => {
     const stop = window.desk.onCommand((command) => {
       if (command === "tab.new") newTab()
@@ -44,7 +49,6 @@ export function App() {
   return (
     <div class="flex h-full flex-col bg-ground text-fg">
       <TabBar />
-      <ThreadSearch />
       <Show when={activeTab()} keyed>
         {(tab) => (
           <main class="flex min-h-0 flex-1 px-2 pb-2">
@@ -54,7 +58,7 @@ export function App() {
                 {/* The right padding leaves room for the panel toggle, which sits over this corner. */}
                 <header class="flex h-[46px] shrink-0 items-center gap-2 pl-4 pr-12">
                   <span class="flex min-w-0 items-center gap-[7px] whitespace-nowrap text-fg-2">
-                    <ProjectAvatar name={state.space?.name} />
+                    <ProjectAvatar fallback={state.space?.name ?? "?"} class="size-[18px]" />
                     {state.space?.name ?? "No repo"}
                     <span class="text-fg-3">/</span>
                     <b class="truncate font-medium text-fg">{tab.title}</b>
@@ -85,34 +89,27 @@ export function App() {
               </section>
               <section class="desk-panel flex flex-col rounded-3xl border border-outline bg-panel" inert={!state.panelOpen}>
                 <div class="desk-no-scrollbar flex h-[46px] shrink-0 items-center gap-1 overflow-x-auto pl-2 pr-12">
-                  <For each={tab.panelTabs}>
-                    {(panelTab) => (
-                      <button
-                        class="group flex h-[30px] shrink-0 items-center gap-[7px] rounded-lg pl-2.5 text-left"
-                        classList={{ "bg-raised text-fg": panelTab.id === tab.panelActive, "text-fg-3 hover:bg-hover hover:text-fg-2": panelTab.id !== tab.panelActive, "pr-2.5": panelTab.kind === "review", "pr-1.5": panelTab.kind === "terminal" }}
-                        onClick={() => selectPanelTab(panelTab.id)}
-                      >
-                        <Icon name={panelTab.kind === "review" ? "diff" : "terminal"} />
-                        {panelTab.kind === "review" ? "Review" : panelTab.title}
-                        <Show when={panelTab.kind === "terminal"}>
-                          <span
-                            role="button"
-                            aria-label="Close terminal"
-                            class="grid size-[18px] place-items-center rounded-[5px] opacity-0 hover:bg-hover hover:opacity-100! group-hover:opacity-60"
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              closePanelTab(panelTab.id)
-                            }}
+                  <Tabs variant="surface" value={tab.panelActive} onChange={selectPanelTab} class="min-w-0">
+                    <Tabs.List>
+                      <For each={tab.panelTabs}>
+                        {(panelTab) => (
+                          <Tabs.Trigger
+                            value={panelTab.id}
+                            class="shrink-0"
+                            closeButton={panelTab.kind === "terminal" ? <Tabs.CloseButton aria-label="Close terminal" onClick={() => closePanelTab(panelTab.id)} /> : undefined}
                           >
-                            <Icon name="x" />
-                          </span>
-                        </Show>
-                      </button>
-                    )}
-                  </For>
-                  <button class="grid size-[30px] shrink-0 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg" aria-label="New terminal" title="New terminal" onClick={newTerminal}>
-                    <Icon name="plus" />
-                  </button>
+                            <span class="flex items-center gap-[7px]">
+                              <Icon name={panelTab.kind === "review" ? "review" : "terminal"} />
+                              {panelTab.kind === "review" ? "Review" : panelTab.title}
+                            </span>
+                          </Tabs.Trigger>
+                        )}
+                      </For>
+                    </Tabs.List>
+                  </Tabs>
+                  <Tooltip value="New terminal" placement="bottom">
+                    <IconButton variant="ghost-muted" size="large" class="shrink-0" aria-label="New terminal" icon={<Icon name="plus" />} onClick={newTerminal} />
+                  </Tooltip>
                 </div>
                 <div class="flex min-h-0 flex-1 flex-col">
                   <Show when={tab.panelActive === "review"}>
@@ -158,19 +155,22 @@ function togglePanelInstantly() {
  */
 function PanelToggle() {
   return (
-    <button
-      class="desk-panel-toggle absolute right-2.5 top-[9px] z-10 grid size-7 place-items-center rounded-lg text-fg-2 hover:bg-hover hover:text-fg"
-      aria-label="Toggle panel"
-      aria-expanded={state.panelOpen}
-      title="Panel (⌘\)"
-      onClick={togglePanel}
-    >
-      <svg viewBox="0 0 16 16" class="size-[15px]" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
-        <rect x="2" y="2.5" width="12" height="11" rx="2" />
-        <path d="M10 2.5v11" />
-        <rect class="desk-panel-glyph" x="10" y="2.5" width="4" height="11" fill="currentColor" stroke="none" />
-      </svg>
-    </button>
+    <Tooltip value="Panel ⌘\\" placement="bottom" class="desk-panel-toggle absolute right-2.5 top-[9px] z-10">
+      <IconButton
+        variant="ghost-muted"
+        size="large"
+        aria-label="Toggle panel"
+        aria-expanded={state.panelOpen}
+        onClick={togglePanel}
+        icon={
+          <svg viewBox="0 0 16 16" class="size-[15px]" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="2.5" width="12" height="11" rx="2" />
+            <path d="M10 2.5v11" />
+            <rect class="desk-panel-glyph" x="10" y="2.5" width="4" height="11" fill="currentColor" stroke="none" />
+          </svg>
+        }
+      />
+    </Tooltip>
   )
 }
 
@@ -193,40 +193,34 @@ function TabBar() {
       <div ref={strip} class="desk-no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1">
         <For each={state.tabs}>
           {(tab) => (
-            <button
+            <div
               data-tab={tab.id}
-              class="desk-no-drag group flex h-8 w-[210px] shrink-0 items-center gap-2 rounded-xl pl-2 pr-1.5 text-left"
+              class="desk-no-drag group relative flex h-8 w-[210px] shrink-0 items-center rounded-xl"
               classList={{ "desk-tab-enter": tab.id === entering(), "bg-raised text-fg": tab.id === state.active, "text-fg-3 hover:bg-panel hover:text-fg-2": tab.id !== state.active }}
-              onClick={() => selectTab(tab.id)}
             >
-              <ProjectAvatar name={state.space?.name} small />
-              <span class="desk-fade-end min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[12px]">{tab.title}</span>
-              <Show when={tab.busy}>
-                <span class="desk-pulse size-1.5 shrink-0 rounded-full bg-accent" />
-              </Show>
-              <span
-                role="button"
+              {/* The tab and its close button are siblings: a button cannot hold another. */}
+              <button class="flex h-full min-w-0 flex-1 items-center gap-2 pl-2 pr-7 text-left" onClick={() => selectTab(tab.id)}>
+                <ProjectAvatar fallback={state.space?.name ?? "?"} />
+                <span class="desk-fade-end min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[12px]">{tab.title}</span>
+                <Show when={tab.busy}>
+                  <Spinner class="size-3.5 shrink-0 text-accent" />
+                </Show>
+              </button>
+              <IconButton
+                variant="ghost-muted"
+                size="small"
                 aria-label="Close tab"
-                class="grid size-[18px] shrink-0 place-items-center rounded-[5px] opacity-0 hover:bg-hover hover:opacity-100! group-hover:opacity-60"
-                classList={{ "opacity-60": tab.id === state.active }}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  closeTab(tab.id)
-                }}
-              >
-                <Icon name="x" />
-              </span>
-            </button>
+                class="absolute right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                classList={{ "opacity-100": tab.id === state.active }}
+                icon={<Icon name="close-small" />}
+                onClick={() => closeTab(tab.id)}
+              />
+            </div>
           )}
         </For>
-        <button
-          class="desk-no-drag grid size-[30px] shrink-0 place-items-center rounded-lg text-fg-2 hover:bg-hover hover:text-fg"
-          aria-label="New tab"
-          title="New tab (⌘-click to open next to this one)"
-          onClick={(event) => setEntering(newTab(event.metaKey ? "next" : "end"))}
-        >
-          <Icon name="plus" />
-        </button>
+        <Tooltip value="New tab. ⌘-click opens it next to this one." placement="bottom" class="desk-no-drag shrink-0">
+          <IconButton variant="ghost-muted" size="large" aria-label="New tab" icon={<Icon name="plus" />} onClick={(event: MouseEvent) => setEntering(newTab(event.metaKey ? "next" : "end"))} />
+        </Tooltip>
       </div>
       <Show when={state.usage}>{(usage) => <UsageButton usage={usage()} />}</Show>
     </nav>

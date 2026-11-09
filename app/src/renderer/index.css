@@ -1,6 +1,7 @@
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
 @import "@opencode/ui/styles/tailwind";
+@import "@opencode/ui/styles/tokens";
 @source "./";
 
 /*
@@ -57,6 +58,55 @@
   color-scheme: dark;
   /* A strong ease-out for things that appear. Built-in ease starts too slowly for UI. */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/*
+ * Desk's palette under @opencode/ui's semantic tokens, so its components draw in Desk's colours.
+ * Desk's colours stay the source. The tokens' own file sets them in a layer for
+ * [data-color-scheme="dark"], and this unlayered rule wins over it.
+ */
+:root[data-color-scheme="dark"] {
+  --v2-background-bg-deep: var(--color-ground);
+  --v2-background-bg-base: var(--color-panel);
+  --v2-background-bg-layer-01: var(--color-card);
+  --v2-background-bg-layer-02: var(--color-raised);
+  --v2-background-bg-layer-03: var(--color-hover);
+  --v2-background-bg-layer-04: var(--color-line);
+  --v2-background-bg-accent: var(--color-ready);
+
+  --v2-text-text-base: var(--color-fg);
+  --v2-text-text-muted: var(--color-fg-2);
+  --v2-text-text-faint: var(--color-fg-3);
+  --v2-text-text-inverse: var(--color-ground);
+  --v2-text-text-accent: var(--color-accent);
+
+  --v2-icon-icon-base: var(--color-fg-2);
+  --v2-icon-icon-muted: var(--color-fg-3);
+  --v2-icon-icon-faint: var(--color-fg-3);
+  --v2-icon-icon-contrast: var(--color-fg);
+  --v2-icon-icon-inverse: var(--color-ground);
+  --v2-icon-icon-accent: var(--color-accent);
+
+  --v2-border-border-muted: var(--color-outline);
+  --v2-border-border-base: var(--color-line);
+  --v2-border-border-focus: var(--color-accent);
+
+  --v2-state-fg-success: var(--color-add);
+  --v2-state-bg-success: var(--color-add-soft);
+  --v2-state-fg-danger: var(--color-del);
+  --v2-state-bg-danger: var(--color-del-soft);
+
+  /* The older tokens a few components still read, such as the popover and the diff counts. */
+  --background-base: transparent;
+  --surface-base: var(--color-card);
+  --surface-base-hover: var(--color-hover);
+  --surface-base-active: var(--color-raised);
+  --surface-raised-stronger-non-alpha: var(--color-raised);
+  --text-strong: var(--color-fg);
+  --text-base: var(--color-fg-2);
+  --text-weak: var(--color-fg-3);
+  --text-diff-add-base: var(--color-add);
+  --text-diff-delete-base: var(--color-del);
 }
 
 html,
@@ -139,47 +189,19 @@ body {
   animation: desk-rise 180ms var(--ease-out) both;
 }
 
-/* A popover opening below its trigger at the right edge. It grows out of the trigger, not away from it. */
+/*
+ * @opencode/ui's popovers and menus open without motion. Desk's grow out of their trigger: Kobalte
+ * sets the transform origin to the corner nearest it.
+ */
 @keyframes desk-pop {
   from {
     opacity: 0;
-    transform: translateY(var(--pop-from)) scale(0.97);
+    transform: scale(0.97);
   }
 }
-.desk-pop {
-  --pop-from: -4px;
-  transform-origin: top right;
+:is([data-component="popover-content"], [data-component="menu-v2-content"]) {
+  transform-origin: var(--kb-popper-content-transform-origin);
   animation: desk-pop 150ms var(--ease-out) both;
-}
-/* A popover opening above its trigger, such as the composer's model picker. */
-.desk-pop-up {
-  --pop-from: 4px;
-}
-
-@keyframes desk-pulse {
-  from {
-    opacity: 0.3;
-  }
-  to {
-    opacity: 1;
-  }
-}
-.desk-pulse {
-  animation: desk-pulse 1s infinite alternate;
-}
-
-@keyframes desk-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-.desk-spin {
-  width: 12px;
-  height: 12px;
-  border: 1.6px solid var(--color-line);
-  border-top-color: var(--color-fg-2);
-  border-radius: 50%;
-  animation: desk-spin 0.8s linear infinite;
 }
 
 /* Thread text. */
@@ -426,12 +448,9 @@ body {
     --panel-duration: 0s;
   }
   .desk-rise,
-  .desk-pop,
-  .desk-tab-enter {
+  .desk-tab-enter,
+  :is([data-component="popover-content"], [data-component="menu-v2-content"]) {
     animation-name: desk-fade;
-  }
-  .desk-spin {
-    animation-duration: 1.6s;
   }
 }
 @keyframes desk-fade {
