@@ -28,7 +28,7 @@ export function App() {
         {(tab) => (
           <main class="flex min-h-0 flex-1 px-2 pb-2">
             <section class="flex min-w-0 flex-1 flex-col rounded-xl bg-background-weak">
-              <header class="flex h-11 shrink-0 items-center gap-2 px-4 text-sm">
+              <header class="flex h-10 shrink-0 items-center gap-2 px-4 text-sm">
                 <span class="text-text-weak">{state.space?.name ?? "No repo"}</span>
                 <span class="text-text-weaker">/</span>
                 <span class="truncate text-text-strong">{tab.title}</span>
@@ -38,14 +38,14 @@ export function App() {
                   when={tab.items.length > 0}
                   fallback={
                     <div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 px-4 pb-16">
-                      <h1 class="text-center text-[1.75rem] leading-tight font-medium text-text-strong">
+                      <h1 class="text-center text-xl font-medium text-text-strong">
                         What should we build in <span class="text-text-strong">{state.space?.name ?? "this folder"}</span>?
                       </h1>
                       <div class="flex w-full max-w-[720px] flex-col gap-3">
                         <Composer tab={tab} />
                         <Show when={state.space}>
                           {(space) => (
-                            <div class="flex items-center gap-2 px-3 text-sm text-text-weak">
+                            <div class="flex items-center gap-2 px-3 text-sm text-text-weaker">
                               <Icon name="branch" />
                               <span class="truncate">{space().branch}</span>
                               <span class="ml-auto truncate">{space().root.replace(/^\/Users\/[^/]+/, "~")}</span>
@@ -65,7 +65,7 @@ export function App() {
                 </Show>
                 <Show when={state.space}>
                   {(space) => (
-                    <aside class="desk-rail w-68 shrink-0 overflow-y-auto pb-2 pr-2">
+                    <aside class="desk-rail w-64 shrink-0 overflow-y-auto pb-2 pr-2">
                       <SpaceCard space={space()} />
                     </aside>
                   )}
@@ -81,12 +81,12 @@ export function App() {
 
 function TabBar() {
   return (
-    <nav class="desk-titlebar flex h-12 shrink-0 items-center gap-1 pl-20 pr-2">
+    <nav class="desk-titlebar flex h-11 shrink-0 items-center gap-1 pl-20 pr-2">
       <div class="flex min-w-0 flex-1 gap-1 overflow-x-auto">
         <For each={state.tabs}>
           {(tab) => (
             <button
-              class="desk-no-drag group flex h-8 w-52 shrink-0 items-center gap-2 rounded-lg px-2.5 text-left text-sm"
+              class="desk-no-drag group flex h-7 w-44 shrink-0 items-center gap-2 rounded-md px-2.5 text-left text-sm"
               classList={{ "bg-surface-raised-base text-text-strong": tab.id === state.active, "text-text-weak hover:bg-surface-base": tab.id !== state.active }}
               onClick={() => selectTab(tab.id)}
             >
@@ -108,7 +108,7 @@ function TabBar() {
             </button>
           )}
         </For>
-        <button class="desk-no-drag grid size-8 shrink-0 place-items-center rounded-lg text-text-weak hover:bg-surface-base" aria-label="New tab" onClick={newTab}>
+        <button class="desk-no-drag grid size-7 shrink-0 place-items-center rounded-md text-text-weak hover:bg-surface-base" aria-label="New tab" onClick={newTab}>
           +
         </button>
       </div>

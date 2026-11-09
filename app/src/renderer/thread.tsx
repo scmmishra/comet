@@ -25,12 +25,12 @@ function rows(items: Item[]): Row[] {
 export function Thread(props: { tab: Tab }) {
   const grouped = createMemo(() => rows(props.tab.items))
   return (
-    <div class="mx-auto flex w-full max-w-[720px] flex-col gap-4 px-6 pb-4 pt-2">
+    <div class="mx-auto flex w-full max-w-[720px] flex-col gap-3.5 px-6 pb-4 pt-2">
       <For each={grouped()}>
         {(row) => (
           <Switch>
             <Match when={row.type === "user" && row}>
-              {(item) => <div class="max-w-[80%] self-end whitespace-pre-wrap rounded-xl bg-surface-raised-base px-3.5 py-2 text-text-strong">{item().text}</div>}
+              {(item) => <div class="max-w-[80%] self-end whitespace-pre-wrap rounded-xl bg-surface-raised-base px-3 py-1.5 text-text-strong">{item().text}</div>}
             </Match>
             <Match when={row.type === "text" && row}>{(item) => <Markdown text={item().text} />}</Match>
             <Match when={row.type === "thinking"}>

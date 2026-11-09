@@ -27,7 +27,7 @@ export function Composer(props: { tab: Tab }) {
 
   return (
     <form
-      class="mx-auto flex w-full max-w-[720px] flex-col gap-2 rounded-xl border border-border-weak-base bg-surface-raised-base px-3.5 pb-2 pt-3"
+      class="mx-auto flex w-full max-w-[720px] flex-col gap-2 rounded-xl border border-border-weak-base bg-surface-raised-base px-3 pb-2 pt-2.5"
       onSubmit={(event) => {
         event.preventDefault()
         submit()
@@ -60,14 +60,14 @@ export function Composer(props: { tab: Tab }) {
             <button
               type="submit"
               aria-label="Send"
-              class="ml-auto grid size-8 place-items-center rounded-full bg-text-strong text-background-base transition-opacity disabled:opacity-30"
+              class="ml-auto grid size-7 place-items-center rounded-full bg-text-strong text-background-base transition-opacity disabled:opacity-30"
               disabled={!text().trim()}
             >
               <Icon name="up" />
             </button>
           }
         >
-          <button type="button" aria-label="Stop" class="ml-auto grid size-8 place-items-center rounded-full bg-surface-strong text-text-strong" onClick={interrupt}>
+          <button type="button" aria-label="Stop" class="ml-auto grid size-7 place-items-center rounded-full bg-surface-strong text-text-strong" onClick={interrupt}>
             <Icon name="stop" />
           </button>
         </Show>
