@@ -67,9 +67,7 @@ export function ReviewView(props: { tab: Tab }) {
                   <use href={`#${fileIconId(icon)}`} />
                 </svg>
                 <span class="min-w-0 flex-1 truncate">
-                  <Show when={slash >= 0}>
-                    <span class="text-fg-3">{file.path.slice(0, slash + 1)}</span>
-                  </Show>
+                  <span class="text-fg-3">{file.path.slice(0, slash + 1)}</span>
                   <span class="text-fg">{file.path.slice(slash + 1)}</span>
                   <Show when={file.status !== "modified"}>
                     <span class="ml-2 text-[12px] text-fg-3">{file.status}</span>

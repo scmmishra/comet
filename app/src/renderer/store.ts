@@ -182,10 +182,9 @@ function restoreTabs(tabs: readonly TabInfo[], active: string | undefined) {
   setState({
     tabs: tabs.map((tab) => {
       const panelTabs: PanelTab[] = [REVIEW_TAB, ...tab.terminals.map((terminal) => ({ kind: "terminal" as const, ...terminal }))]
-      const panelActive = panelTabs.some((panelTab) => panelTab.id === tab.panelActive) ? tab.panelActive! : REVIEW_TAB.id
-      return { id: tab.id, title: tab.title, items: [], busy: false, panelTabs, panelActive }
+      return { id: tab.id, title: tab.title, items: [], busy: false, panelTabs, panelActive: tab.panelActive ?? REVIEW_TAB.id }
     }),
-    active: tabs.some((tab) => tab.id === active) ? active! : tabs[0]!.id,
+    active: active ?? tabs[0]!.id,
   })
   refreshReview()
 }
@@ -265,7 +264,7 @@ function apply(sessionId: string, event: ThreadEvent, arrivedAt?: number) {
         tab.context = { percent: event.percent, tokens: event.tokens, maxTokens: event.maxTokens }
         break
     }
-    if (arrivedAt !== undefined) for (const item of items.slice(before)) item.arrivedAt = arrivedAt
+    for (const item of items.slice(before)) item.arrivedAt = arrivedAt
   }))
   // A finished turn may have changed files, so the Space card and Review read the repo again.
   if (event.kind === "result") {
