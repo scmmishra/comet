@@ -181,7 +181,7 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
     websocket: {
       open(ws) {
         clients.add(ws)
-        send(ws, { type: "hello", protocol: PROTOCOL_VERSION, core: pkg.version, bun: Bun.version })
+        send(ws, { type: "hello", protocol: PROTOCOL_VERSION, core: pkg.version, bun: Bun.version, dir })
         void sendSavedTabs(ws, dir, saved)
       },
       close(ws) {

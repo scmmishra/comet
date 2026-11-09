@@ -145,7 +145,8 @@ export type ClientMessage =
   | { readonly type: "permission.answer"; readonly sessionId: string; readonly id: string; readonly allow: boolean }
 
 export type CoreMessage =
-  | { readonly type: "hello"; readonly protocol: number; readonly core: string; readonly bun: string }
+  /** `dir` is the project folder this core serves. */
+  | { readonly type: "hello"; readonly protocol: number; readonly core: string; readonly bun: string; readonly dir: string }
   | { readonly type: "pong"; readonly id: number }
   /** The tabs saved for this space. Each restored tab's thread follows as a session.history message. */
   | { readonly type: "tabs"; readonly tabs: readonly TabInfo[]; readonly active?: string }

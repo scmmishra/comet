@@ -42,8 +42,7 @@ function ProjectSwitcher() {
   const popover = createPopover({ width: 280, maxHeight: 360, align: "start", side: "below" })
   const [projects, { refetch }] = createResource(() => window.desk.projects())
   let button!: HTMLButtonElement
-  // Opening a project moves it to the front of the list, so the first one is this window's.
-  const current = () => projects()?.[0]
+  const current = () => projects()?.find((project) => project.path === state.project)
 
   return (
     <>

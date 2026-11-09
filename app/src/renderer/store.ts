@@ -41,6 +41,8 @@ const PANEL_KEY = "desk.panel"
 const TITLE_LENGTH = 40
 
 const [state, setState] = createStore({
+  /** The project folder this window shows, as the core names it. */
+  project: "",
   tabs: [] as Tab[],
   active: "",
   space: undefined as Space | undefined,
@@ -243,7 +245,7 @@ function titleFrom(text: string) {
 
 core.listen((message: CoreMessage) => {
   if (message.type === "hello") {
-    setState("connected", true)
+    setState({ connected: true, project: message.dir })
     refreshSpace()
     refreshUsage()
     core.send({ type: "models.get" })
