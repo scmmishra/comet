@@ -6,9 +6,11 @@ import { openInEditor, projectFile } from "./files"
 import { readMcpServers, toggleMcpServer } from "./mcp"
 import { Models } from "./models"
 import { recentThreads } from "./past-threads"
+import { Plugins } from "./plugins/plugins"
 import { findIconFiles, iconFile } from "./project-icons"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { loadSettings, saveSettings, updateSettings } from "./settings"
+import { loadSetups } from "./setups"
 import { readSkills } from "./skills"
 import { readSpace } from "./space"
 import { Usage } from "./usage"
@@ -37,7 +39,11 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
   let settings = loadSettings()
   const models = new Models(broadcast)
   const usage = new Usage(broadcast)
-  const window = new Window({ broadcast, compactIdle: () => settings.claude.compactIdle, rateLimit: (info) => usage.rateLimit(info) })
+  const plugins = new Plugins({
+    broadcast,
+    openThread: (tabId, thread) => void window.openKey(tabId, thread).catch((error) => broadcast({ type: "error", message: error instanceof Error ? error.message : String(error) })),
+  })
+  const window = new Window({ broadcast, compactIdle: () => settings.claude.compactIdle, rateLimit: (info) => usage.rateLimit(info), tabClosed: (tabId) => plugins.dropTab(tabId) })
   // Each project's commands, made the first time the project is named. They run as long as the core.
   const commands = new Map<string, Commands>()
   const commandsOf = (dir: string) => {
@@ -103,6 +109,12 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         return window.resume(message.tabId, message.threadId, reply)
       case "review.get":
         return reply({ type: "review", tabId: message.tabId, files: await window.review(message.tabId) })
+      case "panel.open": {
+        const { plugin, root } = await plugins.open(message.tabId, window.projectOf(message.tabId), message.panel)
+        return reply({ type: "panel", tabId: message.tabId, panel: message.panel, plugin, root })
+      }
+      case "plugin.event":
+        return plugins.event(message.plugin, message.handler, message.args)
       case "terminal.open":
         return window.openTerminal(message.id, message.cols, message.rows)
       case "terminal.input":
@@ -134,6 +146,8 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         clients.add(ws)
         const reply: Send = (message) => ws.send(JSON.stringify(message))
         reply({ type: "settings", settings })
+        reply({ type: "setups", setups: loadSetups() })
+        plugins.resend()
         void window.greet(reply)
       },
       close(ws) {
@@ -156,6 +170,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     port: server.port!,
     stop() {
       window.stop()
+      plugins.stop()
       for (const found of commands.values()) found.stopAll()
       server.stop(true)
     },

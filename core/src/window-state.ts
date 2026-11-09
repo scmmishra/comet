@@ -14,6 +14,8 @@ export interface TabThread {
   readonly baseline?: string
   /** The last context reading. A restored session is not live until its next message, so it cannot be asked. */
   readonly context?: ContextReading
+  /** The key a plugin opened the thread under, such as a conversation's id. */
+  readonly key?: string
 }
 
 /** The window: its tabs in their order across projects, each tab's thread, and the folders tabs have opened. */
@@ -23,6 +25,8 @@ export interface WindowState {
   readonly threads: Readonly<Record<string, TabThread>>
   /** Most recent first. */
   readonly recent: readonly string[]
+  /** The Claude session each thread key leads to, by project and key. One key always resumes the same thread. */
+  readonly keys: Readonly<Record<string, string>>
 }
 
 const windowStatePath = () => join(deskHome(), "window.json")
@@ -33,13 +37,14 @@ export function loadWindowState(): WindowState {
   try {
     saved = JSON.parse(readFileSync(windowStatePath(), "utf8")) as Partial<WindowState>
   } catch {
-    return { tabs: [], threads: {}, recent: [] }
+    return { tabs: [], threads: {}, recent: [], keys: {} }
   }
   return {
     tabs: Array.isArray(saved.tabs) ? saved.tabs.filter(isTab) : [],
     ...(typeof saved.active === "string" ? { active: saved.active } : {}),
     threads: typeof saved.threads === "object" && saved.threads ? saved.threads : {},
     recent: Array.isArray(saved.recent) ? saved.recent.filter((dir) => typeof dir === "string") : [],
+    keys: typeof saved.keys === "object" && saved.keys ? saved.keys : {},
   }
 }
 

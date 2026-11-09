@@ -318,6 +318,17 @@ export interface ProjectParts {
 }
 export type ProjectPart = keyof ProjectParts
 
+/**
+ * A named layout for one project: plugin panels placed beside the thread. A panel is named
+ * `<plugin>.<panel>`, such as `chatwoot.inbox`. Setups live in `~/.desk/setups/<id>.json`.
+ */
+export interface SetupInfo {
+  readonly id: string
+  readonly name: string
+  readonly project: string
+  readonly layout: { readonly left: readonly string[]; readonly right: readonly string[] }
+}
+
 /** A terminal in a tab's panel. Its shell runs in the core under this id. */
 export interface TerminalInfo {
   readonly id: string
@@ -337,7 +348,24 @@ export interface TabInfo extends RunSettings {
   readonly terminals: readonly TerminalInfo[]
   /** The panel tab on show, as a terminal's id. Absent means Review. */
   readonly panelActive?: string
+  /** The setup the tab shows, by id. Its panels sit around the thread, and plugins choose the thread. */
+  readonly setup?: string
 }
+
+/** A value a plugin's UI node can hold. A function becomes a handler id, which the app calls back through `plugin.event`. */
+export type UiValue = string | number | boolean | null | undefined | { readonly handler: number } | readonly UiValue[] | { readonly [key: string]: UiValue }
+
+/**
+ * One change to a plugin's UI tree, after the remote-DOM idea MCP-UI used: the plugin's code builds the
+ * tree in the core, and the app draws each node with Desk's own component of that name. Node ids are
+ * unique within a plugin, and the app keeps one copy of each plugin's nodes.
+ */
+export type UiOp =
+  | { readonly op: "create"; readonly id: number; readonly type: string }
+  | { readonly op: "text"; readonly id: number; readonly text: string }
+  | { readonly op: "set"; readonly id: number; readonly key: string; readonly value: UiValue }
+  | { readonly op: "insert"; readonly parent: number; readonly id: number; readonly before?: number }
+  | { readonly op: "remove"; readonly parent: number; readonly id: number }
 
 /**
  * Messages from the app. Those about a project's data name the project's folder. Those about a tab's
@@ -375,6 +403,10 @@ export type ClientMessage =
   | { readonly type: "session.send"; readonly tabId: string; readonly text: string }
   | { readonly type: "session.interrupt"; readonly tabId: string }
   | { readonly type: "permission.answer"; readonly tabId: string; readonly requestId: string; readonly allow: boolean }
+  /** Draws a plugin panel for a tab, or names the one already drawn. The core answers with `panel`. */
+  | { readonly type: "panel.open"; readonly tabId: string; readonly panel: string }
+  /** Runs a handler a plugin's node holds, such as a button's onClick. */
+  | { readonly type: "plugin.event"; readonly plugin: string; readonly handler: number; readonly args: readonly UiValue[] }
 
 export type CoreMessage =
   /** Desk's settings, sent on connect and again after every change. */
@@ -399,5 +431,13 @@ export type CoreMessage =
   | { readonly type: "session.event"; readonly tabId: string; readonly event: ThreadEvent }
   /** A restored thread, read back from Claude's transcript in one message, so the app can tell it from live events. */
   | { readonly type: "session.history"; readonly tabId: string; readonly items: readonly ThreadItem[]; readonly context?: ContextReading }
+  /** The setups in `~/.desk/setups`, sent on connect. */
+  | { readonly type: "setups"; readonly setups: readonly SetupInfo[] }
+  /** Changes to a plugin's UI. With `reset`, they replace every node the app holds for the plugin. */
+  | { readonly type: "plugin.ops"; readonly plugin: string; readonly ops: readonly UiOp[]; readonly reset?: boolean }
+  /** A panel drawn for a tab: the plugin's node it starts at. */
+  | { readonly type: "panel"; readonly tabId: string; readonly panel: string; readonly plugin: string; readonly root: number }
+  /** A plugin opened a thread in a tab under this name. */
+  | { readonly type: "tab.title"; readonly tabId: string; readonly title: string }
   /** Something the user asked for failed. The app shows the message. */
   | { readonly type: "error"; readonly message: string }

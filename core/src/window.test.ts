@@ -14,7 +14,7 @@ const saved = () => JSON.parse(readFileSync(join(process.env.DESK_HOME!, "window
 function open(state: object) {
   writeFileSync(join(process.env.DESK_HOME!, "window.json"), JSON.stringify(state))
   const sent: CoreMessage[] = []
-  const window = new Window({ broadcast: (message) => sent.push(message), compactIdle: () => false, rateLimit: () => {} })
+  const window = new Window({ broadcast: (message) => sent.push(message), compactIdle: () => false, rateLimit: () => {}, tabClosed: () => {} })
   return { window, sent }
 }
 

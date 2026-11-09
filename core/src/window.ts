@@ -18,6 +18,8 @@ interface WindowHooks {
   /** Whether to compact a large thread that sat idle, read at each ask. */
   readonly compactIdle: () => boolean
   readonly rateLimit: (info: SDKRateLimitInfo) => void
+  /** A tab closed, so what runs for it can stop. */
+  readonly tabClosed: (tabId: string) => void
 }
 
 /**
@@ -75,7 +77,11 @@ export class Window {
           ?.configure(tab)
           .catch((error) => this.hooks.broadcast({ type: "error", message: `Desk could not change how the thread runs: ${message(error)}` }))
     }
-    for (const id of before.keys()) if (!tabs.some((tab) => tab.id === id)) this.closeSession(id)
+    for (const id of before.keys()) {
+      if (tabs.some((tab) => tab.id === id)) continue
+      this.closeSession(id)
+      this.hooks.tabClosed(id)
+    }
     if (opened.length) this.remember(opened)
     this.terminals.retain(new Set(tabs.flatMap((tab) => tab.terminals.map((terminal) => terminal.id))))
   }
@@ -97,6 +103,30 @@ export class Window {
     this.setThread(tabId, { sessionId: threadId })
     reply({ type: "session.history", tabId, items: await this.history(tab, threadId) })
     this.fillContext(tabId, threadId)
+  }
+
+  /**
+   * Shows the thread for `key` in a tab, as a plugin asked. A key that led to a thread before resumes
+   * it. A new one starts empty and, given a prompt, sends it.
+   */
+  async openKey(tabId: string, thread: { readonly key: string; readonly title?: string; readonly prompt?: string }) {
+    if (this.thread(tabId).key === thread.key) return
+    const tab = this.tab(tabId)
+    const sessionId = this.state.keys[threadKey(tab.project, thread.key)]
+    this.closeSession(tabId)
+    this.setThread(tabId, { key: thread.key, ...(sessionId ? { sessionId } : {}) })
+    if (thread.title) this.hooks.broadcast({ type: "tab.title", tabId, title: thread.title })
+    const items = sessionId ? await this.history(tab, sessionId) : []
+    // Another key may have taken the tab while the transcript was read.
+    if (this.thread(tabId).key !== thread.key) return
+    this.hooks.broadcast({ type: "session.history", tabId, items })
+    if (sessionId) this.fillContext(tabId, sessionId)
+    else if (thread.prompt) await this.send(tabId, thread.prompt)
+  }
+
+  /** The folder a tab works in. */
+  projectOf(tabId: string) {
+    return this.tab(tabId).project
   }
 
   interrupt(tabId: string) {
@@ -170,7 +200,11 @@ export class Window {
         resume: this.thread(tab.id).sessionId,
         settings: tab,
         compactIdle: this.hooks.compactIdle,
-        onSessionId: (sessionId) => this.updateThread(tab.id, { sessionId }),
+        onSessionId: (sessionId) => {
+          this.updateThread(tab.id, { sessionId })
+          const key = this.thread(tab.id).key
+          if (key) this.persist({ keys: { ...this.state.keys, [threadKey(tab.project, key)]: sessionId } })
+        },
         onRateLimit: this.hooks.rateLimit,
       })
       this.sessions.set(tab.id, found)
@@ -218,5 +252,8 @@ export class Window {
     saveWindowState(this.state)
   }
 }
+
+/** Keys belong to a project, so two projects' plugins can use the same key. */
+const threadKey = (project: string, key: string) => `${project}\n${key}`
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
