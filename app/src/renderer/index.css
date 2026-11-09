@@ -317,7 +317,7 @@ body {
   padding: 4px 12px 12px;
   overflow-x: auto;
   font-family: var(--font-family-mono);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.6;
   color: var(--color-fg);
 }
