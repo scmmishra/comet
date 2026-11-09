@@ -23,7 +23,7 @@ const USAGE_REFRESH_MS = 5 * 60_000
 export function App() {
   const togglePalette = usePalette()
   onMount(() => {
-    const stop = window.desk.onCommand((command) => {
+    const run = (command: string) => {
       if (command === "tab.new") newTab()
       else if (command === "tab.close" && state.active) closeTab(state.active)
       else if (command === "panel.toggle") togglePanelInstantly()
@@ -36,7 +36,11 @@ export function App() {
         const index = Number(command.slice("tab.select:".length))
         if (!pickModelByNumber(index)) selectTabAt(index)
       }
-    })
+    }
+    const stop = window.desk.onCommand(run)
+    // Menu shortcuts reach the page through the main process, which agent-browser cannot press. In development,
+    // the page takes the same commands from window.__deskCommand, so an agent can test them.
+    if (import.meta.env.DEV) Object.assign(window, { __deskCommand: run })
     // Coming back to the window is when files and usage most likely changed outside Desk.
     const refresh = () => {
       refreshSpace()

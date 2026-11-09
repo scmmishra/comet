@@ -43,6 +43,8 @@ Build the UI from `@opencode/ui`. Anomaly's Rust framework ships `rune-kit`, who
 
 Do not take screen captures. Start the app with `DESK_DEBUG_PORT=9333`, then drive the page with agent-browser: `agent-browser connect 9333`, `snapshot -i`, `fill`, `press`, `get text`, and `screenshot` of the page.
 
+Menu shortcuts such as ⌘K never reach the page from agent-browser, because the main process handles them. In development, run the same command from the page instead: `window.__deskCommand("palette.toggle")`. The commands are the ones `app/src/main/menu.ts` sends.
+
 ## References
 
 T3 Code and OpenCode are cloned in `~/scmmishra/reference`. T3 Code's server shows how to drive the Agent SDK and shape thread items. OpenCode's `packages/ui` and `packages/session-ui` show how `@opencode/ui` is meant to be used.
