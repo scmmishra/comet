@@ -1,16 +1,12 @@
-import { afterAll, beforeAll, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { expect, test } from "bun:test"
+import { mkdirSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { DEFAULT_SETTINGS } from "@desk/protocol"
-import { loadSettings, saveSettings, settingsPath, updateSettings } from "./settings"
+import { loadSettings, saveSettings, updateSettings } from "./settings"
+import { tempFolder, useTempHome } from "./test-support"
 
-const home = mkdtempSync(join(tmpdir(), "desk-home-"))
-beforeAll(() => (process.env.DESK_HOME = home))
-afterAll(() => {
-  delete process.env.DESK_HOME
-  rmSync(home, { recursive: true, force: true })
-})
+useTempHome()
+const settingsPath = () => join(process.env.DESK_HOME!, "settings.json")
 
 test("starts from the defaults and keeps a change across a reload", () => {
   expect(loadSettings()).toEqual(DEFAULT_SETTINGS)
@@ -20,9 +16,10 @@ test("starts from the defaults and keeps a change across a reload", () => {
   rmSync(settingsPath())
 })
 
-test("clears the effort when a change sets it to undefined", () => {
+test("null clears an optional field and cannot clear a required one", () => {
   const high = updateSettings(DEFAULT_SETTINGS, { claude: { effort: "high" } })
-  expect(updateSettings(high, { claude: { effort: undefined } }).claude).toEqual({ model: "default", compactIdle: false })
+  expect(updateSettings(high, { claude: { effort: null } }).claude).toEqual({ model: "default", compactIdle: false })
+  expect(() => updateSettings(DEFAULT_SETTINGS, { appearance: { theme: null as never } })).toThrow()
 })
 
 test("refuses values Desk cannot use", () => {
@@ -34,14 +31,15 @@ test("refuses values Desk cannot use", () => {
 })
 
 test("keeps a project's settings without blank fields", () => {
-  const next = updateSettings(DEFAULT_SETTINGS, { project: { dir: "/work/desk", settings: { name: " Desk ", color: "blue", icon: "./assets/logo.svg" } } })
-  expect(next.projects["/work/desk"]).toEqual({ name: "Desk", color: "blue", icon: "assets/logo.svg" })
-  expect(updateSettings(next, { project: { dir: "/work/desk", settings: { name: "" } } }).projects["/work/desk"]).toEqual({})
+  const dir = tempFolder("project")
+  const next = updateSettings(DEFAULT_SETTINGS, { project: { dir, settings: { name: " Desk ", color: "blue", icon: "./assets/logo.svg" } } })
+  expect(next.projects[dir]).toEqual({ name: "Desk", color: "blue", icon: "assets/logo.svg" })
+  expect(updateSettings(next, { project: { dir, settings: { name: "" } } }).projects[dir]).toEqual({})
 })
 
-test("falls back to the default for a broken saved value", () => {
+test("falls back to the default for a broken saved value, of any type", () => {
   mkdirSync(dirname(settingsPath()), { recursive: true })
-  writeFileSync(settingsPath(), JSON.stringify({ appearance: { theme: "neon", fontSize: 13 } }))
-  expect(loadSettings().appearance).toEqual({ ...DEFAULT_SETTINGS.appearance, fontSize: 13 })
+  writeFileSync(settingsPath(), JSON.stringify({ appearance: { theme: "neon", fontSize: 13, uiFont: 3 }, claude: "opus", projects: { "/work/desk": null } }))
+  expect(loadSettings()).toEqual({ ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_SETTINGS.appearance, fontSize: 13 }, projects: { "/work/desk": {} } })
   rmSync(settingsPath())
 })

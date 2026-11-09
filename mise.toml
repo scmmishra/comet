@@ -7,4 +7,4 @@ run = "bun run --cwd app dev"
 
 [tasks.check]
 description = "Typecheck, test and build"
-run = "bun run typecheck && bun test core && bun run --cwd app build"
+run = "bun run typecheck && bun test core app/src && bun run --cwd app build"

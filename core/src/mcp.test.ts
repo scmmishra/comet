@@ -1,19 +1,15 @@
 import { expect, test } from "bun:test"
 import { mcpServer } from "./mcp"
 
-test("describes a server by its command or URL, its tools and its error", () => {
-  expect(mcpServer({ name: "linear", status: "connected", scope: "user", config: { type: "http", url: "https://mcp.linear.app/mcp" }, tools: [{ name: "a" }, { name: "b" }] })).toEqual({
-    name: "linear",
-    status: "connected",
-    scope: "user",
+test("describes a server by its command or URL, and tells a project's own server from a shared one", () => {
+  expect(mcpServer({ name: "linear", status: "connected", scope: "user", config: { type: "http", url: "https://mcp.linear.app/mcp" }, tools: [{ name: "a" }, { name: "b" }] })).toMatchObject({
     target: "https://mcp.linear.app/mcp",
     tools: 2,
+    ownProject: false,
   })
-  expect(mcpServer({ name: "files", status: "failed", config: { command: "npx", args: ["-y", "server-files"] }, error: "spawn failed" })).toEqual({
-    name: "files",
-    status: "failed",
+  expect(mcpServer({ name: "files", status: "failed", scope: "local", config: { command: "npx", args: ["-y", "server-files"] }, error: "spawn failed" })).toMatchObject({
     target: "npx -y server-files",
     tools: 0,
-    error: "spawn failed",
+    ownProject: true,
   })
 })
