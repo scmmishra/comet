@@ -42,7 +42,7 @@ export function UsageButton(props: { usage: PlanUsage }) {
   )
 }
 
-function UsageRow(props: { window: UsageWindow }) {
+export function UsageRow(props: { window: UsageWindow }) {
   return (
     <div class="grid gap-[5px]">
       <Progress value={props.window.percent} showValueLabel getValueLabel={({ value }) => `${Math.round(value)}%`}>

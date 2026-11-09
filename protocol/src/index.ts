@@ -162,6 +162,18 @@ export interface ProjectSettings {
   readonly icon?: string
 }
 
+/** The Claude account Claude Code is signed in with, as it reports it. */
+export interface ClaudeAccount {
+  readonly email?: string
+  readonly organization?: string
+  /** Such as "max" or "pro". Absent with an API key. */
+  readonly plan?: string
+  /** "firstParty" for Anthropic. Other values, such as "bedrock", mean the account lives with that cloud. */
+  readonly apiProvider?: string
+  /** Set when Claude Code signs in with an API key, naming where the key comes from. */
+  readonly apiKeySource?: string
+}
+
 export interface DeskSettings {
   readonly appearance: AppearanceSettings
   readonly claude: ClaudeSettings
@@ -297,6 +309,8 @@ export type CoreMessage =
   | { readonly type: "threads"; readonly project: string; readonly threads: readonly ThreadSummary[] }
   /** The models Claude Code offers, read once when the core starts. */
   | { readonly type: "models"; readonly models: readonly ModelOption[] }
+  /** Who Claude Code is signed in as, read with the models. Absent when it is not signed in. */
+  | { readonly type: "account"; readonly account?: ClaudeAccount }
   /** `usage` is absent when Claude has no plan limits, such as with an API key. */
   | { readonly type: "usage"; readonly usage?: PlanUsage }
   | { readonly type: "review"; readonly sessionId: string; readonly files: readonly FileChange[] }

@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, type AppearanceSettings, type ClaudeSettings, type CommandInfo, type ProjectSettings, type CommandProcess, type CommandSource, type CoreMessage, type FileChange, type ModelOption, type PlanUsage, type RunSettings, type Space, type TabInfo, type ThreadEvent, type ThreadSummary } from "@desk/protocol"
+import { DEFAULT_SETTINGS, type AppearanceSettings, type ClaudeAccount, type ClaudeSettings, type CommandInfo, type ProjectSettings, type CommandProcess, type CommandSource, type CoreMessage, type FileChange, type ModelOption, type PlanUsage, type RunSettings, type Space, type TabInfo, type ThreadEvent, type ThreadSummary } from "@desk/protocol"
 import { batch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
@@ -57,7 +57,7 @@ export interface ProjectData {
 const EMPTY_PROJECT: ProjectData = { commands: [], threads: [] }
 
 /** The settings screen's pages, in the order its sidebar lists them. */
-export const SETTINGS_PAGES = ["appearance"] as const
+export const SETTINGS_PAGES = ["providers", "appearance"] as const
 export type SettingsPage = (typeof SETTINGS_PAGES)[number]
 
 const [state, setState] = createStore({
@@ -72,6 +72,10 @@ const [state, setState] = createStore({
   projects: {} as Record<string, ProjectData>,
   usage: undefined as PlanUsage | undefined,
   models: [] as readonly ModelOption[],
+  /** Who Claude Code is signed in as. Undefined until read, and when no one is. */
+  account: undefined as ClaudeAccount | undefined,
+  /** Whether the core has read the account yet, so "not signed in" is not shown while it reads. */
+  accountRead: false,
   /** Whether the panel beside the thread is open. A per-window preference, so it lives in the page's storage. */
   panelOpen: localStorage.getItem(PANEL_KEY) === "open",
   connected: false,
@@ -376,6 +380,7 @@ core.listen((message: CoreMessage) => {
   else if (message.type === "space") updateProject(message.project, () => ({ space: message.space }))
   else if (message.type === "usage") setState("usage", message.usage)
   else if (message.type === "models") setState("models", message.models)
+  else if (message.type === "account") setState({ account: message.account, accountRead: true })
   else if (message.type === "threads") updateProject(message.project, () => ({ threads: message.threads }))
   else if (message.type === "commands") updateProject(message.project, () => ({ commands: message.commands }))
   else if (message.type === "commands.found") updateProject(message.project, () => ({ commandSources: message.sources }))

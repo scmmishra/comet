@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION, type ClientMessage, type CoreMessage, type ModelOption, type PlanUsage, type ThreadEvent } from "@desk/protocol"
+import { PROTOCOL_VERSION, type ClaudeAccount, type ClientMessage, type CoreMessage, type ModelOption, type PlanUsage, type ThreadEvent } from "@desk/protocol"
 import type { ServerWebSocket } from "bun"
 import pkg from "../package.json"
 import { discoverCommands } from "./command-sources"
@@ -54,15 +54,26 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
   }
   // The model list rarely changes, so it is read once, on the first ask. A failed read is tried again on the next.
   let models: readonly ModelOption[] | undefined
+  let account: ClaudeAccount | undefined
   let probingModels = false
   const sendModels = (ws: ServerWebSocket) => {
-    if (models) send(ws, { type: "models", models })
+    if (models) {
+      send(ws, { type: "models", models })
+      send(ws, { type: "account", account })
+    }
     if (models || probingModels) return
     probingModels = true
-    void probeModels(dir, (found) => {
-      models = found
-      broadcast({ type: "models", models })
-    }).finally(() => (probingModels = false))
+    void probeModels(
+      dir,
+      (found) => {
+        models = found
+        broadcast({ type: "models", models })
+      },
+      (found) => {
+        account = found
+        broadcast({ type: "account", account })
+      },
+    ).finally(() => (probingModels = false))
   }
   const persist = (next: WindowState) => {
     saved = next
@@ -103,6 +114,7 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
       found = new Session(tab.project, emit, {
         resume: tab.sessionId,
         settings: tab,
+        compactIdle: () => settings.claude.compactIdle,
         onSessionId: (sessionId) => updateTab(tab.id, { sessionId }),
         onRateLimit: (info) => {
           usage = applyRateLimit(usage, info)

@@ -8,7 +8,7 @@ import { modelLabel } from "./format"
 import { Icon, type IconName } from "./icons"
 import { state, updateRunSettings, type Tab } from "./store"
 
-const EFFORT_LABEL: Record<Effort, string> = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max" }
+export const EFFORT_LABEL: Record<Effort, string> = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max" }
 
 /** Permission modes, in T3 Code's words and order. */
 const PERMISSION: Record<PermissionMode, { label: string; description: string; icon: IconName }> = {
@@ -36,7 +36,7 @@ const isAlias = (option: ModelOption) => !option.value.startsWith("claude-")
  * Claude's starburst mark: eight lines through the centre make sixteen rays. In fast mode a solid
  * bolt sits on its bottom-right corner.
  */
-function ClaudeMark(props: { fast?: boolean }) {
+export function ClaudeMark(props: { fast?: boolean }) {
   return (
     <span class="relative shrink-0">
       <svg viewBox="0 0 16 16" class="size-4 text-claude" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" aria-hidden="true">

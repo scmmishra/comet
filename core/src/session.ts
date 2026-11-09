@@ -42,6 +42,8 @@ export interface SessionOptions {
   readonly onSessionId?: (id: string) => void
   /** Called with each plan rate-limit update Claude sends during a turn. */
   readonly onRateLimit?: (info: SDKRateLimitInfo) => void
+  /** Whether to compact a large thread that sat idle, when Claude Code asks on its return. Read at each ask. */
+  readonly compactIdle?: () => boolean
 }
 
 /** One Claude conversation, in one tab. It starts on the first message. */
@@ -115,6 +117,10 @@ export class Session {
         // It allows the mode and does not set it.
         allowDangerouslySkipPermissions: true,
         ...(this.sessionId ? { resume: this.sessionId } : {}),
+        // Claude Code asks whether to compact a large thread that sat idle. The setting answers, so no dialog shows.
+        supportedDialogKinds: ["resume_return"],
+        onUserDialog: async (request) =>
+          request.dialogKind === "resume_return" ? { behavior: "completed", result: this.options.compactIdle?.() ? "compact" : "continue" } : { behavior: "cancelled" },
       },
     })
     void this.pump(this.query)
