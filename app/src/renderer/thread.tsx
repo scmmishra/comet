@@ -189,7 +189,7 @@ function ToolRow(props: { tool: ToolItem }) {
   const [open, setOpen] = createSignal(false)
   return (
     <Collapsible variant="ghost" open={open()} onOpenChange={setOpen} disabled={!props.tool.result} class="py-[3px] text-[12.5px]">
-      <Collapsible.Trigger class="grid h-auto grid-cols-[auto_1fr] gap-x-2 text-left text-[12.5px] font-normal">
+      <Collapsible.Trigger class="grid h-auto w-full min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-2 text-left text-[12.5px] font-normal">
         <span class="font-medium text-fg-2">{props.tool.name}</span>
         <span class="min-w-0 truncate font-mono text-[12px] text-fg-2">{summarize(props.tool.input)}</span>
         <span class="col-start-2 text-[12px] text-fg-3">{outcome(props.tool)}</span>
