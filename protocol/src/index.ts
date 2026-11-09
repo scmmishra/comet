@@ -1,6 +1,6 @@
 /** Messages between the Desk app and the core, sent as JSON over one WebSocket. */
 
-export const PROTOCOL_VERSION = 1
+export const PROTOCOL_VERSION = 2
 
 /** The line the core prints on stdout once it listens, so the app knows where to connect. */
 export interface CoreReady {
@@ -171,74 +171,83 @@ export interface TerminalInfo {
   readonly title: string
 }
 
-/** A top tab as the app shows it. The core saves tabs per space and sends them back on connect. */
+/**
+ * A top tab as the app shows it. The core saves the window's tabs, in their order, and sends them back
+ * on connect. Each tab works in one project.
+ */
 export interface TabInfo extends RunSettings {
   readonly id: string
   readonly title: string
+  /** The project folder the tab works in. A tab can change it only before its thread starts. */
+  readonly project: string
   /** The terminals in this tab's panel, in order. The core closes any shell that no tab lists. */
   readonly terminals: readonly TerminalInfo[]
   /** The panel tab on show, as a terminal's id. Absent means Review. */
   readonly panelActive?: string
 }
 
+/**
+ * Messages from the app. Those about a project's data name the project's folder. Those about a tab's
+ * thread or panel name the tab or terminal, and the core finds the project from the saved tabs.
+ */
 export type ClientMessage =
   | { readonly type: "ping"; readonly id: number }
-  | { readonly type: "space.get" }
+  | { readonly type: "space.get"; readonly project: string }
   | { readonly type: "usage.get" }
   | { readonly type: "models.get" }
-  /** The space's recent threads, open in a tab or not. */
-  | { readonly type: "threads.get" }
+  /** The project's recent threads, open in a tab or not. */
+  | { readonly type: "threads.get"; readonly project: string }
   /** Continues a past thread in a tab that has not started one. */
   | { readonly type: "thread.resume"; readonly sessionId: string; readonly threadId: string }
   /** Starts a terminal, or reattaches to one already running under this id. */
   | { readonly type: "terminal.open"; readonly id: string; readonly cols: number; readonly rows: number }
   | { readonly type: "terminal.input"; readonly id: string; readonly data: string }
   | { readonly type: "terminal.resize"; readonly id: string; readonly cols: number; readonly rows: number }
-  | { readonly type: "commands.get" }
-  /** Looks for commands to import in the space's Procfiles, mise tasks and package.json. */
-  | { readonly type: "commands.discover" }
+  | { readonly type: "commands.get"; readonly project: string }
+  /** Looks for commands to import in the project's Procfiles, mise tasks and package.json. */
+  | { readonly type: "commands.discover"; readonly project: string }
   /**
    * Replaces the commands in `replacing` with `processes`, in their place. One process saves as a plain
    * command called `name`, several as a group called `name`. Adding replaces nothing.
    */
-  | { readonly type: "commands.save"; readonly name: string; readonly processes: readonly CommandProcess[]; readonly replacing: readonly string[] }
+  | { readonly type: "commands.save"; readonly project: string; readonly name: string; readonly processes: readonly CommandProcess[]; readonly replacing: readonly string[] }
   /** Removes commands, such as every command in a group, stopping those that run. */
-  | { readonly type: "commands.remove"; readonly ids: readonly string[] }
-  | { readonly type: "command.run"; readonly id: string }
-  | { readonly type: "command.stop"; readonly id: string }
+  | { readonly type: "commands.remove"; readonly project: string; readonly ids: readonly string[] }
+  | { readonly type: "command.run"; readonly project: string; readonly id: string }
+  | { readonly type: "command.stop"; readonly project: string; readonly id: string }
   /** Runs every command in the group that is not running. */
-  | { readonly type: "group.run"; readonly group: string }
-  | { readonly type: "group.stop"; readonly group: string }
+  | { readonly type: "group.run"; readonly project: string; readonly group: string }
+  | { readonly type: "group.stop"; readonly project: string; readonly group: string }
   /** The files a tab's thread changed since its first message. */
   | { readonly type: "review.get"; readonly sessionId: string }
-  /** The app's tabs, in order, sent whenever they change. */
+  /** The window's tabs, in order, sent whenever they change. */
   | { readonly type: "tabs.save"; readonly tabs: readonly TabInfo[]; readonly active?: string }
-  /** Opens a file from the thread in the editor. The core refuses paths outside the space. */
-  | { readonly type: "file.open"; readonly path: string; readonly line?: number }
+  /** Opens a file from the thread in the editor. The core refuses paths outside the project. */
+  | { readonly type: "file.open"; readonly project: string; readonly path: string; readonly line?: number }
   | { readonly type: "session.send"; readonly sessionId: string; readonly text: string }
   | { readonly type: "session.interrupt"; readonly sessionId: string }
   | { readonly type: "session.close"; readonly sessionId: string }
   | { readonly type: "permission.answer"; readonly sessionId: string; readonly id: string; readonly allow: boolean }
 
 export type CoreMessage =
-  /** `dir` is the project folder this core serves. */
-  | { readonly type: "hello"; readonly protocol: number; readonly core: string; readonly bun: string; readonly dir: string }
+  /** `project` is the folder a new tab opens in when the window has none. */
+  | { readonly type: "hello"; readonly protocol: number; readonly core: string; readonly bun: string; readonly project: string }
   | { readonly type: "pong"; readonly id: number }
-  /** The tabs saved for this space. Each restored tab's thread follows as a session.history message. */
+  /** The window's saved tabs. Each restored tab's thread follows as a session.history message. */
   | { readonly type: "tabs"; readonly tabs: readonly TabInfo[]; readonly active?: string }
-  | { readonly type: "threads"; readonly threads: readonly ThreadSummary[] }
+  | { readonly type: "threads"; readonly project: string; readonly threads: readonly ThreadSummary[] }
   /** The models Claude Code offers, read once when the core starts. */
   | { readonly type: "models"; readonly models: readonly ModelOption[] }
   /** `usage` is absent when Claude has no plan limits, such as with an API key. */
   | { readonly type: "usage"; readonly usage?: PlanUsage }
   | { readonly type: "review"; readonly sessionId: string; readonly files: readonly FileChange[] }
-  /** The space's commands and how each one runs, sent again on every change. */
-  | { readonly type: "commands"; readonly commands: readonly CommandInfo[] }
-  | { readonly type: "commands.found"; readonly sources: readonly CommandSource[] }
+  /** The project's commands and how each one runs, sent again on every change. */
+  | { readonly type: "commands"; readonly project: string; readonly commands: readonly CommandInfo[] }
+  | { readonly type: "commands.found"; readonly project: string; readonly sources: readonly CommandSource[] }
   | { readonly type: "terminal.output"; readonly id: string; readonly data: string }
   | { readonly type: "terminal.exit"; readonly id: string; readonly code: number }
   /** `space` is absent when the folder is not a Git repo. */
-  | { readonly type: "space"; readonly space?: Space }
+  | { readonly type: "space"; readonly project: string; readonly space?: Space }
   | { readonly type: "session.event"; readonly sessionId: string; readonly event: ThreadEvent }
   /** A restored thread, read back from Claude's transcript in one message, so the app can tell it from live events. */
   | { readonly type: "session.history"; readonly sessionId: string; readonly events: readonly ThreadEvent[] }

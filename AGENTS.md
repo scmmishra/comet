@@ -15,7 +15,7 @@ Always build code cleanly, modularly, and with proper architecture and separatio
 
 ## Structure
 
-- `core/` is a Bun process. It owns sessions, the Claude Agent SDK, Git and space data. Later it also owns PTYs, cards, variables and the MCP server.
+- `core/` is a Bun process. It owns sessions, the Claude Agent SDK, Git, PTYs, commands and space data, for every project the window's tabs work in. Later it also owns cards, variables and the MCP server.
 - `app/` is Electron with Solid and `@opencode/ui`. It is a thin client: it draws what the core sends.
 - `protocol/` holds the message types the two share. They talk JSON over one WebSocket on loopback, guarded by a token.
 
@@ -33,8 +33,9 @@ Build the UI from `@opencode/ui`. Anomaly's Rust framework ships `rune-kit`, who
 
 ## Run
 
-- `mise run dev` starts the app. It opens `DESK_DIR` if set, then the most recent project, then asks for one. ⌘O opens another folder. Recent projects live in `projects.json` in the app's data folder.
-- `bin/desk <folder>` opens a folder in Desk. Link it onto your PATH to use `desk .`.
+- `mise run dev` starts the app. A window with no tabs opens on `DESK_DIR` if set, then the most recent project, then asks for one. ⌘O opens a folder in a new tab. Recent projects live in `projects.json` in the app's data folder.
+- `bin/desk <folder>` opens a folder in Desk. When Desk already runs, the folder opens in a new tab there. Link it onto your PATH to use `desk .`.
+- One Desk runs at a time, with one window. Its tabs are saved in `~/.desk/window.json`.
 - The app starts the core with `bun` from `PATH`. Set `DESK_BUN` to use another binary. The core needs Bun 1.4 or newer.
 - `mise run check` typechecks, runs the core tests and builds the app.
 
@@ -49,7 +50,7 @@ T3 Code and OpenCode are cloned in `~/scmmishra/reference`. T3 Code's server sho
 ## Glossary
 
 - **Space.** A repo and its branch.
-- **Tab.** One top tab of the window. A tab is a session, and later also a setup.
+- **Tab.** One top tab of the window. A tab is a session in one project, and later also a setup. Tabs from several projects share the window.
 - **Session.** One Claude conversation in a tab.
 - **Thread.** The messages of a session, as Desk draws them.
 - **Setup.** A named space with its own cards and bindings. Not built yet.

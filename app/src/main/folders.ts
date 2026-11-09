@@ -6,7 +6,7 @@ import { join } from "node:path"
 const projectsFile = () => join(app.getPath("userData"), "projects.json")
 const MAX_PROJECTS = 20
 
-function isFolder(path: string) {
+export function isFolder(path: string) {
   try {
     return statSync(path).isDirectory()
   } catch {

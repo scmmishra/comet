@@ -3,7 +3,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron"
 contextBridge.exposeInMainWorld("desk", {
   core: () => ipcRenderer.invoke("desk:core"),
   projects: () => ipcRenderer.invoke("desk:projects"),
-  openProject: (path: string) => ipcRenderer.invoke("desk:open-project", path),
+  useProject: (path: string) => ipcRenderer.invoke("desk:use-project", path),
   chooseProject: () => ipcRenderer.invoke("desk:choose-project"),
   isFullScreen: () => ipcRenderer.invoke("desk:is-full-screen"),
   onFullScreen(listener: (fullScreen: boolean) => void) {

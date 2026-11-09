@@ -5,7 +5,7 @@ import { SearchHighlight, SearchList } from "@opencode/ui/search-list"
 import { createMemo, createSignal, Show } from "solid-js"
 import { formatAgo } from "./format"
 import { Icon } from "./icons"
-import { openThread, refreshThreads, state } from "./store"
+import { activeData, openThread, refreshThreads } from "./store"
 
 const DIALOG_ID = "thread-search"
 
@@ -19,14 +19,14 @@ export function useThreadSearch() {
   }
 }
 
-/** Finds a thread in the space by its title or branch, after OpenCode's session search. */
+/** Finds a thread in the active tab's project by its title or branch, after OpenCode's session search. */
 function ThreadSearch(props: { onPick: () => void }) {
   const [query, setQuery] = createSignal("")
 
   // Every word must appear somewhere in the title or the branch.
   const matches = createMemo(() => {
     const words = query().toLowerCase().split(/\s+/).filter(Boolean)
-    return state.threads.filter((thread) => {
+    return activeData().threads.filter((thread) => {
       const text = `${thread.title} ${thread.branch ?? ""}`.toLowerCase()
       return words.every((word) => text.includes(word))
     })
@@ -55,7 +55,7 @@ function ThreadSearch(props: { onPick: () => void }) {
               <span class="min-w-0 flex-1 truncate">
                 <SearchHighlight text={thread().title} />
               </span>
-              <Show when={thread().branch && thread().branch !== state.space?.branch}>
+              <Show when={thread().branch && thread().branch !== activeData().space?.branch}>
                 <span class="flex shrink-0 items-center gap-1 text-[12px] text-fg-3">
                   <Icon name="branch" class="size-[13px]" />
                   {thread().branch}

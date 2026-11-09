@@ -2,9 +2,9 @@ import { Menu } from "@opencode/ui/menu"
 import { ProjectAvatar } from "@opencode/ui/project-avatar"
 import { createResource, For, onMount, Show } from "solid-js"
 import { Composer } from "./composer"
-import { formatAgo } from "./format"
+import { formatAgo, projectName } from "./format"
 import { Icon } from "./icons"
-import { openThread, refreshThreads, state, type Tab } from "./store"
+import { activeData, openThread, refreshThreads, setTabProject, type Tab } from "./store"
 
 /** A new tab: the composer, the project and branch it works in, and threads to pick up again. */
 export function StartScreen(props: { tab: Tab }) {
@@ -15,8 +15,8 @@ export function StartScreen(props: { tab: Tab }) {
       <div class="flex w-full max-w-[720px] flex-col gap-[18px]">
         <Composer tab={props.tab} />
         <div class="flex items-center gap-1 px-0.5 text-fg-2">
-          <ProjectSwitcher />
-          <Show when={state.space}>
+          <ProjectSwitcher tab={props.tab} />
+          <Show when={activeData().space}>
             {(space) => (
               <>
                 <span class="text-fg-3">/</span>
@@ -34,29 +34,29 @@ export function StartScreen(props: { tab: Tab }) {
   )
 }
 
-/**
- * Switches the window to another project. The window shows one project at a time, so a switch
- * starts a new core for that folder and reloads the page with its tabs.
- */
-function ProjectSwitcher() {
+/** Moves this tab to another project. Its thread has not started, so nothing is lost. */
+function ProjectSwitcher(props: { tab: Tab }) {
   const [projects, { refetch }] = createResource(() => window.desk.projects())
-  const current = () => projects()?.find((project) => project.path === state.project)
+  const use = (path: string) => {
+    void window.desk.useProject(path)
+    setTabProject(path)
+  }
 
   return (
     <Menu placement="bottom-start" gutter={8} onOpenChange={(open) => open && void refetch()}>
       <Menu.Trigger class="flex h-8 items-center gap-2 rounded-lg px-1.5 hover:bg-hover hover:text-fg data-[expanded]:bg-hover data-[expanded]:text-fg">
-        <ProjectAvatar fallback={state.space?.name ?? current()?.name ?? "?"} class="size-[18px]" />
-        {state.space?.name ?? current()?.name ?? "No project"}
+        <ProjectAvatar fallback={projectName(props.tab.project)} class="size-[18px]" />
+        {projectName(props.tab.project)}
         <Icon name="chevron-down" class="size-3 text-fg-3" />
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content class="w-[280px]">
           <Menu.Group>
             <Menu.GroupLabel>Projects</Menu.GroupLabel>
-            <Menu.RadioGroup value={current()?.path}>
+            <Menu.RadioGroup value={props.tab.project}>
               <For each={projects()}>
                 {(project) => (
-                  <Menu.RadioItem value={project.path} title={project.path} onSelect={() => project !== current() && void window.desk.openProject(project.path)}>
+                  <Menu.RadioItem value={project.path} title={project.path} closeOnSelect onSelect={() => use(project.path)}>
                     <span class="flex min-w-0 items-center gap-2.5">
                       <ProjectAvatar fallback={project.name} />
                       <span class="truncate">{project.name}</span>
@@ -67,7 +67,7 @@ function ProjectSwitcher() {
             </Menu.RadioGroup>
           </Menu.Group>
           <Menu.Separator />
-          <Menu.Item shortcut="⌘O" onSelect={() => void window.desk.chooseProject()}>
+          <Menu.Item onSelect={() => void window.desk.chooseProject().then((path) => path && setTabProject(path))}>
             Open folder…
           </Menu.Item>
         </Menu.Content>
@@ -76,9 +76,9 @@ function ProjectSwitcher() {
   )
 }
 
-/** Threads in this space that no tab has open. Picking one continues it in this tab. */
+/** Threads in this tab's project that no tab has open. Picking one continues it in this tab. */
 function RecentThreads() {
-  const closed = () => state.threads.filter((thread) => !thread.tabId).slice(0, 8)
+  const closed = () => activeData().threads.filter((thread) => !thread.tabId).slice(0, 8)
   return (
     <Show when={closed().length > 0}>
       <section class="grid gap-1 pt-2">
@@ -87,7 +87,7 @@ function RecentThreads() {
           {(thread) => (
             <button type="button" class="group flex h-9 min-w-0 items-center gap-3 rounded-lg px-2 text-left hover:bg-hover" onClick={() => openThread(thread)}>
               <span class="min-w-0 flex-1 truncate text-fg-2 group-hover:text-fg">{thread.title}</span>
-              <Show when={thread.branch && thread.branch !== state.space?.branch}>
+              <Show when={thread.branch && thread.branch !== activeData().space?.branch}>
                 <span class="flex shrink-0 items-center gap-1 text-[12px] text-fg-3">
                   <Icon name="branch" class="size-[13px]" />
                   {thread.branch}

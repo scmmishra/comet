@@ -1,6 +1,6 @@
 import { getSessionMessages, listSessions, type SDKSessionInfo } from "@anthropic-ai/claude-agent-sdk"
 import type { ThreadEvent, ThreadSummary } from "@desk/protocol"
-import type { SavedTab } from "./space-state"
+import type { SavedTab } from "./window-state"
 import { probe } from "./probe"
 import { historyEvents } from "./thread"
 

@@ -11,7 +11,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Icon } from "./icons"
-import { discoverCommands, removeCommands, runCommand, runGroup, saveCommands, state, stopCommand, stopGroup } from "./store"
+import { activeData, discoverCommands, removeCommands, runCommand, runGroup, saveCommands, stopCommand, stopGroup } from "./store"
 
 const COMMAND_DIALOG_ID = "command"
 const COMMAND_FORM_ID = "command-form"
@@ -61,7 +61,7 @@ export function CommandsCard() {
   // Editing a command in a group edits the whole group, as Rune's editor did.
   const edit = (command?: CommandInfo) =>
     dialog.show(() => <CommandEditor draft={draftFor(command)} onDone={() => dialog.close(COMMAND_DIALOG_ID)} />, undefined, COMMAND_DIALOG_ID)
-  const rows = createMemo(() => entries(state.commands))
+  const rows = createMemo(() => entries(activeData().commands))
 
   return (
     <section class="flex flex-col rounded-3xl border border-outline bg-card p-1.5">
@@ -160,9 +160,9 @@ function ImportMenu(props: { onPick: (command: Found) => void; onPickAll: (group
   // The menu mounts inside the dialog's content: the dialog closes on a press outside its content, and a
   // menu in its own portal at the end of the page counts as outside. Nothing between them clips it.
   const [mount, setMount] = createSignal<HTMLElement>()
-  const saved = () => new Set(state.commands.map((command) => command.command))
+  const saved = () => new Set(activeData().commands.map((command) => command.command))
   const sources = () =>
-    state.commandSources
+    activeData().commandSources
       ?.map((source) => ({ ...source, commands: source.commands.filter((command) => !saved().has(command.command)) }))
       .filter((source) => source.commands.length > 0)
 
@@ -249,7 +249,7 @@ const blankProcess = (): DraftProcess => ({ key: crypto.randomUUID(), name: "", 
 
 function draftFor(command: CommandInfo | undefined): Draft {
   if (!command) return { name: "", processes: [blankProcess()], original: [] }
-  const members = command.group ? state.commands.filter((found) => found.group === command.group) : [command]
+  const members = command.group ? activeData().commands.filter((found) => found.group === command.group) : [command]
   return {
     name: command.group ?? command.name,
     processes: members.map((member) => ({ key: member.id, id: member.id, name: member.name, command: member.command })),

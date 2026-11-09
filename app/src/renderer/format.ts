@@ -39,3 +39,8 @@ export function formatMessageTime(at: number, now = Date.now()) {
   const sameYear = date.getFullYear() === new Date(now).getFullYear()
   return `${date.toLocaleDateString(undefined, { day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) })} ${time}`
 }
+
+/** A project's name: its folder's last part, as the Space card names it. */
+export function projectName(project: string) {
+  return project.split("/").filter(Boolean).pop() ?? project
+}

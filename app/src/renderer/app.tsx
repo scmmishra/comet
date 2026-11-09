@@ -12,7 +12,8 @@ import { ReviewView } from "./review"
 import { CommandsCard } from "./commands"
 import { SpaceCard, SpaceChip } from "./space"
 import { StartScreen } from "./start-screen"
-import { activeTab, closePanelTab, closeTab, newTab, newTerminal, refreshSpace, refreshUsage, selectPanelTab, selectTab, selectTabAt, state, togglePanel, type Tab } from "./store"
+import { projectName } from "./format"
+import { activeData, activeTab, closePanelTab, closeTab, newTab, newTerminal, refreshSpace, refreshUsage, selectPanelTab, selectTab, selectTabAt, state, togglePanel, type Tab } from "./store"
 import { TerminalView } from "./terminal"
 import { useThreadSearch } from "./thread-search"
 import { Thread } from "./thread"
@@ -28,6 +29,7 @@ export function App() {
       else if (command === "panel.toggle") togglePanelInstantly()
       else if (command === "terminal.new") newTerminal()
       else if (command === "threads.search") toggleThreadSearch()
+      else if (command.startsWith("project.open:")) newTab("end", command.slice("project.open:".length))
       else if (command.startsWith("tab.select:")) {
         const index = Number(command.slice("tab.select:".length))
         if (!pickModelByNumber(index)) selectTabAt(index)
@@ -59,13 +61,13 @@ export function App() {
                 {/* The right padding leaves room for the panel toggle, which sits over this corner. */}
                 <header class="flex h-[46px] shrink-0 items-center gap-2 pl-4 pr-12">
                   <span class="flex min-w-0 items-center gap-[7px] whitespace-nowrap text-fg-2">
-                    <ProjectAvatar fallback={state.space?.name ?? "?"} class="size-[18px]" />
-                    {state.space?.name ?? "No repo"}
+                    <ProjectAvatar fallback={projectName(tab.project)} class="size-[18px]" />
+                    {projectName(tab.project)}
                     <span class="text-fg-3">/</span>
                     <b class="truncate font-medium text-fg">{tab.title}</b>
                   </span>
                   <span class="ml-auto flex items-center gap-1">
-                    <Show when={state.panelOpen && state.space}>{(space) => <SpaceChip space={space()} />}</Show>
+                    <Show when={state.panelOpen && activeData().space}>{(space) => <SpaceChip space={space()} />}</Show>
                     <Show when={tab.context}>{(context) => <ContextRing {...context()} />}</Show>
                   </span>
                 </header>
@@ -79,7 +81,7 @@ export function App() {
                       </div>
                     </Show>
                   </div>
-                  <Show when={!state.panelOpen && state.space}>
+                  <Show when={!state.panelOpen && activeData().space}>
                     {(space) => (
                       <aside class="desk-rail desk-no-scrollbar absolute right-2 top-0 flex max-h-full w-[264px] flex-col gap-2 overflow-y-auto pb-2">
                         <SpaceCard space={space()} />
@@ -202,7 +204,7 @@ function TabBar() {
             >
               {/* The tab and its close button are siblings: a button cannot hold another. */}
               <button class="flex h-full min-w-0 flex-1 items-center gap-2 pl-2 pr-7 text-left" onClick={() => selectTab(tab.id)}>
-                <ProjectAvatar fallback={state.space?.name ?? "?"} />
+                <ProjectAvatar fallback={projectName(tab.project)} />
                 <span class="desk-fade-end min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[12px]">{tab.title}</span>
                 <Show when={tab.busy}>
                   <Spinner class="size-3.5 shrink-0 text-accent" />

@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron"
 import { basename, join } from "node:path"
 import { CoreProcess } from "./core-process"
-import { chooseFolder, initialFolder, recentProjects, rememberProject } from "./folders"
+import { chooseFolder, initialFolder, isFolder, recentProjects, rememberProject } from "./folders"
 import { installMenu } from "./menu"
 
 // Without a name, Electron names the app and its settings folder after the npm package.
@@ -10,21 +10,29 @@ app.setName("Desk")
 // Lets an agent read and drive the page over the DevTools protocol, without screenshots.
 if (process.env.DESK_DEBUG_PORT) app.commandLine.appendSwitch("remote-debugging-port", process.env.DESK_DEBUG_PORT)
 
+/**
+ * One Desk runs at a time: its window's tabs are saved in one file, which a second Desk would overwrite.
+ * A second launch, such as `desk ~/code/repo`, hands its folder to the running Desk and quits.
+ */
+const firstLaunch = app.requestSingleInstanceLock({ dir: process.env.DESK_DIR })
+if (!firstLaunch) app.quit()
+
 let core: CoreProcess | undefined
 let window: BrowserWindow | undefined
 
-/** Points the window at another folder: a new core for it, then a fresh page. */
-async function openFolder(dir: string) {
-  const next = await CoreProcess.start(dir)
-  core?.stop()
-  core = next
+/** Opens a tab in a folder. The page owns the tabs, so it makes the tab. */
+function openInTab(dir: string) {
   rememberProject(dir)
-  window?.webContents.reload()
+  window?.webContents.send("desk:command", `project.open:${dir}`)
+  window?.show()
+  window?.focus()
 }
 
-async function chooseAndOpenFolder() {
+/** Asks for a folder and records it as a recent project. */
+async function chooseProject(): Promise<string | undefined> {
   const chosen = await chooseFolder(window)
-  if (chosen) await openFolder(chosen)
+  if (chosen) rememberProject(chosen)
+  return chosen
 }
 
 function createWindow() {
@@ -69,7 +77,15 @@ function createWindow() {
   else void window.loadFile(join(__dirname, "../renderer/index.html"))
 }
 
+app.on("second-instance", (_event, _argv, _cwd, data) => {
+  const dir = (data as { dir?: string } | undefined)?.dir
+  if (dir && isFolder(dir)) openInTab(dir)
+  else window?.focus()
+})
+
 app.whenReady().then(async () => {
+  if (!firstLaunch) return
+  // The core serves every project. This folder is the one a window with no tabs opens on.
   const dir = await initialFolder()
   if (!dir) return app.quit()
   core = await CoreProcess.start(dir)
@@ -77,10 +93,10 @@ app.whenReady().then(async () => {
   ipcMain.handle("desk:core", () => core?.info)
   ipcMain.handle("desk:is-full-screen", () => window?.isFullScreen() ?? false)
   ipcMain.handle("desk:projects", () => recentProjects().map((path) => ({ path, name: basename(path) })))
-  // Only a folder from the recent list opens this way. Any other folder goes through the picker.
-  ipcMain.handle("desk:open-project", (_event, path: string) => (recentProjects().includes(path) ? openFolder(path) : undefined))
-  ipcMain.handle("desk:choose-project", chooseAndOpenFolder)
-  installMenu({ openFolder: chooseAndOpenFolder })
+  // Only a folder from the recent list is taken this way. Any other folder goes through the picker.
+  ipcMain.handle("desk:use-project", (_event, path: string) => recentProjects().includes(path) && rememberProject(path))
+  ipcMain.handle("desk:choose-project", chooseProject)
+  installMenu({ openFolder: () => void chooseProject().then((dir) => dir && openInTab(dir)) })
   createWindow()
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

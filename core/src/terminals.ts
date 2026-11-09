@@ -54,6 +54,10 @@ export class Terminals {
     this.running.set(id, entry)
   }
 
+  has(id: string) {
+    return this.running.has(id)
+  }
+
   input(id: string, data: string) {
     this.running.get(id)?.process.terminal?.write(data)
   }

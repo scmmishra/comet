@@ -20,6 +20,8 @@ type Writable<T> = { -readonly [K in keyof T]: T[K] }
 export interface Tab extends Writable<RunSettings> {
   readonly id: string
   title: string
+  /** The project folder the tab works in. It can change only before the tab's thread starts. */
+  project: string
   items: Item[]
   busy: boolean
   /** The model that ran, as the session reported it. */
@@ -40,20 +42,29 @@ const NEW_TAB_TITLE = "New session"
 const PANEL_KEY = "desk.panel"
 const TITLE_LENGTH = 40
 
+/** What the window knows about one project, read from the core when a tab first shows it. */
+export interface ProjectData {
+  /** The Space card's facts. Undefined until read, and when the folder is not a Git repo. */
+  space?: Space
+  /** The project's saved commands and their runs. */
+  commands: readonly CommandInfo[]
+  /** Commands the project's files define, for the import menu. Undefined until the core has looked. */
+  commandSources?: readonly CommandSource[]
+  /** The project's recent threads, for the start screen and thread search. */
+  threads: readonly ThreadSummary[]
+}
+
+const EMPTY_PROJECT: ProjectData = { commands: [], threads: [] }
+
 const [state, setState] = createStore({
-  /** The project folder this window shows, as the core names it. */
-  project: "",
+  /** The folder a new tab opens in when the window has none, as the core names it. */
+  defaultProject: "",
   tabs: [] as Tab[],
   active: "",
-  space: undefined as Space | undefined,
+  /** Each project a tab has shown, by folder. */
+  projects: {} as Record<string, ProjectData>,
   usage: undefined as PlanUsage | undefined,
   models: [] as readonly ModelOption[],
-  /** The space's saved commands and their runs, for the Space card. */
-  commands: [] as readonly CommandInfo[],
-  /** Commands the space's files define, for the Import menu. Undefined until the core has looked. */
-  commandSources: undefined as readonly CommandSource[] | undefined,
-  /** The space's recent threads, for the start screen and thread search. */
-  threads: [] as readonly ThreadSummary[],
   /** Whether the panel beside the thread is open. A per-window preference, so it lives in the page's storage. */
   panelOpen: localStorage.getItem(PANEL_KEY) === "open",
   connected: false,
@@ -62,13 +73,37 @@ export { state }
 
 export const activeTab = () => state.tabs.find((tab) => tab.id === state.active)
 
-/** Opens a tab at the end of the bar, or right after the active tab. Returns its id. */
-export function newTab(place: "end" | "next" = "end"): string {
-  // A new thread starts on the model and effort of the one in front of you.
+/** The project the active tab works in. */
+export const activeProject = () => activeTab()?.project ?? state.defaultProject
+
+/** What the window knows about the active tab's project. */
+export const activeData = (): ProjectData => state.projects[activeProject()] ?? EMPTY_PROJECT
+
+/** Changes what the window knows about a project, starting a record for a project it has not seen. */
+function updateProject(project: string, change: (data: ProjectData) => Partial<ProjectData>) {
+  setState("projects", project, (data) => ({ ...(data ?? EMPTY_PROJECT), ...change(data ?? EMPTY_PROJECT) }))
+}
+
+/** Reads a project's Space card, commands and threads from the core, so its tab shows them. */
+function loadProject(project: string) {
+  if (!project) return
+  updateProject(project, () => ({}))
+  core.send({ type: "space.get", project })
+  core.send({ type: "commands.get", project })
+  core.send({ type: "threads.get", project })
+}
+
+/**
+ * Opens a tab at the end of the bar, or right after the active tab. It works in `project`, or else in
+ * the active tab's project. Returns its id.
+ */
+export function newTab(place: "end" | "next" = "end", project?: string): string {
+  // A new thread starts on the project, model and effort of the one in front of you.
   const from = activeTab()
   const tab: Tab = {
     id: crypto.randomUUID(),
     title: NEW_TAB_TITLE,
+    project: project ?? from?.project ?? state.defaultProject,
     items: [],
     busy: false,
     model: from?.model ?? DEFAULT_MODEL,
@@ -84,7 +119,17 @@ export function newTab(place: "end" | "next" = "end"): string {
     draft.active = tab.id
   }))
   saveTabs()
+  loadProject(tab.project)
   return tab.id
+}
+
+/** Moves the active tab to another project. Only a tab whose thread has not started can move. */
+export function setTabProject(project: string) {
+  const tab = activeTab()
+  if (!tab || tab.items.length > 0 || tab.project === project) return
+  setState("tabs", (found) => found.id === tab.id, "project", project)
+  saveTabs()
+  loadProject(project)
 }
 
 export function closeTab(id: string) {
@@ -103,6 +148,7 @@ export function selectTab(id: string) {
   setState("active", id)
   saveTabs()
   refreshReview()
+  refreshSpace()
 }
 
 export function selectTabAt(index: number) {
@@ -129,7 +175,7 @@ export function updateRunSettings(change: Partial<RunSettings>) {
 }
 
 export function refreshThreads() {
-  core.send({ type: "threads.get" })
+  core.send({ type: "threads.get", project: activeProject() })
 }
 
 /**
@@ -141,7 +187,7 @@ export function openThread(thread: ThreadSummary) {
   if (activeTab()?.items.length !== 0) newTab()
   const tab = activeTab()!
   setState("tabs", (found) => found.id === tab.id, "title", titleFrom(thread.title))
-  setState("threads", (threads) => threads.map((found) => (found.id === thread.id ? { ...found, tabId: tab.id } : found)))
+  updateProject(tab.project, (data) => ({ threads: data.threads.map((found) => (found.id === thread.id ? { ...found, tabId: tab.id } : found)) }))
   saveTabs()
   core.send({ type: "thread.resume", sessionId: tab.id, threadId: thread.id })
 }
@@ -157,11 +203,14 @@ export function answerPermission(id: string, allow: boolean) {
 }
 
 export function openFile(path: string, line?: number) {
-  core.send({ type: "file.open", path, line })
+  core.send({ type: "file.open", project: activeProject(), path, line })
 }
 
+/** Reads the active tab's project again, or loads it the first time it shows. */
 export function refreshSpace() {
-  core.send({ type: "space.get" })
+  const project = activeProject()
+  if (!state.projects[project]) return loadProject(project)
+  core.send({ type: "space.get", project })
 }
 
 export function togglePanel() {
@@ -172,8 +221,9 @@ export function togglePanel() {
 
 /** Looks again for commands to import. The space's files may have changed since the last look. */
 export function discoverCommands() {
-  setState("commandSources", undefined)
-  core.send({ type: "commands.discover" })
+  const project = activeProject()
+  updateProject(project, () => ({ commandSources: undefined }))
+  core.send({ type: "commands.discover", project })
 }
 
 /**
@@ -181,29 +231,29 @@ export function discoverCommands() {
  * `name`, several as a group called `name`. Adding replaces nothing.
  */
 export function saveCommands(name: string, processes: readonly CommandProcess[], replacing: readonly string[]) {
-  core.send({ type: "commands.save", name, processes, replacing })
+  core.send({ type: "commands.save", project: activeProject(), name, processes, replacing })
 }
 
 /** Removes commands, such as every command in a group, stopping those that run. */
 export function removeCommands(ids: readonly string[]) {
-  core.send({ type: "commands.remove", ids })
+  core.send({ type: "commands.remove", project: activeProject(), ids })
 }
 
 export function runCommand(id: string) {
-  core.send({ type: "command.run", id })
+  core.send({ type: "command.run", project: activeProject(), id })
 }
 
 export function stopCommand(id: string) {
-  core.send({ type: "command.stop", id })
+  core.send({ type: "command.stop", project: activeProject(), id })
 }
 
 /** Runs the group's commands that are not running. */
 export function runGroup(group: string) {
-  core.send({ type: "group.run", group })
+  core.send({ type: "group.run", project: activeProject(), group })
 }
 
 export function stopGroup(group: string) {
-  core.send({ type: "group.stop", group })
+  core.send({ type: "group.stop", project: activeProject(), group })
 }
 
 /** Opens a terminal in the active tab's panel, opening the panel if it is closed. */
@@ -259,6 +309,7 @@ function saveTabs() {
     tabs: state.tabs.map((tab) => ({
       id: tab.id,
       title: tab.title,
+      project: tab.project,
       terminals: tab.panelTabs.flatMap((panelTab) => (panelTab.kind === "terminal" ? [{ id: panelTab.id, title: panelTab.title }] : [])),
       panelActive: tab.panelActive === REVIEW_TAB.id ? undefined : tab.panelActive,
       model: tab.model,
@@ -279,11 +330,12 @@ function restoreTabs(tabs: readonly TabInfo[], active: string | undefined) {
   setState({
     tabs: tabs.map((tab) => {
       const panelTabs: PanelTab[] = [REVIEW_TAB, ...tab.terminals.map((terminal) => ({ kind: "terminal" as const, ...terminal }))]
-      return { id: tab.id, title: tab.title, items: [], busy: false, model: tab.model, effort: tab.effort, fast: tab.fast, permissionMode: tab.permissionMode, panelTabs, panelActive: tab.panelActive ?? REVIEW_TAB.id }
+      return { id: tab.id, title: tab.title, project: tab.project, items: [], busy: false, model: tab.model, effort: tab.effort, fast: tab.fast, permissionMode: tab.permissionMode, panelTabs, panelActive: tab.panelActive ?? REVIEW_TAB.id }
     }),
     active: active ?? tabs[0]!.id,
   })
   refreshReview()
+  refreshSpace()
 }
 
 function titleFrom(text: string) {
@@ -292,19 +344,18 @@ function titleFrom(text: string) {
 }
 
 core.listen((message: CoreMessage) => {
+  // The active tab's project loads once the saved tabs arrive, so hello only reads what is global.
   if (message.type === "hello") {
-    setState({ connected: true, project: message.dir })
-    refreshSpace()
+    setState({ connected: true, defaultProject: message.project })
     refreshUsage()
     core.send({ type: "models.get" })
-    core.send({ type: "commands.get" })
   } else if (message.type === "tabs") restoreTabs(message.tabs, message.active)
-  else if (message.type === "space") setState("space", message.space)
+  else if (message.type === "space") updateProject(message.project, () => ({ space: message.space }))
   else if (message.type === "usage") setState("usage", message.usage)
   else if (message.type === "models") setState("models", message.models)
-  else if (message.type === "threads") setState("threads", message.threads)
-  else if (message.type === "commands") setState("commands", message.commands)
-  else if (message.type === "commands.found") setState("commandSources", message.sources)
+  else if (message.type === "threads") updateProject(message.project, () => ({ threads: message.threads }))
+  else if (message.type === "commands") updateProject(message.project, () => ({ commands: message.commands }))
+  else if (message.type === "commands.found") updateProject(message.project, () => ({ commandSources: message.sources }))
   else if (message.type === "review") setState("tabs", (tab) => tab.id === message.sessionId, "review", [...message.files])
   else if (message.type === "session.event") apply(message.sessionId, message.event, performance.now())
   else if (message.type === "session.history") batch(() => message.events.forEach((event) => apply(message.sessionId, event)))

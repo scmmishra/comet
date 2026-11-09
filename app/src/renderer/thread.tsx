@@ -10,7 +10,7 @@ import { editTexts, lineDiff } from "./diff"
 import { formatDuration, formatMessageTime } from "./format"
 import { Icon } from "./icons"
 import { Markdown } from "./markdown"
-import { answerPermission, state, type Item, type Tab } from "./store"
+import { activeData, answerPermission, type Item, type Tab } from "./store"
 
 type ToolItem = Extract<Item, { type: "tool" }>
 type PermissionItem = Extract<Item, { type: "permission" }>
@@ -274,6 +274,6 @@ function summarize(input: Record<string, unknown>, full = false) {
 }
 
 function relativePath(path: string) {
-  const root = state.space?.root
+  const root = activeData().space?.root
   return root && path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path
 }

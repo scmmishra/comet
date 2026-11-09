@@ -1,7 +1,7 @@
 import type { CommandInfo, CommandProcess, CommandRun, SpaceCommand } from "@desk/protocol"
 import { spawn, type ChildProcess } from "node:child_process"
 import { readFileSync } from "node:fs"
-import { spaceDataPath, writeJsonFile } from "./space-state"
+import { spaceDataPath, writeJsonFile } from "./data-files"
 
 const IDLE: CommandRun = { state: "idle" }
 
