@@ -1,10 +1,8 @@
-import type { FileChange } from "@desk/protocol"
 import { FileDiff, getSingularPatch } from "@pierre/diffs"
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { fileIconId, fileIconName, requestFileIcon } from "./file-icons"
+import { Icon } from "./icons"
 import type { Tab } from "./store"
-
-const STATUS_LETTER: Record<FileChange["status"], string> = { added: "A", modified: "M", deleted: "D", renamed: "R" }
 
 /** Diff options as OpenCode sets them: unified, word-level changes, and no file header of Pierre's own. */
 const DIFF_OPTIONS = {
@@ -21,12 +19,24 @@ const DIFF_OPTIONS = {
   unsafeCSS: ":host { --diffs-bg: var(--color-panel); }",
 } as const
 
-/** What this tab's thread changed since its first message, file by file. */
+/** Above this many files, the diffs start folded, so a large change opens as a list. */
+const OPEN_FILE_LIMIT = 8
+
+/**
+ * What this tab's thread changed since its first message, after OpenCode's review: every file's diff
+ * in one scrolling list, under a header that stays at the top while its diff scrolls by, and folds it.
+ */
 export function ReviewView(props: { tab: Tab }) {
-  const [selected, setSelected] = createSignal(0)
+  const [toggled, setToggled] = createSignal(new Set<string>())
   const files = () => props.tab.review ?? []
   const totals = () => files().reduce((sum, file) => ({ additions: sum.additions + file.additions, deletions: sum.deletions + file.deletions }), { additions: 0, deletions: 0 })
-  const current = () => files()[Math.min(selected(), files().length - 1)]
+  // A file is open by default in a small change. Clicking its header flips that.
+  const isOpen = (path: string) => (files().length <= OPEN_FILE_LIMIT) !== toggled().has(path)
+  const toggle = (path: string) => {
+    const next = new Set(toggled())
+    if (!next.delete(path)) next.add(path)
+    setToggled(next)
+  }
 
   return (
     <Show
@@ -40,40 +50,43 @@ export function ReviewView(props: { tab: Tab }) {
           <span class="text-del">−{totals().deletions}</span>
         </span>
       </div>
-      <div class="grid gap-px px-2 pb-2">
-        <For each={files()}>
-          {(file, index) => {
-            const icon = fileIconName(file.path)
-            requestFileIcon(icon)
-            return (
+      <For each={files()}>
+        {(file) => {
+          const icon = fileIconName(file.path)
+          requestFileIcon(icon)
+          const slash = file.path.lastIndexOf("/")
+          return (
+            <section class="border-t border-outline">
               <button
-                class="flex min-w-0 items-center gap-2 rounded-md px-2 py-[5px] text-left"
-                classList={{ "bg-raised text-fg": index() === selected(), "text-fg-2 hover:bg-hover": index() !== selected() }}
-                onClick={() => setSelected(index())}
+                class="sticky top-0 z-10 flex w-full min-w-0 items-center gap-2 bg-panel px-4 py-2 text-left hover:bg-hover"
+                aria-expanded={isOpen(file.path)}
+                onClick={() => toggle(file.path)}
               >
-                <span class="w-3 shrink-0 font-mono text-[11px]" classList={{ "text-add": file.status === "added", "text-del": file.status === "deleted", "text-[#ddb065]": file.status === "modified" || file.status === "renamed" }}>
-                  {STATUS_LETTER[file.status]}
-                </span>
+                <Icon name="chevron" class={`size-[13px] text-fg-3 transition-transform duration-150 ${isOpen(file.path) ? "rotate-90" : ""}`} />
                 <svg class="size-[14px] shrink-0" aria-hidden="true">
                   <use href={`#${fileIconId(icon)}`} />
                 </svg>
-                <span class="min-w-0 flex-1 truncate font-mono text-[12px]">{file.path}</span>
+                <span class="min-w-0 flex-1 truncate">
+                  <Show when={slash >= 0}>
+                    <span class="text-fg-3">{file.path.slice(0, slash + 1)}</span>
+                  </Show>
+                  <span class="text-fg">{file.path.slice(slash + 1)}</span>
+                  <Show when={file.status !== "modified"}>
+                    <span class="ml-2 text-[12px] text-fg-3">{file.status}</span>
+                  </Show>
+                </span>
                 <span class="shrink-0 font-mono text-[12px] tabular-nums text-add">+{file.additions}</span>
                 <span class="shrink-0 font-mono text-[12px] tabular-nums text-del">−{file.deletions}</span>
               </button>
-            )
-          }}
-        </For>
-      </div>
-      <Show when={current()} keyed>
-        {(file) => (
-          <div class="min-h-0 flex-1 overflow-auto border-t border-outline">
-            <Show when={file.patch} fallback={<div class="p-4 text-fg-3">Binary file. No diff to show.</div>}>
-              <PatchDiff patch={file.patch} />
-            </Show>
-          </div>
-        )}
-      </Show>
+              <Show when={isOpen(file.path)}>
+                <Show when={file.patch} fallback={<div class="px-4 pb-3 text-fg-3">Binary file. No diff to show.</div>}>
+                  <PatchDiff patch={file.patch} />
+                </Show>
+              </Show>
+            </section>
+          )
+        }}
+      </For>
     </Show>
   )
 }
