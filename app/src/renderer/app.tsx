@@ -2,8 +2,9 @@ import { createEffect, For, on, onCleanup, onMount, Show } from "solid-js"
 import { Composer } from "./composer"
 import { Icon } from "./icons"
 import { ContextRing, UsageButton } from "./meters"
-import { SpaceCard } from "./space"
-import { activeTab, closeTab, newTab, refreshSpace, refreshUsage, selectTab, selectTabAt, state, toggleSpaceCard, type Tab } from "./store"
+import { ReviewView } from "./review"
+import { SpaceCard, SpaceChip } from "./space"
+import { activeTab, closeTab, newTab, refreshSpace, refreshUsage, selectTab, selectTabAt, state, togglePanel, type Tab } from "./store"
 import { Thread } from "./thread"
 
 const USAGE_REFRESH_MS = 5 * 60_000
@@ -13,7 +14,7 @@ export function App() {
     const stop = window.desk.onCommand((command) => {
       if (command === "tab.new") newTab()
       else if (command === "tab.close" && state.active) closeTab(state.active)
-      else if (command === "space.toggle") toggleSpaceCard()
+      else if (command === "panel.toggle") togglePanel()
       else if (command.startsWith("tab.select:")) selectTabAt(Number(command.slice("tab.select:".length)))
     })
     // Coming back to the window is when files and usage most likely changed outside Desk.
@@ -45,19 +46,20 @@ export function App() {
                   <b class="truncate font-medium text-fg">{tab.title}</b>
                 </span>
                 <span class="ml-auto flex items-center gap-1">
+                  <Show when={state.panelOpen && state.space}>{(space) => <SpaceChip space={space()} />}</Show>
                   <Show when={tab.context}>{(context) => <ContextRing {...context()} />}</Show>
                   <button
                     class="grid size-7 place-items-center rounded-lg text-fg-2 hover:bg-hover hover:text-fg"
-                    classList={{ "bg-hover text-fg": state.spaceCard }}
-                    aria-pressed={state.spaceCard}
-                    title="Space card (⌘\)"
-                    onClick={toggleSpaceCard}
+                    classList={{ "bg-hover text-fg": state.panelOpen }}
+                    aria-pressed={state.panelOpen}
+                    title="Panel (⌘\)"
+                    onClick={togglePanel}
                   >
                     <Icon name="panel" />
                   </button>
                 </span>
               </header>
-              {/* The Space card floats over the panel's corner, so the thread stays centred on the whole panel. */}
+              {/* The Space card floats over the session's corner, so the thread stays centred. With the panel open, it folds into the header chip. */}
               <div class="relative flex min-h-0 flex-1">
                 <div class="flex min-w-0 flex-1 flex-col">
                   <Show when={tab.items.length > 0} fallback={<StartScreen tab={tab} />}>
@@ -67,7 +69,7 @@ export function App() {
                     </div>
                   </Show>
                 </div>
-                <Show when={state.spaceCard && state.space}>
+                <Show when={!state.panelOpen && state.space}>
                   {(space) => (
                     <aside class="desk-rail desk-no-scrollbar absolute right-2 top-0 flex max-h-full w-[264px] flex-col gap-2 overflow-y-auto pb-2">
                       <SpaceCard space={space()} />
@@ -76,6 +78,19 @@ export function App() {
                 </Show>
               </div>
             </section>
+            <Show when={state.panelOpen}>
+              <section class="flex min-w-[340px] flex-1 flex-col rounded-3xl border border-outline bg-panel">
+                <div class="flex h-[46px] shrink-0 items-center gap-1 px-2">
+                  <span class="flex h-[30px] items-center gap-[7px] rounded-lg bg-raised px-2.5 text-fg">
+                    <Icon name="diff" />
+                    Review
+                  </span>
+                </div>
+                <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+                  <ReviewView tab={tab} />
+                </div>
+              </section>
+            </Show>
           </main>
         )}
       </Show>

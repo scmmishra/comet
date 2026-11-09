@@ -1,5 +1,5 @@
 import type { Space } from "@desk/protocol"
-import { Show, type JSX } from "solid-js"
+import { createSignal, Show, type JSX } from "solid-js"
 import { Icon, type IconName } from "./icons"
 
 const NUMBER = new Intl.NumberFormat("en")
@@ -37,6 +37,31 @@ export function SpaceCard(props: { space: Space }) {
         </Row>
       </div>
     </section>
+  )
+}
+
+/**
+ * The Space card folded into the session header, for when the panel takes the room. Hovering or
+ * focusing the chip opens the full card.
+ */
+export function SpaceChip(props: { space: Space }) {
+  const [open, setOpen] = createSignal(false)
+  return (
+    <div class="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)} onFocusIn={() => setOpen(true)} onFocusOut={() => setOpen(false)}>
+      <button class="flex h-7 items-center gap-2 rounded-lg bg-raised px-2.5 text-[12px] text-fg-2 hover:text-fg" aria-expanded={open()}>
+        <Icon name="branch" />
+        <span class="max-w-[160px] truncate text-fg">{props.space.branch}</span>
+        <Changes changes={props.space.changes} />
+      </button>
+      <Show when={open()}>
+        {/* The padding bridges the gap to the card, so moving the pointer onto it keeps it open. */}
+        <div class="absolute right-0 top-full z-30 w-[264px] pt-1.5">
+          <div class="desk-rise shadow-[0_18px_40px_rgb(0_0_0/50%)]">
+            <SpaceCard space={props.space} />
+          </div>
+        </div>
+      </Show>
+    </div>
   )
 }
 

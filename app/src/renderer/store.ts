@@ -1,4 +1,4 @@
-import type { CoreMessage, PlanUsage, Space, TabInfo, ThreadEvent } from "@desk/protocol"
+import type { CoreMessage, FileChange, PlanUsage, Space, TabInfo, ThreadEvent } from "@desk/protocol"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
 
@@ -18,10 +18,12 @@ export interface Tab {
   busy: boolean
   model?: string
   context?: { percent: number; tokens: number; maxTokens: number }
+  /** The files this tab's thread changed. Undefined until asked for. */
+  review?: FileChange[]
 }
 
 const NEW_TAB_TITLE = "New session"
-const SPACE_CARD_KEY = "desk.spaceCard"
+const PANEL_KEY = "desk.panel"
 const TITLE_LENGTH = 40
 
 const [state, setState] = createStore({
@@ -29,8 +31,8 @@ const [state, setState] = createStore({
   active: "",
   space: undefined as Space | undefined,
   usage: undefined as PlanUsage | undefined,
-  /** Whether the Space card shows. A per-window preference, so it lives in the page's storage. */
-  spaceCard: localStorage.getItem(SPACE_CARD_KEY) !== "hidden",
+  /** Whether the panel beside the thread is open. A per-window preference, so it lives in the page's storage. */
+  panelOpen: localStorage.getItem(PANEL_KEY) === "open",
   connected: false,
 })
 export { state }
@@ -62,6 +64,7 @@ export function closeTab(id: string) {
 export function selectTab(id: string) {
   setState("active", id)
   saveTabs()
+  refreshReview()
 }
 
 export function selectTabAt(index: number) {
@@ -97,9 +100,15 @@ export function refreshSpace() {
   core.send({ type: "space.get" })
 }
 
-export function toggleSpaceCard() {
-  setState("spaceCard", !state.spaceCard)
-  localStorage.setItem(SPACE_CARD_KEY, state.spaceCard ? "shown" : "hidden")
+export function togglePanel() {
+  setState("panelOpen", !state.panelOpen)
+  localStorage.setItem(PANEL_KEY, state.panelOpen ? "open" : "closed")
+  refreshReview()
+}
+
+/** Asks for the active tab's changes, when the panel is open to show them. */
+export function refreshReview() {
+  if (state.panelOpen && state.active) core.send({ type: "review.get", sessionId: state.active })
 }
 
 /** The core probes plan usage at most once a minute, so asking often is cheap. */
@@ -119,6 +128,7 @@ function restoreTabs(tabs: readonly TabInfo[], active: string | undefined) {
     tabs: tabs.map((tab) => ({ id: tab.id, title: tab.title, items: [], busy: false })),
     active: tabs.some((tab) => tab.id === active) ? active! : tabs[0]!.id,
   })
+  refreshReview()
 }
 
 function titleFrom(text: string) {
@@ -134,6 +144,7 @@ core.listen((message: CoreMessage) => {
   } else if (message.type === "tabs") restoreTabs(message.tabs, message.active)
   else if (message.type === "space") setState("space", message.space)
   else if (message.type === "usage") setState("usage", message.usage)
+  else if (message.type === "review") setState("tabs", (tab) => tab.id === message.sessionId, "review", [...message.files])
   else if (message.type === "session.event") apply(message.sessionId, message.event)
 })
 
@@ -194,6 +205,9 @@ function apply(sessionId: string, event: ThreadEvent) {
         break
     }
   }))
-  // A finished turn may have changed files, so the Space card reads the repo again.
-  if (event.kind === "result") refreshSpace()
+  // A finished turn may have changed files, so the Space card and Review read the repo again.
+  if (event.kind === "result") {
+    refreshSpace()
+    if (sessionId === state.active) refreshReview()
+  }
 }
