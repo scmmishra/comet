@@ -27,7 +27,7 @@ export function Composer(props: { tab: Tab }) {
 
   return (
     <form
-      class="mx-auto grid w-full max-w-[680px] gap-1 rounded-xl border border-line-strong bg-card pb-2 pl-3.5 pr-2 pt-3 transition-colors focus-within:border-[rgb(255_255_255/16%)]"
+      class="mx-auto grid w-full max-w-[720px] gap-1.5 rounded-3xl bg-raised pb-2 pl-3.5 pr-2.5 pt-[11px] shadow-[0_0_0_1px_var(--color-line)]"
       onSubmit={(event) => {
         event.preventDefault()
         submit()
@@ -37,8 +37,8 @@ export function Composer(props: { tab: Tab }) {
         ref={input}
         rows={1}
         aria-label="Message"
-        class="min-h-[40px] w-full resize-none bg-transparent text-fg outline-none placeholder:text-fg-3"
-        placeholder="Ask Claude…"
+        class="min-h-[22px] w-full resize-none bg-transparent text-fg outline-none placeholder:text-fg-3"
+        placeholder="Ask anything, / for commands, @ for context…"
         value={text()}
         onInput={(event) => {
           setText(event.currentTarget.value)
@@ -52,8 +52,8 @@ export function Composer(props: { tab: Tab }) {
           if (event.key === "Escape" && props.tab.busy) interrupt()
         }}
       />
-      <div class="flex items-center gap-1 text-[12px] text-fg-2">
-        <span class="inline-flex h-6 items-center gap-1.5 rounded-md px-1">
+      <div class="flex items-center gap-1 text-fg-2">
+        <span class="inline-flex h-[26px] items-center gap-1.5 rounded-md px-[7px]">
           <span class="size-1.5 rounded-full bg-claude" />
           {/* The SDK names the model once the session starts. */}
           <Show when={props.tab.model} fallback="Claude Code">
@@ -70,14 +70,14 @@ export function Composer(props: { tab: Tab }) {
             <button
               type="submit"
               aria-label="Send"
-              class="ml-auto grid size-6 place-items-center rounded-full bg-raised text-fg-3 ring-1 ring-line ring-inset transition-colors"
-              classList={{ "bg-fg! text-ground! ring-0!": !!text().trim() }}
+              class="ml-auto grid size-7 place-items-center rounded-lg bg-fg-3 text-ground transition-colors"
+              classList={{ "bg-fg!": !!text().trim() }}
             >
               <Icon name="up" />
             </button>
           }
         >
-          <button type="button" aria-label="Stop" class="ml-auto grid size-6 place-items-center rounded-full bg-fg text-ground" onClick={interrupt}>
+          <button type="button" aria-label="Stop" class="ml-auto grid size-7 place-items-center rounded-lg bg-fg text-ground" onClick={interrupt}>
             <Icon name="stop" />
           </button>
         </Show>
