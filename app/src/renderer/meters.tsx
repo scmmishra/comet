@@ -27,7 +27,7 @@ export function UsageButton(props: { usage: PlanUsage }) {
   return (
     <div ref={root} class="desk-no-drag relative">
       <button
-        class="flex h-[30px] items-center gap-[7px] rounded-lg px-[9px] tabular-nums text-fg-2 hover:bg-hover hover:text-fg"
+        class="flex h-[30px] items-center gap-[7px] rounded-lg px-[9px] text-[12px] tabular-nums text-fg-2 hover:bg-hover hover:text-fg"
         classList={{ "bg-hover text-fg": open() }}
         aria-expanded={open()}
         onClick={() => setOpen(!open())}

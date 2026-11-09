@@ -72,18 +72,21 @@ body {
   color: var(--color-fg);
 }
 
-/* Form controls do not inherit the page font without this. */
-button,
-input,
-textarea,
-select {
-  font: inherit;
-  color: inherit;
-  letter-spacing: inherit;
-}
+/* Form controls do not inherit the page font without this. It sits in the base layer, because
+   unlayered CSS beats every utility and would undo text sizes set on buttons and inputs. */
+@layer base {
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+    letter-spacing: inherit;
+  }
 
-button {
-  cursor: default;
+  button {
+    cursor: default;
+  }
 }
 
 ::selection {
