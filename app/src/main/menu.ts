@@ -37,6 +37,8 @@ export function installMenu(actions: MenuActions) {
           click: () => command(`tab.select:${index}`),
         })),
         { type: "separator" },
+        { label: "Toggle Space Card", accelerator: "CmdOrCtrl+\\", click: () => command("space.toggle") },
+        { type: "separator" },
         { role: "reload" },
         { role: "toggleDevTools" },
       ],

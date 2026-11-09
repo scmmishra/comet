@@ -21,6 +21,7 @@ export interface Tab {
 }
 
 const NEW_TAB_TITLE = "New session"
+const SPACE_CARD_KEY = "desk.spaceCard"
 const TITLE_LENGTH = 40
 
 const [state, setState] = createStore({
@@ -28,6 +29,8 @@ const [state, setState] = createStore({
   active: "",
   space: undefined as Space | undefined,
   usage: undefined as PlanUsage | undefined,
+  /** Whether the Space card shows. A per-window preference, so it lives in the page's storage. */
+  spaceCard: localStorage.getItem(SPACE_CARD_KEY) !== "hidden",
   connected: false,
 })
 export { state }
@@ -92,6 +95,11 @@ export function openFile(path: string, line?: number) {
 
 export function refreshSpace() {
   core.send({ type: "space.get" })
+}
+
+export function toggleSpaceCard() {
+  setState("spaceCard", !state.spaceCard)
+  localStorage.setItem(SPACE_CARD_KEY, state.spaceCard ? "shown" : "hidden")
 }
 
 /** The core probes plan usage at most once a minute, so asking often is cheap. */

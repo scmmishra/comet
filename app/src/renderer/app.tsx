@@ -3,7 +3,7 @@ import { Composer } from "./composer"
 import { Icon } from "./icons"
 import { ContextRing, UsageButton } from "./meters"
 import { SpaceCard } from "./space"
-import { activeTab, closeTab, newTab, refreshSpace, refreshUsage, selectTab, selectTabAt, state, type Tab } from "./store"
+import { activeTab, closeTab, newTab, refreshSpace, refreshUsage, selectTab, selectTabAt, state, toggleSpaceCard, type Tab } from "./store"
 import { Thread } from "./thread"
 
 const USAGE_REFRESH_MS = 5 * 60_000
@@ -13,6 +13,7 @@ export function App() {
     const stop = window.desk.onCommand((command) => {
       if (command === "tab.new") newTab()
       else if (command === "tab.close" && state.active) closeTab(state.active)
+      else if (command === "space.toggle") toggleSpaceCard()
       else if (command.startsWith("tab.select:")) selectTabAt(Number(command.slice("tab.select:".length)))
     })
     // Coming back to the window is when files and usage most likely changed outside Desk.
@@ -43,7 +44,18 @@ export function App() {
                   <span class="text-fg-3">/</span>
                   <b class="truncate font-medium text-fg">{tab.title}</b>
                 </span>
-                <Show when={tab.context}>{(context) => <span class="ml-auto"><ContextRing {...context()} /></span>}</Show>
+                <span class="ml-auto flex items-center gap-1">
+                  <Show when={tab.context}>{(context) => <ContextRing {...context()} />}</Show>
+                  <button
+                    class="grid size-7 place-items-center rounded-lg text-fg-2 hover:bg-hover hover:text-fg"
+                    classList={{ "bg-hover text-fg": state.spaceCard }}
+                    aria-pressed={state.spaceCard}
+                    title="Space card (⌘\)"
+                    onClick={toggleSpaceCard}
+                  >
+                    <Icon name="panel" />
+                  </button>
+                </span>
               </header>
               {/* The Space card floats over the panel's corner, so the thread stays centred on the whole panel. */}
               <div class="relative flex min-h-0 flex-1">
@@ -55,7 +67,7 @@ export function App() {
                     </div>
                   </Show>
                 </div>
-                <Show when={state.space}>
+                <Show when={state.spaceCard && state.space}>
                   {(space) => (
                     <aside class="desk-rail desk-no-scrollbar absolute right-2 top-0 flex max-h-full w-[264px] flex-col gap-2 overflow-y-auto pb-2">
                       <SpaceCard space={space()} />
