@@ -94,12 +94,12 @@ function StartScreen(props: { tab: Tab }) {
 
 function TabBar() {
   return (
-    <nav class="desk-titlebar flex h-[46px] shrink-0 items-center gap-1 pl-[84px] pr-2.5">
+    <nav class="desk-titlebar flex h-[42px] shrink-0 items-center gap-1 pl-[84px] pr-2.5">
       <div class="desk-no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1">
         <For each={state.tabs}>
           {(tab) => (
             <button
-              class="desk-no-drag group flex h-8 w-[210px] shrink-0 items-center gap-2 rounded-xl pl-2 pr-1.5 text-left"
+              class="desk-no-drag group flex h-[34px] w-[210px] shrink-0 items-center gap-2 rounded-xl pl-2 pr-1.5 text-left"
               classList={{ "bg-raised text-fg": tab.id === state.active, "text-fg-3 hover:bg-panel hover:text-fg-2": tab.id !== state.active }}
               onClick={() => selectTab(tab.id)}
             >
