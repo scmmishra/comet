@@ -12,6 +12,8 @@
 @theme {
   --color-ground: #08090a;
   --color-panel: #0f1011;
+  /* Code in the thread: a step darker than the panel it sits on, short of the window's ground. */
+  --color-code: #0b0c0d;
   --color-card: #131416;
   --color-raised: #1c1d1f;
   --color-hover: #222326;
@@ -265,21 +267,20 @@ body {
 }
 
 /* Fenced code, styled like the thread's tool blocks. */
+/* A code block: one flat surface, no outline. The language and Copy sit on it, not on a bar of their own. */
 .desk-code {
   margin: 0 0 8px;
   border-radius: 10px;
   overflow: hidden;
-  background: var(--color-ground);
-  box-shadow: 0 0 0 1px var(--color-line);
+  background: var(--color-code);
 }
 .desk-code-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px 5px 12px;
-  background: var(--color-raised);
-  color: var(--color-fg-2);
-  font-size: 12px;
+  padding: 6px 6px 0 12px;
+  color: var(--color-fg-3);
+  font-size: 11px;
 }
 .desk-code-copy {
   margin-left: auto;
@@ -294,7 +295,7 @@ body {
 }
 .desk-code pre {
   margin: 0;
-  padding: 10px 12px;
+  padding: 4px 12px 12px;
   overflow-x: auto;
   font-family: var(--font-family-mono);
   font-size: 12px;
