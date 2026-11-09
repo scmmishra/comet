@@ -18,7 +18,7 @@ function connect(port: number, token: string) {
 }
 
 test("greets the client and answers a ping", async () => {
-  core = startCore("secret")
+  core = startCore({ token: "secret", dir: process.cwd() })
   const client = connect(core.port, "secret")
   await client.opened
   expect(await client.next()).toMatchObject({ type: "hello", protocol: 1, bun: Bun.version })
@@ -28,7 +28,7 @@ test("greets the client and answers a ping", async () => {
 })
 
 test("rejects a client without the token", async () => {
-  core = startCore("secret")
+  core = startCore({ token: "secret", dir: process.cwd() })
   const response = await fetch(`http://127.0.0.1:${core.port}/?token=wrong`)
   expect(response.status).toBe(403)
 })
