@@ -2,7 +2,7 @@ import { query, type Query, type SDKUserMessage } from "@anthropic-ai/claude-age
 
 const PROBE_TIMEOUT_MS = 20_000
 
-export interface ProbeOptions {
+interface ProbeOptions {
   /** A thread to load first, to read about it. */
   readonly thread?: string
   /** Starts the project's MCP servers, as a session would, to read or change them. Probes skip them otherwise. */

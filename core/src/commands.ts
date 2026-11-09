@@ -1,15 +1,18 @@
 import type { CommandInfo, CommandProcess, CommandRun, SpaceCommand } from "@desk/protocol"
 import { spawn, type ChildProcess } from "node:child_process"
 import { readFileSync } from "node:fs"
-import { spaceDataPath, writeJsonFile } from "./data-files"
+import { projectDataPath, writeJsonFile } from "./data-files"
+import { loginShell } from "./shell"
 
 const IDLE: CommandRun = { state: "idle" }
+/** The exit code a shell gives a command it cannot start. */
+const CANNOT_START = 127
 
-export const commandsPath = (dir: string) => spaceDataPath("commands", dir)
+const commandsPath = (dir: string) => projectDataPath("commands", dir)
 
 /**
- * The space's saved commands, such as a dev server, and their runs. A command runs in the background
- * at the space's root, with its output discarded. Runs last as long as the core.
+ * A project's saved commands, such as a dev server, and their runs. A command runs in the background
+ * in the project's folder, with its output discarded. Runs last as long as the core.
  */
 export class Commands {
   private saved: SpaceCommand[]
@@ -52,11 +55,21 @@ export class Commands {
     this.persist()
   }
 
-  run(id: string) {
+  /** Runs the commands that are not running. */
+  run(ids: readonly string[]) {
+    for (const id of ids) this.start(id)
+  }
+
+  stop(ids: readonly string[]) {
+    for (const id of ids) this.end(id)
+  }
+
+  private start(id: string) {
     const command = this.saved.find((found) => found.id === id)
     if (!command || this.processes.has(id)) return
+    const [shell, ...args] = loginShell(command.command)
     // A process group of its own, so Stop also ends the processes the command starts, such as a dev server's workers.
-    const child = spawn(process.env.SHELL || "/bin/zsh", ["-l", "-c", command.command], {
+    const child = spawn(shell!, args, {
       cwd: this.dir,
       env: { ...process.env, DESK_SPACE_ROOT: this.dir },
       stdio: "ignore",
@@ -64,11 +77,11 @@ export class Commands {
     })
     this.processes.set(id, child)
     this.setRun(id, { state: "running" })
-    child.on("error", () => this.finish(id, child, 127))
+    child.on("error", () => this.finish(id, child, CANNOT_START))
     child.on("exit", (code, signal) => this.finish(id, child, code ?? (signal ? 1 : 0)))
   }
 
-  stop(id: string) {
+  private end(id: string) {
     const child = this.processes.get(id)
     if (!child) return
     // Dropped first, so the exit that follows reads as a stop, not a failure.
@@ -77,27 +90,14 @@ export class Commands {
     this.setRun(id, IDLE)
   }
 
-  /** Runs the group's commands that are not running. */
-  runGroup(group: string) {
-    for (const command of this.members(group)) this.run(command.id)
-  }
-
-  stopGroup(group: string) {
-    for (const command of this.members(group)) this.stop(command.id)
-  }
-
-  private members(group: string) {
-    return this.saved.filter((command) => command.group === group)
-  }
-
   /** Stops a command and drops its run, for a command about to go. */
   private forget(id: string) {
-    this.stop(id)
+    this.end(id)
     this.runs.delete(id)
   }
 
   stopAll() {
-    for (const id of [...this.processes.keys()]) this.stop(id)
+    this.stop([...this.processes.keys()])
   }
 
   private finish(id: string, child: ChildProcess, code: number) {

@@ -10,7 +10,7 @@ export const deskHome = () => process.env.DESK_HOME ?? join(homedir(), ".desk")
  * Where Desk keeps one kind of data for a project: `~/.desk/<kind>/<folder>-<hash>.json`, as Rune
  * names its space files. The hash keeps two checkouts with the same folder name apart.
  */
-export function spaceDataPath(kind: string, dir: string): string {
+export function projectDataPath(kind: string, dir: string): string {
   const hash = createHash("sha256").update(dir).digest("hex").slice(0, 8)
   return join(deskHome(), kind, `${basename(dir)}-${hash}.json`)
 }

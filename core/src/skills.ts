@@ -6,18 +6,38 @@ import { probe } from "./probe"
 const SOURCE_SUFFIX = /\s*\(([^()]+)\)\s*$/
 /** A plugin's skill starts with the plugin's name instead, such as "(figma) ". */
 const PLUGIN_PREFIX = /^\(([^()]+)\)\s*/
+/** Claude Code marks a skill in the project's .claude folder with this source. */
+const PROJECT_SOURCE = "project"
+/** Groups of skills available to every project, in the order they list. Plugins follow, by name, then other sources, then Other. */
+const SOURCE_GROUPS: Record<string, string> = { user: "User", "claude.ai sync": "claude.ai" }
+const OTHER = "Other"
 
-/** The skills and custom commands Claude Code offers in a project. Its own built-in commands are left out. */
-export async function readSkills(dir: string): Promise<Skill[] | undefined> {
+/** The skills and custom commands Claude Code offers in a project, grouped. Its own built-in commands are left out. */
+export async function readSkills(dir: string): Promise<Skill[] | null> {
   const commands = await probe(dir, (running) => running.supportedCommands())
-  return commands?.filter((command) => !command.builtin).map(skill)
+  return commands ? skillsFrom(commands) : null
+}
+
+/** Claude Code's commands as Desk lists them: built-in commands left out, and the rest in their groups' order. */
+export function skillsFrom(commands: readonly SlashCommand[]): Skill[] {
+  const skills = commands.filter((command) => !command.builtin).map(skill)
+  const groups = [...new Set(skills.map((found) => found.group))].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+  return skills.sort((a, b) => groups.indexOf(a.group) - groups.indexOf(b.group))
 }
 
 /** A command as Desk lists it, with the source Claude Code marks in its description moved out of it. */
-export function skill(command: SlashCommand): Skill {
+function skill(command: SlashCommand): Skill {
   const plugin = PLUGIN_PREFIX.exec(command.description)
-  if (plugin) return { name: command.name, description: command.description.slice(plugin[0].length), source: plugin[1]!, plugin: true }
+  if (plugin) return { name: command.name, description: command.description.slice(plugin[0].length), ownProject: false, group: `Plugin: ${plugin[1]}` }
   const source = SOURCE_SUFFIX.exec(command.description)
-  if (source) return { name: command.name, description: command.description.slice(0, source.index), source: source[1]! }
-  return { name: command.name, description: command.description, source: "other" }
+  const description = source ? command.description.slice(0, source.index) : command.description
+  const from = source?.[1]
+  return { name: command.name, description, ownProject: from === PROJECT_SOURCE, group: from ? (SOURCE_GROUPS[from] ?? from) : OTHER }
+}
+
+function rank(group: string) {
+  const known = Object.values(SOURCE_GROUPS).indexOf(group)
+  if (known >= 0) return known
+  if (group.startsWith("Plugin: ")) return 10
+  return group === OTHER ? 30 : 20
 }

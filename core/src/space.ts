@@ -1,36 +1,30 @@
 import { basename } from "node:path"
 import type { Space } from "@desk/protocol"
+import { git, numstatLine } from "./git"
 
-/** Runs a command in `dir` and returns its trimmed stdout, or undefined when it fails. */
-async function run(command: string[], dir: string): Promise<string | undefined> {
-  try {
-    const child = Bun.spawn(command, { cwd: dir, stdout: "pipe", stderr: "ignore", env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } })
-    const [output, code] = await Promise.all([new Response(child.stdout).text(), child.exited])
-    return code === 0 ? output.trim() : undefined
-  } catch {
-    return undefined
-  }
-}
+/** A part that fails gives undefined, so each part of the card fails on its own. */
+const part = <T>(read: Promise<T>): Promise<T | undefined> => read.catch(() => undefined)
+const gitOutput = (dir: string, args: string[]) => part(git(dir, args).then((output) => output.trim()))
 
-/** Reads what the Space card shows. Each part fails on its own, so a missing `gh` only hides the PR. */
-export async function readSpace(dir: string): Promise<Space | undefined> {
-  const root = await run(["git", "rev-parse", "--show-toplevel"], dir)
-  if (!root) return undefined
+/** Reads what the Space card shows, or null outside a Git repo. A missing `gh` only hides the PR. */
+export async function readSpace(dir: string): Promise<Space | null> {
+  const root = await gitOutput(dir, ["rev-parse", "--show-toplevel"])
+  if (!root) return null
   const [branch, sha, numstat, untracked, counts, pr] = await Promise.all([
-    run(["git", "branch", "--show-current"], root),
-    run(["git", "rev-parse", "--short", "HEAD"], root),
-    run(["git", "diff", "--numstat", "HEAD"], root),
-    run(["git", "ls-files", "--others", "--exclude-standard"], root),
-    run(["git", "rev-list", "--left-right", "--count", "@{upstream}...HEAD"], root),
-    readPullRequest(root),
+    gitOutput(root, ["branch", "--show-current"]),
+    gitOutput(root, ["rev-parse", "--short", "HEAD"]),
+    gitOutput(root, ["diff", "--numstat", "HEAD"]),
+    gitOutput(root, ["ls-files", "--others", "--exclude-standard"]),
+    gitOutput(root, ["rev-list", "--left-right", "--count", "@{upstream}...HEAD"]),
+    part(readPullRequest(root)),
   ])
   return {
     name: basename(root),
     root,
     branch: branch || (sha ? `detached at ${sha}` : "no commits yet"),
-    upstream: parseCounts(counts),
+    ...(counts ? { upstream: parseCounts(counts) } : {}),
     changes: parseChanges(numstat ?? "", untracked ?? ""),
-    pr,
+    ...(pr ? { pr } : {}),
   }
 }
 
@@ -38,20 +32,17 @@ export function parseChanges(numstat: string, untracked: string): Space["changes
   let additions = 0
   let deletions = 0
   let files = 0
-  for (const line of numstat.split("\n")) {
-    if (!line) continue
-    const [added, removed] = line.split("\t")
+  for (const line of numstat.split("\n").filter(Boolean)) {
+    const counts = numstatLine(line)
     files++
-    // Binary files show "-" for both counts.
-    additions += Number(added) || 0
-    deletions += Number(removed) || 0
+    additions += counts.additions
+    deletions += counts.deletions
   }
   files += untracked.split("\n").filter(Boolean).length
   return { files, additions, deletions }
 }
 
-function parseCounts(counts: string | undefined): Space["upstream"] {
-  if (!counts) return undefined
+function parseCounts(counts: string): NonNullable<Space["upstream"]> {
   const [behind, ahead] = counts.split(/\s+/).map(Number)
   return { ahead: ahead ?? 0, behind: behind ?? 0 }
 }
@@ -65,9 +56,11 @@ interface GhPullRequest {
   statusCheckRollup?: Array<{ conclusion?: string; status?: string; state?: string }>
 }
 
-async function readPullRequest(root: string): Promise<Space["pr"]> {
-  const json = await run(["gh", "pr", "view", "--json", "number,title,url,state,isDraft,statusCheckRollup"], root)
-  if (!json) return undefined
+/** The branch's pull request, from `gh`. It throws when there is none or `gh` cannot say. */
+async function readPullRequest(root: string): Promise<NonNullable<Space["pr"]>> {
+  const child = Bun.spawn(["gh", "pr", "view", "--json", "number,title,url,state,isDraft,statusCheckRollup"], { cwd: root, stdout: "pipe", stderr: "ignore" })
+  const [json, code] = await Promise.all([new Response(child.stdout).text(), child.exited])
+  if (code !== 0) throw new Error("No pull request")
   const pr = JSON.parse(json) as GhPullRequest
   const checks = { passed: 0, failed: 0, pending: 0 }
   for (const check of pr.statusCheckRollup ?? []) {

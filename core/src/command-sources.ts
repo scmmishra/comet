@@ -2,6 +2,7 @@ import type { CommandSource } from "@desk/protocol"
 import { spawn } from "node:child_process"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
+import { loginShell } from "./shell"
 
 /** A broken mise setup must not leave the import menu waiting. */
 const MISE_TIMEOUT_MS = 5_000
@@ -17,16 +18,13 @@ const LOCKFILES: readonly [file: string, manager: string][] = [
 type Found = CommandSource["commands"][number]
 
 /**
- * Commands the space already defines, for the Commands card to import: each Procfile's processes,
- * mise's tasks and package.json's scripts. A file that is missing or broken adds nothing.
+ * Commands the project already defines, for the Commands card to import: each Procfile's processes,
+ * mise's tasks and package.json's scripts. A file that is missing or broken adds nothing. Command
+ * lines in `saved` are left out, so only what is not saved yet is offered.
  */
-export async function discoverCommands(dir: string): Promise<CommandSource[]> {
-  const sources: CommandSource[] = [...procfiles(dir)]
-  const mise = await miseTasks(dir)
-  if (mise.length) sources.push({ name: "mise", commands: mise })
-  const scripts = packageScripts(dir)
-  if (scripts.length) sources.push({ name: "package.json", commands: scripts })
-  return sources
+export async function discoverCommands(dir: string, saved: ReadonlySet<string>): Promise<CommandSource[]> {
+  const sources: CommandSource[] = [...procfiles(dir), { name: "mise", commands: await miseTasks(dir) }, { name: "package.json", commands: packageScripts(dir) }]
+  return sources.map((source) => ({ ...source, commands: source.commands.filter((command) => !saved.has(command.command)) })).filter((source) => source.commands.length > 0)
 }
 
 function procfiles(dir: string): CommandSource[] {
@@ -64,21 +62,20 @@ function packageScripts(dir: string): Found[] {
   return Object.keys(scripts).map((name) => ({ name, command: `${manager} run ${quote(name)}` }))
 }
 
-/**
- * Asks mise for the space's own tasks, so tasks defined as files count too. It runs in a login shell,
- * because the core may start without the user's PATH.
- */
+/** Asks mise for the project's own tasks, so tasks defined as files count too. */
 function miseTasks(dir: string): Promise<Found[]> {
   return new Promise((resolve) => {
-    const child = spawn(process.env.SHELL || "/bin/zsh", ["-l", "-c", "mise tasks ls --json --local"], { cwd: dir, stdio: ["ignore", "pipe", "ignore"] })
+    const [shell, ...args] = loginShell("mise tasks ls --json --local")
+    const child = spawn(shell!, args, { cwd: dir, stdio: ["ignore", "pipe", "ignore"] })
     let output = ""
     const timer = setTimeout(() => child.kill("SIGKILL"), MISE_TIMEOUT_MS)
-    child.stdout.on("data", (chunk) => (output += chunk))
-    child.on("error", () => resolve([]))
-    child.on("close", () => {
+    const done = (found: Found[]) => {
       clearTimeout(timer)
-      resolve(parseMiseTasks(output))
-    })
+      resolve(found)
+    }
+    child.stdout.on("data", (chunk) => (output += chunk))
+    child.on("error", () => done([]))
+    child.on("close", () => done(parseMiseTasks(output)))
   })
 }
 
@@ -96,7 +93,7 @@ export function parseMiseTasks(json: string): Found[] {
     .map((task) => ({ name: task.name, command: `mise run ${quote(task.name)}` }))
 }
 
-/** Quotes a name for the shell when it holds anything but safe characters. */
+/** Quotes a name for a POSIX shell, such as zsh or bash, when it holds anything but safe characters. */
 function quote(value: string) {
   return /^[\w.:/-]+$/.test(value) ? value : `'${value.replaceAll("'", `'\\''`)}'`
 }

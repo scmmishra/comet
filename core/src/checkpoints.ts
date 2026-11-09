@@ -2,24 +2,13 @@ import type { FileChange } from "@desk/protocol"
 import { copyFileSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { isAbsolute, join } from "node:path"
+import { git, numstatLine } from "./git"
 
 /**
  * Snapshots of the working tree, so Desk can show what a thread changed. A snapshot is a Git tree
  * built in a temporary index file: the user's index, working tree and refs are never touched.
  * Untracked files that are not ignored are included, because new files are changes too.
  */
-
-async function git(dir: string, args: string[], env: Record<string, string> = {}): Promise<string> {
-  const child = Bun.spawn(["git", ...args], {
-    cwd: dir,
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", ...env },
-  })
-  const [output, error, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
-  if (code !== 0) throw new Error(`git ${args[0]} failed: ${error.trim()}`)
-  return output
-}
 
 /** The tree of the working tree as it is now, or undefined outside a Git repo. */
 export async function snapshot(dir: string): Promise<string | undefined> {
@@ -57,17 +46,10 @@ export async function changesSince(dir: string, base: string): Promise<FileChang
     .split("\n")
     .filter(Boolean)
     .map((line) => {
-      const [added, removed, ...rest] = line.split("\t")
-      const path = renamedPath(rest.join("\t"))
+      const { additions, deletions, path: named } = numstatLine(line)
+      const path = renamedPath(named)
       const filePatch = patches.get(path) ?? ""
-      return {
-        path,
-        status: fileStatus(filePatch),
-        // Binary files show "-" for both counts.
-        additions: Number(added) || 0,
-        deletions: Number(removed) || 0,
-        patch: filePatch,
-      }
+      return { path, status: fileStatus(filePatch), additions, deletions, patch: filePatch }
     })
 }
 
@@ -80,7 +62,7 @@ function renamedPath(path: string): string {
 }
 
 /** Splits a multi-file patch into one patch per file, keyed by the file's new path. */
-export function splitPatch(patch: string): Map<string, string> {
+function splitPatch(patch: string): Map<string, string> {
   const files = new Map<string, string>()
   for (const chunk of patch.split(/^(?=diff --git )/m)) {
     const header = /^diff --git a\/(.*) b\/(.*)$/m.exec(chunk)

@@ -1,6 +1,8 @@
 import { query, type CanUseTool, type PermissionResult, type Query, type SDKRateLimitInfo, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
-import { DEFAULT_MODEL, type RunSettings, type ThreadEvent } from "@desk/protocol"
-import { ThreadMapper } from "./thread"
+import type { RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
+import { readContext } from "./context"
+import { sdkModel } from "./models"
+import { ThreadMapper, toolDetail } from "./thread"
 
 type Emit = (event: ThreadEvent) => void
 
@@ -34,24 +36,26 @@ class Inbox implements AsyncIterable<SDKUserMessage> {
   }
 }
 
-export interface SessionOptions {
+interface SessionOptions {
   /** A Claude session to continue, from an earlier run of Desk. */
   readonly resume?: string
   readonly settings: RunSettings
   /** Called when Claude names the session, so it can be resumed later. */
-  readonly onSessionId?: (id: string) => void
+  readonly onSessionId: (id: string) => void
   /** Called with each plan rate-limit update Claude sends during a turn. */
-  readonly onRateLimit?: (info: SDKRateLimitInfo) => void
+  readonly onRateLimit: (info: SDKRateLimitInfo) => void
   /** Whether to compact a large thread that sat idle, when Claude Code asks on its return. Read at each ask. */
-  readonly compactIdle?: () => boolean
+  readonly compactIdle: () => boolean
 }
 
 /** One Claude conversation, in one tab. It starts on the first message. */
 export class Session {
+  /** Each query reads its own inbox. A failed query's input loop may still wait on its inbox, and must not take the next message. */
   private inbox = new Inbox()
   private query?: Query
-  private mapper = new ThreadMapper()
-  private permissions = new Map<string, (result: PermissionResult) => void>()
+  private mapper: ThreadMapper
+  /** Open permission requests: how to answer each, and the item that shows it. */
+  private permissions = new Map<string, { readonly resolve: (result: PermissionResult) => void; readonly item: Extract<ThreadItem, { type: "permission" }> }>()
   private sent = 0
   private sessionId?: string
   private settings: RunSettings
@@ -63,6 +67,7 @@ export class Session {
   ) {
     this.sessionId = options.resume
     this.settings = options.settings
+    this.mapper = new ThreadMapper(dir)
   }
 
   /** Changes how the thread runs. A running thread takes the change from its next reply. */
@@ -76,8 +81,9 @@ export class Session {
   }
 
   send(text: string) {
-    this.emit({ kind: "user", id: `user-${++this.sent}`, text, at: Date.now() })
+    this.emit({ kind: "item", item: { type: "user", id: `user-${++this.sent}`, text, at: Date.now() } })
     this.emit({ kind: "status", busy: true })
+    if (!this.query) this.inbox = new Inbox()
     this.inbox.push({ type: "user", message: { role: "user", content: text }, parent_tool_use_id: null })
     if (!this.query) this.start()
   }
@@ -87,18 +93,18 @@ export class Session {
   }
 
   close() {
-    for (const resolve of this.permissions.values()) resolve({ behavior: "deny", message: "The tab was closed." })
+    for (const { resolve } of this.permissions.values()) resolve({ behavior: "deny", message: "The tab was closed." })
     this.permissions.clear()
     this.inbox.close()
     this.query?.close()
   }
 
-  answerPermission(id: string, allow: boolean) {
-    const resolve = this.permissions.get(id)
-    if (!resolve) return
-    this.permissions.delete(id)
-    this.emit({ kind: "permission.resolved", id, allowed: allow })
-    resolve(allow ? { behavior: "allow" } : { behavior: "deny", message: "The user declined this tool call." })
+  answerPermission(requestId: string, allow: boolean) {
+    const request = this.permissions.get(requestId)
+    if (!request) return
+    this.permissions.delete(requestId)
+    this.emit({ kind: "item", item: { ...request.item, answer: allow } })
+    request.resolve(allow ? { behavior: "allow" } : { behavior: "deny", message: "The user declined this tool call." })
   }
 
   private start() {
@@ -120,7 +126,7 @@ export class Session {
         // Claude Code asks whether to compact a large thread that sat idle. The setting answers, so no dialog shows.
         supportedDialogKinds: ["resume_return"],
         onUserDialog: async (request) =>
-          request.dialogKind === "resume_return" ? { behavior: "completed", result: this.options.compactIdle?.() ? "compact" : "continue" } : { behavior: "cancelled" },
+          request.dialogKind === "resume_return" ? { behavior: "completed", result: this.options.compactIdle() ? "compact" : "continue" } : { behavior: "cancelled" },
       },
     })
     void this.pump(this.query)
@@ -131,9 +137,9 @@ export class Session {
       for await (const message of running) {
         if (message.session_id && message.session_id !== this.sessionId) {
           this.sessionId = message.session_id
-          this.options.onSessionId?.(message.session_id)
+          this.options.onSessionId(message.session_id)
         }
-        if (message.type === "rate_limit_event") this.options.onRateLimit?.(message.rate_limit_info)
+        if (message.type === "rate_limit_event") this.options.onRateLimit(message.rate_limit_info)
         for (const event of this.mapper.map(message, Date.now())) this.emit(event)
         if (message.type === "result") {
           this.emit({ kind: "status", busy: false })
@@ -141,35 +147,35 @@ export class Session {
         }
       }
     } catch (error) {
-      this.emit({ kind: "error", id: `error-${Date.now()}`, message: error instanceof Error ? error.message : String(error) })
+      this.emit({ kind: "item", item: { type: "error", id: `error-${Date.now()}`, message: error instanceof Error ? error.message : String(error) } })
       this.emit({ kind: "status", busy: false })
+      this.inbox.close()
       this.query = undefined
     }
   }
 
-  /** "summary" answers from the last response's usage, without asking the API to count tokens. */
   private async reportContext(running: Query) {
     try {
-      const usage = await running.getContextUsage({ detail: "summary" })
-      this.emit({ kind: "context", percent: usage.percentage, tokens: usage.totalTokens, maxTokens: usage.maxTokens })
+      this.emit({ kind: "context", reading: await readContext(running) })
     } catch {
       // Context usage is extra information. A turn still counts as done without it.
     }
   }
 
-  private askPermission: CanUseTool = (tool, input, { signal, toolUseID: id }) =>
+  /** A request shows as its own item. Its id differs from the tool call's, which shows separately once allowed. */
+  private askPermission: CanUseTool = (tool, input, { signal, toolUseID: requestId }) =>
     new Promise((resolve) => {
-      this.permissions.set(id, resolve)
+      const item = { type: "permission", id: `permission:${requestId}`, requestId, tool, detail: toolDetail(input) } as const
+      this.permissions.set(requestId, { resolve, item })
+      // An interrupted turn cancels its request, which then shows as declined.
       signal.addEventListener("abort", () => {
-        this.permissions.delete(id)
+        this.permissions.delete(requestId)
+        this.emit({ kind: "item", item: { ...item, answer: false } })
         resolve({ behavior: "deny", message: "The request was cancelled." })
       })
-      this.emit({ kind: "permission", id, tool, input })
+      this.emit({ kind: "item", item })
     })
 }
-
-/** Claude Code's default model is the absence of a model option. */
-const sdkModel = (model: string) => (model === DEFAULT_MODEL ? undefined : model)
 
 /** Whether two tabs run the same way, so a save can skip reconfiguring a session. */
 export const sameRunSettings = (a: RunSettings, b: RunSettings) =>

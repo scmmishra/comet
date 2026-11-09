@@ -1,6 +1,7 @@
-import { spawnSync } from "node:child_process"
 import { statSync } from "node:fs"
-import { basename, extname, isAbsolute, join, normalize } from "node:path"
+import { basename, extname } from "node:path"
+import { git } from "./git"
+import { insideProject } from "./project-path"
 
 /** Image types a browser draws, by extension, with the type the core serves them as. */
 const IMAGE_TYPES: Record<string, string> = {
@@ -24,10 +25,9 @@ const MAX_ICON_BYTES = 1024 * 1024
  * folders such as node_modules stay out. Favicons and logos near the root come first. A file listed
  * but deleted, or too large to be an icon, is left out.
  */
-export function findIconFiles(dir: string): string[] {
-  const listed = spawnSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], { cwd: dir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })
-  if (listed.status !== 0) return []
-  return listed.stdout
+export async function findIconFiles(dir: string): Promise<string[]> {
+  const listed = await git(dir, ["ls-files", "--cached", "--others", "--exclude-standard"]).catch(() => "")
+  return listed
     .split("\n")
     .filter((path) => path && ICON_NAME.test(basename(path)))
     .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
@@ -48,11 +48,9 @@ function rank(path: string) {
  * a file that is not an image, and a file too large to be an icon.
  */
 export function iconFile(dir: string, path: string): { path: string; type: string } | undefined {
-  const relative = normalize(path)
-  if (isAbsolute(relative) || relative.startsWith("..")) return undefined
-  const type = IMAGE_TYPES[extname(relative).toLowerCase()]
-  if (!type) return undefined
-  const file = join(dir, relative)
+  const file = insideProject(dir, path)
+  const type = IMAGE_TYPES[extname(path).toLowerCase()]
+  if (!file || !type) return undefined
   try {
     const stat = statSync(file)
     return stat.isFile() && stat.size <= MAX_ICON_BYTES ? { path: file, type } : undefined

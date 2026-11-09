@@ -1,43 +1,38 @@
 import type { Subprocess } from "bun"
+import { loginShell } from "./shell"
 
 /** Output kept per terminal, so a terminal the page draws again shows what it showed before. */
 const MAX_BUFFER_CHARS = 256 * 1024
 
-export interface TerminalEvents {
-  output(id: string, data: string): void
-  exit(id: string, code: number): void
-}
-
 interface Running {
   readonly process: Subprocess
-  readonly decoder: TextDecoder
   buffer: string
 }
 
-/** Shell sessions in the space, each on its own PTY. They live as long as the core, not the page. */
+/** Shell sessions, each on its own PTY under an id the app chose. They live as long as the core, not the page. */
 export class Terminals {
   private running = new Map<string, Running>()
 
   constructor(
-    private readonly dir: string,
-    private readonly events: TerminalEvents,
+    private readonly events: {
+      output(id: string, data: string): void
+      exit(id: string, code: number): void
+    },
   ) {}
 
-  /** Starts a terminal, or replays the output of one already running under this id. */
-  open(id: string, cols: number, rows: number) {
+  /** Starts a terminal in `dir`, or replays the output of one already running under this id. */
+  open(id: string, dir: string, cols: number, rows: number) {
     const existing = this.running.get(id)
     if (existing) {
-      existing.process.terminal?.resize(cols, rows)
+      this.resize(id, cols, rows)
       if (existing.buffer) this.events.output(id, existing.buffer)
       return
     }
-    const shell = process.env.SHELL || "/bin/zsh"
     const decoder = new TextDecoder()
     const entry: Running = {
-      decoder,
       buffer: "",
-      process: Bun.spawn([shell, "-l"], {
-        cwd: this.dir,
+      process: Bun.spawn(loginShell(), {
+        cwd: dir,
         env: { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor", TERM_PROGRAM: "Desk" },
         terminal: {
           cols,
@@ -54,29 +49,23 @@ export class Terminals {
     this.running.set(id, entry)
   }
 
-  has(id: string) {
-    return this.running.has(id)
-  }
-
   input(id: string, data: string) {
     this.running.get(id)?.process.terminal?.write(data)
   }
 
+  /** A hidden terminal measures 0 by 0, which a PTY cannot take. */
   resize(id: string, cols: number, rows: number) {
     if (cols > 0 && rows > 0) this.running.get(id)?.process.terminal?.resize(cols, rows)
   }
 
-  private close(id: string) {
-    const entry = this.running.get(id)
-    if (!entry) return
-    this.running.delete(id)
-    entry.process.terminal?.close()
-    entry.process.kill()
-  }
-
-  /** Closes every terminal not in `ids`. The saved tabs list the terminals that should exist. */
+  /** Closes every terminal not in `ids`. */
   retain(ids: ReadonlySet<string>) {
-    for (const id of [...this.running.keys()]) if (!ids.has(id)) this.close(id)
+    for (const [id, entry] of [...this.running]) {
+      if (ids.has(id)) continue
+      this.running.delete(id)
+      entry.process.terminal?.close()
+      entry.process.kill()
+    }
   }
 
   closeAll() {

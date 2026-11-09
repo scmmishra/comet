@@ -1,20 +1,16 @@
 import { statSync } from "node:fs"
-import { isAbsolute, relative, resolve } from "node:path"
+import { homedir } from "node:os"
+import { join } from "node:path"
+import { insideProject } from "./project-path"
 
 /** The editor command, which takes `path:line`. Zed's CLI does; set DESK_EDITOR for another. */
 const EDITOR = process.env.DESK_EDITOR ?? "zed"
 
-/**
- * Resolves a path from a reply to a file inside the space. The path comes from model output, so
- * anything outside the space, or anything that is not a regular file, is refused.
- */
-export function resolveSpaceFile(dir: string, path: string): string | undefined {
-  const expanded = path.startsWith("~/") ? resolve(process.env.HOME ?? "", path.slice(2)) : path
-  const absolute = isAbsolute(expanded) ? resolve(expanded) : resolve(dir, expanded)
-  const inside = relative(dir, absolute)
-  if (inside === "" || inside.startsWith("..") || isAbsolute(inside)) return undefined
+/** A file a reply names, inside the project. Anything that is not a regular file is refused too. */
+export function projectFile(dir: string, path: string): string | undefined {
+  const file = insideProject(dir, path.startsWith("~/") ? join(homedir(), path.slice(2)) : path)
   try {
-    return statSync(absolute).isFile() ? absolute : undefined
+    return file && statSync(file).isFile() ? file : undefined
   } catch {
     return undefined
   }

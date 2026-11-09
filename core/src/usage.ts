@@ -1,42 +1,74 @@
 import type { SDKControlGetUsageResponse, SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
-import type { PlanUsage, UsageWindow } from "@desk/protocol"
+import type { CoreMessage, PlanUsage, UsageWindow } from "@desk/protocol"
+import { homedir } from "node:os"
 import { probe } from "./probe"
 
-const LABELS = { five_hour: "Session", seven_day: "This week" } as const
-type WindowId = keyof typeof LABELS
+/** Plan usage is probed at most this often. Sessions' rate-limit events keep it current in between. */
+const PROBE_INTERVAL_MS = 60_000
+
+/** The windows Desk shows, in the order it shows them. */
+const WINDOWS = [
+  { id: "five_hour", label: "Session" },
+  { id: "seven_day", label: "This week" },
+] as const satisfies readonly Pick<UsageWindow, "id" | "label">[]
+
+/** The account's plan usage, kept for every client. It reads the same from any folder, so it is read from the home folder. */
+export class Usage {
+  private usage?: PlanUsage
+  private probedAt = 0
+
+  constructor(private readonly broadcast: (message: CoreMessage) => void) {}
+
+  /** Probes again unless a probe ran in the last minute, then sends the reading. */
+  async refresh() {
+    if (Date.now() - this.probedAt >= PROBE_INTERVAL_MS) {
+      this.probedAt = Date.now()
+      this.usage = (await probeUsage(homedir())) ?? this.usage
+    }
+    this.broadcast({ type: "usage", usage: this.usage })
+  }
+
+  /** Takes a rate-limit event, which a session receives during a turn. */
+  rateLimit(info: SDKRateLimitInfo) {
+    this.usage = applyRateLimit(this.usage, info)
+    this.broadcast({ type: "usage", usage: this.usage })
+  }
+}
 
 /**
  * Reads plan usage through the SDK's usage call. The call is marked experimental, so a failure only
  * means no reading. skipBehaviors avoids a scan of local transcripts that only the /usage screen needs.
  */
-export async function probeUsage(dir: string): Promise<PlanUsage | undefined> {
+function probeUsage(dir: string): Promise<PlanUsage | undefined> {
   return probe(dir, async (running) => usageFromResponse(await running.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true })))
 }
 
 /** The usage response's percentages are already 0–100. */
 export function usageFromResponse(response: Pick<SDKControlGetUsageResponse, "rate_limits_available" | "rate_limits">): PlanUsage | undefined {
   if (!response.rate_limits_available || !response.rate_limits) return undefined
-  const windows: UsageWindow[] = []
-  for (const id of Object.keys(LABELS) as WindowId[]) {
-    const window = response.rate_limits[id]
-    if (typeof window?.utilization !== "number") continue
-    windows.push({ id, label: LABELS[id], percent: clamp(window.utilization), ...(window.resets_at ? { resetsAt: window.resets_at } : {}) })
-  }
-  return windows.length ? { windows } : undefined
+  return planUsage(
+    WINDOWS.flatMap(({ id, label }) => {
+      const window = response.rate_limits?.[id]
+      return typeof window?.utilization === "number" ? [{ id, label, percent: clamp(window.utilization), ...(window.resets_at ? { resetsAt: window.resets_at } : {}) }] : []
+    }),
+  )
 }
 
-/** Updates a reading from a rate-limit event, which a session receives during a turn. Its utilization is 0–1. */
+/** Updates a reading from a rate-limit event. Its utilization is 0–1. Other limit types are not shown. */
 export function applyRateLimit(current: PlanUsage | undefined, info: SDKRateLimitInfo): PlanUsage | undefined {
-  const id = info.rateLimitType
-  if (!id || !(id in LABELS) || typeof info.utilization !== "number") return current
+  const shown = WINDOWS.find((window) => window.id === info.rateLimitType)
+  if (!shown || typeof info.utilization !== "number") return current
   const window: UsageWindow = {
-    id: id as WindowId,
-    label: LABELS[id as WindowId],
+    ...shown,
     percent: clamp(info.utilization * 100),
     ...(info.resetsAt ? { resetsAt: new Date(info.resetsAt * 1000).toISOString() } : {}),
   }
-  const others = (current?.windows ?? []).filter((found) => found.id !== window.id)
-  return { windows: [...others, window].sort((a, b) => a.id.localeCompare(b.id)) }
+  const windows = new Map((current?.windows ?? []).map((found) => [found.id, found]))
+  windows.set(window.id, window)
+  return planUsage(WINDOWS.flatMap(({ id }) => windows.get(id) ?? []))
 }
+
+/** Usage with no window has nothing to show. */
+const planUsage = (windows: UsageWindow[]): PlanUsage | undefined => (windows.length ? { windows: windows as [UsageWindow, ...UsageWindow[]] } : undefined)
 
 const clamp = (percent: number) => Math.min(100, Math.max(0, percent))
