@@ -8,8 +8,8 @@ const NUMBER = new Intl.NumberFormat("en")
 export function SpaceCard(props: { space: Space }) {
   const pr = () => props.space.pr
   return (
-    <section class="flex flex-col rounded-3xl bg-card">
-      <div class="flex h-10 items-center px-3.5 font-medium">Space</div>
+    <section class="flex flex-col rounded-xl border border-line bg-card">
+      <div class="flex h-9 items-center px-3 font-medium">Space</div>
       <div class="px-1.5 pb-1.5">
         <Row icon="folder">{props.space.root.replace(/^\/Users\/[^/]+/, "~")}</Row>
         <div class="h-1.5" />
@@ -18,7 +18,7 @@ export function SpaceCard(props: { space: Space }) {
         </Row>
         <Show when={pr()}>
           {(found) => (
-            <a class="grid grid-cols-[auto_1fr] gap-x-2.5 gap-y-0.5 rounded-lg px-2 py-[7px] hover:bg-panel" href={found().url} target="_blank">
+            <a class="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 rounded-md px-1.5 py-1 hover:bg-hover" href={found().url} target="_blank">
               <Icon name="pr" class="text-fg-2" />
               <span class="leading-snug">{found().title}</span>
               <span class="col-start-2 flex items-center justify-between text-fg-3">
@@ -43,7 +43,7 @@ export function SpaceCard(props: { space: Space }) {
 
 function Row(props: { icon: IconName; detail?: JSX.Element; children: JSX.Element }) {
   return (
-    <div class="flex min-w-0 items-center gap-2.5 rounded-lg px-2 py-[7px]">
+    <div class="flex h-[26px] min-w-0 items-center gap-2 rounded-md px-1.5">
       <Icon name={props.icon} class="text-fg-2" />
       <span class="min-w-0 flex-1 truncate">{props.children}</span>
       <Show when={props.detail}>

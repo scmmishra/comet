@@ -26,10 +26,10 @@ export function App() {
       <TabBar />
       <Show when={activeTab()} keyed>
         {(tab) => (
-          <main class="flex min-h-0 flex-1 gap-2 px-2 pb-2">
-            <section class="flex min-w-0 flex-1 flex-col rounded-3xl bg-panel">
-              <header class="flex h-[46px] shrink-0 items-center gap-2 px-4">
-                <span class="flex min-w-0 items-center gap-[7px] whitespace-nowrap text-fg-2">
+          <main class="flex min-h-0 flex-1 px-2 pb-2">
+            <section class="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-line bg-panel">
+              <header class="flex h-10 shrink-0 items-center gap-2 px-4">
+                <span class="flex min-w-0 items-center gap-2 whitespace-nowrap text-fg-2">
                   <SpaceAvatar />
                   {state.space?.name ?? "No repo"}
                   <span class="text-fg-3">/</span>
@@ -40,14 +40,14 @@ export function App() {
                 <div class="flex min-w-0 flex-1 flex-col">
                   <Show when={tab.items.length > 0} fallback={<StartScreen tab={tab} />}>
                     <ThreadScroll tab={tab} />
-                    <div class="shrink-0 px-4 pb-4 pt-1.5">
+                    <div class="shrink-0 px-4 pb-4 pt-1">
                       <Composer tab={tab} />
                     </div>
                   </Show>
                 </div>
                 <Show when={state.space}>
                   {(space) => (
-                    <aside class="desk-rail desk-no-scrollbar flex w-[272px] shrink-0 flex-col gap-2 overflow-y-auto pb-2 pr-2">
+                    <aside class="desk-rail desk-no-scrollbar flex w-[264px] shrink-0 flex-col gap-2 overflow-y-auto pb-2 pr-2">
                       <SpaceCard space={space()} />
                     </aside>
                   )}
@@ -63,7 +63,7 @@ export function App() {
 
 function SpaceAvatar() {
   return (
-    <span class="grid size-[18px] shrink-0 place-items-center rounded-[5px] bg-[#3a3a40] text-[11px] font-semibold text-fg">
+    <span class="grid size-4 shrink-0 place-items-center rounded-[4px] bg-raised text-[10px] font-semibold text-fg-2 ring-1 ring-line ring-inset">
       {(state.space?.name ?? "?").charAt(0).toUpperCase()}
     </span>
   )
@@ -71,13 +71,13 @@ function SpaceAvatar() {
 
 function StartScreen(props: { tab: Tab }) {
   return (
-    <div class="flex min-h-0 flex-1 flex-col items-center gap-[18px] overflow-y-auto px-4 pb-6 pt-[14vh]">
+    <div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-4 pb-[12vh]">
       <div class="select-none text-center font-mono text-[clamp(44px,8vw,88px)] font-medium leading-none tracking-[-0.04em] text-mark">desk</div>
-      <div class="flex w-full max-w-[720px] flex-col gap-[18px]">
+      <div class="flex w-full max-w-[680px] flex-col gap-3">
         <Composer tab={props.tab} />
         <Show when={state.space}>
           {(space) => (
-            <div class="flex flex-wrap items-center gap-2 px-1.5 text-fg-2">
+            <div class="flex flex-wrap items-center gap-2 px-3 text-[12px] text-fg-3">
               <SpaceAvatar />
               {space().name}
               <span class="text-fg-3">/</span>
@@ -94,24 +94,24 @@ function StartScreen(props: { tab: Tab }) {
 
 function TabBar() {
   return (
-    <nav class="desk-titlebar flex h-[46px] shrink-0 items-center gap-1 pl-[84px] pr-2.5">
+    <nav class="desk-titlebar flex h-[38px] shrink-0 items-center gap-1 pl-[80px] pr-2">
       <div class="desk-no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1">
         <For each={state.tabs}>
           {(tab) => (
             <button
-              class="desk-no-drag group flex h-8 w-[210px] shrink-0 items-center gap-2 rounded-xl pl-2 pr-1.5 text-left"
-              classList={{ "bg-raised text-fg": tab.id === state.active, "text-fg-3 hover:bg-panel hover:text-fg-2": tab.id !== state.active }}
+              class="desk-no-drag group flex h-6 w-[196px] shrink-0 items-center gap-1.5 rounded-md pl-1.5 pr-1 text-left"
+              classList={{ "bg-raised text-fg ring-1 ring-line ring-inset": tab.id === state.active, "text-fg-2 hover:bg-hover hover:text-fg": tab.id !== state.active }}
               onClick={() => selectTab(tab.id)}
             >
               <SpaceAvatar />
               <span class="desk-fade-end min-w-0 flex-1 overflow-hidden whitespace-nowrap">{tab.title}</span>
               <Show when={tab.busy}>
-                <span class="desk-pulse size-1.5 shrink-0 rounded-full bg-accent" />
+                <span class="desk-pulse size-1.5 shrink-0 rounded-full bg-fg-2" />
               </Show>
               <span
                 role="button"
                 aria-label="Close tab"
-                class="grid size-[18px] shrink-0 place-items-center rounded-[5px] opacity-0 hover:bg-hover hover:opacity-100! group-hover:opacity-60"
+                class="grid size-4 shrink-0 place-items-center rounded opacity-0 hover:bg-hover hover:opacity-100! group-hover:opacity-60"
                 classList={{ "opacity-60": tab.id === state.active }}
                 onClick={(event) => {
                   event.stopPropagation()
@@ -123,7 +123,7 @@ function TabBar() {
             </button>
           )}
         </For>
-        <button class="desk-no-drag grid size-[30px] shrink-0 place-items-center rounded-lg text-fg-2 hover:bg-hover hover:text-fg" aria-label="New tab" onClick={newTab}>
+        <button class="desk-no-drag grid size-6 shrink-0 place-items-center rounded-md text-fg-2 hover:bg-hover hover:text-fg" aria-label="New tab" onClick={newTab}>
           <Icon name="plus" />
         </button>
       </div>
