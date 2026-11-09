@@ -8,11 +8,15 @@ import { probe } from "./probe"
  */
 type SettingsReader = { getSettings(): Promise<{ applied?: { effort?: Effort | null } }> }
 
-/** The models Claude Code offers this account, in its order, with each one's default effort. */
-export async function probeModels(dir: string): Promise<ModelOption[] | undefined> {
-  return probe(dir, async (running) => {
+/**
+ * The models Claude Code offers this account, in its order. `publish` gets the list as soon as the
+ * query starts, then again with each model's default effort, which takes seconds to read.
+ */
+export async function probeModels(dir: string, publish: (models: ModelOption[]) => void): Promise<void> {
+  await probe(dir, async (running) => {
     const models = (await running.initializationResult()).models
-    return modelOptions(models, await defaultEfforts(running, models))
+    publish(modelOptions(models))
+    publish(modelOptions(models, await defaultEfforts(running, models)))
   })
 }
 

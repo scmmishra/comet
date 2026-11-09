@@ -46,13 +46,17 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
     }
     broadcast({ type: "usage", usage })
   }
-  // The model list rarely changes, so it is read once, on the first ask.
-  let models: Promise<readonly ModelOption[] | undefined> | undefined
-  const sendModels = async (ws: ServerWebSocket) => {
-    models ??= probeModels(dir)
-    const found = await models
-    if (found) send(ws, { type: "models", models: found })
-    else models = undefined
+  // The model list rarely changes, so it is read once, on the first ask. A failed read is tried again on the next.
+  let models: readonly ModelOption[] | undefined
+  let probingModels = false
+  const sendModels = (ws: ServerWebSocket) => {
+    if (models) send(ws, { type: "models", models })
+    if (models || probingModels) return
+    probingModels = true
+    void probeModels(dir, (found) => {
+      models = found
+      broadcast({ type: "models", models })
+    }).finally(() => (probingModels = false))
   }
   const persist = (next: SpaceState) => {
     saved = next
@@ -132,7 +136,7 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
       case "terminal.resize":
         return terminals.resize(message.id, message.cols, message.rows)
       case "models.get":
-        return void sendModels(ws)
+        return sendModels(ws)
       case "usage.get":
         return void refreshUsage()
       case "space.get":
