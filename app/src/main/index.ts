@@ -13,6 +13,9 @@ export interface CoreInfo {
 
 const CORE_START_TIMEOUT_MS = 10_000
 
+// Lets an agent read and drive the page over the DevTools protocol, without screenshots.
+if (process.env.DESK_DEBUG_PORT) app.commandLine.appendSwitch("remote-debugging-port", process.env.DESK_DEBUG_PORT)
+
 let core: ChildProcess | undefined
 
 /**
