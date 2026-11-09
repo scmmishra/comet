@@ -52,12 +52,14 @@ export interface ProjectData {
   commandSources?: readonly CommandSource[]
   /** The project's recent threads, for the start screen and thread search. */
   threads: readonly ThreadSummary[]
+  /** Images in the project that look like its logo, for the icon picker. Undefined until asked for. */
+  iconFiles?: readonly string[]
 }
 
 const EMPTY_PROJECT: ProjectData = { commands: [], threads: [] }
 
 /** The settings screen's pages, in the order its sidebar lists them. */
-export const SETTINGS_PAGES = ["providers", "appearance"] as const
+export const SETTINGS_PAGES = ["providers", "appearance", "projects"] as const
 export type SettingsPage = (typeof SETTINGS_PAGES)[number]
 
 const [state, setState] = createStore({
@@ -142,6 +144,11 @@ export function openSettings(page: SettingsPage = SETTINGS_PAGES[0]) {
 
 export function closeSettings() {
   setState("settingsPage", undefined)
+}
+
+/** Asks the core for the images in a project that look like its logo. */
+export function findProjectIcons(project: string) {
+  core.send({ type: "project.icons", project })
 }
 
 /** Changes the named settings. The core saves them and sends them back. */
@@ -383,6 +390,7 @@ core.listen((message: CoreMessage) => {
   else if (message.type === "account") setState({ account: message.account, accountRead: true })
   else if (message.type === "threads") updateProject(message.project, () => ({ threads: message.threads }))
   else if (message.type === "commands") updateProject(message.project, () => ({ commands: message.commands }))
+  else if (message.type === "project.icons") updateProject(message.project, () => ({ iconFiles: message.files }))
   else if (message.type === "commands.found") updateProject(message.project, () => ({ commandSources: message.sources }))
   else if (message.type === "review") setState("tabs", (tab) => tab.id === message.sessionId, "review", [...message.files])
   else if (message.type === "session.event") apply(message.sessionId, message.event, performance.now())

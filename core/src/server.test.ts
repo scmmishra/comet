@@ -73,3 +73,16 @@ test("keeps each project's commands apart", async () => {
   rmSync(one, { recursive: true, force: true })
   rmSync(two, { recursive: true, force: true })
 })
+
+test("serves a project's icon and refuses a path outside it", async () => {
+  core = startCore({ token: "secret", dir: process.cwd() })
+  const project = mkdtempSync(join(tmpdir(), "desk-icon-"))
+  await Bun.write(join(project, "logo.svg"), "<svg/>")
+  const url = (path: string, token = "secret") => `http://127.0.0.1:${core!.port}/project-icon?token=${token}&dir=${encodeURIComponent(project)}&path=${encodeURIComponent(path)}`
+  const found = await fetch(url("logo.svg"))
+  expect(found.status).toBe(200)
+  expect(found.headers.get("content-type")).toBe("image/svg+xml")
+  expect((await fetch(url("../etc/hosts"))).status).toBe(404)
+  expect((await fetch(url("logo.svg", "wrong"))).status).toBe(403)
+  rmSync(project, { recursive: true, force: true })
+})

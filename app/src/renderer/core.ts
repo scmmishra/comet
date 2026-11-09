@@ -7,9 +7,11 @@ export class CoreClient {
   private socket?: WebSocket
   private queue: string[] = []
   private listeners = new Set<Listener>()
+  private address?: { readonly port: number; readonly token: string }
 
   async connect() {
     const { port, token } = await window.desk.core()
+    this.address = { port, token }
     const socket = new WebSocket(`ws://127.0.0.1:${port}/?token=${token}`)
     this.socket = socket
     socket.onopen = () => {
@@ -20,6 +22,13 @@ export class CoreClient {
       const message = JSON.parse(String(event.data)) as CoreMessage
       for (const listener of this.listeners) listener(message)
     }
+  }
+
+  /** The address of a project's icon, which the core serves over HTTP. Undefined before the core connects. */
+  iconUrl(dir: string, path: string): string | undefined {
+    if (!this.address) return undefined
+    const query = new URLSearchParams({ token: this.address.token, dir, path })
+    return `http://127.0.0.1:${this.address.port}/project-icon?${query}`
   }
 
   send(message: ClientMessage) {

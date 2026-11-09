@@ -1,5 +1,4 @@
 import { IconButton } from "@opencode/ui/icon-button"
-import { ProjectAvatar } from "@opencode/ui/project-avatar"
 import { Spinner } from "@opencode/ui/spinner"
 import { Tabs } from "@opencode/ui/tabs"
 import { Tooltip } from "@opencode/ui/tooltip"
@@ -12,7 +11,7 @@ import { ReviewView } from "./review"
 import { CommandsCard } from "./commands"
 import { SpaceCard, SpaceChip } from "./space"
 import { StartScreen } from "./start-screen"
-import { projectName } from "./format"
+import { ProjectMark, projectLabel } from "./project-mark"
 import { SettingsScreen } from "./settings/screen"
 import { activeData, activeTab, closePanelTab, openSettings, closeTab, newTab, newTerminal, refreshSpace, refreshUsage, selectPanelTab, selectTab, selectTabAt, state, togglePanel, type Tab } from "./store"
 import { TerminalView } from "./terminal"
@@ -70,8 +69,8 @@ export function App() {
                 {/* The right padding leaves room for the panel toggle, which sits over this corner. */}
                 <header class="flex h-[46px] shrink-0 items-center gap-2 pl-4 pr-12">
                   <span class="flex min-w-0 items-center gap-[7px] whitespace-nowrap text-fg-2">
-                    <ProjectAvatar fallback={projectName(tab.project)} class="size-[18px]" />
-                    {projectName(tab.project)}
+                    <ProjectMark project={tab.project} class="size-[18px]" />
+                    {projectLabel(tab.project)}
                     <span class="text-fg-3">/</span>
                     <b class="truncate font-medium text-fg">{tab.title}</b>
                   </span>
@@ -213,7 +212,7 @@ function TabBar() {
             >
               {/* The tab and its close button are siblings: a button cannot hold another. */}
               <button class="flex h-full min-w-0 flex-1 items-center gap-2 pl-2 pr-7 text-left" onClick={() => selectTab(tab.id)}>
-                <ProjectAvatar fallback={projectName(tab.project)} />
+                <ProjectMark project={tab.project} />
                 <span class="desk-fade-end min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[12px]">{tab.title}</span>
                 <Show when={tab.busy}>
                   <Spinner class="size-3.5 shrink-0 text-accent" />

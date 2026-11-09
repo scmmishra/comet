@@ -1,9 +1,9 @@
 import { Menu } from "@opencode/ui/menu"
-import { ProjectAvatar } from "@opencode/ui/project-avatar"
 import { createResource, For, onMount, Show } from "solid-js"
 import { Composer } from "./composer"
-import { formatAgo, projectName } from "./format"
+import { formatAgo } from "./format"
 import { Icon } from "./icons"
+import { ProjectMark, projectLabel } from "./project-mark"
 import { activeData, openThread, refreshThreads, setTabProject, type Tab } from "./store"
 
 /** A new tab: the composer, the project and branch it works in, and threads to pick up again. */
@@ -45,8 +45,8 @@ function ProjectSwitcher(props: { tab: Tab }) {
   return (
     <Menu placement="bottom-start" gutter={8} onOpenChange={(open) => open && void refetch()}>
       <Menu.Trigger class="flex h-8 items-center gap-2 rounded-lg px-1.5 hover:bg-hover hover:text-fg data-[expanded]:bg-hover data-[expanded]:text-fg">
-        <ProjectAvatar fallback={projectName(props.tab.project)} class="size-[18px]" />
-        {projectName(props.tab.project)}
+        <ProjectMark project={props.tab.project} class="size-[18px]" />
+        {projectLabel(props.tab.project)}
         <Icon name="chevron-down" class="size-3 text-fg-3" />
       </Menu.Trigger>
       <Menu.Portal>
@@ -58,8 +58,8 @@ function ProjectSwitcher(props: { tab: Tab }) {
                 {(project) => (
                   <Menu.RadioItem value={project.path} title={project.path} closeOnSelect onSelect={() => use(project.path)}>
                     <span class="flex min-w-0 items-center gap-2.5">
-                      <ProjectAvatar fallback={project.name} />
-                      <span class="truncate">{project.name}</span>
+                      <ProjectMark project={project.path} />
+                      <span class="truncate">{projectLabel(project.path)}</span>
                     </span>
                   </Menu.RadioItem>
                 )}

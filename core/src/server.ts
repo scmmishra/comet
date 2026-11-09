@@ -3,6 +3,7 @@ import type { ServerWebSocket } from "bun"
 import pkg from "../package.json"
 import { discoverCommands } from "./command-sources"
 import { sameRunSettings, Session } from "./session"
+import { findIconFiles, iconFile } from "./project-icons"
 import { loadSettings, saveSettings, updateSettings } from "./settings"
 import { isProjectFolder, Spaces } from "./spaces"
 import { loadWindowState, saveWindowState, type SavedTab, type WindowState } from "./window-state"
@@ -213,6 +214,8 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
         return sendModels(ws)
       case "usage.get":
         return void refreshUsage()
+      case "project.icons":
+        return send(ws, { type: "project.icons", project: message.project, files: findIconFiles(message.project) })
       case "space.get":
         return void readSpace(message.project).then((space) => send(ws, { type: "space", project: message.project, space }))
       case "session.send":
@@ -252,6 +255,12 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
     fetch(request, server) {
       const url = new URL(request.url)
       if (url.searchParams.get("token") !== token) return new Response("Forbidden", { status: 403 })
+      // A project's icon, for its avatar. Only an image inside a project folder is served.
+      if (url.pathname === "/project-icon") {
+        const dir = url.searchParams.get("dir") ?? ""
+        const icon = isProjectFolder(dir) ? iconFile(dir, url.searchParams.get("path") ?? "") : undefined
+        return icon ? new Response(Bun.file(icon.path), { headers: { "content-type": icon.type, "cache-control": "no-cache" } }) : new Response("Not found", { status: 404 })
+      }
       if (server.upgrade(request)) return undefined
       return new Response("Expected a WebSocket", { status: 426 })
     },

@@ -17,7 +17,7 @@ export function SettingsHeader(props: { title: string; description: string; acti
 }
 
 /** A titled group of settings on a page. */
-export function SettingsSection(props: { title?: string; children: JSX.Element }) {
+export function SettingsSection(props: { title?: JSX.Element; children: JSX.Element }) {
   return (
     <section class="settings-section">
       <Show when={props.title}>

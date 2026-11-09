@@ -262,6 +262,8 @@ export type ClientMessage =
       readonly project?: { readonly dir: string; readonly settings: ProjectSettings }
     }
   | { readonly type: "space.get"; readonly project: string }
+  /** Images in the project that look like its logo, for the icon picker. */
+  | { readonly type: "project.icons"; readonly project: string }
   | { readonly type: "usage.get" }
   | { readonly type: "models.get" }
   /** The project's recent threads, open in a tab or not. */
@@ -319,6 +321,8 @@ export type CoreMessage =
   | { readonly type: "commands.found"; readonly project: string; readonly sources: readonly CommandSource[] }
   | { readonly type: "terminal.output"; readonly id: string; readonly data: string }
   | { readonly type: "terminal.exit"; readonly id: string; readonly code: number }
+  /** Paths relative to the project. The core serves each at `/project-icon?dir=&path=&token=`. */
+  | { readonly type: "project.icons"; readonly project: string; readonly files: readonly string[] }
   /** `space` is absent when the folder is not a Git repo. */
   | { readonly type: "space"; readonly project: string; readonly space?: Space }
   | { readonly type: "session.event"; readonly sessionId: string; readonly event: ThreadEvent }
