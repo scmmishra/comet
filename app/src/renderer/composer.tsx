@@ -1,18 +1,9 @@
 import { createSignal, onMount, Show } from "solid-js"
-import { modelLabel } from "./format"
 import { Icon } from "./icons"
+import { ModelPicker } from "./model-picker"
 import { interrupt, send, type Tab } from "./store"
 
 const MAX_HEIGHT_PX = 240
-
-/** Claude's starburst mark: eight lines through the centre make sixteen rays. */
-function ClaudeMark() {
-  return (
-    <svg viewBox="0 0 16 16" class="size-4 shrink-0 text-claude" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" aria-hidden="true">
-      <path d="M8 1.5v13M1.5 8h13M3.4 3.4l9.2 9.2M12.6 3.4l-9.2 9.2M5.3 1.9l5.4 12.2M10.7 1.9 5.3 14.1M1.9 5.3l12.2 5.4M14.1 5.3 1.9 10.7" />
-    </svg>
-  )
-}
 
 /**
  * The message box, laid out as T3 Code's: a tall text area, then a row with the model and the
@@ -68,13 +59,7 @@ export function Composer(props: { tab: Tab }) {
         }}
       />
       <div class="flex items-center gap-1 px-2.5 pb-2.5 pt-1">
-        <span class="ml-auto inline-flex h-8 items-center gap-2 rounded-lg px-2 text-[13px]">
-          <ClaudeMark />
-          {/* The SDK names the model once the session starts. */}
-          <Show when={props.tab.model} fallback={<span class="text-fg-2">Claude Code</span>}>
-            {(model) => <span class="text-fg">{modelLabel(model())}</span>}
-          </Show>
-        </span>
+        <ModelPicker tab={props.tab} />
         <Show
           when={props.tab.busy}
           fallback={

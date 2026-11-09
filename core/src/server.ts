@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION, type ClientMessage, type CoreMessage, type PlanUsage, type ThreadEvent } from "@desk/protocol"
+import { DEFAULT_MODEL, PROTOCOL_VERSION, type ClientMessage, type CoreMessage, type ModelOption, type PlanUsage, type ThreadEvent } from "@desk/protocol"
 import type { ServerWebSocket } from "bun"
 import pkg from "../package.json"
 import { getSessionMessages } from "@anthropic-ai/claude-agent-sdk"
@@ -10,6 +10,7 @@ import { changesSince, snapshot } from "./checkpoints"
 import { Terminals } from "./terminals"
 import { historyEvents } from "./thread"
 import { applyRateLimit, probeUsage } from "./usage"
+import { probeModels } from "./models"
 
 const USAGE_PROBE_INTERVAL_MS = 60_000
 
@@ -46,6 +47,14 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
     }
     broadcast({ type: "usage", usage })
   }
+  // The model list rarely changes, so it is read once, on the first ask.
+  let models: Promise<readonly ModelOption[] | undefined> | undefined
+  const sendModels = async (ws: ServerWebSocket) => {
+    models ??= probeModels(dir)
+    const found = await models
+    if (found) send(ws, { type: "models", models: found })
+    else models = undefined
+  }
   const persist = (next: SpaceState) => {
     saved = next
     saveSpaceState(dir, saved)
@@ -64,8 +73,11 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
         if (event.kind === "context") updateTab(id, { context: { percent: event.percent, tokens: event.tokens, maxTokens: event.maxTokens } })
         broadcast({ type: "session.event", sessionId: id, event })
       }
+      const tab = saved.tabs.find((found) => found.id === id)
       found = new Session(dir, emit, {
-        resume: saved.tabs.find((tab) => tab.id === id)?.sessionId,
+        resume: tab?.sessionId,
+        model: tab?.model ?? DEFAULT_MODEL,
+        effort: tab?.effort,
         onSessionId: (sessionId) => updateTab(id, { sessionId }),
         onRateLimit: (info) => {
           usage = applyRateLimit(usage, info)
@@ -95,8 +107,9 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
         if (!file) return send(ws, { type: "error", message: `Desk can only open files inside the space: ${message.path}` })
         return openInEditor(file, message.line)
       }
-      case "tabs.save":
-        // The app owns order, titles and panel terminals. The core keeps each tab's Claude session.
+      case "tabs.save": {
+        // The app owns order, titles, panel terminals, model and effort. The core keeps each tab's Claude session.
+        const before = new Map(saved.tabs.map((tab) => [tab.id, tab]))
         persist({
           tabs: message.tabs.map((tab) => {
             const { sessionId, context, baseline } = saved.tabs.find((found) => found.id === tab.id) ?? {}
@@ -104,14 +117,23 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
           }),
           active: message.active,
         })
+        // A changed model or effort applies to a running thread from its next reply.
+        for (const tab of message.tabs) {
+          const old = before.get(tab.id)
+          if (old?.model === tab.model && old.effort === tab.effort) continue
+          sessions.get(tab.id)?.configure(tab.model, tab.effort).catch((error) => send(ws, { type: "error", message: `Desk could not change the model: ${error instanceof Error ? error.message : error}` }))
+        }
         // A closed tab or panel terminal drops out of the list, so its shell ends here.
         return terminals.retain(new Set(message.tabs.flatMap((tab) => tab.terminals.map((terminal) => terminal.id))))
+      }
       case "terminal.open":
         return terminals.open(message.id, message.cols, message.rows)
       case "terminal.input":
         return terminals.input(message.id, message.data)
       case "terminal.resize":
         return terminals.resize(message.id, message.cols, message.rows)
+      case "models.get":
+        return void sendModels(ws)
       case "usage.get":
         return void refreshUsage()
       case "space.get":
@@ -177,7 +199,7 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
 
 /** Sends the saved tabs, then each tab's conversation read back from Claude's transcript. */
 async function sendSavedTabs(ws: ServerWebSocket, dir: string, saved: SpaceState) {
-  send(ws, { type: "tabs", tabs: saved.tabs.map(({ id, title, terminals, panelActive }) => ({ id, title, terminals, panelActive })), active: saved.active })
+  send(ws, { type: "tabs", tabs: saved.tabs.map(({ id, title, terminals, panelActive, model, effort }) => ({ id, title, terminals, panelActive, model, effort })), active: saved.active })
   for (const tab of saved.tabs) {
     if (!tab.sessionId) continue
     const messages = await getSessionMessages(tab.sessionId, { dir }).catch(() => [])

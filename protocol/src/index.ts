@@ -72,6 +72,24 @@ export interface PlanUsage {
   readonly windows: readonly UsageWindow[]
 }
 
+/** Claude Code's own default model, as a ModelOption value. */
+export const DEFAULT_MODEL = "default"
+
+/** How much Claude thinks before it answers. */
+export type Effort = "low" | "medium" | "high" | "xhigh" | "max"
+
+/** A model Claude Code offers the account, as its /model menu lists it. */
+export interface ModelOption {
+  /** What a session is started with, such as "opus". "default" is Claude Code's own default. */
+  readonly value: string
+  readonly label: string
+  readonly description: string
+  /** The model that runs, such as "claude-opus-5-5". */
+  readonly resolvedModel?: string
+  /** The effort levels the model takes. Empty when it takes none. */
+  readonly efforts: readonly Effort[]
+}
+
 /** A terminal in a tab's panel. Its shell runs in the core under this id. */
 export interface TerminalInfo {
   readonly id: string
@@ -86,12 +104,17 @@ export interface TabInfo {
   readonly terminals: readonly TerminalInfo[]
   /** The panel tab on show, as a terminal's id. Absent means Review. */
   readonly panelActive?: string
+  /** The model this tab's thread runs on, as a ModelOption value. */
+  readonly model: string
+  /** Absent means the model's default effort. */
+  readonly effort?: Effort
 }
 
 export type ClientMessage =
   | { readonly type: "ping"; readonly id: number }
   | { readonly type: "space.get" }
   | { readonly type: "usage.get" }
+  | { readonly type: "models.get" }
   /** Starts a terminal, or reattaches to one already running under this id. */
   | { readonly type: "terminal.open"; readonly id: string; readonly cols: number; readonly rows: number }
   | { readonly type: "terminal.input"; readonly id: string; readonly data: string }
@@ -112,6 +135,8 @@ export type CoreMessage =
   | { readonly type: "pong"; readonly id: number }
   /** The tabs saved for this space. Each restored tab's thread follows as a session.history message. */
   | { readonly type: "tabs"; readonly tabs: readonly TabInfo[]; readonly active?: string }
+  /** The models Claude Code offers, read once when the core starts. */
+  | { readonly type: "models"; readonly models: readonly ModelOption[] }
   /** `usage` is absent when Claude has no plan limits, such as with an API key. */
   | { readonly type: "usage"; readonly usage?: PlanUsage }
   | { readonly type: "review"; readonly sessionId: string; readonly files: readonly FileChange[] }

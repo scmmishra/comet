@@ -54,7 +54,7 @@ export function Thread(props: { tab: Tab }) {
                 {(item) => (
                   <div class="flex items-center gap-1.5 text-[12px] text-fg-3">
                     <Icon name="bot" class="size-[15px]" />
-                    {`${modelLabel(props.tab.model)} · ${formatDuration(item().durationMs)}`}
+                    {`${modelLabel(props.tab.resolvedModel)} · ${formatDuration(item().durationMs)}`}
                   </div>
                 )}
               </Match>

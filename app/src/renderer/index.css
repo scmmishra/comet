@@ -135,16 +135,22 @@ body {
   animation: desk-rise 180ms var(--ease-out) both;
 }
 
-/* A popover opening below its trigger at the right edge. It grows out of the trigger, not up from below. */
+/* A popover opening below its trigger at the right edge. It grows out of the trigger, not away from it. */
 @keyframes desk-pop {
   from {
     opacity: 0;
-    transform: translateY(-4px) scale(0.97);
+    transform: translateY(var(--pop-from)) scale(0.97);
   }
 }
 .desk-pop {
+  --pop-from: -4px;
   transform-origin: top right;
   animation: desk-pop 150ms var(--ease-out) both;
+}
+/* A popover opening above its trigger, such as the composer's model picker. */
+.desk-pop-up {
+  --pop-from: 4px;
+  transform-origin: bottom right;
 }
 
 @keyframes desk-pulse {

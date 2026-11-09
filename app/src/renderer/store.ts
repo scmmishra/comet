@@ -1,4 +1,4 @@
-import type { CoreMessage, FileChange, PlanUsage, Space, TabInfo, ThreadEvent } from "@desk/protocol"
+import { DEFAULT_MODEL, type CoreMessage, type Effort, type FileChange, type ModelOption, type PlanUsage, type Space, type TabInfo, type ThreadEvent } from "@desk/protocol"
 import { batch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
@@ -19,7 +19,11 @@ export interface Tab {
   title: string
   items: Item[]
   busy: boolean
-  model?: string
+  /** The model and effort chosen for this thread. */
+  model: string
+  effort?: Effort
+  /** The model that ran, as the session reported it. */
+  resolvedModel?: string
   context?: { percent: number; tokens: number; maxTokens: number }
   /** The files this tab's thread changed. Undefined until asked for. */
   review?: FileChange[]
@@ -41,6 +45,7 @@ const [state, setState] = createStore({
   active: "",
   space: undefined as Space | undefined,
   usage: undefined as PlanUsage | undefined,
+  models: [] as readonly ModelOption[],
   /** Whether the panel beside the thread is open. A per-window preference, so it lives in the page's storage. */
   panelOpen: localStorage.getItem(PANEL_KEY) === "open",
   connected: false,
@@ -51,7 +56,18 @@ export const activeTab = () => state.tabs.find((tab) => tab.id === state.active)
 
 /** Opens a tab at the end of the bar, or right after the active tab. Returns its id. */
 export function newTab(place: "end" | "next" = "end"): string {
-  const tab: Tab = { id: crypto.randomUUID(), title: NEW_TAB_TITLE, items: [], busy: false, panelTabs: [REVIEW_TAB], panelActive: REVIEW_TAB.id }
+  // A new thread starts on the model and effort of the one in front of you.
+  const from = activeTab()
+  const tab: Tab = {
+    id: crypto.randomUUID(),
+    title: NEW_TAB_TITLE,
+    items: [],
+    busy: false,
+    model: from?.model ?? DEFAULT_MODEL,
+    effort: from?.effort,
+    panelTabs: [REVIEW_TAB],
+    panelActive: REVIEW_TAB.id,
+  }
   setState(produce((draft) => {
     const index = place === "next" ? draft.tabs.findIndex((found) => found.id === draft.active) + 1 : draft.tabs.length
     draft.tabs.splice(index, 0, tab)
@@ -92,6 +108,14 @@ export function send(text: string) {
     saveTabs()
   }
   core.send({ type: "session.send", sessionId: tab.id, text })
+}
+
+/** Sets the active tab's model and effort. A running thread takes them from its next reply. */
+export function chooseModel(model: string, effort: Effort | undefined) {
+  const tab = activeTab()
+  if (!tab) return
+  setState("tabs", (found) => found.id === tab.id, { model, effort })
+  saveTabs()
 }
 
 export function interrupt() {
@@ -173,6 +197,8 @@ function saveTabs() {
       title: tab.title,
       terminals: tab.panelTabs.flatMap((panelTab) => (panelTab.kind === "terminal" ? [{ id: panelTab.id, title: panelTab.title }] : [])),
       panelActive: tab.panelActive === REVIEW_TAB.id ? undefined : tab.panelActive,
+      model: tab.model,
+      effort: tab.effort,
     })),
     active: state.active,
   })
@@ -187,7 +213,7 @@ function restoreTabs(tabs: readonly TabInfo[], active: string | undefined) {
   setState({
     tabs: tabs.map((tab) => {
       const panelTabs: PanelTab[] = [REVIEW_TAB, ...tab.terminals.map((terminal) => ({ kind: "terminal" as const, ...terminal }))]
-      return { id: tab.id, title: tab.title, items: [], busy: false, panelTabs, panelActive: tab.panelActive ?? REVIEW_TAB.id }
+      return { id: tab.id, title: tab.title, items: [], busy: false, model: tab.model, effort: tab.effort, panelTabs, panelActive: tab.panelActive ?? REVIEW_TAB.id }
     }),
     active: active ?? tabs[0]!.id,
   })
@@ -204,9 +230,11 @@ core.listen((message: CoreMessage) => {
     setState("connected", true)
     refreshSpace()
     refreshUsage()
+    core.send({ type: "models.get" })
   } else if (message.type === "tabs") restoreTabs(message.tabs, message.active)
   else if (message.type === "space") setState("space", message.space)
   else if (message.type === "usage") setState("usage", message.usage)
+  else if (message.type === "models") setState("models", message.models)
   else if (message.type === "review") setState("tabs", (tab) => tab.id === message.sessionId, "review", [...message.files])
   else if (message.type === "session.event") apply(message.sessionId, message.event, performance.now())
   else if (message.type === "session.history") batch(() => message.events.forEach((event) => apply(message.sessionId, event)))
@@ -263,7 +291,7 @@ function apply(sessionId: string, event: ThreadEvent, arrivedAt?: number) {
         tab.busy = event.busy
         break
       case "init":
-        tab.model = event.model
+        tab.resolvedModel = event.model
         break
       case "context":
         tab.context = { percent: event.percent, tokens: event.tokens, maxTokens: event.maxTokens }
