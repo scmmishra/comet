@@ -61,9 +61,13 @@ export function App() {
   )
 }
 
-function SpaceAvatar() {
+/** The space's first letter. Tabs use the small size. */
+function SpaceAvatar(props: { small?: boolean }) {
   return (
-    <span class="grid size-[18px] shrink-0 place-items-center rounded-[5px] bg-[#3a3a40] text-[11px] font-semibold text-fg">
+    <span
+      class="grid shrink-0 place-items-center bg-[#3a3a40] font-semibold text-fg"
+      classList={{ "size-[18px] rounded-[5px] text-[11px]": !props.small, "size-4 rounded-[4px] text-[10px]": props.small }}
+    >
       {(state.space?.name ?? "?").charAt(0).toUpperCase()}
     </span>
   )
@@ -103,8 +107,8 @@ function TabBar() {
               classList={{ "bg-raised text-fg": tab.id === state.active, "text-fg-3 hover:bg-panel hover:text-fg-2": tab.id !== state.active }}
               onClick={() => selectTab(tab.id)}
             >
-              <SpaceAvatar />
-              <span class="desk-fade-end min-w-0 flex-1 overflow-hidden whitespace-nowrap">{tab.title}</span>
+              <SpaceAvatar small />
+              <span class="desk-fade-end min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[12px]">{tab.title}</span>
               <Show when={tab.busy}>
                 <span class="desk-pulse size-1.5 shrink-0 rounded-full bg-accent" />
               </Show>
