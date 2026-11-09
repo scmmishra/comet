@@ -1,8 +1,10 @@
 import type { CoreMessage, FileChange, PlanUsage, Space, TabInfo, ThreadEvent } from "@desk/protocol"
+import { batch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
 
-export type Item =
+/** `arrivedAt` is when an item arrived live, from performance.now(). Items replayed from a transcript have none. */
+export type Item = { arrivedAt?: number } & (
   | { readonly type: "user"; readonly id: string; readonly text: string }
   | { readonly type: "text"; readonly id: string; text: string; done: boolean }
   | { readonly type: "thinking"; readonly id: string }
@@ -10,6 +12,7 @@ export type Item =
   | { readonly type: "permission"; readonly id: string; readonly requestId: string; readonly tool: string; readonly input: Record<string, unknown>; answer?: boolean }
   | { readonly type: "result"; readonly id: string; readonly durationMs: number; readonly isError: boolean }
   | { readonly type: "error"; readonly id: string; readonly message: string }
+)
 
 export interface Tab {
   readonly id: string
@@ -201,12 +204,14 @@ core.listen((message: CoreMessage) => {
   else if (message.type === "space") setState("space", message.space)
   else if (message.type === "usage") setState("usage", message.usage)
   else if (message.type === "review") setState("tabs", (tab) => tab.id === message.sessionId, "review", [...message.files])
-  else if (message.type === "session.event") apply(message.sessionId, message.event)
+  else if (message.type === "session.event") apply(message.sessionId, message.event, performance.now())
+  else if (message.type === "session.history") batch(() => message.events.forEach((event) => apply(message.sessionId, event)))
 })
 
-function apply(sessionId: string, event: ThreadEvent) {
+function apply(sessionId: string, event: ThreadEvent, arrivedAt?: number) {
   setState("tabs", (tab) => tab.id === sessionId, produce((tab) => {
     const items = tab.items
+    const before = items.length
     const find = (id: string) => items.find((item) => item.id === id)
     switch (event.kind) {
       case "user":
@@ -260,6 +265,7 @@ function apply(sessionId: string, event: ThreadEvent) {
         tab.context = { percent: event.percent, tokens: event.tokens, maxTokens: event.maxTokens }
         break
     }
+    if (arrivedAt !== undefined) for (const item of items.slice(before)) item.arrivedAt = arrivedAt
   }))
   // A finished turn may have changed files, so the Space card and Review read the repo again.
   if (event.kind === "result") {

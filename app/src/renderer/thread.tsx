@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, For, Index, Match, Show, Switch } from "solid-js"
 import { editTexts, lineDiff } from "./diff"
 import { formatDuration, modelLabel } from "./format"
 import { Icon } from "./icons"
@@ -24,41 +24,47 @@ function rows(items: readonly Item[]): Row[] {
 
 export function Thread(props: { tab: Tab }) {
   const grouped = createMemo(() => rows(props.tab.items))
+  // Only what arrives while the thread is on screen rises in. A tab switch, a reload or a restored
+  // transcript shows the thread at once, so switching tabs never replays motion.
+  const mountedAt = performance.now()
+  const rise = (row: Row) => {
+    const item = row.type === "tools" ? row.tools[0] : row
+    return (item?.arrivedAt ?? 0) > mountedAt ? "desk-rise" : ""
+  }
   return (
     <div class="mx-auto flex w-full max-w-[720px] flex-col gap-3.5 px-6 pb-4 pt-2.5">
-      <For each={grouped()}>
+      {/* Rows only append, and a tool group is rebuilt each time an item arrives. Index keys rows by position, so a growing group keeps its element and its open state. */}
+      <Index each={grouped()}>
         {(row) => (
-          <Switch>
-            <Match when={row.type === "user" && row}>
-              {(item) => <div class="desk-rise max-w-[80%] self-end whitespace-pre-wrap rounded-3xl bg-raised px-3.5 py-[9px]">{item().text}</div>}
-            </Match>
-            <Match when={row.type === "text" && row}>
-              {(item) => (
-                <div class="desk-rise">
-                  <Markdown text={item().text} done={item().done} />
-                </div>
-              )}
-            </Match>
-            <Match when={row.type === "thinking"}>
-              <div class="desk-rise text-[12px] text-fg-3">Thought</div>
-            </Match>
-            <Match when={row.type === "tools" && row}>{(group) => <ToolGroup tools={group().tools} />}</Match>
-            <Match when={row.type === "tool" && row}>{(item) => <EditBlock tool={item() as ToolItem} />}</Match>
-            <Match when={row.type === "permission" && row}>{(item) => <PermissionCard item={item() as PermissionItem} />}</Match>
-            <Match when={row.type === "result" && row}>
-              {(item) => (
-                <div class="desk-rise flex items-center gap-1.5 text-[12px] text-fg-3">
-                  <Icon name="bot" class="size-[15px]" />
-                  {`${modelLabel(props.tab.model)} · ${formatDuration(item().durationMs)}`}
-                </div>
-              )}
-            </Match>
-            <Match when={row.type === "error" && row}>
-              {(item) => <div class="desk-rise rounded-2xl bg-del-soft px-3 py-2 text-del">{item().message}</div>}
-            </Match>
-          </Switch>
+          <div class={rise(row())}>
+            <Switch>
+              <Match when={row().type === "user" && (row() as Item)}>
+                {(item) => <div class="ml-auto w-fit max-w-[80%] whitespace-pre-wrap rounded-3xl bg-raised px-3.5 py-[9px]">{(item() as Extract<Item, { type: "user" }>).text}</div>}
+              </Match>
+              <Match when={row().type === "text" && (row() as Extract<Item, { type: "text" }>)}>
+                {(item) => <Markdown text={item().text} done={item().done} />}
+              </Match>
+              <Match when={row().type === "thinking"}>
+                <div class="text-[12px] text-fg-3">Thought</div>
+              </Match>
+              <Match when={row().type === "tools" && (row() as Extract<Row, { type: "tools" }>)}>{(group) => <ToolGroup tools={group().tools} />}</Match>
+              <Match when={row().type === "tool" && row()}>{(item) => <EditBlock tool={item() as ToolItem} />}</Match>
+              <Match when={row().type === "permission" && row()}>{(item) => <PermissionCard item={item() as PermissionItem} />}</Match>
+              <Match when={row().type === "result" && (row() as Extract<Item, { type: "result" }>)}>
+                {(item) => (
+                  <div class="flex items-center gap-1.5 text-[12px] text-fg-3">
+                    <Icon name="bot" class="size-[15px]" />
+                    {`${modelLabel(props.tab.model)} · ${formatDuration(item().durationMs)}`}
+                  </div>
+                )}
+              </Match>
+              <Match when={row().type === "error" && (row() as Extract<Item, { type: "error" }>)}>
+                {(item) => <div class="rounded-2xl bg-del-soft px-3 py-2 text-del">{item().message}</div>}
+              </Match>
+            </Switch>
+          </div>
         )}
-      </For>
+      </Index>
       <Show when={props.tab.busy}>
         <div class="flex items-center gap-2 text-fg-3">
           <span class="desk-spin" />
@@ -73,7 +79,7 @@ function ToolGroup(props: { tools: ToolItem[] }) {
   const [open, setOpen] = createSignal(false)
   const names = () => [...new Set(props.tools.map((tool) => tool.name))].join(", ")
   return (
-    <div class="desk-rise grid gap-1.5">
+    <div class="grid gap-1.5">
       <button class="inline-flex w-fit items-center gap-1.5 text-fg-3 hover:[&_b]:text-fg" onClick={() => setOpen(!open())}>
         <Icon name="chevron" class={`size-[15px] transition-transform duration-150 ${open() ? "rotate-90" : ""}`} />
         Used <b class="font-medium text-fg-2">{props.tools.length}</b> · {names()}
@@ -112,7 +118,7 @@ function EditBlock(props: { tool: ToolItem }) {
   const added = () => lines().filter((line) => line.kind === "add").length
   const removed = () => lines().filter((line) => line.kind === "del").length
   return (
-    <div class="desk-rise overflow-hidden rounded-2xl bg-ground shadow-[0_0_0_1px_var(--color-line)]">
+    <div class="overflow-hidden rounded-2xl bg-ground shadow-[0_0_0_1px_var(--color-line)]">
       <div class="flex min-w-0 items-center gap-2 bg-raised px-3 py-[7px] text-[12px] text-fg-2">
         <Icon name="edit" class="size-[15px]" />
         <span class="min-w-0 truncate font-mono text-fg">{relativePath(String(props.tool.input.file_path ?? ""))}</span>
@@ -142,7 +148,7 @@ function EditBlock(props: { tool: ToolItem }) {
 
 function PermissionCard(props: { item: PermissionItem }) {
   return (
-    <div class="desk-rise overflow-hidden rounded-3xl bg-raised">
+    <div class="overflow-hidden rounded-3xl bg-raised">
       <div class="flex items-center gap-2 px-3.5 pt-2.5 text-[12px] text-fg-3">
         <Icon name="lock" class="size-[15px]" />
         Claude wants to use {props.item.tool}

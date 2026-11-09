@@ -181,8 +181,9 @@ async function sendSavedTabs(ws: ServerWebSocket, dir: string, saved: SpaceState
   for (const tab of saved.tabs) {
     if (!tab.sessionId) continue
     const messages = await getSessionMessages(tab.sessionId, { dir }).catch(() => [])
-    for (const event of historyEvents(messages)) send(ws, { type: "session.event", sessionId: tab.id, event })
-    if (tab.context) send(ws, { type: "session.event", sessionId: tab.id, event: { kind: "context", ...tab.context } })
+    const events: ThreadEvent[] = historyEvents(messages)
+    if (tab.context) events.push({ kind: "context", ...tab.context })
+    send(ws, { type: "session.history", sessionId: tab.id, events })
   }
 }
 

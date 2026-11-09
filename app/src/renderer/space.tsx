@@ -56,7 +56,7 @@ export function SpaceChip(props: { space: Space }) {
       <Show when={open()}>
         {/* The padding bridges the gap to the card, so moving the pointer onto it keeps it open. */}
         <div class="absolute right-0 top-full z-30 w-[264px] pt-1.5">
-          <div class="desk-rise shadow-[0_18px_40px_rgb(0_0_0/50%)]">
+          <div class="desk-pop shadow-[0_18px_40px_rgb(0_0_0/50%)]">
             <SpaceCard space={props.space} />
           </div>
         </div>

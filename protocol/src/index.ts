@@ -110,7 +110,7 @@ export type ClientMessage =
 export type CoreMessage =
   | { readonly type: "hello"; readonly protocol: number; readonly core: string; readonly bun: string }
   | { readonly type: "pong"; readonly id: number }
-  /** The tabs saved for this space. Each restored tab's thread follows as session events. */
+  /** The tabs saved for this space. Each restored tab's thread follows as a session.history message. */
   | { readonly type: "tabs"; readonly tabs: readonly TabInfo[]; readonly active?: string }
   /** `usage` is absent when Claude has no plan limits, such as with an API key. */
   | { readonly type: "usage"; readonly usage?: PlanUsage }
@@ -120,4 +120,6 @@ export type CoreMessage =
   /** `space` is absent when the folder is not a Git repo. */
   | { readonly type: "space"; readonly space?: Space }
   | { readonly type: "session.event"; readonly sessionId: string; readonly event: ThreadEvent }
+  /** A restored thread, read back from Claude's transcript in one message, so the app can tell it from live events. */
+  | { readonly type: "session.history"; readonly sessionId: string; readonly events: readonly ThreadEvent[] }
   | { readonly type: "error"; readonly message: string }

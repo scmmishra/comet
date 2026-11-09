@@ -15,7 +15,7 @@ export function App() {
     const stop = window.desk.onCommand((command) => {
       if (command === "tab.new") newTab()
       else if (command === "tab.close" && state.active) closeTab(state.active)
-      else if (command === "panel.toggle") togglePanel()
+      else if (command === "panel.toggle") togglePanelInstantly()
       else if (command === "terminal.new") newTerminal()
       else if (command.startsWith("tab.select:")) selectTabAt(Number(command.slice("tab.select:".length)))
     })
@@ -128,6 +128,19 @@ export function App() {
       </Show>
     </div>
   )
+}
+
+/**
+ * Toggles the panel with no motion, for ⌘\ and the menu. The new state is applied while transitions
+ * are off, and reading layout forces that before they come back. Otherwise the next frame would see
+ * the change with transitions on again, and slide anyway.
+ */
+function togglePanelInstantly() {
+  const root = document.documentElement
+  root.dataset.motion = "instant"
+  togglePanel()
+  void root.offsetHeight
+  delete root.dataset.motion
 }
 
 /**

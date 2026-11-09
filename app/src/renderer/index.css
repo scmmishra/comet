@@ -51,6 +51,8 @@
   --font-family-sans: "Geist Variable", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
   --font-family-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
   color-scheme: dark;
+  /* A strong ease-out for things that appear. Built-in ease starts too slowly for UI. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 html,
@@ -128,8 +130,21 @@ body {
     transform: none;
   }
 }
+/* A thread item arriving live. */
 .desk-rise {
-  animation: desk-rise 0.25s ease both;
+  animation: desk-rise 180ms var(--ease-out) both;
+}
+
+/* A popover opening below its trigger at the right edge. It grows out of the trigger, not up from below. */
+@keyframes desk-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+}
+.desk-pop {
+  transform-origin: top right;
+  animation: desk-pop 150ms var(--ease-out) both;
 }
 
 @keyframes desk-pulse {
@@ -324,8 +339,13 @@ body {
  * damped spring OpenCode uses (0.3s, no bounce).
  */
 .desk-split {
-  --panel-motion: 300ms cubic-bezier(0.32, 0.72, 0, 1);
+  --panel-duration: 300ms;
+  --panel-motion: var(--panel-duration) cubic-bezier(0.32, 0.72, 0, 1);
   --panel-width: calc(50% - 4px);
+}
+/* ⌘\ toggles the panel at once. A shortcut pressed all day should not wait on motion. Clicking the toggle still slides it. */
+:root[data-motion="instant"] .desk-split {
+  --panel-duration: 0s;
 }
 .desk-session {
   width: 100%;
@@ -345,7 +365,7 @@ body {
   visibility: hidden;
   transition:
     transform var(--panel-motion),
-    visibility 0s linear 300ms;
+    visibility 0s linear var(--panel-duration);
 }
 .desk-split[data-panel="open"] .desk-panel {
   transform: none;
@@ -362,11 +382,22 @@ body {
 .desk-split[data-panel="open"] .desk-panel-glyph {
   transform: scaleX(1);
 }
+/* Reduced motion keeps fades and drops movement. */
 @media (prefers-reduced-motion: reduce) {
-  .desk-session,
-  .desk-panel,
-  .desk-panel-glyph {
-    transition: none;
+  .desk-split {
+    --panel-duration: 0s;
+  }
+  .desk-rise,
+  .desk-pop {
+    animation-name: desk-fade;
+  }
+  .desk-spin {
+    animation-duration: 1.6s;
+  }
+}
+@keyframes desk-fade {
+  from {
+    opacity: 0;
   }
 }
 

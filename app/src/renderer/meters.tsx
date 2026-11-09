@@ -39,7 +39,7 @@ export function UsageButton(props: { usage: PlanUsage }) {
         {Math.round(fullest().percent)}%
       </button>
       <Show when={open()}>
-        <div class="desk-rise absolute right-0 top-[38px] z-30 grid w-[280px] gap-3 rounded-2xl border border-outline bg-raised p-3 shadow-[0_18px_40px_rgb(0_0_0/50%)]">
+        <div class="desk-pop absolute right-0 top-[38px] z-30 grid w-[280px] gap-3 rounded-2xl border border-outline bg-raised p-3 shadow-[0_18px_40px_rgb(0_0_0/50%)]">
           <h4 class="text-[11px] font-medium uppercase tracking-[0.06em] text-fg-3">Claude plan usage</h4>
           <For each={props.usage.windows}>{(window) => <UsageRow window={window} />}</For>
         </div>
