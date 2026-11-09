@@ -1,4 +1,6 @@
-import { createSignal, Show } from "solid-js"
+import { createSignal, onMount, Show } from "solid-js"
+import { modelLabel } from "./format"
+import { Icon } from "./icons"
 import { interrupt, send, type Tab } from "./store"
 
 const MAX_HEIGHT_PX = 200
@@ -6,6 +8,9 @@ const MAX_HEIGHT_PX = 200
 export function Composer(props: { tab: Tab }) {
   const [text, setText] = createSignal("")
   let input!: HTMLTextAreaElement
+
+  // A new tab, and the first message moving the composer to the bottom, both start typing here.
+  onMount(() => input.focus())
 
   const resize = () => {
     input.style.height = "auto"
@@ -48,17 +53,22 @@ export function Composer(props: { tab: Tab }) {
         }}
       />
       <div class="flex items-center gap-2 text-sm text-text-weak">
-        <span>Claude Code{props.tab.model ? ` · ${props.tab.model}` : ""}</span>
+        <span class="text-text-base">{modelLabel(props.tab.model)}</span>
         <Show
           when={props.tab.busy}
           fallback={
-            <button type="submit" class="ml-auto rounded-md bg-text-strong px-2.5 py-1 text-background-base disabled:opacity-40" disabled={!text().trim()}>
-              Send
+            <button
+              type="submit"
+              aria-label="Send"
+              class="ml-auto grid size-8 place-items-center rounded-full bg-text-strong text-background-base transition-opacity disabled:opacity-30"
+              disabled={!text().trim()}
+            >
+              <Icon name="up" />
             </button>
           }
         >
-          <button type="button" class="ml-auto rounded-md bg-surface-strong px-2.5 py-1 text-text-strong" onClick={interrupt}>
-            Stop
+          <button type="button" aria-label="Stop" class="ml-auto grid size-8 place-items-center rounded-full bg-surface-strong text-text-strong" onClick={interrupt}>
+            <Icon name="stop" />
           </button>
         </Show>
       </div>

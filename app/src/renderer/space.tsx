@@ -1,5 +1,6 @@
 import type { Space } from "@desk/protocol"
-import { Show } from "solid-js"
+import { Show, type JSX } from "solid-js"
+import { Icon, type IconName } from "./icons"
 
 const NUMBER = new Intl.NumberFormat("en")
 
@@ -7,42 +8,67 @@ const NUMBER = new Intl.NumberFormat("en")
 export function SpaceCard(props: { space: Space }) {
   const pr = () => props.space.pr
   return (
-    <section class="flex flex-col gap-0.5 rounded-xl bg-surface-raised-base p-1.5 text-sm">
-      <Row label={props.space.root.replace(/^\/Users\/[^/]+/, "~")} muted />
-      <Row label={props.space.branch} detail={upstream(props.space)} />
+    <section class="flex flex-col rounded-xl bg-surface-raised-base p-1.5 text-sm">
+      <Row icon="folder" muted>
+        {props.space.root.replace(/^\/Users\/[^/]+/, "~")}
+      </Row>
+      <div class="mx-2 my-1 h-px bg-border-weak-base" />
+      <Row icon="branch" detail={upstream(props.space)}>
+        {props.space.branch}
+      </Row>
       <Show when={pr()}>
         {(found) => (
-          <a class="flex flex-col gap-1 rounded-md px-2 py-1.5 hover:bg-surface-raised-base-hover" href={found().url} target="_blank">
-            <span class="leading-snug text-text-strong">{found().title}</span>
-            <span class="flex items-center justify-between text-text-weak">
-              <span class="font-mono">#{found().number}</span>
-              <span class={`rounded-full px-2 text-xs leading-5 ${prTone(found())}`}>{prLabel(found())}</span>
+          <a class="flex gap-2.5 rounded-md px-2 py-1.5 hover:bg-surface-raised-base-hover" href={found().url} target="_blank">
+            <Icon name="pr" class="mt-0.5 text-text-weak" />
+            <span class="flex min-w-0 flex-1 flex-col gap-1">
+              <span class="leading-snug text-text-strong">{found().title}</span>
+              <span class="flex items-center justify-between text-text-weak">
+                <span class="font-mono">#{found().number}</span>
+                <span class={`rounded-full px-2 text-xs leading-5 ${prTone(found())}`}>{prLabel(found())}</span>
+              </span>
             </span>
           </a>
         )}
       </Show>
       <Show when={pr() && checksTotal(pr()!) > 0}>
-        <Row label="Checks" detail={checksLabel(pr()!)} />
+        <Row icon="check" detail={checksLabel(pr()!)}>
+          Checks
+        </Row>
       </Show>
-      <div class="flex items-center gap-2 rounded-md px-2 py-1.5">
-        <span class="flex-1 text-text-base">Changes</span>
-        <Show when={props.space.changes.files > 0} fallback={<span class="text-text-weaker">None</span>}>
-          <span class="font-mono text-text-diff-add-base">+{NUMBER.format(props.space.changes.additions)}</span>
-          <span class="font-mono text-text-diff-delete-base">−{NUMBER.format(props.space.changes.deletions)}</span>
-        </Show>
-      </div>
+      <Row icon="diff" detail={<Changes changes={props.space.changes} />}>
+        Changes
+      </Row>
     </section>
   )
 }
 
-function Row(props: { label: string; detail?: string; muted?: boolean }) {
+function Row(props: { icon: IconName; detail?: JSX.Element; muted?: boolean; children: JSX.Element }) {
   return (
-    <div class="flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5">
-      <span class={`min-w-0 flex-1 truncate ${props.muted ? "text-text-weak" : "text-text-base"}`}>{props.label}</span>
+    <div class="flex min-w-0 items-center gap-2.5 rounded-md px-2 py-1.5">
+      <Icon name={props.icon} class="text-text-weak" />
+      <span class={`min-w-0 flex-1 truncate ${props.muted ? "text-text-weak" : "text-text-base"}`}>{props.children}</span>
       <Show when={props.detail}>
         <span class="shrink-0 text-text-weak">{props.detail}</span>
       </Show>
     </div>
+  )
+}
+
+function Changes(props: { changes: Space["changes"] }) {
+  return (
+    <Show when={props.changes.files > 0} fallback={<span class="text-text-weaker">None</span>}>
+      <span class="flex gap-1.5 font-mono">
+        <Show when={props.changes.additions}>
+          <span class="text-text-diff-add-base">+{NUMBER.format(props.changes.additions)}</span>
+        </Show>
+        <Show when={props.changes.deletions}>
+          <span class="text-text-diff-delete-base">−{NUMBER.format(props.changes.deletions)}</span>
+        </Show>
+        <Show when={!props.changes.additions && !props.changes.deletions}>
+          <span>{props.changes.files} files</span>
+        </Show>
+      </span>
+    </Show>
   )
 }
 

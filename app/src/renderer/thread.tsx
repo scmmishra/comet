@@ -2,6 +2,7 @@ import { Button } from "@opencode/ui/button"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { editTexts, lineDiff } from "./diff"
+import { formatDuration, modelLabel } from "./format"
 import { Markdown } from "./markdown"
 import { answerPermission, state, type Item, type Tab } from "./store"
 
@@ -39,7 +40,7 @@ export function Thread(props: { tab: Tab }) {
             <Match when={row.type === "tool" && row}>{(item) => <EditBlock tool={item()} />}</Match>
             <Match when={row.type === "permission" && row}>{(item) => <PermissionBlock item={item()} />}</Match>
             <Match when={row.type === "result" && row}>
-              {(item) => <div class="text-sm text-text-weaker">{`${props.tab.model ?? "Claude"} · ${formatDuration(item().durationMs)}`}</div>}
+              {(item) => <div class="text-sm text-text-weaker">{`${modelLabel(props.tab.model)} · ${formatDuration(item().durationMs)}`}</div>}
             </Match>
             <Match when={row.type === "error" && row}>
               {(item) => <div class="text-sm text-text-diff-delete-base">{item().message}</div>}
@@ -163,9 +164,4 @@ function summarize(input: Record<string, unknown>, full = false) {
 function relativePath(path: string) {
   const root = state.space?.root
   return root && path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path
-}
-
-function formatDuration(ms: number) {
-  const seconds = Math.round(ms / 1000)
-  return seconds < 60 ? `${seconds} s` : `${Math.floor(seconds / 60)} min ${seconds % 60} s`
 }

@@ -1,5 +1,6 @@
 import { createEffect, For, on, onCleanup, onMount, Show } from "solid-js"
 import { Composer } from "./composer"
+import { Icon } from "./icons"
 import { SpaceCard } from "./space"
 import { activeTab, closeTab, newTab, refreshSpace, selectTab, selectTabAt, state } from "./store"
 import { Thread } from "./thread"
@@ -33,12 +34,35 @@ export function App() {
                 <span class="truncate text-text-strong">{tab.title}</span>
               </header>
               <div class="flex min-h-0 flex-1">
-                <div class="flex min-w-0 flex-1 flex-col">
-                  <ThreadScroll tab={tab} />
-                  <div class="shrink-0 px-4 pb-4 pt-1.5">
-                    <Composer tab={tab} />
+                <Show
+                  when={tab.items.length > 0}
+                  fallback={
+                    <div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 px-4 pb-16">
+                      <h1 class="text-center text-[1.75rem] leading-tight font-medium text-text-strong">
+                        What should we build in <span class="text-text-strong">{state.space?.name ?? "this folder"}</span>?
+                      </h1>
+                      <div class="flex w-full max-w-[720px] flex-col gap-3">
+                        <Composer tab={tab} />
+                        <Show when={state.space}>
+                          {(space) => (
+                            <div class="flex items-center gap-2 px-3 text-sm text-text-weak">
+                              <Icon name="branch" />
+                              <span class="truncate">{space().branch}</span>
+                              <span class="ml-auto truncate">{space().root.replace(/^\/Users\/[^/]+/, "~")}</span>
+                            </div>
+                          )}
+                        </Show>
+                      </div>
+                    </div>
+                  }
+                >
+                  <div class="flex min-w-0 flex-1 flex-col">
+                    <ThreadScroll tab={tab} />
+                    <div class="shrink-0 px-4 pb-4 pt-1.5">
+                      <Composer tab={tab} />
+                    </div>
                   </div>
-                </div>
+                </Show>
                 <Show when={state.space}>
                   {(space) => (
                     <aside class="desk-rail w-68 shrink-0 overflow-y-auto pb-2 pr-2">
