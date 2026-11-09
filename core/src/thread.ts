@@ -89,3 +89,47 @@ function toolOutputText(content: unknown): string {
 function truncate(text: string) {
   return text.length > MAX_TOOL_OUTPUT ? `${text.slice(0, MAX_TOOL_OUTPUT)}\n…` : text
 }
+
+/** One message of a stored transcript, as the SDK's getSessionMessages returns it. */
+export interface StoredMessage {
+  readonly type: "user" | "assistant" | "system"
+  readonly uuid: string
+  readonly message: unknown
+  readonly parent_tool_use_id: string | null
+}
+
+/**
+ * Rebuilds a thread from a stored transcript, so a restored tab shows its conversation. Turn
+ * timings are not stored, so a restored thread has no result lines.
+ */
+export function historyEvents(messages: readonly StoredMessage[]): ThreadEvent[] {
+  const mapper = new ThreadMapper()
+  const events: ThreadEvent[] = []
+  for (const stored of messages) {
+    if (stored.parent_tool_use_id) continue
+    if (stored.type === "assistant") {
+      events.push(...mapper.map({ type: "assistant", uuid: stored.uuid, parent_tool_use_id: null, message: stored.message } as SDKMessage))
+    } else if (stored.type === "user") {
+      const content = (stored.message as { content?: unknown }).content
+      const text = userText(content)
+      if (text !== undefined) events.push({ kind: "user", id: stored.uuid, text })
+      else events.push(...mapToolResults(content))
+    }
+  }
+  return events
+}
+
+/**
+ * The text the user typed, or undefined for a tool result. Claude Code also stores messages it
+ * writes itself, such as command output and reminders. They start with a tag and stay hidden.
+ */
+function userText(content: unknown): string | undefined {
+  const text =
+    typeof content === "string"
+      ? content
+      : Array.isArray(content) && content.every((block) => block.type === "text")
+        ? content.map((block) => block.text).join("\n")
+        : undefined
+  if (text === undefined) return undefined
+  return text.trimStart().startsWith("<") ? undefined : text
+}

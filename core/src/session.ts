@@ -34,6 +34,13 @@ class Inbox implements AsyncIterable<SDKUserMessage> {
   }
 }
 
+export interface SessionOptions {
+  /** A Claude session to continue, from an earlier run of Desk. */
+  readonly resume?: string
+  /** Called when Claude names the session, so it can be resumed later. */
+  readonly onSessionId?: (id: string) => void
+}
+
 /** One Claude conversation, in one tab. It starts on the first message. */
 export class Session {
   private inbox = new Inbox()
@@ -41,11 +48,15 @@ export class Session {
   private mapper = new ThreadMapper()
   private permissions = new Map<string, (result: PermissionResult) => void>()
   private sent = 0
+  private sessionId?: string
 
   constructor(
     private readonly dir: string,
     private readonly emit: Emit,
-  ) {}
+    private readonly options: SessionOptions = {},
+  ) {
+    this.sessionId = options.resume
+  }
 
   send(text: string) {
     this.emit({ kind: "user", id: `user-${++this.sent}`, text })
@@ -81,6 +92,7 @@ export class Session {
         includePartialMessages: true,
         systemPrompt: { type: "preset", preset: "claude_code" },
         canUseTool: this.askPermission,
+        ...(this.sessionId ? { resume: this.sessionId } : {}),
       },
     })
     void this.pump(this.query)
@@ -89,6 +101,10 @@ export class Session {
   private async pump(running: Query) {
     try {
       for await (const message of running) {
+        if (message.session_id && message.session_id !== this.sessionId) {
+          this.sessionId = message.session_id
+          this.options.onSessionId?.(message.session_id)
+        }
         for (const event of this.mapper.map(message)) this.emit(event)
         if (message.type === "result") this.emit({ kind: "status", busy: false })
       }
