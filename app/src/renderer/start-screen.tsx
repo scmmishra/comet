@@ -10,9 +10,9 @@ import { activeData, openThread, refreshThreads, setTabProject, type Tab } from 
 export function StartScreen(props: { tab: Tab }) {
   onMount(refreshThreads)
   return (
-    <div class="flex min-h-0 flex-1 flex-col items-center gap-[18px] overflow-y-auto px-4 pb-6 pt-[14vh]">
-      <div class="select-none text-center font-mono text-[clamp(44px,8vw,88px)] font-medium leading-none tracking-[-0.04em] text-mark">desk</div>
-      <div class="flex w-full max-w-[720px] flex-col gap-[18px]">
+    <div class="flex min-h-0 flex-1 flex-col items-center gap-[18px] overflow-y-auto px-4 pb-6 pt-[6vh]">
+      <div class="desk-wordmark" aria-hidden="true">desk</div>
+      <div class="relative flex w-full max-w-[720px] flex-col gap-[18px]">
         <Composer tab={props.tab} />
         <div class="flex items-center gap-1 px-0.5 text-fg-2">
           <ProjectSwitcher tab={props.tab} />

@@ -213,6 +213,21 @@ body {
     transform: none;
   }
 }
+/*
+ * The start screen's wordmark. Its foot sits behind the composer, and a mask fades it out downward
+ * into the ground. The negative margin takes back the column's 18px gap and tucks the letters under.
+ */
+.desk-wordmark {
+  margin-bottom: calc(-18px - 0.26em);
+  color: color-mix(in srgb, var(--color-fg) 9.6%, transparent);
+  font-size: clamp(120px, 20vw, 240px);
+  font-weight: 600;
+  letter-spacing: -0.06em;
+  line-height: 1;
+  user-select: none;
+  mask-image: linear-gradient(to bottom, #000 15%, transparent 92%);
+}
+
 /* A thread item arriving live. */
 .desk-rise {
   animation: desk-rise 180ms var(--ease-out) both;
