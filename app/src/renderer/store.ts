@@ -1,4 +1,4 @@
-import type { CoreMessage, Space, TabInfo, ThreadEvent } from "@desk/protocol"
+import type { CoreMessage, PlanUsage, Space, TabInfo, ThreadEvent } from "@desk/protocol"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
 
@@ -17,6 +17,7 @@ export interface Tab {
   items: Item[]
   busy: boolean
   model?: string
+  context?: { percent: number; tokens: number; maxTokens: number }
 }
 
 const NEW_TAB_TITLE = "New session"
@@ -26,6 +27,7 @@ const [state, setState] = createStore({
   tabs: [] as Tab[],
   active: "",
   space: undefined as Space | undefined,
+  usage: undefined as PlanUsage | undefined,
   connected: false,
 })
 export { state }
@@ -92,6 +94,11 @@ export function refreshSpace() {
   core.send({ type: "space.get" })
 }
 
+/** The core probes plan usage at most once a minute, so asking often is cheap. */
+export function refreshUsage() {
+  core.send({ type: "usage.get" })
+}
+
 /** The core saves tab order and titles per space, so Desk reopens with the same tabs. */
 function saveTabs() {
   core.send({ type: "tabs.save", tabs: state.tabs.map(({ id, title }) => ({ id, title })), active: state.active })
@@ -115,8 +122,10 @@ core.listen((message: CoreMessage) => {
   if (message.type === "hello") {
     setState("connected", true)
     refreshSpace()
+    refreshUsage()
   } else if (message.type === "tabs") restoreTabs(message.tabs, message.active)
   else if (message.type === "space") setState("space", message.space)
+  else if (message.type === "usage") setState("usage", message.usage)
   else if (message.type === "session.event") apply(message.sessionId, message.event)
 })
 
@@ -171,6 +180,9 @@ function apply(sessionId: string, event: ThreadEvent) {
         break
       case "init":
         tab.model = event.model
+        break
+      case "context":
+        tab.context = { percent: event.percent, tokens: event.tokens, maxTokens: event.maxTokens }
         break
     }
   }))

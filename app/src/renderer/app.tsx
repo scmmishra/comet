@@ -1,9 +1,12 @@
 import { createEffect, For, on, onCleanup, onMount, Show } from "solid-js"
 import { Composer } from "./composer"
 import { Icon } from "./icons"
+import { ContextRing, UsageButton } from "./meters"
 import { SpaceCard } from "./space"
-import { activeTab, closeTab, newTab, refreshSpace, selectTab, selectTabAt, state, type Tab } from "./store"
+import { activeTab, closeTab, newTab, refreshSpace, refreshUsage, selectTab, selectTabAt, state, type Tab } from "./store"
 import { Thread } from "./thread"
+
+const USAGE_REFRESH_MS = 5 * 60_000
 
 export function App() {
   onMount(() => {
@@ -12,11 +15,17 @@ export function App() {
       else if (command === "tab.close" && state.active) closeTab(state.active)
       else if (command.startsWith("tab.select:")) selectTabAt(Number(command.slice("tab.select:".length)))
     })
-    // Coming back to the window is when files most likely changed outside Desk.
-    window.addEventListener("focus", refreshSpace)
+    // Coming back to the window is when files and usage most likely changed outside Desk.
+    const refresh = () => {
+      refreshSpace()
+      refreshUsage()
+    }
+    window.addEventListener("focus", refresh)
+    const usageTimer = setInterval(refreshUsage, USAGE_REFRESH_MS)
     onCleanup(() => {
       stop()
-      window.removeEventListener("focus", refreshSpace)
+      window.removeEventListener("focus", refresh)
+      clearInterval(usageTimer)
     })
   })
 
@@ -34,8 +43,10 @@ export function App() {
                   <span class="text-fg-3">/</span>
                   <b class="truncate font-medium text-fg">{tab.title}</b>
                 </span>
+                <Show when={tab.context}>{(context) => <span class="ml-auto"><ContextRing {...context()} /></span>}</Show>
               </header>
-              <div class="flex min-h-0 flex-1">
+              {/* The Space card floats over the panel's corner, so the thread stays centred on the whole panel. */}
+              <div class="relative flex min-h-0 flex-1">
                 <div class="flex min-w-0 flex-1 flex-col">
                   <Show when={tab.items.length > 0} fallback={<StartScreen tab={tab} />}>
                     <ThreadScroll tab={tab} />
@@ -46,7 +57,7 @@ export function App() {
                 </div>
                 <Show when={state.space}>
                   {(space) => (
-                    <aside class="desk-rail desk-no-scrollbar flex w-[272px] shrink-0 flex-col gap-2 overflow-y-auto pb-2 pr-2">
+                    <aside class="desk-rail desk-no-scrollbar absolute right-2 top-0 flex max-h-full w-[264px] flex-col gap-2 overflow-y-auto pb-2">
                       <SpaceCard space={space()} />
                     </aside>
                   )}
@@ -130,6 +141,7 @@ function TabBar() {
           <Icon name="plus" />
         </button>
       </div>
+      <Show when={state.usage}>{(usage) => <UsageButton usage={usage()} />}</Show>
     </nav>
   )
 }
