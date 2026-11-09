@@ -4,7 +4,10 @@ import { Icon, type IconName } from "./icons"
 
 const NUMBER = new Intl.NumberFormat("en")
 
-/** The Space card: where the session runs and what has changed there. It sits inside the session. */
+/**
+ * The Space card: where the session runs and what has changed there. It sits inside the session.
+ * Local facts come first. GitHub's pull request and checks sit below a line, when the branch has one.
+ */
 export function SpaceCard(props: { space: Space }) {
   const pr = () => props.space.pr
   return (
@@ -15,8 +18,13 @@ export function SpaceCard(props: { space: Space }) {
         <Row icon="branch" detail={upstream(props.space)}>
           {props.space.branch}
         </Row>
-        <Show when={pr()}>
-          {(found) => (
+        <Row icon="diff" detail={<Changes changes={props.space.changes} />}>
+          Changes
+        </Row>
+      </div>
+      <Show when={pr()}>
+        {(found) => (
+          <div class="border-t border-outline p-1.5">
             <a class="grid grid-cols-[auto_1fr] gap-x-2.5 gap-y-0.5 rounded-lg px-2 py-[7px] hover:bg-panel" href={found().url} target="_blank">
               <Icon name="pr" class="text-fg-2" />
               <span class="leading-snug">{found().title}</span>
@@ -25,17 +33,14 @@ export function SpaceCard(props: { space: Space }) {
                 <span class={`rounded-full px-[7px] text-[11px] leading-[19px] ${prTone(found())}`}>{prLabel(found())}</span>
               </span>
             </a>
-          )}
-        </Show>
-        <Show when={pr() && checksTotal(pr()!) > 0}>
-          <Row icon="check" detail={checksBadge(pr()!)}>
-            Checks
-          </Row>
-        </Show>
-        <Row icon="diff" detail={<Changes changes={props.space.changes} />}>
-          Changes
-        </Row>
-      </div>
+            <Show when={checksTotal(found()) > 0}>
+              <Row icon="check" detail={checksBadge(found())}>
+                Checks
+              </Row>
+            </Show>
+          </div>
+        )}
+      </Show>
     </section>
   )
 }
