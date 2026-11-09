@@ -9,6 +9,11 @@ export interface SavedTab {
   readonly title: string
   /** The Claude session to resume. Absent until the tab's first message. */
   readonly sessionId?: string
+  /**
+   * A snapshot of the working tree taken before the thread's first message. Review diffs against it.
+   * No ref points at it, so `git gc` may prune it after about two weeks; Review then shows nothing.
+   */
+  readonly baseline?: string
   /** The last context reading. A restored session is not live until its next message, so it cannot be asked. */
   readonly context?: { readonly percent: number; readonly tokens: number; readonly maxTokens: number }
 }

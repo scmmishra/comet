@@ -49,6 +49,16 @@ export interface Space {
   }
 }
 
+/** One file a thread changed, with its unified diff. */
+export interface FileChange {
+  readonly path: string
+  readonly status: "added" | "modified" | "deleted" | "renamed"
+  readonly additions: number
+  readonly deletions: number
+  /** The unified diff of this file. Empty for binary files. */
+  readonly patch: string
+}
+
 /** One plan usage window, such as the 5-hour session limit. */
 export interface UsageWindow {
   readonly id: "five_hour" | "seven_day"
@@ -72,6 +82,8 @@ export type ClientMessage =
   | { readonly type: "ping"; readonly id: number }
   | { readonly type: "space.get" }
   | { readonly type: "usage.get" }
+  /** The files a tab's thread changed since its first message. */
+  | { readonly type: "review.get"; readonly sessionId: string }
   /** The app's tabs, in order, sent whenever they change. */
   | { readonly type: "tabs.save"; readonly tabs: readonly TabInfo[]; readonly active?: string }
   /** Opens a file from the thread in the editor. The core refuses paths outside the space. */
@@ -88,6 +100,7 @@ export type CoreMessage =
   | { readonly type: "tabs"; readonly tabs: readonly TabInfo[]; readonly active?: string }
   /** `usage` is absent when Claude has no plan limits, such as with an API key. */
   | { readonly type: "usage"; readonly usage?: PlanUsage }
+  | { readonly type: "review"; readonly sessionId: string; readonly files: readonly FileChange[] }
   /** `space` is absent when the folder is not a Git repo. */
   | { readonly type: "space"; readonly space?: Space }
   | { readonly type: "session.event"; readonly sessionId: string; readonly event: ThreadEvent }

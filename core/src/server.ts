@@ -6,6 +6,7 @@ import { Session } from "./session"
 import { loadSpaceState, saveSpaceState, type SavedTab, type SpaceState } from "./space-state"
 import { openInEditor, resolveSpaceFile } from "./files"
 import { readSpace } from "./space"
+import { changesSince, snapshot } from "./checkpoints"
 import { historyEvents } from "./thread"
 import { applyRateLimit, probeUsage } from "./usage"
 
@@ -71,6 +72,15 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
     return found
   }
 
+  /** A thread's first message snapshots the repo first, so Review can show what the thread changed. */
+  const startTurn = async (tabId: string, text: string) => {
+    if (!saved.tabs.find((tab) => tab.id === tabId)?.baseline) {
+      const baseline = await snapshot(dir)
+      if (baseline) updateTab(tabId, { baseline })
+    }
+    session(tabId).send(text)
+  }
+
   const handle = (ws: ServerWebSocket, message: ClientMessage) => {
     switch (message.type) {
       case "ping":
@@ -84,8 +94,8 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
         // The app owns order and titles. The core keeps each tab's Claude session.
         return persist({
           tabs: message.tabs.map((tab) => {
-            const { sessionId, context } = saved.tabs.find((found) => found.id === tab.id) ?? {}
-            return { ...tab, sessionId, context }
+            const { sessionId, context, baseline } = saved.tabs.find((found) => found.id === tab.id) ?? {}
+            return { ...tab, sessionId, context, baseline }
           }),
           active: message.active,
         })
@@ -94,7 +104,12 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
       case "space.get":
         return void readSpace(dir).then((space) => send(ws, { type: "space", space }))
       case "session.send":
-        return session(message.sessionId).send(message.text)
+        return void startTurn(message.sessionId, message.text)
+      case "review.get": {
+        const baseline = saved.tabs.find((tab) => tab.id === message.sessionId)?.baseline
+        if (!baseline) return send(ws, { type: "review", sessionId: message.sessionId, files: [] })
+        return void changesSince(dir, baseline).then((files) => send(ws, { type: "review", sessionId: message.sessionId, files }))
+      }
       case "session.interrupt":
         return void sessions.get(message.sessionId)?.interrupt()
       case "session.close":
