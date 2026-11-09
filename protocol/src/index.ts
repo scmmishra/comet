@@ -88,6 +88,8 @@ export interface ModelOption {
   readonly resolvedModel?: string
   /** The effort levels the model takes. Empty when it takes none. */
   readonly efforts: readonly Effort[]
+  /** The effort Claude Code uses when the tab sets none, after the user's own settings. */
+  readonly defaultEffort?: Effort
 }
 
 /** A past thread in the space, as Claude Code saved it. */

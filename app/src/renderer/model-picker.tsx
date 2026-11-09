@@ -71,7 +71,8 @@ export function ModelPicker(props: { tab: Tab }) {
       >
         <ClaudeMark />
         <span class="text-fg">{label(selected()) ?? (props.tab.resolvedModel ? modelLabel(props.tab.resolvedModel) : "Claude Code")}</span>
-        <Show when={props.tab.effort}>{(effort) => <span class="text-fg-3">{EFFORT_LABEL[effort()]}</span>}</Show>
+        {/* The effort that will run: the tab's choice, or the model's default. */}
+        <Show when={props.tab.effort ?? selected()?.defaultEffort}>{(effort) => <span class="text-fg-3">{EFFORT_LABEL[effort()]}</span>}</Show>
         <Icon name="down" class="size-3 text-fg-3" />
       </button>
       <PopoverPanel popover={popover} label="Model and effort" class="grid grid-cols-[minmax(0,1fr)_minmax(0,168px)]">
@@ -124,7 +125,10 @@ export function ModelPicker(props: { tab: Tab }) {
                     aria-pressed={effort === props.tab.effort}
                     onClick={() => chooseModel(props.tab.model, effort)}
                   >
-                    {effort ? EFFORT_LABEL[effort] : "Default"}
+                    <span>
+                      {effort ? EFFORT_LABEL[effort] : "Default"}
+                      <Show when={!effort && selected()?.defaultEffort}>{(level) => <span class="ml-1.5 text-fg-3">{EFFORT_LABEL[level()]}</span>}</Show>
+                    </span>
                     <Show when={effort === props.tab.effort}>
                       <Icon name="check" class="size-[15px] text-fg" />
                     </Show>
