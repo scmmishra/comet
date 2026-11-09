@@ -4,16 +4,12 @@ import { randomBytes } from "node:crypto"
 import { resolve } from "node:path"
 import { createInterface } from "node:readline"
 import type { CoreReady } from "@desk/protocol"
-
-export interface CoreInfo {
-  readonly port: number
-  readonly token: string
-}
+import type { CoreInfo } from "../shared/bridge"
 
 const START_TIMEOUT_MS = 10_000
 const STOP_GRACE_MS = 1000
 
-/** The Bun core for one folder. In development it runs from source next to the app. */
+/** The Bun core, which serves every project. It runs from source next to the app. */
 export class CoreProcess {
   private constructor(
     private readonly child: ChildProcess,
@@ -21,11 +17,11 @@ export class CoreProcess {
   ) {}
 
   /** Starts the core and waits for the line that says where it listens. */
-  static start(dir: string): Promise<CoreProcess> {
+  static start(): Promise<CoreProcess> {
     const token = randomBytes(24).toString("hex")
     const child = spawn(process.env.DESK_BUN ?? "bun", ["core/src/main.ts"], {
       cwd: resolve(app.getAppPath(), ".."),
-      env: { ...process.env, DESK_TOKEN: token, DESK_DIR: dir },
+      env: { ...process.env, DESK_TOKEN: token },
       stdio: ["pipe", "pipe", "inherit"],
     })
     return new Promise((done, fail) => {

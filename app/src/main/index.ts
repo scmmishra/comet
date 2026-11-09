@@ -1,7 +1,9 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron"
-import { basename, join } from "node:path"
+import { join } from "node:path"
+import { CHANNELS } from "../shared/bridge"
+import type { DeskCommand } from "../shared/commands"
 import { CoreProcess } from "./core-process"
-import { chooseFolder, initialFolder, isFolder, recentProjects, rememberProject } from "./folders"
+import { chooseFolder, folder } from "./folders"
 import { installMenu } from "./menu"
 
 // Without a name, Electron names the app and its settings folder after the npm package.
@@ -10,29 +12,25 @@ app.setName("Desk")
 // Lets an agent read and drive the page over the DevTools protocol, without screenshots.
 if (process.env.DESK_DEBUG_PORT) app.commandLine.appendSwitch("remote-debugging-port", process.env.DESK_DEBUG_PORT)
 
+/** The folder `desk <folder>` asks to open, as `bin/desk` sets it. */
+const requested = process.env.DESK_DIR ? folder(process.env.DESK_DIR) : undefined
+
 /**
  * One Desk runs at a time: its window's tabs are saved in one file, which a second Desk would overwrite.
  * A second launch, such as `desk ~/code/repo`, hands its folder to the running Desk and quits.
  */
-const firstLaunch = app.requestSingleInstanceLock({ dir: process.env.DESK_DIR })
+const firstLaunch = app.requestSingleInstanceLock({ dir: requested })
 if (!firstLaunch) app.quit()
 
 let core: CoreProcess | undefined
 let window: BrowserWindow | undefined
+/** Commands sent before the page loaded. The page takes them once it has. */
+let pending: DeskCommand[] = requested ? [{ id: "project.open", dir: requested }] : []
 
-/** Opens a tab in a folder. The page owns the tabs, so it makes the tab. */
-function openInTab(dir: string) {
-  rememberProject(dir)
-  window?.webContents.send("desk:command", `project.open:${dir}`)
-  window?.show()
-  window?.focus()
-}
-
-/** Asks for a folder and records it as a recent project. */
-async function chooseProject(): Promise<string | undefined> {
-  const chosen = await chooseFolder(window)
-  if (chosen) rememberProject(chosen)
-  return chosen
+/** Sends a command to the page, which owns the tabs, or keeps it until the page has loaded. */
+function send(command: DeskCommand) {
+  if (window && !window.webContents.isLoading()) window.webContents.send(CHANNELS.command, command)
+  else pending.push(command)
 }
 
 function createWindow() {
@@ -52,8 +50,13 @@ function createWindow() {
     },
   })
   window.once("ready-to-show", () => window?.show())
+  window.on("closed", () => (window = undefined))
+  window.webContents.on("did-finish-load", () => {
+    for (const command of pending) window?.webContents.send(CHANNELS.command, command)
+    pending = []
+  })
   // Full screen hides the window buttons, so the tab bar drops the room it keeps for them.
-  const sendFullScreen = () => window?.webContents.send("desk:full-screen", window.isFullScreen())
+  const sendFullScreen = () => window?.webContents.send(CHANNELS.fullScreen, window.isFullScreen())
   window.on("enter-full-screen", sendFullScreen)
   window.on("leave-full-screen", sendFullScreen)
   // Links in the thread open in the browser, never inside the app window.
@@ -67,7 +70,6 @@ function createWindow() {
     event.preventDefault()
     if (url.startsWith("https://") || url.startsWith("http://")) void shell.openExternal(url)
   })
-  // In development, page warnings and errors go to the terminal that runs Desk.
   if (!app.isPackaged) {
     window.webContents.on("console-message", ({ level, message }) => {
       if (level === "warning" || level === "error") console.log(`[renderer ${level}] ${message}`)
@@ -79,32 +81,26 @@ function createWindow() {
 
 app.on("second-instance", (_event, _argv, _cwd, data) => {
   const dir = (data as { dir?: string } | undefined)?.dir
-  if (dir && isFolder(dir)) openInTab(dir)
-  else window?.focus()
+  if (dir) send({ id: "project.open", dir })
+  if (!window) createWindow()
+  window?.show()
+  window?.focus()
 })
 
 app.whenReady().then(async () => {
   if (!firstLaunch) return
-  // The core serves every project. This folder is the one a window with no tabs opens on.
-  const dir = await initialFolder()
-  if (!dir) return app.quit()
-  core = await CoreProcess.start(dir)
-  rememberProject(dir)
-  ipcMain.handle("desk:core", () => core?.info)
-  ipcMain.handle("desk:is-full-screen", () => window?.isFullScreen() ?? false)
-  ipcMain.handle("desk:projects", () => recentProjects().map((path) => ({ path, name: basename(path) })))
-  // Only a folder from the recent list is taken this way. Any other folder goes through the picker.
-  ipcMain.handle("desk:use-project", (_event, path: string) => recentProjects().includes(path) && rememberProject(path))
-  ipcMain.handle("desk:choose-project", chooseProject)
-  installMenu({ openFolder: () => void chooseProject().then((dir) => dir && openInTab(dir)) })
+  core = await CoreProcess.start()
+  ipcMain.handle(CHANNELS.core, () => core?.info)
+  ipcMain.handle(CHANNELS.isFullScreen, () => window?.isFullScreen() ?? false)
+  ipcMain.handle(CHANNELS.chooseFolder, () => chooseFolder(window))
+  installMenu(send)
   createWindow()
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit()
-})
+// Desk keeps running with no window, as Mac apps do. The Dock icon opens a new one.
+app.on("window-all-closed", () => {})
 
 app.on("will-quit", () => core?.stop())

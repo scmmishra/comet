@@ -1,21 +1,12 @@
-import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from "electron"
-
-const TAB_SHORTCUTS = 9
-
-function command(name: string) {
-  BrowserWindow.getFocusedWindow()?.webContents.send("desk:command", name)
-}
-
-export interface MenuActions {
-  /** Picks a folder and opens it in a new tab. */
-  readonly openFolder: () => void
-}
+import { app, Menu, type MenuItemConstructorOptions } from "electron"
+import { COMMANDS, TAB_SHORTCUTS, tabShortcut, type CommandId, type DeskCommand } from "../shared/commands"
 
 /**
- * The app menu. Tab shortcuts live here because macOS gives menu accelerators the key first:
- * the default menu's ⌘W would close the window before the page could close a tab.
+ * The app menu. Shortcuts live here because macOS gives menu accelerators the key first: the default
+ * menu's ⌘W would close the window before the page could close a tab. Each item sends its command to the page.
  */
-export function installMenu(actions: MenuActions) {
+export function installMenu(send: (command: DeskCommand) => void) {
+  const item = (id: CommandId): MenuItemConstructorOptions => ({ label: COMMANDS[id].title, accelerator: COMMANDS[id].accelerator, click: () => send({ id }) })
   const template: MenuItemConstructorOptions[] = [
     // The standard app menu, with Settings added where macOS apps put it.
     {
@@ -23,7 +14,7 @@ export function installMenu(actions: MenuActions) {
       submenu: [
         { role: "about" },
         { type: "separator" },
-        { label: "Settings…", accelerator: "CmdOrCtrl+,", click: () => command("settings.open") },
+        item("settings.open"),
         { type: "separator" },
         { role: "services" },
         { type: "separator" },
@@ -34,29 +25,20 @@ export function installMenu(actions: MenuActions) {
         { role: "quit" },
       ],
     },
-    {
-      label: "File",
-      submenu: [
-        { label: "New Tab", accelerator: "CmdOrCtrl+T", click: () => command("tab.new") },
-        { label: "New Terminal", accelerator: "Ctrl+`", click: () => command("terminal.new") },
-        { label: "Open Folder…", accelerator: "CmdOrCtrl+O", click: actions.openFolder },
-        { type: "separator" },
-        { label: "Close Tab", accelerator: "CmdOrCtrl+W", click: () => command("tab.close") },
-      ],
-    },
+    { label: "File", submenu: [item("tab.new"), item("terminal.new"), item("folder.open"), { type: "separator" }, item("tab.close")] },
     { role: "editMenu" },
     {
       label: "View",
       submenu: [
         ...Array.from({ length: TAB_SHORTCUTS }, (_, index): MenuItemConstructorOptions => ({
           label: `Tab ${index + 1}`,
-          accelerator: `CmdOrCtrl+${index + 1}`,
-          click: () => command(`tab.select:${index}`),
+          accelerator: tabShortcut(index),
+          click: () => send({ id: "tab.select", index }),
         })),
         { type: "separator" },
-        { label: "Toggle Panel", accelerator: "CmdOrCtrl+\\", click: () => command("panel.toggle") },
-        { label: "Command Palette…", accelerator: "CmdOrCtrl+K", click: () => command("palette.toggle") },
-        { label: "Search Threads…", accelerator: "CmdOrCtrl+Shift+O", click: () => command("threads.search") },
+        item("panel.toggle"),
+        item("palette.toggle"),
+        item("threads.search"),
         { type: "separator" },
         { role: "reload" },
         { role: "toggleDevTools" },
