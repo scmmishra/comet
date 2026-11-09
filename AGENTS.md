@@ -4,6 +4,8 @@ Desk is a Mac workspace for working with coding agents. It wraps Claude Code in 
 
 Desk replaces Rune (`~/scmmishra/rune`), a Swift app. Rune's docs and glossary carry over where they still apply.
 
+Always build code cleanly, modularly, and with proper architecture and separation of concerns. Never simply bolt on a feature because I asked for it. If you can’t find an easy way to build it naturally, and you'd recommend a refactor to make the whole thing cleanly, stop your work ahead of time and say so.
+
 ## Rules
 
 - Keep Desk minimal and easy to understand. Do not add features or dependencies without a clear need.
