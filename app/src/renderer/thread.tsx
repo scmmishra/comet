@@ -87,7 +87,7 @@ function RowView(props: { row: Row }) {
   return (
     <Switch>
       <Match when={props.row.type === "user" && (props.row as Extract<Item, { type: "user" }>)}>
-        {(item) => <div class="ml-auto w-fit max-w-[80%] whitespace-pre-wrap rounded-3xl bg-raised px-3.5 py-[9px]">{item().text}</div>}
+        {(item) => <div class="ml-auto w-fit max-w-[80%] whitespace-pre-wrap rounded-3xl bg-raised px-3.5 py-[9px] text-[14px] leading-[1.625]">{item().text}</div>}
       </Match>
       <Match when={props.row.type === "text" && (props.row as Extract<Item, { type: "text" }>)}>{(item) => <Markdown text={item().text} done={item().done} />}</Match>
       <Match when={props.row.type === "thinking"}>

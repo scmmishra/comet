@@ -183,8 +183,14 @@ body {
 }
 
 /* Thread text. */
+/*
+ * Thread text, with T3 Code's measures in px, because Desk's root is 13px: 14px text on a 1.625 line,
+ * blocks 10.4px apart, and the text at 90% of the foreground.
+ */
 .desk-prose {
-  color: var(--color-fg);
+  font-size: 14px;
+  line-height: 1.625;
+  color: color-mix(in srgb, var(--color-fg) 90%, transparent);
   overflow-wrap: anywhere;
 }
 .desk-prose > :first-child {
@@ -193,15 +199,20 @@ body {
 .desk-prose > :last-child {
   margin-bottom: 0;
 }
-.desk-prose p {
-  margin: 0 0 8px;
+.desk-prose p,
+.desk-prose ul,
+.desk-prose ol,
+.desk-prose blockquote,
+.desk-prose table,
+.desk-prose .desk-code {
+  margin: 10.4px 0;
 }
 .desk-prose ul,
 .desk-prose ol {
-  margin: 4px 0 8px;
   padding-left: 20px;
-  display: grid;
-  gap: 4px;
+}
+.desk-prose li + li {
+  margin-top: 4px;
 }
 .desk-prose ul {
   list-style: disc;
@@ -215,13 +226,23 @@ body {
 .desk-prose h1,
 .desk-prose h2,
 .desk-prose h3,
-.desk-prose h4 {
-  margin: 14px 0 6px;
-  font-size: 13px;
+.desk-prose h4,
+.desk-prose h5,
+.desk-prose h6 {
+  margin: 20px 0 8px;
+  font-size: 14px;
   font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-fg);
 }
 .desk-prose h1 {
-  font-size: 15px;
+  font-size: 20px;
+}
+.desk-prose h2 {
+  font-size: 18px;
+}
+.desk-prose h3 {
+  font-size: 16px;
 }
 .desk-prose strong {
   font-weight: 600;
@@ -234,7 +255,6 @@ body {
   text-decoration: underline;
 }
 .desk-prose blockquote {
-  margin: 0 0 8px;
   padding-left: 10px;
   box-shadow: inset 2px 0 0 var(--color-line);
   color: var(--color-fg-2);
@@ -255,7 +275,6 @@ body {
 .desk-prose table {
   width: 100%;
   border-collapse: collapse;
-  margin: 0 0 8px;
 }
 .desk-prose th,
 .desk-prose td {
@@ -270,7 +289,6 @@ body {
 /* Fenced code, styled like the thread's tool blocks. */
 /* A code block: one flat surface, no outline. The language and Copy sit on it, not on a bar of their own. */
 .desk-code {
-  margin: 0 0 8px;
   border-radius: 10px;
   overflow: hidden;
   background: var(--color-code);
