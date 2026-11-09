@@ -41,7 +41,7 @@ function ClaudeMark(props: { fast?: boolean }) {
       </svg>
       <Show when={props.fast}>
         {/* The card colour outlines the bolt, so it reads on top of the rays. */}
-        <svg viewBox="0 0 16 16" class="absolute -bottom-1 -right-1 size-[11px] text-fast" aria-label="Fast">
+        <svg viewBox="0 0 16 16" class="absolute -bottom-px -right-1.5 size-[13px] text-fast" aria-label="Fast">
           <path d="M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z" fill="currentColor" stroke="var(--color-card)" stroke-width="2" stroke-linejoin="round" paint-order="stroke" />
         </svg>
       </Show>
