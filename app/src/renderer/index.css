@@ -11,3 +11,64 @@ body {
   margin: 0;
   overflow: hidden;
 }
+
+/* The tab bar doubles as the window's title bar, so it drags the window. Its controls opt out. */
+.desk-titlebar {
+  -webkit-app-region: drag;
+}
+.desk-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* The Space card needs room. On a narrow window the thread keeps the width. */
+@media (max-width: 900px) {
+  .desk-rail {
+    display: none;
+  }
+}
+
+.desk-prose {
+  line-height: 1.6;
+  color: var(--color-text-base);
+  overflow-wrap: anywhere;
+}
+.desk-prose > * + * {
+  margin-top: 0.75em;
+}
+.desk-prose h1,
+.desk-prose h2,
+.desk-prose h3 {
+  font-weight: 600;
+  color: var(--color-text-strong);
+}
+.desk-prose ul,
+.desk-prose ol {
+  padding-left: 1.25em;
+}
+.desk-prose ul {
+  list-style: disc;
+}
+.desk-prose ol {
+  list-style: decimal;
+}
+.desk-prose a {
+  color: var(--color-text-interactive-base);
+  text-decoration: underline;
+}
+.desk-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--color-surface-inset-base);
+  border-radius: 4px;
+  padding: 0.1em 0.3em;
+}
+.desk-prose pre {
+  background: var(--color-surface-inset-base);
+  border-radius: 8px;
+  padding: 0.75em 1em;
+  overflow-x: auto;
+}
+.desk-prose pre code {
+  background: none;
+  padding: 0;
+}

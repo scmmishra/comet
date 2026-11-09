@@ -12,7 +12,8 @@
     "@desk/protocol": "workspace:*",
     "@opencode/ui": "2.2.6",
     "@solidjs/meta": "0.29.8",
-    "solid-js": "1.9.18"
+    "solid-js": "1.9.18",
+    "marked": "18.0.11"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.5",

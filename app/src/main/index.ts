@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto"
 import { join, resolve } from "node:path"
 import { createInterface } from "node:readline"
 import type { CoreReady } from "@desk/protocol"
+import { installMenu } from "./menu"
 
 export interface CoreInfo {
   readonly port: number
@@ -60,6 +61,18 @@ function createWindow() {
     if (url.startsWith("https://") || url.startsWith("http://")) void shell.openExternal(url)
     return { action: "deny" }
   })
+  // A link the page did not open in a new window must not replace the app.
+  window.webContents.on("will-navigate", (event, url) => {
+    if (url === window.webContents.getURL()) return
+    event.preventDefault()
+    if (url.startsWith("https://") || url.startsWith("http://")) void shell.openExternal(url)
+  })
+  // In development, page warnings and errors go to the terminal that runs Desk.
+  if (!app.isPackaged) {
+    window.webContents.on("console-message", ({ level, message }) => {
+      if (level === "warning" || level === "error") console.log(`[renderer ${level}] ${message}`)
+    })
+  }
   if (process.env.ELECTRON_RENDERER_URL) void window.loadURL(process.env.ELECTRON_RENDERER_URL)
   else void window.loadFile(join(__dirname, "../renderer/index.html"))
 }
@@ -67,6 +80,7 @@ function createWindow() {
 app.whenReady().then(async () => {
   const info = await startCore()
   ipcMain.handle("desk:core", () => info)
+  installMenu()
   createWindow()
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
