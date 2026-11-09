@@ -103,7 +103,8 @@ export function ModelPicker(props: { tab: Tab }) {
         </Show>
         {/* Supervised is the plain case. Any other mode shows, so a thread never runs looser than you think. */}
         <Show when={props.tab.permissionMode !== "default"}>
-          <Icon name={PERMISSION[props.tab.permissionMode].icon} class="size-[13px] text-fg-2" aria-label={PERMISSION[props.tab.permissionMode].label} />
+          <span class="text-fg-3">·</span>
+          <span class="text-fg-2">{PERMISSION[props.tab.permissionMode].label}</span>
         </Show>
         <Icon name="down" class="size-3 text-fg-3" />
       </button>
