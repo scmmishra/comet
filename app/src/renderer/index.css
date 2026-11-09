@@ -369,3 +369,13 @@ body {
     transition: none;
   }
 }
+
+/*
+ * ghostty-web draws its cursor on the canvas, and takes keys through a hidden textarea and its
+ * contenteditable container. Chromium still draws their native carets, opacity 0 or not, so a second
+ * cursor showed in the corner. The container is positioned, so the textarea stays inside it.
+ */
+.desk-terminal,
+.desk-terminal textarea {
+  caret-color: transparent;
+}

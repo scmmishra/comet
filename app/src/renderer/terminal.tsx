@@ -93,5 +93,5 @@ export function TerminalView(props: { id: string }) {
     term.focus()
   })
 
-  return <div ref={container} class="h-full w-full overflow-hidden" />
+  return <div ref={container} class="desk-terminal relative h-full w-full overflow-hidden" />
 }
