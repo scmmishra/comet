@@ -1,7 +1,7 @@
 import type { FitAddon, Ghostty, Terminal } from "ghostty-web"
 import wasmUrl from "ghostty-web/ghostty-vt.wasm?url"
 import { createEffect, createRoot, on, onCleanup, onMount } from "solid-js"
-import { colorScheme, themeColor } from "./appearance"
+import { appliedScheme, themeColor } from "./appearance"
 import { core } from "./core"
 
 type GhosttyModule = typeof import("ghostty-web")
@@ -91,10 +91,10 @@ export function TerminalView(props: { id: string }) {
     const observer = new ResizeObserver(() => container.clientWidth > 0 && container.clientHeight > 0 && fit.fit())
     observer.observe(container)
     cleanups.push(() => observer.disconnect())
-    // A theme change recolours the open terminal. The page's theme attribute changes in the same update, so the colours are read after it.
+    // A theme change recolours the open terminal. onMount awaited the WASM above, which left Solid's owner behind, so the effect gets a root of its own.
     createRoot((dispose) => {
       cleanups.push(dispose)
-      createEffect(on(colorScheme, () => queueMicrotask(() => (term.options.theme = terminalTheme())), { defer: true }))
+      createEffect(on(appliedScheme, () => (term.options.theme = terminalTheme()), { defer: true }))
     })
     term.focus()
   })

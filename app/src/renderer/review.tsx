@@ -1,14 +1,16 @@
 import { DiffChanges } from "@opencode/ui/diff-changes"
 import { FileDiff, getSingularPatch } from "@pierre/diffs"
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
+import type { FileChange } from "@desk/protocol"
 import { colorScheme } from "./appearance"
-import { fileIconId, fileIconName, requestFileIcon } from "./file-icons"
-import { Icon } from "./icons"
-import type { Tab } from "./store"
+import { fileIcon } from "./file-icons"
+import { CODE_THEMES } from "./highlight"
+import { plural } from "./format"
+import { Chevron } from "./icons"
 
 /** Diff options as OpenCode sets them: unified, word-level changes, and no file header of Pierre's own. */
 const DIFF_OPTIONS = {
-  theme: { light: "pierre-light", dark: "pierre-dark" },
+  theme: CODE_THEMES,
   preferredHighlighter: "highlights",
   diffStyle: "unified",
   diffIndicators: "bars",
@@ -28,9 +30,9 @@ const OPEN_FILE_LIMIT = 8
  * What this tab's thread changed since its first message, after OpenCode's review: every file's diff
  * in one scrolling list, under a header that stays at the top while its diff scrolls by, and folds it.
  */
-export function ReviewView(props: { tab: Tab }) {
+export function ReviewView(props: { review: readonly FileChange[] | undefined }) {
   const [toggled, setToggled] = createSignal(new Set<string>())
-  const files = () => props.tab.review ?? []
+  const files = () => props.review ?? []
   const totals = () => files().reduce((sum, file) => ({ additions: sum.additions + file.additions, deletions: sum.deletions + file.deletions }), { additions: 0, deletions: 0 })
   // A file is open by default in a small change. Clicking its header flips that.
   const isOpen = (path: string) => (files().length <= OPEN_FILE_LIMIT) !== toggled().has(path)
@@ -43,16 +45,14 @@ export function ReviewView(props: { tab: Tab }) {
   return (
     <Show
       when={files().length > 0}
-      fallback={<div class="m-auto px-6 text-center text-fg-3">{props.tab.review ? "This thread has not changed any files." : "Loading changes…"}</div>}
+      fallback={<div class="m-auto px-6 text-center text-fg-3">{props.review ? "This thread has not changed any files." : "Loading changes…"}</div>}
     >
       <div class="flex items-center gap-2 px-4 pb-2 pt-0.5 text-fg-2">
-        {files().length} {files().length === 1 ? "file" : "files"}
+        {plural(files().length, "file")}
         <DiffChanges class="ml-auto" changes={totals()} />
       </div>
       <For each={files()}>
         {(file) => {
-          const icon = fileIconName(file.path)
-          requestFileIcon(icon)
           const slash = file.path.lastIndexOf("/")
           return (
             <section class="border-t border-outline">
@@ -61,9 +61,9 @@ export function ReviewView(props: { tab: Tab }) {
                 aria-expanded={isOpen(file.path)}
                 onClick={() => toggle(file.path)}
               >
-                <Icon name="chevron-right" class={`size-[13px] text-fg-3 transition-transform duration-150 ${isOpen(file.path) ? "rotate-90" : ""}`} />
+                <Chevron open={isOpen(file.path)} class="size-[13px] text-fg-3" />
                 <svg class="size-[14px] shrink-0" aria-hidden="true">
-                  <use href={`#${fileIconId(icon)}`} />
+                  <use href={`#${fileIcon(file.path)}`} />
                 </svg>
                 <span class="min-w-0 flex-1 truncate">
                   <span class="text-fg-3">{file.path.slice(0, slash + 1)}</span>

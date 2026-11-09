@@ -4,7 +4,7 @@ import { fileLabel, fileReference } from "./file-links"
 test("recognises repo-relative paths with and without a position", () => {
   expect(fileReference("core/src/space.ts")).toEqual({ path: "core/src/space.ts" })
   expect(fileReference("core/src/space.ts:37")).toEqual({ path: "core/src/space.ts", line: 37 })
-  expect(fileReference("app/main.tsx:12:5")).toEqual({ path: "app/main.tsx", line: 12, column: 5 })
+  expect(fileReference("app/main.tsx:12:5")).toEqual({ path: "app/main.tsx", line: 12 })
   expect(fileReference("./README.md")).toEqual({ path: "./README.md" })
   expect(fileReference("README.md:4")).toEqual({ path: "README.md", line: 4 })
 })

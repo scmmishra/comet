@@ -1,49 +1,41 @@
+import type { TabInfo } from "@desk/protocol"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Spinner } from "@opencode/ui/spinner"
 import { Tabs } from "@opencode/ui/tabs"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
+import { COMMANDS, keyLabels } from "../shared/commands"
+import { account, refreshUsage } from "./account"
+import { useCommands } from "./actions"
 import { Composer } from "./composer"
 import { Icon } from "./icons"
 import { ContextRing, UsageButton } from "./meters"
-import { pickModelByNumber } from "./model-picker"
+import { ProjectMark } from "./project-mark"
+import { projectData, projectLabel, readProject } from "./projects"
 import { ReviewView } from "./review"
-import { CommandsCard } from "./commands"
-import { SpaceCard, SpaceChip } from "./space"
-import { StartScreen } from "./start-screen"
-import { ProjectMark, projectLabel } from "./project-mark"
 import { SettingsScreen } from "./settings/screen"
-import { activeData, activeTab, closePanelTab, openSettings, closeTab, newTab, newTerminal, refreshSpace, refreshUsage, selectPanelTab, selectTab, selectTabAt, state, togglePanel, type Tab } from "./store"
+import { ProjectCards, SpaceChip } from "./space"
+import { StartScreen } from "./start-screen"
 import { TerminalView } from "./terminal"
-import { usePalette } from "./palette"
 import { Thread } from "./thread"
+import { threadOf } from "./threads"
+import { closeTab, closeTerminal, newTab, newTerminal, showPanelTab, showTab, shownTab, togglePanel, workspace } from "./workspace"
 
 const USAGE_REFRESH_MS = 5 * 60_000
+/** The panel's Tabs value for Review, which has no id of its own: a tab's panelActive is absent then. */
+const REVIEW = "review"
 
 export function App() {
-  const togglePalette = usePalette()
+  const run = useCommands()
   onMount(() => {
-    const run = (command: string) => {
-      if (command === "tab.new") newTab()
-      else if (command === "tab.close" && state.active) closeTab(state.active)
-      else if (command === "panel.toggle") togglePanelInstantly()
-      else if (command === "terminal.new") newTerminal()
-      else if (command === "palette.toggle") togglePalette()
-      else if (command === "threads.search") togglePalette("threads")
-      else if (command === "settings.open") openSettings()
-      else if (command.startsWith("project.open:")) newTab("end", command.slice("project.open:".length))
-      else if (command.startsWith("tab.select:")) {
-        const index = Number(command.slice("tab.select:".length))
-        if (!pickModelByNumber(index)) selectTabAt(index)
-      }
-    }
     const stop = window.desk.onCommand(run)
     // Menu shortcuts reach the page through the main process, which agent-browser cannot press. In development,
     // the page takes the same commands from window.__deskCommand, so an agent can test them.
     if (import.meta.env.DEV) Object.assign(window, { __deskCommand: run })
     // Coming back to the window is when files and usage most likely changed outside Desk.
     const refresh = () => {
-      refreshSpace()
+      const project = shownTab()?.project
+      if (project) readProject(project, "space")
       refreshUsage()
     }
     window.addEventListener("focus", refresh)
@@ -58,112 +50,107 @@ export function App() {
   return (
     <div class="flex h-full flex-col bg-ground text-fg">
       <TabBar />
-      <Show when={state.settingsPage}>
+      <Show when={workspace.settingsPage !== undefined}>
         <main class="flex min-h-0 flex-1 px-2 pb-2">
           <section class="flex min-w-0 flex-1 rounded-3xl border border-outline bg-panel">
             <SettingsScreen />
           </section>
         </main>
       </Show>
-      <Show when={!state.settingsPage && activeTab()} keyed>
-        {(tab) => (
-          <main class="flex min-h-0 flex-1 px-2 pb-2">
-            {/* The session and the panel share one box. The session's width and the panel's slide run on the same curve, so the gap between them stays put while the panel opens. */}
-            <div class="desk-split relative min-h-0 flex-1 overflow-hidden" data-panel={state.panelOpen ? "open" : "closed"}>
-              <section class="desk-session flex h-full min-w-0 flex-col rounded-3xl border border-outline bg-panel">
-                {/* The right padding leaves room for the panel toggle, which sits over this corner. */}
-                <header class="flex h-[46px] shrink-0 items-center gap-2 pl-4 pr-12">
-                  <span class="flex min-w-0 items-center gap-[7px] whitespace-nowrap text-fg-2">
-                    <ProjectMark project={tab.project} class="size-[18px]" />
-                    {projectLabel(tab.project)}
-                    <span class="text-fg-3">/</span>
-                    <b class="truncate font-medium text-fg">{tab.title}</b>
-                  </span>
-                  <span class="ml-auto flex items-center gap-1">
-                    <Show when={state.panelOpen && activeData().space}>{(space) => <SpaceChip space={space()} />}</Show>
-                    <Show when={tab.context}>{(context) => <ContextRing {...context()} />}</Show>
-                  </span>
-                </header>
-                {/* The Space and Commands cards float over the session's corner, so the thread stays centred. With the panel open, they fold into the header chip. */}
-                <div class="relative flex min-h-0 flex-1">
-                  <div class="flex min-w-0 flex-1 flex-col">
-                    <Show when={tab.items.length > 0} fallback={<StartScreen tab={tab} />}>
-                      <ThreadScroll tab={tab} />
-                      <div class="shrink-0 px-4 pb-4 pt-1.5">
-                        <Composer tab={tab} />
-                      </div>
-                    </Show>
-                  </div>
-                  <Show when={!state.panelOpen && activeData().space}>
-                    {(space) => (
-                      <aside class="desk-rail desk-no-scrollbar absolute right-2 top-0 flex max-h-full w-[264px] flex-col gap-2 overflow-y-auto pb-2">
-                        <SpaceCard space={space()} />
-                        <CommandsCard />
-                      </aside>
-                    )}
-                  </Show>
-                </div>
-              </section>
-              <section class="desk-panel flex flex-col rounded-3xl border border-outline bg-panel" inert={!state.panelOpen}>
-                <div class="desk-no-scrollbar flex h-[46px] shrink-0 items-center gap-1 overflow-x-auto pl-2 pr-12">
-                  <Tabs variant="surface" value={tab.panelActive} onChange={selectPanelTab} class="min-w-0">
-                    <Tabs.List>
-                      <For each={tab.panelTabs}>
-                        {(panelTab) => (
-                          <Tabs.Trigger
-                            value={panelTab.id}
-                            class="shrink-0"
-                            closeButton={panelTab.kind === "terminal" ? <Tabs.CloseButton aria-label="Close terminal" onClick={() => closePanelTab(panelTab.id)} /> : undefined}
-                          >
-                            <span class="flex items-center gap-[7px]">
-                              <Icon name={panelTab.kind === "review" ? "review" : "terminal"} />
-                              {panelTab.kind === "review" ? "Review" : panelTab.title}
-                            </span>
-                          </Tabs.Trigger>
-                        )}
-                      </For>
-                    </Tabs.List>
-                  </Tabs>
-                  <Tooltip value="New terminal" placement="bottom">
-                    <IconButton variant="ghost-muted" size="large" class="shrink-0" aria-label="New terminal" icon={<Icon name="plus" />} onClick={newTerminal} />
-                  </Tooltip>
-                </div>
-                <div class="flex min-h-0 flex-1 flex-col">
-                  <Show when={tab.panelActive === "review"}>
-                    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
-                      <ReviewView tab={tab} />
-                    </div>
-                  </Show>
-                  {/* Terminals stay mounted while another panel tab shows, so their screens keep their state. */}
-                  <For each={tab.panelTabs.filter((panelTab) => panelTab.kind === "terminal")}>
-                    {(panelTab) => (
-                      <div class="min-h-0 flex-1 overflow-hidden px-3 pb-3" classList={{ hidden: panelTab.id !== tab.panelActive }}>
-                        <TerminalView id={panelTab.id} />
-                      </div>
-                    )}
-                  </For>
-                </div>
-              </section>
-              <PanelToggle />
-            </div>
-          </main>
-        )}
+      <Show when={shownTab()} keyed>
+        {(tab) => <TabView tab={tab} />}
       </Show>
     </div>
   )
 }
 
-/**
- * Toggles the panel with no motion, for ⌘\ and the menu. The new state is applied while transitions
- * are off, and reading layout forces that before they come back. Otherwise the next frame would see
- * the change with transitions on again, and slide anyway.
- */
-function togglePanelInstantly() {
-  const root = document.documentElement
-  root.dataset.motion = "instant"
-  togglePanel()
-  void root.offsetHeight
-  delete root.dataset.motion
+/** A tab: its session beside the panel. The session and the panel share one box. */
+function TabView(props: { tab: TabInfo }) {
+  const thread = () => threadOf(props.tab.id)
+  const space = () => projectData(props.tab.project).space
+  return (
+    <main class="flex min-h-0 flex-1 px-2 pb-2">
+      {/* The session's width and the panel's slide run on the same curve, so the gap between them stays put while the panel opens. */}
+      <div class="desk-split relative min-h-0 flex-1 overflow-hidden" data-panel={workspace.panelOpen ? "open" : "closed"}>
+        <section class="desk-session flex h-full min-w-0 flex-col rounded-3xl border border-outline bg-panel">
+          {/* The right padding leaves room for the panel toggle, which sits over this corner. */}
+          <header class="flex h-[46px] shrink-0 items-center gap-2 pl-4 pr-12">
+            <span class="flex min-w-0 items-center gap-[7px] whitespace-nowrap text-fg-2">
+              <ProjectMark project={props.tab.project} class="size-[18px]" />
+              {projectLabel(props.tab.project)}
+              <span class="text-fg-3">/</span>
+              <b class="truncate font-medium text-fg">{props.tab.title}</b>
+            </span>
+            <span class="ml-auto flex items-center gap-1">
+              <Show when={workspace.panelOpen}>
+                <SpaceChip project={props.tab.project} space={space()} />
+              </Show>
+              <Show when={thread().context}>{(context) => <ContextRing {...context()} />}</Show>
+            </span>
+          </header>
+          {/* The project's cards float over the session's corner, so the thread stays centred. With the panel open, they fold into the header chip. */}
+          <div class="relative flex min-h-0 flex-1">
+            <div class="flex min-w-0 flex-1 flex-col">
+              <Show when={thread().items.length > 0} fallback={<StartScreen tab={props.tab} />}>
+                <ThreadScroll tab={props.tab} />
+                <div class="shrink-0 px-4 pb-4 pt-1.5">
+                  <Composer tab={props.tab} />
+                </div>
+              </Show>
+            </div>
+            <Show when={!workspace.panelOpen}>
+              <aside class="desk-rail desk-no-scrollbar absolute right-2 top-0 flex max-h-full w-[264px] flex-col gap-2 overflow-y-auto pb-2">
+                <ProjectCards project={props.tab.project} />
+              </aside>
+            </Show>
+          </div>
+        </section>
+        <section class="desk-panel flex flex-col rounded-3xl border border-outline bg-panel" inert={!workspace.panelOpen}>
+          <div class="desk-no-scrollbar flex h-[46px] shrink-0 items-center gap-1 overflow-x-auto pl-2 pr-12">
+            <Tabs variant="surface" value={props.tab.panelActive ?? REVIEW} onChange={(value) => showPanelTab(value === REVIEW ? undefined : value)} class="min-w-0">
+              <Tabs.List>
+                <Tabs.Trigger value={REVIEW} class="shrink-0">
+                  <span class="flex items-center gap-[7px]">
+                    <Icon name="review" />
+                    Review
+                  </span>
+                </Tabs.Trigger>
+                <For each={props.tab.terminals}>
+                  {(terminal) => (
+                    <Tabs.Trigger value={terminal.id} class="shrink-0" closeButton={<Tabs.CloseButton aria-label="Close terminal" onClick={() => closeTerminal(terminal.id)} />}>
+                      <span class="flex items-center gap-[7px]">
+                        <Icon name="terminal" />
+                        {terminal.title}
+                      </span>
+                    </Tabs.Trigger>
+                  )}
+                </For>
+              </Tabs.List>
+            </Tabs>
+            <Tooltip value="New terminal" placement="bottom">
+              <IconButton variant="ghost-muted" size="large" class="shrink-0" aria-label="New terminal" icon={<Icon name="plus" />} onClick={newTerminal} />
+            </Tooltip>
+          </div>
+          <div class="flex min-h-0 flex-1 flex-col">
+            <Show when={props.tab.panelActive === undefined}>
+              <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+                <ReviewView review={thread().review} />
+              </div>
+            </Show>
+            {/* Terminals stay mounted while another panel tab shows, so their screens keep their state. */}
+            <For each={props.tab.terminals}>
+              {(terminal) => (
+                <div class="min-h-0 flex-1 overflow-hidden px-3 pb-3" classList={{ hidden: terminal.id !== props.tab.panelActive }}>
+                  <TerminalView id={terminal.id} />
+                </div>
+              )}
+            </For>
+          </div>
+        </section>
+        <PanelToggle />
+      </div>
+    </main>
+  )
 }
 
 /**
@@ -172,12 +159,12 @@ function togglePanelInstantly() {
  */
 function PanelToggle() {
   return (
-    <Tooltip value="Panel ⌘\\" placement="bottom" class="desk-panel-toggle absolute right-2.5 top-[9px] z-10">
+    <Tooltip value={`Panel ${keyLabels(COMMANDS["panel.toggle"].accelerator).join("")}`} placement="bottom" class="absolute right-2.5 top-[9px] z-10">
       <IconButton
         variant="ghost-muted"
         size="large"
         aria-label="Toggle panel"
-        aria-expanded={state.panelOpen}
+        aria-expanded={workspace.panelOpen}
         onClick={togglePanel}
         icon={
           <svg viewBox="0 0 16 16" class="size-[15px]" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" aria-hidden="true">
@@ -199,18 +186,18 @@ function TabBar() {
     void window.desk.isFullScreen().then(setFullScreen)
     onCleanup(window.desk.onFullScreen(setFullScreen))
   })
-  // Settings show in place of the active tab, so while they are open no tab is marked active.
-  const shown = (id: string) => id === state.active && !state.settingsPage
   // The tab opened from the + button. Only it animates in: tabs from ⌘T or the menu appear at once.
   const [entering, setEntering] = createSignal<string>()
   let strip!: HTMLDivElement
   // A new tab opens at the end, which may be past the bar's edge. Keep the active tab in view.
-  createEffect(() => strip.querySelector(`[data-tab="${state.active}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" }))
+  createEffect(() => strip.querySelector(`[data-tab="${workspace.active}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" }))
+  // Settings show in place of the active tab, so while they are open no tab is marked active.
+  const shown = (id: string) => id === shownTab()?.id
 
   return (
     <nav class="desk-titlebar flex h-11 shrink-0 items-center gap-1 pr-2.5" classList={{ "pl-[84px]": !fullScreen(), "pl-1": fullScreen() }}>
       <div ref={strip} class="desk-no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1">
-        <For each={state.tabs}>
+        <For each={workspace.tabs}>
           {(tab) => (
             <div
               data-tab={tab.id}
@@ -218,10 +205,10 @@ function TabBar() {
               classList={{ "desk-tab-enter": tab.id === entering(), "bg-raised text-fg": shown(tab.id), "text-fg-3 hover:bg-panel hover:text-fg-2": !shown(tab.id) }}
             >
               {/* The tab and its close button are siblings: a button cannot hold another. */}
-              <button class="flex h-full min-w-0 flex-1 items-center gap-2 pl-2 pr-7 text-left" onClick={() => selectTab(tab.id)}>
+              <button class="flex h-full min-w-0 flex-1 items-center gap-2 pl-2 pr-7 text-left" onClick={() => showTab(tab.id)}>
                 <ProjectMark project={tab.project} />
                 <span class="desk-fade-end min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[12px]">{tab.title}</span>
-                <Show when={tab.busy}>
+                <Show when={threadOf(tab.id).busy}>
                   <Spinner class="size-3.5 shrink-0 text-accent" />
                 </Show>
               </button>
@@ -238,21 +225,30 @@ function TabBar() {
           )}
         </For>
         <Tooltip value="New tab. ⌘-click opens it next to this one." placement="bottom" class="desk-no-drag shrink-0">
-          <IconButton variant="ghost-muted" size="large" aria-label="New tab" icon={<Icon name="plus" />} onClick={(event: MouseEvent) => setEntering(newTab(event.metaKey ? "next" : "end"))} />
+          <IconButton
+            variant="ghost-muted"
+            size="large"
+            aria-label="New tab"
+            icon={<Icon name="plus" />}
+            onClick={(event: MouseEvent) => {
+              newTab(event.metaKey ? "next" : "end")
+              setEntering(workspace.active)
+            }}
+          />
         </Tooltip>
       </div>
-      <Show when={state.usage}>{(usage) => <UsageButton usage={usage()} />}</Show>
+      <Show when={account.usage}>{(usage) => <UsageButton usage={usage()} />}</Show>
     </nav>
   )
 }
 
 /** Keeps the newest message in view while Claude writes, unless the user scrolled up to read. */
-function ThreadScroll(props: { tab: Tab }) {
+function ThreadScroll(props: { tab: TabInfo }) {
   let box!: HTMLDivElement
   let pinned = true
   createEffect(
     on(
-      () => props.tab.items.map((item) => (item.type === "text" ? item.text.length : 0)).join(),
+      () => threadOf(props.tab.id).items.map((item) => (item.type === "text" ? item.text.length : 0)).join(),
       () => {
         if (pinned) box.scrollTop = box.scrollHeight
       },

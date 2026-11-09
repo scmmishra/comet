@@ -1,13 +1,13 @@
-import type { PlanUsage, UsageWindow } from "@desk/protocol"
+import type { ContextReading, PlanUsage, UsageWindow } from "@desk/protocol"
 import { Popover } from "@opencode/ui/popover"
 import { Progress } from "@opencode/ui/progress"
 import { ProgressCircle } from "@opencode/ui/progress-circle"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createSignal, For, Show } from "solid-js"
+import { DAY_MS } from "./format"
 import { Icon } from "./icons"
 
-const NUMBER = new Intl.NumberFormat("en")
-const DAY_MS = 24 * 60 * 60 * 1000
+const NUMBER = new Intl.NumberFormat()
 
 /** The title bar's plan usage: the fullest window as a small meter, every window in a popover. */
 export function UsageButton(props: { usage: PlanUsage }) {
@@ -20,6 +20,7 @@ export function UsageButton(props: { usage: PlanUsage }) {
       onOpenChange={setOpen}
       placement="bottom-end"
       gutter={8}
+      // The popover opens over the tab bar, which drags the window, so it opts out too.
       class="desk-no-drag w-[280px] max-w-none"
       triggerAs="button"
       triggerProps={{
@@ -62,11 +63,11 @@ function resetLabel(iso: string) {
     const minutes = Math.round(left / 60_000)
     return minutes < 60 ? `Resets in ${minutes} min` : `Resets in ${Math.floor(minutes / 60)} h ${minutes % 60} min`
   }
-  return `Resets ${at.toLocaleDateString("en", { weekday: "long" })} ${at.toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit", hour12: false })}`
+  return `Resets ${at.toLocaleDateString(undefined, { weekday: "long" })} ${at.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`
 }
 
 /** How full the session's context window is, as a ring and a percentage. */
-export function ContextRing(props: { percent: number; tokens: number; maxTokens: number }) {
+export function ContextRing(props: ContextReading) {
   return (
     <Tooltip value={`${NUMBER.format(props.tokens)} of ${NUMBER.format(props.maxTokens)} tokens in context`} placement="bottom">
       <span class="flex items-center gap-1.5 px-1.5 tabular-nums text-fg-2">

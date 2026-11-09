@@ -10,14 +10,14 @@ import { TextInput } from "@opencode/ui/text-input"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { Icon } from "./icons"
-import { activeData, discoverCommands, removeCommands, runCommand, runGroup, saveCommands, stopCommand, stopGroup } from "./store"
+import { Chevron, Icon } from "./icons"
+import { projectData, reloadProject, removeCommands, runCommands, saveCommands, stopCommands } from "./projects"
 
 const COMMAND_DIALOG_ID = "command"
 const COMMAND_FORM_ID = "command-form"
 
-/** What each run state reads as, in its dot's tooltip. */
-const RUN_LABEL: Record<CommandRun["state"], string> = { idle: "Not running", running: "Running", exited: "Exited", failed: "Failed" }
+/** What each run state reads as, in its dot's tooltip. A failure names its exit code. */
+const RUN_LABEL: Record<Exclude<CommandRun["state"], "failed">, string> = { idle: "Not running", running: "Running", exited: "Exited" }
 
 /** A row of the Commands card: a command on its own, or a group of commands that share a name. */
 type Entry = { readonly kind: "command"; readonly command: CommandInfo } | { readonly kind: "group"; readonly name: string; readonly members: CommandInfo[] }
@@ -55,21 +55,25 @@ function groupRun(members: readonly CommandInfo[]): CommandRun {
 
 const runLabel = (run: CommandRun) => (run.state === "failed" ? `Failed with exit code ${run.code}` : RUN_LABEL[run.state])
 
-/** The Commands card: the space's commands, each run in the background, with Run or Stop beside its name. */
-export function CommandsCard() {
+/** The Commands card: a project's commands, each run in the background, with Run or Stop beside its name. */
+export function CommandsCard(props: { project: string }) {
   const dialog = useDialog()
   // Editing a command in a group edits the whole group, as Rune's editor did.
-  const edit = (command?: CommandInfo) =>
-    dialog.show(() => <CommandEditor draft={draftFor(command)} onDone={() => dialog.close(COMMAND_DIALOG_ID)} />, undefined, COMMAND_DIALOG_ID)
-  const rows = createMemo(() => entries(activeData().commands))
+  const edit = (name?: string, members: readonly CommandInfo[] = []) =>
+    dialog.show(() => <CommandEditor project={props.project} draft={draftFor(name, members)} onDone={() => dialog.close(COMMAND_DIALOG_ID)} />, undefined, COMMAND_DIALOG_ID)
+  const rows = createMemo(() => entries(projectData(props.project).commands ?? []))
 
   return (
     <section class="flex flex-col rounded-3xl border border-outline bg-card p-1.5">
       <For each={rows()}>
         {(entry) => (
           <Switch>
-            <Match when={entry.kind === "command" && entry}>{(single) => <CommandRow command={single().command} onEdit={() => edit(single().command)} />}</Match>
-            <Match when={entry.kind === "group" && entry}>{(group) => <GroupRow name={group().name} members={group().members} onEdit={edit} />}</Match>
+            <Match when={entry.kind === "command" && entry}>
+              {(single) => <CommandRow project={props.project} command={single().command} onEdit={() => edit(single().command.name, [single().command])} />}
+            </Match>
+            <Match when={entry.kind === "group" && entry}>
+              {(group) => <GroupRow project={props.project} name={group().name} members={group().members} onEdit={() => edit(group().name, group().members)} />}
+            </Match>
           </Switch>
         )}
       </For>
@@ -82,39 +86,43 @@ export function CommandsCard() {
 }
 
 /** A group as one row that runs and stops all its commands. It opens to show each command. */
-function GroupRow(props: { name: string; members: CommandInfo[]; onEdit: (command: CommandInfo) => void }) {
+function GroupRow(props: { project: string; name: string; members: CommandInfo[]; onEdit: () => void }) {
   const [open, setOpen] = createSignal(false)
+  const ids = () => props.members.map((member) => member.id)
   const run = () => groupRun(props.members)
   const running = () => props.members.filter((member) => member.run.state === "running").length
   const status = () => (running() ? `${running()} of ${props.members.length} running` : runLabel(run()))
   return (
     <Collapsible variant="ghost" open={open()} onOpenChange={setOpen}>
-      <RowMenu onEdit={() => props.onEdit(props.members[0]!)} onDelete={() => removeCommands(props.members.map((member) => member.id))} class="group flex min-w-0 items-center gap-2.5 rounded-lg py-[3px] pl-2 pr-1 hover:bg-panel">
+      <RowMenu onEdit={props.onEdit} onDelete={() => removeCommands(props.project, ids())}>
         <RunDot run={run()} label={status()} />
         <Collapsible.Trigger class="flex h-auto min-w-0 flex-1 items-center gap-1 text-left text-[13px] font-normal text-fg">
           <span class="truncate">{props.name}</span>
           <span class="shrink-0 text-fg-3">{props.members.length}</span>
-          <Icon name="chevron-right" class={`size-[13px] shrink-0 text-fg-3 transition-transform duration-150 ${open() ? "rotate-90" : ""}`} />
+          <Chevron open={open()} class="size-[13px] text-fg-3" />
         </Collapsible.Trigger>
-        <Show
-          when={running()}
-          fallback={<IconButton variant="ghost-muted" size="normal" aria-label={`Run ${props.name}`} icon={<Icon name="play" />} onClick={() => runGroup(props.name)} />}
-        >
-          <IconButton variant="ghost-muted" size="normal" aria-label={`Stop ${props.name}`} icon={<Icon name="stop" />} onClick={() => stopGroup(props.name)} />
-        </Show>
+        <RunButton name={props.name} running={running() > 0} onRun={() => runCommands(props.project, ids())} onStop={() => stopCommands(props.project, ids())} />
       </RowMenu>
       <Collapsible.Content class="ml-[15px] pl-[7px] shadow-[inset_1px_0_0_var(--color-line)]">
-        <For each={props.members}>{(member) => <CommandRow command={member} onEdit={() => props.onEdit(member)} />}</For>
+        <For each={props.members}>{(member) => <CommandRow project={props.project} command={member} onEdit={props.onEdit} />}</For>
       </Collapsible.Content>
     </Collapsible>
   )
 }
 
+function RunButton(props: { name: string; running: boolean; onRun: () => void; onStop: () => void }) {
+  return (
+    <Show when={props.running} fallback={<IconButton variant="ghost-muted" size="normal" aria-label={`Run ${props.name}`} icon={<Icon name="play" />} onClick={props.onRun} />}>
+      <IconButton variant="ghost-muted" size="normal" aria-label={`Stop ${props.name}`} icon={<Icon name="stop" />} onClick={props.onStop} />
+    </Show>
+  )
+}
+
 /** A row with a right-click menu to edit or delete what it shows. */
-function RowMenu(props: { onEdit: () => void; onDelete: () => void; class: string; children: JSX.Element }) {
+function RowMenu(props: { onEdit: () => void; onDelete: () => void; children: JSX.Element }) {
   return (
     <Menu.Context>
-      <Menu.Context.Trigger as="div" class={props.class}>
+      <Menu.Context.Trigger as="div" class="group flex min-w-0 items-center gap-2.5 rounded-lg py-[3px] pl-2 pr-1 hover:bg-panel">
         {props.children}
       </Menu.Context.Trigger>
       <Menu.Context.Portal>
@@ -130,7 +138,7 @@ function RowMenu(props: { onEdit: () => void; onDelete: () => void; class: strin
   )
 }
 
-/** A run's state as a dot: green while running, red when failed, grey when exited, hollow when idle. */
+/** A run's state as a dot. */
 function RunDot(props: { run: CommandRun; label: string }) {
   return (
     <Tooltip value={props.label} placement="left">
@@ -152,27 +160,24 @@ function RunDot(props: { run: CommandRun; label: string }) {
 type Found = CommandSource["commands"][number]
 
 /**
- * A menu of the commands the space's Procfiles, mise tasks and package.json define, grouped by file,
- * for the editor. Picking one fills a process, and "Import all as a group" fills one per command.
- * Commands already saved, by their command line, are left out.
+ * A menu of the commands the project's Procfiles, mise tasks and package.json define, grouped by
+ * file, for the editor. Picking one fills a process, and "Import all as a group" fills one per command.
+ * The core leaves out commands already saved.
  */
-function ImportMenu(props: { onPick: (command: Found) => void; onPickAll: (group: string, commands: readonly Found[]) => void }) {
+function ImportMenu(props: { project: string; onPick: (command: Found) => void; onPickAll: (group: string, commands: readonly Found[]) => void }) {
   // The menu mounts inside the dialog's content: the dialog closes on a press outside its content, and a
   // menu in its own portal at the end of the page counts as outside. Nothing between them clips it.
   const [mount, setMount] = createSignal<HTMLElement>()
-  const saved = () => new Set(activeData().commands.map((command) => command.command))
-  const sources = () =>
-    activeData().commandSources
-      ?.map((source) => ({ ...source, commands: source.commands.filter((command) => !saved().has(command.command)) }))
-      .filter((source) => source.commands.length > 0)
+  const sources = () => projectData(props.project).commandSources
 
   return (
     // Not modal: the dialog already traps focus, and a second trap fought it for focus and hung the page.
-    <Menu placement="top-start" gutter={6} modal={false} onOpenChange={(open) => open && discoverCommands()}>
+    <Menu placement="top-start" gutter={6} modal={false} onOpenChange={(open) => open && reloadProject(props.project, "commandSources")}>
       <Menu.Trigger
         as={Button}
         variant="ghost"
         class="me-auto"
+        // A ref runs before its element joins the page, so the dialog content is looked up once it has.
         ref={(trigger: HTMLElement) => queueMicrotask(() => setMount(trigger.closest<HTMLElement>("[data-slot=dialog-content]") ?? undefined))}
       >
         Import from…
@@ -215,21 +220,16 @@ function ImportMenu(props: { onPick: (command: Found) => void; onPickAll: (group
   )
 }
 
-function CommandRow(props: { command: CommandInfo; onEdit: () => void }) {
-  const running = () => props.command.run.state === "running"
+function CommandRow(props: { project: string; command: CommandInfo; onEdit: () => void }) {
+  const ids = () => [props.command.id]
   return (
-    <RowMenu onEdit={props.onEdit} onDelete={() => removeCommands([props.command.id])} class="group flex min-w-0 items-center gap-2.5 rounded-lg py-[3px] pl-2 pr-1 hover:bg-panel">
+    <RowMenu onEdit={props.onEdit} onDelete={() => removeCommands(props.project, ids())}>
       <RunDot run={props.command.run} label={runLabel(props.command.run)} />
       <Tooltip value={<span class="font-mono">{props.command.command}</span>} placement="top" class="min-w-0 flex-1">
         <span class="truncate">{props.command.name}</span>
       </Tooltip>
       <IconButton variant="ghost-muted" size="normal" aria-label={`Edit ${props.command.name}`} class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100" icon={<Icon name="edit" />} onClick={props.onEdit} />
-      <Show
-        when={running()}
-        fallback={<IconButton variant="ghost-muted" size="normal" aria-label={`Run ${props.command.name}`} icon={<Icon name="play" />} onClick={() => runCommand(props.command.id)} />}
-      >
-        <IconButton variant="ghost-muted" size="normal" aria-label={`Stop ${props.command.name}`} icon={<Icon name="stop" />} onClick={() => stopCommand(props.command.id)} />
-      </Show>
+      <RunButton name={props.command.name} running={props.command.run.state === "running"} onRun={() => runCommands(props.project, ids())} onStop={() => stopCommands(props.project, ids())} />
     </RowMenu>
   )
 }
@@ -247,11 +247,11 @@ interface Draft {
 
 const blankProcess = (): DraftProcess => ({ key: crypto.randomUUID(), name: "", command: "" })
 
-function draftFor(command: CommandInfo | undefined): Draft {
-  if (!command) return { name: "", processes: [blankProcess()], original: [] }
-  const members = command.group ? activeData().commands.filter((found) => found.group === command.group) : [command]
+/** A draft of saved commands: a plain command, or a group's members. Without them, a new command. */
+function draftFor(name: string | undefined, members: readonly CommandInfo[]): Draft {
+  if (!name) return { name: "", processes: [blankProcess()], original: [] }
   return {
-    name: command.group ?? command.name,
+    name,
     processes: members.map((member) => ({ key: member.id, id: member.id, name: member.name, command: member.command })),
     original: members.map((member) => member.id),
   }
@@ -262,7 +262,7 @@ function draftFor(command: CommandInfo | undefined): Draft {
  * command with the name above. "Add process" turns it into a group, where each process has a name of
  * its own. The core checks the draft and reports what it refuses.
  */
-function CommandEditor(props: { draft: Draft; onDone: () => void }) {
+function CommandEditor(props: { project: string; draft: Draft; onDone: () => void }) {
   const [name, setName] = createSignal(props.draft.name)
   const [processes, setProcesses] = createStore<DraftProcess[]>(props.draft.processes)
   const editing = props.draft.original.length > 0
@@ -294,6 +294,7 @@ function CommandEditor(props: { draft: Draft; onDone: () => void }) {
     event.preventDefault()
     if (!ready()) return
     saveCommands(
+      props.project,
       name(),
       processes.map(({ id, name, command }) => ({ id, name, command })),
       props.draft.original,
@@ -305,7 +306,7 @@ function CommandEditor(props: { draft: Draft; onDone: () => void }) {
   return (
     <Dialog fit>
       <DialogHeader>
-        <DialogTitleGroup title={editing ? (grouped() ? "Edit group" : "Edit command") : "Add command"} description="Runs in the background at the space's root." />
+        <DialogTitleGroup title={editing ? (grouped() ? "Edit group" : "Edit command") : "Add command"} description="Runs in the background in the project's folder." />
       </DialogHeader>
       <DialogBody>
         {/* The body hides overflow, so the bottom padding keeps the last input's border in view. */}
@@ -346,12 +347,12 @@ function CommandEditor(props: { draft: Draft; onDone: () => void }) {
         </form>
       </DialogBody>
       <DialogFooter>
-        <Show when={editing} fallback={<ImportMenu onPick={importOne} onPickAll={importAll} />}>
+        <Show when={editing} fallback={<ImportMenu project={props.project} onPick={importOne} onPickAll={importAll} />}>
           <Button
             variant="ghost-danger"
             class="me-auto"
             onClick={() => {
-              removeCommands(props.draft.original)
+              removeCommands(props.project, props.draft.original)
               props.onDone()
             }}
           >

@@ -1,12 +1,3 @@
-/** "claude-opus-5-5" → "Opus 5.5". Unknown ids pass through unchanged. */
-export function modelLabel(id: string | undefined) {
-  if (!id) return "Claude"
-  const match = /^claude-([a-z]+)-(\d+)(?:-(\d))?/.exec(id)
-  if (!match) return id
-  const [, family, major, minor] = match
-  return `${family!.charAt(0).toUpperCase()}${family!.slice(1)} ${major}${minor ? `.${minor}` : ""}`
-}
-
 export function formatDuration(ms: number) {
   const seconds = Math.round(ms / 1000)
   if (seconds < 60) return `${seconds} s`
@@ -26,7 +17,7 @@ export function formatAgo(time: number, now = Date.now()) {
   return new Date(time).toLocaleDateString(undefined, { month: "short", day: "numeric" })
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000
+export const DAY_MS = 24 * 60 * 60 * 1000
 
 /** A message's time, as T3 Code shows it: "15:54" today, "yesterday at 15:54", then a date. */
 export function formatMessageTime(at: number, now = Date.now()) {
@@ -40,7 +31,19 @@ export function formatMessageTime(at: number, now = Date.now()) {
   return `${date.toLocaleDateString(undefined, { day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) })} ${time}`
 }
 
-/** A project's name: its folder's last part, as the Space card names it. */
+/** A project's name: its folder's last part. */
 export function projectName(project: string) {
   return project.split("/").filter(Boolean).pop() ?? project
 }
+
+/** How long a copy button says it copied. */
+export const COPIED_MS = 1500
+
+/** A path with the home folder written as ~. Desk runs on macOS, where homes live in /Users. */
+export const shortPath = (path: string) => path.replace(/^\/Users\/[^/]+/, "~")
+
+/** "1 file", "3 files". */
+export const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`
+
+/** A thread's branch, when it differs from the branch the project is on now. */
+export const otherBranch = (thread: { readonly branch?: string }, current: string | undefined) => (thread.branch && thread.branch !== current ? thread.branch : undefined)

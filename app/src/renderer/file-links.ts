@@ -6,7 +6,6 @@
 export interface FileReference {
   readonly path: string
   readonly line?: number
-  readonly column?: number
 }
 
 const POSITION_SUFFIX = /:(\d+)(?::(\d+))?$/
@@ -41,7 +40,6 @@ export function fileReference(text: string): FileReference | undefined {
   return {
     path,
     ...(position ? { line: Number(position[1]) } : {}),
-    ...(position?.[2] ? { column: Number(position[2]) } : {}),
   }
 }
 

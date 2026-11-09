@@ -1,17 +1,24 @@
-import type { ThemeChoice } from "@desk/protocol"
+import { THEMES } from "@desk/protocol"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogBody } from "@opencode/ui/dialog"
 import { Keybind } from "@opencode/ui/keybind"
 import { SearchHighlight, SearchList } from "@opencode/ui/search-list"
 import { createMemo, createSignal, For, Show } from "solid-js"
-import { formatAgo } from "./format"
+import { COMMANDS, keyLabels, type CommandId, type DeskCommand } from "../shared/commands"
+import { account, updateSettings } from "./account"
+import { THEME_LABELS } from "./appearance"
+import { formatAgo, otherBranch, shortPath } from "./format"
 import { Icon, type IconName } from "./icons"
-import { ProjectMark, projectLabel } from "./project-mark"
-import { activeProject, newTab, newTerminal, openSettings, openThread, projectThreads, refreshThreads, selectTab, SETTINGS_PAGES, state, togglePanel, updateSettings, type SettingsPage } from "./store"
+import { ProjectMark } from "./project-mark"
+import { projectData, projectLabel, readProject } from "./projects"
+import { SETTINGS_PAGES } from "./settings/pages"
+import { openThread } from "./threads"
+import { activeProject, newTab, openSettings, showTab, workspace } from "./workspace"
 
 const DIALOG_ID = "palette"
 /** Threads the palette lists before a search. A search looks through all of them. */
 const RECENT_THREADS = 20
+const THEME_ICONS: Record<(typeof THEMES)[number], IconName> = { dark: "appearance", light: "appearance", auto: "monitor" }
 
 /** One thing the palette can do. A search looks through its title, detail and section. */
 interface Entry {
@@ -22,10 +29,11 @@ interface Entry {
   readonly icon?: IconName
   /** A project whose mark leads the row, in place of an icon. Entries stay plain data, so the list can rebuild them freely. */
   readonly project?: string
-  readonly keys?: readonly string[]
+  /** The menu command the entry runs. Its shortcut shows beside it. */
+  readonly command?: CommandId
   /** Marks the current choice in a list of choices, such as the theme. */
   readonly checked?: boolean
-  /** Runs the entry. An entry without it opens `page` instead. */
+  /** Runs the entry. An entry without it runs `command`, or opens `page`. */
   readonly run?: () => void
   readonly page?: Page
 }
@@ -38,23 +46,16 @@ interface Page {
   readonly entries: () => Entry[]
 }
 
-const SETTINGS_TITLES: Record<SettingsPage, string> = { providers: "Providers", appearance: "Appearance", projects: "Projects", mcps: "MCP servers", skills: "Skills" }
-const THEMES: readonly { choice: ThemeChoice; title: string; icon: IconName }[] = [
-  { choice: "auto", title: "System", icon: "monitor" },
-  { choice: "light", title: "Light", icon: "appearance" },
-  { choice: "dark", title: "Dark", icon: "appearance" },
-]
-
 /**
- * Opens the command palette, or closes it when it is open. With `threads`, it lists only the active
- * project's threads, for ⌘⇧O. Call it inside the DialogProvider.
+ * Opens the command palette, or closes it when it is open. With `threads`, it opens on the active
+ * project's threads, for ⌘⇧O. `run` runs a menu command. Call it inside the DialogProvider.
  */
-export function usePalette() {
+export function usePalette(run: (command: DeskCommand) => void) {
   const dialog = useDialog()
-  return (only?: "threads") => {
+  return (start?: "threads") => {
     if (dialog.active?.id === DIALOG_ID) return dialog.close(DIALOG_ID)
-    refreshThreads()
-    dialog.show(() => <Palette only={only} onDone={() => dialog.close(DIALOG_ID)} />, undefined, DIALOG_ID)
+    readProject(activeProject(), "threads")
+    dialog.show(() => <Palette start={start} run={run} onDone={() => dialog.close(DIALOG_ID)} />, undefined, DIALOG_ID)
   }
 }
 
@@ -63,81 +64,76 @@ export function usePalette() {
  * open tabs and recent threads. Themes, settings pages and projects sit in nested lists, and a search
  * from the root looks through those too.
  */
-function Palette(props: { only?: "threads"; onDone: () => void }) {
+function Palette(props: { start?: "threads"; run: (command: DeskCommand) => void; onDone: () => void }) {
   const [query, setQuery] = createSignal("")
-  const [pages, setPages] = createSignal<readonly Page[]>([])
-  const page = () => pages().at(-1)
-  // Recent projects, read once as the palette opens.
-  const [projects, setProjects] = createSignal<readonly { readonly path: string; readonly name: string }[]>([])
-  void window.desk.projects().then(setProjects)
 
   /** A project's threads, newest first, as the core lists them. */
   const threadEntries = (project: string): Entry[] =>
-    projectThreads(project).map((thread) => ({
+    (projectData(project).threads ?? []).map((thread) => ({
       id: `thread:${thread.id}`,
       section: "Threads",
       title: thread.title,
-      detail: [thread.branch && thread.branch !== state.projects[project]?.space?.branch ? thread.branch : "", thread.tabId ? "Open" : "", formatAgo(thread.updatedAt)].filter(Boolean).join(" · "),
+      detail: [otherBranch(thread, projectData(project).space?.branch) ?? "", thread.tabId ? "Open" : "", formatAgo(thread.updatedAt)].filter(Boolean).join(" · "),
       icon: "comment",
       run: () => openThread(thread, project),
     }))
   const threads = () => threadEntries(activeProject())
-  const threadsPage = (project: string): Page => ({ title: `Threads in ${projectLabel(project)}`, load: () => refreshThreads(project), entries: () => threadEntries(project) })
+  const threadsPage = (project: string): Page => ({ title: `Threads in ${projectLabel(project)}`, load: () => readProject(project, "threads"), entries: () => threadEntries(project) })
 
   const themePage: Page = {
     title: "Change theme",
     entries: () =>
-      THEMES.map(({ choice, title, icon }) => ({
-        id: `theme:${choice}`,
+      THEMES.map((theme) => ({
+        id: `theme:${theme}`,
         section: "Theme",
-        title,
-        icon,
-        checked: state.settings.appearance.theme === choice,
-        run: () => updateSettings({ appearance: { theme: choice } }),
+        title: THEME_LABELS[theme],
+        icon: THEME_ICONS[theme],
+        checked: account.settings.appearance.theme === theme,
+        run: () => updateSettings({ appearance: { theme } }),
       })),
   }
   const settingsPage: Page = {
     title: "Open settings",
-    entries: () => SETTINGS_PAGES.map((page) => ({ id: `settings:${page}`, section: "Settings", title: SETTINGS_TITLES[page], icon: "settings-gear", run: () => openSettings(page) })),
+    entries: () => SETTINGS_PAGES.map((page) => ({ id: `settings:${page.id}`, section: "Settings", title: page.title, icon: page.icon, run: () => openSettings(page.id) })),
   }
   /** Recent projects as a nested list. `entry` turns a project into what its row does. */
   const projectPage = (title: string, entry: (project: string) => Pick<Entry, "run" | "page">): Page => ({
     title,
     entries: () =>
-      projects().map((project) => ({
-        id: `project:${project.path}`,
+      workspace.recent.map((project) => ({
+        id: `project:${project}`,
         section: "Projects",
-        title: projectLabel(project.path),
-        detail: project.path.replace(/^\/Users\/[^/]+/, "~"),
-        project: project.path,
-        ...entry(project.path),
+        title: projectLabel(project),
+        detail: shortPath(project),
+        project,
+        ...entry(project),
       })),
   })
-  const newSessionPage = projectPage("New session in", (project) => ({
-    run: () => {
-      void window.desk.useProject(project)
-      newTab("end", project)
-    },
-  }))
+  const newSessionPage = projectPage("New session in", (project) => ({ run: () => newTab("end", project) }))
   const searchThreadsPage = projectPage("Search threads in", (project) => ({ page: threadsPage(project) }))
 
   const root = (): Entry[] => [
-    { id: "new-session", section: "Actions", title: "New session", icon: "plus", keys: ["⌘", "T"], run: () => newTab() },
+    { id: "new-session", section: "Actions", title: "New session", icon: "plus", command: "tab.new" },
     { id: "new-session-in", section: "Actions", title: "New session in…", icon: "folder-add-left", page: newSessionPage },
-    { id: "search-threads", section: "Actions", title: "Search threads", icon: "magnifying-glass", keys: ["⌘", "⇧", "O"], page: threadsPage(activeProject()) },
+    { id: "search-threads", section: "Actions", title: "Search threads", icon: "magnifying-glass", command: "threads.search", page: threadsPage(activeProject()) },
     { id: "search-threads-in", section: "Actions", title: "Search threads in…", icon: "magnifying-glass", page: searchThreadsPage },
-    { id: "new-terminal", section: "Actions", title: "New terminal", icon: "terminal", keys: ["⌃", "`"], run: newTerminal },
-    { id: "toggle-panel", section: "Actions", title: state.panelOpen ? "Hide panel" : "Show panel", icon: "layout-right", keys: ["⌘", "\\"], run: togglePanel },
-    { id: "open-folder", section: "Actions", title: "Open folder…", icon: "folder", keys: ["⌘", "O"], run: () => void window.desk.chooseProject().then((dir) => dir && newTab("end", dir)) },
+    { id: "new-terminal", section: "Actions", title: "New terminal", icon: "terminal", command: "terminal.new" },
+    { id: "toggle-panel", section: "Actions", title: workspace.panelOpen ? "Hide panel" : "Show panel", icon: "layout-right", command: "panel.toggle" },
+    { id: "open-folder", section: "Actions", title: "Open folder…", icon: "folder", command: "folder.open" },
     { id: "change-theme", section: "Actions", title: "Change theme…", icon: "appearance", page: themePage },
     { id: "open-settings", section: "Actions", title: "Open settings…", icon: "settings-gear", page: settingsPage },
-    ...state.tabs.map((tab): Entry => ({ id: `tab:${tab.id}`, section: "Tabs", title: tab.title, detail: projectLabel(tab.project), project: tab.project, run: () => selectTab(tab.id) })),
+    ...workspace.tabs.map((tab): Entry => ({ id: `tab:${tab.id}`, section: "Tabs", title: tab.title, detail: projectLabel(tab.project), project: tab.project, run: () => showTab(tab.id) })),
   ]
+
+  // The palette opened on a list leaves it by closing, so ⌘⇧O and Escape make a pair.
+  const startPages = props.start === "threads" ? [threadsPage(activeProject())] : []
+  const [pages, setPages] = createSignal<readonly Page[]>(startPages)
+  const page = () => pages().at(-1)
+  const nested = () => pages().length > startPages.length
 
   const entries = createMemo((): Entry[] => {
     const current = page()
     if (current) return current.entries()
-    if (props.only === "threads") return threads()
     // A search from the root also finds what the nested lists hold.
     if (!query().trim()) return [...root(), ...threads().slice(0, RECENT_THREADS)]
     return [...root(), ...themePage.entries(), ...settingsPage.entries(), ...newSessionPage.entries(), ...threads()]
@@ -162,12 +158,13 @@ function Palette(props: { only?: "threads"; onDone: () => void }) {
   const select = (entry: Entry) => {
     if (entry.page) return open(entry.page)
     props.onDone()
-    entry.run?.()
+    if (entry.run) entry.run()
+    else if (entry.command) props.run({ id: entry.command })
   }
 
   // Escape, or Backspace in an empty field, leaves a nested list before it closes the palette.
   const onKeyDown = (event: KeyboardEvent) => {
-    if (page() && (event.key === "Escape" || (event.key === "Backspace" && !query()))) {
+    if (nested() && (event.key === "Escape" || (event.key === "Backspace" && !query()))) {
       event.preventDefault()
       back()
     }
@@ -175,15 +172,14 @@ function Palette(props: { only?: "threads"; onDone: () => void }) {
 
   const placeholder = () => {
     const current = page()
-    if (current) return `${current.title}…`
-    return props.only === "threads" ? `Search threads in ${projectLabel(activeProject())}` : "Search actions, tabs and threads"
+    return current ? `${current.title}…` : "Search actions, tabs and threads"
   }
 
   return (
     <Dialog size="large" fit containerClass="desk-palette">
       <DialogBody>
         {/* The dialog closes on Escape unless the key comes from inside [data-owns-escape]. A nested list takes Escape to go back. */}
-        <div class="contents" data-owns-escape={page() ? "" : undefined}>
+        <div class="contents" data-owns-escape={nested() ? "" : undefined}>
         <SearchList
           query={query()}
           onQuery={setQuery}
@@ -196,7 +192,7 @@ function Palette(props: { only?: "threads"; onDone: () => void }) {
           onSelect={select}
           onKeyDown={onKeyDown}
           onClose={props.onDone}
-          footer={<Hints back={!!page()} />}
+          footer={<Hints back={nested()} />}
         >
           {(entry, row) => (
             <button type="button" {...row}>
@@ -211,7 +207,7 @@ function Palette(props: { only?: "threads"; onDone: () => void }) {
                   <span class="min-w-0 shrink truncate text-[12px] text-fg-3">{entry().detail}</span>
                 </Show>
               </span>
-              <Show when={entry().keys}>{(keys) => <Keybind keys={[...keys()]} variant="ghost" class="shrink-0 text-fg-3" />}</Show>
+              <Show when={entry().command}>{(command) => <Keybind keys={keyLabels(COMMANDS[command()].accelerator)} variant="ghost" class="shrink-0 text-fg-3" />}</Show>
               <Show when={entry().checked}>
                 <Icon name="check" class="shrink-0 text-fg-2" />
               </Show>

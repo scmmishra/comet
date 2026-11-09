@@ -3,7 +3,7 @@ import type { ClientMessage, CoreMessage } from "@desk/protocol"
 type Listener = (message: CoreMessage) => void
 
 /** The app's one connection to the core. Messages queue until the socket opens. */
-export class CoreClient {
+class CoreClient {
   private socket?: WebSocket
   private queue: string[] = []
   private listeners = new Set<Listener>()

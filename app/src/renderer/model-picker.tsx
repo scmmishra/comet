@@ -1,14 +1,15 @@
-import type { Effort, ModelOption, PermissionMode } from "@desk/protocol"
+import type { ModelOption, PermissionMode, RunSettings, TabInfo } from "@desk/protocol"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
 import { Popover } from "@opencode/ui/popover"
 import { SegmentedControl, SegmentedControlItem } from "@opencode/ui/segmented-control"
+import { keyLabels, TAB_SHORTCUTS, tabShortcut } from "../shared/commands"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
-import { modelLabel } from "./format"
-import { Icon, type IconName } from "./icons"
-import { state, updateRunSettings, type Tab } from "./store"
-
-export const EFFORT_LABEL: Record<Effort, string> = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max" }
+import { account } from "./account"
+import { ClaudeMark, Icon, type IconName } from "./icons"
+import { EFFORT_LABEL, effortFor, isAlias, modelLabel } from "./models"
+import { threadOf } from "./threads"
+import { changeTab } from "./workspace"
 
 /** Permission modes, in T3 Code's words and order. */
 const PERMISSION: Record<PermissionMode, { label: string; description: string; icon: IconName }> = {
@@ -27,43 +28,19 @@ let pickByNumber: ((index: number) => boolean) | undefined
 export const pickModelByNumber = (index: number) => pickByNumber?.(index) ?? false
 
 /**
- * Aliases such as "opus" follow the newest model of a family, so they lead the list. Pinned
- * models, such as "claude-opus-4-8", wait behind "Show older models".
- */
-const isAlias = (option: ModelOption) => !option.value.startsWith("claude-")
-
-/**
- * Claude's starburst mark: eight lines through the centre make sixteen rays. In fast mode a solid
- * bolt sits on its bottom-right corner.
- */
-export function ClaudeMark(props: { fast?: boolean }) {
-  return (
-    <span class="relative shrink-0">
-      <svg viewBox="0 0 16 16" class="size-4 text-claude" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" aria-hidden="true">
-        <path d="M8 1.5v13M1.5 8h13M3.4 3.4l9.2 9.2M12.6 3.4l-9.2 9.2M5.3 1.9l5.4 12.2M10.7 1.9 5.3 14.1M1.9 5.3l12.2 5.4M14.1 5.3 1.9 10.7" />
-      </svg>
-      <Show when={props.fast}>
-        {/* The card colour outlines the bolt, so it reads on top of the rays. */}
-        <svg viewBox="0 0 16 16" class="absolute -bottom-px -right-1.5 size-[13px] text-fast" aria-label="Fast">
-          <path d="M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z" fill="currentColor" stroke="var(--color-card)" stroke-width="2" stroke-linejoin="round" paint-order="stroke" />
-        </svg>
-      </Show>
-    </span>
-  )
-}
-
-/**
  * The composer's model button. The popover sets the model on the left and its effort on the
  * right. The button names the model that runs, so "Default" reads as "Opus 5.5".
  */
-export function ModelPicker(props: { tab: Tab }) {
+export function ModelPicker(props: { tab: TabInfo }) {
   const [open, setOpen] = createSignal(false)
   const [showAll, setShowAll] = createSignal(false)
+  const update = (change: Partial<RunSettings>) => changeTab(props.tab.id, change)
 
-  const selected = () => state.models.find((option) => option.value === props.tab.model)
+  const selected = () => account.models.find((option) => option.value === props.tab.model)
   const label = (option: ModelOption | undefined) => (option?.resolvedModel ? modelLabel(option.resolvedModel) : option?.label)
-  const aliases = createMemo(() => state.models.filter(isAlias))
-  const shown = () => (showAll() ? state.models : aliases())
+  const ran = () => threadOf(props.tab.id).model
+  const aliases = createMemo(() => account.models.filter(isAlias))
+  const shown = () => (showAll() ? account.models : aliases())
 
   const onOpenChange = (next: boolean) => {
     // A pinned model is only visible with the full list, so choosing one opens it that way.
@@ -74,9 +51,9 @@ export function ModelPicker(props: { tab: Tab }) {
 
   // What the new model does not take falls back: its default effort, standard speed, Supervised.
   const pickModel = (option: ModelOption) =>
-    updateRunSettings({
+    update({
       model: option.value,
-      effort: props.tab.effort && option.efforts.includes(props.tab.effort) ? props.tab.effort : undefined,
+      effort: effortFor(option, props.tab.effort),
       fast: option.fast && props.tab.fast,
       permissionMode: props.tab.permissionMode === "auto" && !option.autoMode ? "default" : props.tab.permissionMode,
     })
@@ -95,8 +72,7 @@ export function ModelPicker(props: { tab: Tab }) {
   onCleanup(() => pickByNumber === pickNumber && (pickByNumber = undefined))
 
   return (
-    // Solid passes portal events up the component tree, and the composer's click would move focus to its text box.
-    <div class="ml-auto" onClick={(event) => event.stopPropagation()}>
+    <div class="ml-auto">
       <Popover
         open={open()}
         onOpenChange={onOpenChange}
@@ -112,7 +88,7 @@ export function ModelPicker(props: { tab: Tab }) {
         trigger={
           <>
             <ClaudeMark fast={props.tab.fast} />
-            <span class="text-fg">{label(selected()) ?? (props.tab.resolvedModel ? modelLabel(props.tab.resolvedModel) : "Claude Code")}</span>
+            <span class="text-fg">{label(selected()) ?? (ran() ? modelLabel(ran()!) : "Claude Code")}</span>
             {/* The effort that will run: the tab's choice, or the model's default. */}
             <Show when={props.tab.effort ?? selected()?.defaultEffort}>{(effort) => <span class="text-fg-3">{EFFORT_LABEL[effort()]}</span>}</Show>
             {/* Supervised is the plain case. Any other mode shows, so a thread never runs looser than you think. */}
@@ -144,14 +120,14 @@ export function ModelPicker(props: { tab: Tab }) {
                       <Show when={option.value === props.tab.model}>
                         <Icon name="check" class="size-[15px] shrink-0 text-fg" />
                       </Show>
-                      <Show when={shortcut() >= 0 && shortcut() < 9}>
-                        <Keybind variant="ghost" keys={["⌘", String(shortcut() + 1)]} class="shrink-0" />
+                      <Show when={shortcut() >= 0 && shortcut() < TAB_SHORTCUTS}>
+                        <Keybind variant="ghost" keys={keyLabels(tabShortcut(shortcut()))} class="shrink-0" />
                       </Show>
                     </button>
                   )
                 }}
               </For>
-              <Show when={!showAll() && state.models.length > aliases().length}>
+              <Show when={!showAll() && account.models.length > aliases().length}>
                 <button type="button" class="flex h-9 items-center rounded-lg px-2.5 text-left text-fg-3 hover:text-fg-2" onClick={() => setShowAll(true)}>
                   Show older models
                 </button>
@@ -172,7 +148,7 @@ export function ModelPicker(props: { tab: Tab }) {
                       class="flex h-9 items-center justify-between rounded-lg px-2.5 text-left hover:bg-hover"
                       classList={{ "text-fg": effort === props.tab.effort, "text-fg-2": effort !== props.tab.effort }}
                       aria-pressed={effort === props.tab.effort}
-                      onClick={() => updateRunSettings({ effort })}
+                      onClick={() => update({ effort })}
                     >
                       <span>
                         {effort ? EFFORT_LABEL[effort] : "Default"}
@@ -190,7 +166,7 @@ export function ModelPicker(props: { tab: Tab }) {
           <div class="col-span-2 flex items-center justify-between gap-2 border-t border-outline p-1.5">
             {/* Fast mode is only offered on a model that has it. */}
             <Show when={selected()?.fast} fallback={<span />}>
-              <SegmentedControl value={props.tab.fast ? "fast" : "standard"} onChange={(speed) => speed && updateRunSettings({ fast: speed === "fast" })}>
+              <SegmentedControl value={props.tab.fast ? "fast" : "standard"} onChange={(speed) => speed && update({ fast: speed === "fast" })}>
                 <SegmentedControlItem value="standard">Standard</SegmentedControlItem>
                 <SegmentedControlItem value="fast">
                   <span class="flex items-center gap-1.5">
@@ -200,7 +176,7 @@ export function ModelPicker(props: { tab: Tab }) {
                 </SegmentedControlItem>
               </SegmentedControl>
             </Show>
-            <PermissionMenu tab={props.tab} modes={modes()} />
+            <PermissionMenu mode={props.tab.permissionMode} modes={modes()} onChange={(permissionMode) => update({ permissionMode })} />
           </div>
         </div>
       </Popover>
@@ -213,16 +189,16 @@ export function ModelPicker(props: { tab: Tab }) {
  * the model popover, not in a portal. The popover closes when focus leaves its content, and opening a
  * portaled menu moves focus there.
  */
-function PermissionMenu(props: { tab: Tab; modes: PermissionMode[] }) {
+function PermissionMenu(props: { mode: PermissionMode; modes: PermissionMode[]; onChange: (mode: PermissionMode) => void }) {
   return (
     <Menu placement="top-end" gutter={6}>
       <Menu.Trigger class="flex h-8 items-center gap-2 rounded-lg px-2.5 text-fg-2 hover:bg-hover hover:text-fg data-[expanded]:bg-hover data-[expanded]:text-fg">
-        <Icon name={PERMISSION[props.tab.permissionMode].icon} class="size-[15px]" />
-        {PERMISSION[props.tab.permissionMode].label}
+        <Icon name={PERMISSION[props.mode].icon} class="size-[15px]" />
+        {PERMISSION[props.mode].label}
         <Icon name="chevron-down" class="size-3 text-fg-3" />
       </Menu.Trigger>
       <Menu.Content class="w-[320px]">
-          <Menu.RadioGroup value={props.tab.permissionMode} onChange={(mode) => updateRunSettings({ permissionMode: mode as PermissionMode })}>
+          <Menu.RadioGroup value={props.mode} onChange={(mode) => props.onChange(mode as PermissionMode)}>
             <For each={props.modes}>
               {(mode) => (
                 // menu.css sits outside Tailwind's layers, so its 28px row height needs ! to give way to two lines.

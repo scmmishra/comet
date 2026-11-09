@@ -27,26 +27,23 @@ const loaders = new Map(
 )
 const requested = new Set<string>()
 
-/** The icon a file gets, such as "Typescript" for a .ts file. */
-export function fileIconName(path: string): string {
+/** The sprite id of a file's icon, such as the TypeScript mark for a .ts file, for `<use href="#…">`. The icon loads the first time it is asked for. */
+export function fileIcon(path: string): string {
   const chosen = chooseIconName(path, "file", false)
-  const name = OVERRIDES[chosen] ?? chosen
-  return loaders.has(name) ? name : FALLBACK
+  const name = loaders.has(OVERRIDES[chosen] ?? chosen) ? (OVERRIDES[chosen] ?? chosen) : FALLBACK
+  if (!requested.has(name)) {
+    requested.add(name)
+    void loaders.get(name)?.().then((svg) => addSymbol(name, svg))
+  }
+  return symbolId(name)
 }
 
-export const fileIconId = (name: string) => `desk-file-icon-${name}`
-
-/** Adds an icon to the sprite the first time a chip needs it. */
-export function requestFileIcon(name: string) {
-  if (requested.has(name)) return
-  requested.add(name)
-  void loaders.get(name)?.().then((svg) => addSymbol(name, svg))
-}
+const symbolId = (name: string) => `desk-file-icon-${name}`
 
 function addSymbol(name: string, svg: string) {
   const parsed = new DOMParser().parseFromString(svg, "image/svg+xml").documentElement
   const symbol = document.createElementNS("http://www.w3.org/2000/svg", "symbol")
-  symbol.id = fileIconId(name)
+  symbol.id = symbolId(name)
   // Some icons set fill="none" on their root, with a placeholder path that relies on it. The symbol keeps
   // the root's attributes, so children inherit them and that path stays unpainted instead of black.
   for (const attribute of Array.from(parsed.attributes)) {

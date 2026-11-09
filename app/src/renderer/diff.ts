@@ -1,4 +1,4 @@
-export type DiffLine = { readonly kind: "same" | "add" | "del"; readonly text: string }
+type DiffLine = { readonly kind: "same" | "add" | "del"; readonly text: string }
 
 /** Edits larger than this many lines on either side show as removed-then-added, without matching. */
 const MAX_MATCHED_LINES = 400
@@ -30,14 +30,4 @@ export function lineDiff(before: string, after: string): DiffLine[] {
   while (i < a.length) lines.push({ kind: "del", text: a[i++]! })
   while (j < b.length) lines.push({ kind: "add", text: b[j++]! })
   return lines
-}
-
-/** The before and after text of an Edit, MultiEdit or Write call, or undefined for other tools. */
-export function editTexts(name: string, input: Record<string, unknown>): { before: string; after: string }[] | undefined {
-  if (name === "Edit") return [{ before: String(input.old_string ?? ""), after: String(input.new_string ?? "") }]
-  if (name === "Write") return [{ before: "", after: String(input.content ?? "") }]
-  if (name === "MultiEdit" && Array.isArray(input.edits)) {
-    return input.edits.map((edit: Record<string, unknown>) => ({ before: String(edit.old_string ?? ""), after: String(edit.new_string ?? "") }))
-  }
-  return undefined
 }
