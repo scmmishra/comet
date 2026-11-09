@@ -273,3 +273,7 @@ function apply(sessionId: string, event: ThreadEvent, arrivedAt?: number) {
     if (sessionId === state.active) refreshReview()
   }
 }
+
+// The core sends the saved tabs once, on connect. A hot-swapped copy of this module would start with
+// none, and its next save would overwrite them. In development, a change here reloads the page instead.
+if (import.meta.hot) import.meta.hot.accept(() => location.reload())
