@@ -9,8 +9,7 @@ export function SpaceCard(props: { space: Space }) {
   const pr = () => props.space.pr
   return (
     <section class="flex flex-col rounded-3xl border border-outline bg-card">
-      <div class="flex h-10 items-center px-3.5 font-medium">Space</div>
-      <div class="px-1.5 pb-1.5">
+      <div class="p-1.5">
         <Row icon="folder">{props.space.root.replace(/^\/Users\/[^/]+/, "~")}</Row>
         <div class="h-1.5" />
         <Row icon="branch" detail={upstream(props.space)}>
