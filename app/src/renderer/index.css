@@ -270,3 +270,39 @@ button {
   line-height: 1.6;
   color: var(--color-fg);
 }
+
+/* Highlighted code keeps the card's background; the theme only colours the tokens. */
+.desk-code code span[style] {
+  background-color: transparent !important;
+}
+
+/* A file named in a reply: a chip that opens it in the editor. */
+/* Prefixed with .desk-prose so it outranks the rule for ordinary links. */
+.desk-prose .desk-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  vertical-align: baseline;
+  max-width: 100%;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--color-raised);
+  color: var(--color-fg);
+  font-size: 12px;
+  line-height: 20px;
+  text-decoration: none !important;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.desk-prose .desk-file:hover {
+  background: var(--color-hover);
+}
+.desk-file svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.desk-file span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

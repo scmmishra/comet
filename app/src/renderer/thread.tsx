@@ -35,7 +35,7 @@ export function Thread(props: { tab: Tab }) {
             <Match when={row.type === "text" && row}>
               {(item) => (
                 <div class="desk-rise">
-                  <Markdown text={item().text} />
+                  <Markdown text={item().text} done={item().done} />
                 </div>
               )}
             </Match>

@@ -78,6 +78,10 @@ export function answerPermission(id: string, allow: boolean) {
   if (tab) core.send({ type: "permission.answer", sessionId: tab.id, id, allow })
 }
 
+export function openFile(path: string, line?: number) {
+  core.send({ type: "file.open", path, line })
+}
+
 export function refreshSpace() {
   core.send({ type: "space.get" })
 }
