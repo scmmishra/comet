@@ -2,7 +2,9 @@ import { app, dialog, type BrowserWindow } from "electron"
 import { readFileSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-const lastFolderFile = () => join(app.getPath("userData"), "last-folder.json")
+/** The folders Desk has opened, most recent first. Kept beside Electron's own data for the app. */
+const projectsFile = () => join(app.getPath("userData"), "projects.json")
+const MAX_PROJECTS = 20
 
 function isFolder(path: string) {
   try {
@@ -12,18 +14,20 @@ function isFolder(path: string) {
   }
 }
 
-/** The folder Desk had open when it last quit, if it still exists. */
-export function lastFolder(): string | undefined {
+/** Recent projects that still exist. The first is the one Desk reopens on launch. */
+export function recentProjects(): string[] {
   try {
-    const { path } = JSON.parse(readFileSync(lastFolderFile(), "utf8")) as { path?: string }
-    return path && isFolder(path) ? path : undefined
+    const { paths } = JSON.parse(readFileSync(projectsFile(), "utf8")) as { paths?: unknown }
+    return Array.isArray(paths) ? paths.filter((path): path is string => typeof path === "string" && isFolder(path)) : []
   } catch {
-    return undefined
+    return []
   }
 }
 
-export function rememberFolder(path: string) {
-  writeFileSync(lastFolderFile(), JSON.stringify({ path }))
+/** Moves a folder to the front of the recent projects. */
+export function rememberProject(path: string) {
+  const paths = [path, ...recentProjects().filter((found) => found !== path)].slice(0, MAX_PROJECTS)
+  writeFileSync(projectsFile(), JSON.stringify({ paths }, null, 2))
 }
 
 export async function chooseFolder(window?: BrowserWindow): Promise<string | undefined> {
@@ -32,9 +36,9 @@ export async function chooseFolder(window?: BrowserWindow): Promise<string | und
   return result.canceled ? undefined : result.filePaths[0]
 }
 
-/** DESK_DIR wins, as `bin/desk` sets it. Then the last folder, then the picker. */
+/** DESK_DIR wins, as `bin/desk` sets it. Then the most recent project, then the picker. */
 export async function initialFolder(): Promise<string | undefined> {
   const fromEnv = process.env.DESK_DIR
   if (fromEnv && isFolder(fromEnv)) return fromEnv
-  return lastFolder() ?? (await chooseFolder())
+  return recentProjects()[0] ?? (await chooseFolder())
 }

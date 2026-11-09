@@ -1,9 +1,11 @@
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
+import { ProjectAvatar } from "./avatar"
 import { Composer } from "./composer"
 import { Icon } from "./icons"
 import { ContextRing, UsageButton } from "./meters"
 import { ReviewView } from "./review"
 import { SpaceCard, SpaceChip } from "./space"
+import { StartScreen } from "./start-screen"
 import { activeTab, closePanelTab, closeTab, newTab, newTerminal, refreshSpace, refreshUsage, selectPanelTab, selectTab, selectTabAt, state, togglePanel, type Tab } from "./store"
 import { TerminalView } from "./terminal"
 import { Thread } from "./thread"
@@ -45,7 +47,7 @@ export function App() {
                 {/* The right padding leaves room for the panel toggle, which sits over this corner. */}
                 <header class="flex h-[46px] shrink-0 items-center gap-2 pl-4 pr-12">
                   <span class="flex min-w-0 items-center gap-[7px] whitespace-nowrap text-fg-2">
-                    <SpaceAvatar />
+                    <ProjectAvatar name={state.space?.name} />
                     {state.space?.name ?? "No repo"}
                     <span class="text-fg-3">/</span>
                     <b class="truncate font-medium text-fg">{tab.title}</b>
@@ -165,41 +167,6 @@ function PanelToggle() {
   )
 }
 
-/** The space's first letter. Tabs use the small size. */
-function SpaceAvatar(props: { small?: boolean }) {
-  return (
-    <span
-      class="grid shrink-0 place-items-center bg-[#3a3a40] font-semibold leading-none text-fg"
-      classList={{ "size-[18px] rounded-[5px] text-[11px]": !props.small, "size-[16px] rounded-[4px] text-[10px]": props.small }}
-    >
-      {(state.space?.name ?? "?").charAt(0).toUpperCase()}
-    </span>
-  )
-}
-
-function StartScreen(props: { tab: Tab }) {
-  return (
-    <div class="flex min-h-0 flex-1 flex-col items-center gap-[18px] overflow-y-auto px-4 pb-6 pt-[14vh]">
-      <div class="select-none text-center font-mono text-[clamp(44px,8vw,88px)] font-medium leading-none tracking-[-0.04em] text-mark">desk</div>
-      <div class="flex w-full max-w-[720px] flex-col gap-[18px]">
-        <Composer tab={props.tab} />
-        <Show when={state.space}>
-          {(space) => (
-            <div class="flex flex-wrap items-center gap-2 px-1.5 text-fg-2">
-              <SpaceAvatar />
-              {space().name}
-              <span class="text-fg-3">/</span>
-              <Icon name="branch" />
-              {space().branch}
-              <span class="ml-auto font-mono text-[12px] text-fg-3">{space().root.replace(/^\/Users\/[^/]+/, "~")}</span>
-            </div>
-          )}
-        </Show>
-      </div>
-    </div>
-  )
-}
-
 function TabBar() {
   // The tab opened from the + button. Only it animates in: tabs from ⌘T or the menu appear at once.
   const [entering, setEntering] = createSignal<string>()
@@ -218,7 +185,7 @@ function TabBar() {
               classList={{ "desk-tab-enter": tab.id === entering(), "bg-raised text-fg": tab.id === state.active, "text-fg-3 hover:bg-panel hover:text-fg-2": tab.id !== state.active }}
               onClick={() => selectTab(tab.id)}
             >
-              <SpaceAvatar small />
+              <ProjectAvatar name={state.space?.name} small />
               <span class="desk-fade-end min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[12px]">{tab.title}</span>
               <Show when={tab.busy}>
                 <span class="desk-pulse size-1.5 shrink-0 rounded-full bg-accent" />

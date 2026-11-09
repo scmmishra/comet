@@ -1,14 +1,13 @@
 import { DEFAULT_MODEL, PROTOCOL_VERSION, type ClientMessage, type CoreMessage, type ModelOption, type PlanUsage, type ThreadEvent } from "@desk/protocol"
 import type { ServerWebSocket } from "bun"
 import pkg from "../package.json"
-import { getSessionMessages } from "@anthropic-ai/claude-agent-sdk"
 import { Session } from "./session"
 import { loadSpaceState, saveSpaceState, type SavedTab, type SpaceState } from "./space-state"
 import { openInEditor, resolveSpaceFile } from "./files"
 import { readSpace } from "./space"
 import { changesSince, snapshot } from "./checkpoints"
 import { Terminals } from "./terminals"
-import { historyEvents } from "./thread"
+import { recentThreads, threadHistory } from "./past-threads"
 import { applyRateLimit, probeUsage } from "./usage"
 import { probeModels } from "./models"
 
@@ -147,6 +146,19 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
       }
       case "session.interrupt":
         return void sessions.get(message.sessionId)?.interrupt()
+      case "threads.get": {
+        const open = new Set(saved.tabs.flatMap((tab) => (tab.sessionId ? [tab.sessionId] : [])))
+        return void recentThreads(dir, open).then((threads) => send(ws, { type: "threads", threads }))
+      }
+      case "thread.resume": {
+        // The tab may hold a session that never sent a message. The resumed thread replaces it.
+        sessions.get(message.sessionId)?.close()
+        sessions.delete(message.sessionId)
+        updateTab(message.sessionId, { sessionId: message.threadId, baseline: undefined, context: undefined })
+        const tab = saved.tabs.find((found) => found.id === message.sessionId)
+        if (!tab) return send(ws, { type: "error", message: "Desk could not find the tab to resume the thread in." })
+        return void threadHistory(dir, tab).then((events) => send(ws, { type: "session.history", sessionId: tab.id, events }))
+      }
       case "session.close":
         sessions.get(message.sessionId)?.close()
         return void sessions.delete(message.sessionId)
@@ -201,11 +213,7 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
 async function sendSavedTabs(ws: ServerWebSocket, dir: string, saved: SpaceState) {
   send(ws, { type: "tabs", tabs: saved.tabs.map(({ id, title, terminals, panelActive, model, effort }) => ({ id, title, terminals, panelActive, model, effort })), active: saved.active })
   for (const tab of saved.tabs) {
-    if (!tab.sessionId) continue
-    const messages = await getSessionMessages(tab.sessionId, { dir }).catch(() => [])
-    const events: ThreadEvent[] = historyEvents(messages)
-    if (tab.context) events.push({ kind: "context", ...tab.context })
-    send(ws, { type: "session.history", sessionId: tab.id, events })
+    if (tab.sessionId) send(ws, { type: "session.history", sessionId: tab.id, events: await threadHistory(dir, tab) })
   }
 }
 

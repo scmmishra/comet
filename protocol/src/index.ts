@@ -90,6 +90,16 @@ export interface ModelOption {
   readonly efforts: readonly Effort[]
 }
 
+/** A past thread in the space, as Claude Code saved it. */
+export interface ThreadSummary {
+  /** Claude's session id, which resumes the thread. */
+  readonly id: string
+  readonly title: string
+  readonly branch?: string
+  /** Milliseconds since the epoch. */
+  readonly updatedAt: number
+}
+
 /** A terminal in a tab's panel. Its shell runs in the core under this id. */
 export interface TerminalInfo {
   readonly id: string
@@ -115,6 +125,10 @@ export type ClientMessage =
   | { readonly type: "space.get" }
   | { readonly type: "usage.get" }
   | { readonly type: "models.get" }
+  /** The space's recent threads that no tab has open. */
+  | { readonly type: "threads.get" }
+  /** Continues a past thread in a tab that has not started one. */
+  | { readonly type: "thread.resume"; readonly sessionId: string; readonly threadId: string }
   /** Starts a terminal, or reattaches to one already running under this id. */
   | { readonly type: "terminal.open"; readonly id: string; readonly cols: number; readonly rows: number }
   | { readonly type: "terminal.input"; readonly id: string; readonly data: string }
@@ -135,6 +149,7 @@ export type CoreMessage =
   | { readonly type: "pong"; readonly id: number }
   /** The tabs saved for this space. Each restored tab's thread follows as a session.history message. */
   | { readonly type: "tabs"; readonly tabs: readonly TabInfo[]; readonly active?: string }
+  | { readonly type: "threads"; readonly threads: readonly ThreadSummary[] }
   /** The models Claude Code offers, read once when the core starts. */
   | { readonly type: "models"; readonly models: readonly ModelOption[] }
   /** `usage` is absent when Claude has no plan limits, such as with an API key. */

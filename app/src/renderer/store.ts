@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL, type CoreMessage, type Effort, type FileChange, type ModelOption, type PlanUsage, type Space, type TabInfo, type ThreadEvent } from "@desk/protocol"
+import { DEFAULT_MODEL, type CoreMessage, type Effort, type FileChange, type ModelOption, type PlanUsage, type Space, type TabInfo, type ThreadEvent, type ThreadSummary } from "@desk/protocol"
 import { batch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
@@ -46,6 +46,8 @@ const [state, setState] = createStore({
   space: undefined as Space | undefined,
   usage: undefined as PlanUsage | undefined,
   models: [] as readonly ModelOption[],
+  /** The space's recent threads that no tab has open, for the start screen. */
+  threads: [] as readonly ThreadSummary[],
   /** Whether the panel beside the thread is open. A per-window preference, so it lives in the page's storage. */
   panelOpen: localStorage.getItem(PANEL_KEY) === "open",
   connected: false,
@@ -116,6 +118,20 @@ export function chooseModel(model: string, effort: Effort | undefined) {
   if (!tab) return
   setState("tabs", (found) => found.id === tab.id, { model, effort })
   saveTabs()
+}
+
+export function refreshThreads() {
+  core.send({ type: "threads.get" })
+}
+
+/** Continues a past thread in the active tab, which has not started one. Its history follows from the core. */
+export function resumeThread(thread: ThreadSummary) {
+  const tab = activeTab()
+  if (!tab) return
+  setState("tabs", (found) => found.id === tab.id, "title", titleFrom(thread.title))
+  setState("threads", (threads) => threads.filter((found) => found.id !== thread.id))
+  saveTabs()
+  core.send({ type: "thread.resume", sessionId: tab.id, threadId: thread.id })
 }
 
 export function interrupt() {
@@ -235,6 +251,7 @@ core.listen((message: CoreMessage) => {
   else if (message.type === "space") setState("space", message.space)
   else if (message.type === "usage") setState("usage", message.usage)
   else if (message.type === "models") setState("models", message.models)
+  else if (message.type === "threads") setState("threads", message.threads)
   else if (message.type === "review") setState("tabs", (tab) => tab.id === message.sessionId, "review", [...message.files])
   else if (message.type === "session.event") apply(message.sessionId, message.event, performance.now())
   else if (message.type === "session.history") batch(() => message.events.forEach((event) => apply(message.sessionId, event)))

@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron"
-import { join } from "node:path"
+import { basename, join } from "node:path"
 import { CoreProcess } from "./core-process"
-import { chooseFolder, initialFolder, rememberFolder } from "./folders"
+import { chooseFolder, initialFolder, recentProjects, rememberProject } from "./folders"
 import { installMenu } from "./menu"
 
 // Without a name, Electron names the app and its settings folder after the npm package.
@@ -18,8 +18,13 @@ async function openFolder(dir: string) {
   const next = await CoreProcess.start(dir)
   core?.stop()
   core = next
-  rememberFolder(dir)
+  rememberProject(dir)
   window?.webContents.reload()
+}
+
+async function chooseAndOpenFolder() {
+  const chosen = await chooseFolder(window)
+  if (chosen) await openFolder(chosen)
 }
 
 function createWindow() {
@@ -64,14 +69,13 @@ app.whenReady().then(async () => {
   const dir = await initialFolder()
   if (!dir) return app.quit()
   core = await CoreProcess.start(dir)
-  rememberFolder(dir)
+  rememberProject(dir)
   ipcMain.handle("desk:core", () => core?.info)
-  installMenu({
-    openFolder: async () => {
-      const chosen = await chooseFolder(window)
-      if (chosen) await openFolder(chosen)
-    },
-  })
+  ipcMain.handle("desk:projects", () => recentProjects().map((path) => ({ path, name: basename(path) })))
+  // Only a folder from the recent list opens this way. Any other folder goes through the picker.
+  ipcMain.handle("desk:open-project", (_event, path: string) => (recentProjects().includes(path) ? openFolder(path) : undefined))
+  ipcMain.handle("desk:choose-project", chooseAndOpenFolder)
+  installMenu({ openFolder: chooseAndOpenFolder })
   createWindow()
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

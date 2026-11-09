@@ -152,7 +152,6 @@ body {
 /* A popover opening above its trigger, such as the composer's model picker. */
 .desk-pop-up {
   --pop-from: 4px;
-  transform-origin: bottom right;
 }
 
 @keyframes desk-pulse {
