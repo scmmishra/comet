@@ -23,7 +23,8 @@ Keep logic in the core. The UI may later move to Anomaly's Rust framework, and t
 
 ## Run
 
-- `mise run dev` starts the app. Set `DESK_DIR` to the repo to open. It defaults to this repo.
+- `mise run dev` starts the app. It opens `DESK_DIR` if set, then the last folder, then asks for one. ⌘O opens another folder.
+- `bin/desk <folder>` opens a folder in Desk. Link it onto your PATH to use `desk .`.
 - The app starts the core with `bun` from `PATH`. Set `DESK_BUN` to use another binary. The core needs Bun 1.4 or newer.
 - `mise run check` typechecks, runs the core tests and builds the app.
 

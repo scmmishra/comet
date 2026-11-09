@@ -1,0 +1,6 @@
+#!/bin/bash
+# Opens a folder in Desk: `desk .` or `desk ~/code/repo`. Desk runs from source until it is packaged.
+set -euo pipefail
+folder="$(cd "${1:-.}" && pwd)"
+repo="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+cd "$repo" && DESK_DIR="$folder" exec mise run dev
