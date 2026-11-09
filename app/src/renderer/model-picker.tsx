@@ -29,12 +29,23 @@ export const pickModelByNumber = (index: number) => pickByNumber?.(index) ?? fal
  */
 const isAlias = (option: ModelOption) => !option.value.startsWith("claude-")
 
-/** Claude's starburst mark: eight lines through the centre make sixteen rays. */
-function ClaudeMark() {
+/**
+ * Claude's starburst mark: eight lines through the centre make sixteen rays. In fast mode a solid
+ * bolt sits on its bottom-right corner.
+ */
+function ClaudeMark(props: { fast?: boolean }) {
   return (
-    <svg viewBox="0 0 16 16" class="size-4 shrink-0 text-claude" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" aria-hidden="true">
-      <path d="M8 1.5v13M1.5 8h13M3.4 3.4l9.2 9.2M12.6 3.4l-9.2 9.2M5.3 1.9l5.4 12.2M10.7 1.9 5.3 14.1M1.9 5.3l12.2 5.4M14.1 5.3 1.9 10.7" />
-    </svg>
+    <span class="relative shrink-0">
+      <svg viewBox="0 0 16 16" class="size-4 text-claude" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" aria-hidden="true">
+        <path d="M8 1.5v13M1.5 8h13M3.4 3.4l9.2 9.2M12.6 3.4l-9.2 9.2M5.3 1.9l5.4 12.2M10.7 1.9 5.3 14.1M1.9 5.3l12.2 5.4M14.1 5.3 1.9 10.7" />
+      </svg>
+      <Show when={props.fast}>
+        {/* The card colour outlines the bolt, so it reads on top of the rays. */}
+        <svg viewBox="0 0 16 16" class="absolute -bottom-1 -right-1 size-[11px] text-fast" aria-label="Fast">
+          <path d="M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z" fill="currentColor" stroke="var(--color-card)" stroke-width="2" stroke-linejoin="round" paint-order="stroke" />
+        </svg>
+      </Show>
+    </span>
   )
 }
 
@@ -94,17 +105,14 @@ export function ModelPicker(props: { tab: Tab }) {
         aria-expanded={popover.isOpen()}
         onClick={toggle}
       >
-        <ClaudeMark />
+        <ClaudeMark fast={props.tab.fast} />
         <span class="text-fg">{label(selected()) ?? (props.tab.resolvedModel ? modelLabel(props.tab.resolvedModel) : "Claude Code")}</span>
         {/* The effort that will run: the tab's choice, or the model's default. */}
         <Show when={props.tab.effort ?? selected()?.defaultEffort}>{(effort) => <span class="text-fg-3">{EFFORT_LABEL[effort()]}</span>}</Show>
-        <Show when={props.tab.fast}>
-          <Icon name="bolt" class="size-[13px] text-fg-2" aria-label="Fast" />
-        </Show>
         {/* Supervised is the plain case. Any other mode shows, so a thread never runs looser than you think. */}
         <Show when={props.tab.permissionMode !== "default"}>
           <span class="text-fg-3">·</span>
-          <span class="text-fg-2">{PERMISSION[props.tab.permissionMode].label}</span>
+          <span class="text-fg-3">{PERMISSION[props.tab.permissionMode].label}</span>
         </Show>
         <Icon name="down" class="size-3 text-fg-3" />
       </button>

@@ -32,6 +32,8 @@
   --color-del-soft: rgb(232 119 126 / 9%);
   --color-ready: #3d5fe0;
   --color-claude: #d97757;
+  /* Fast mode's bolt. */
+  --color-fast: #f5c542;
 
   --radius-sm: 4px;
   --radius-md: 6px;
