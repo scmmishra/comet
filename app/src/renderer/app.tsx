@@ -168,7 +168,8 @@ function PanelToggle() {
 }
 
 function TabBar() {
-  // The left padding keeps the tabs clear of the window buttons, which full screen hides.
+  // The left padding keeps the tabs clear of the window buttons, which full screen hides. There, the
+  // bar's 4px and the strip's 4px line the first tab up with the card's 8px edge below it.
   const [fullScreen, setFullScreen] = createSignal(false)
   onMount(() => {
     void window.desk.isFullScreen().then(setFullScreen)
@@ -181,7 +182,7 @@ function TabBar() {
   createEffect(() => strip.querySelector(`[data-tab="${state.active}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" }))
 
   return (
-    <nav class="desk-titlebar flex h-11 shrink-0 items-center gap-1 pr-2.5" classList={{ "pl-[84px]": !fullScreen(), "pl-2.5": fullScreen() }}>
+    <nav class="desk-titlebar flex h-11 shrink-0 items-center gap-1 pr-2.5" classList={{ "pl-[84px]": !fullScreen(), "pl-1": fullScreen() }}>
       <div ref={strip} class="desk-no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1">
         <For each={state.tabs}>
           {(tab) => (
