@@ -188,6 +188,17 @@ export interface McpServer {
   readonly error?: string
 }
 
+/** A skill or custom command Claude Code offers in a project. */
+export interface Skill {
+  /** What follows the slash, such as "pdf" or "figma:figma-use". */
+  readonly name: string
+  readonly description: string
+  /** Where it comes from, as Claude Code marks it: "user", "project", "claude.ai sync", a plugin's name, or "other". */
+  readonly source: string
+  /** Set when a plugin ships it. */
+  readonly plugin?: boolean
+}
+
 export interface DeskSettings {
   readonly appearance: AppearanceSettings
   readonly claude: ClaudeSettings
@@ -280,6 +291,8 @@ export type ClientMessage =
   | { readonly type: "project.icons"; readonly project: string }
   /** The MCP servers Claude Code loads in the project. Reading starts them, so it takes a few seconds. */
   | { readonly type: "mcp.get"; readonly project: string }
+  /** The skills and custom commands Claude Code offers in the project. */
+  | { readonly type: "skills.get"; readonly project: string }
   /** Turns an MCP server on or off for the project. Claude Code keeps the choice. */
   | { readonly type: "mcp.toggle"; readonly project: string; readonly name: string; readonly enabled: boolean }
   | { readonly type: "usage.get" }
@@ -339,6 +352,8 @@ export type CoreMessage =
   | { readonly type: "commands.found"; readonly project: string; readonly sources: readonly CommandSource[] }
   | { readonly type: "terminal.output"; readonly id: string; readonly data: string }
   | { readonly type: "terminal.exit"; readonly id: string; readonly code: number }
+  /** `skills` is absent when Claude Code could not be asked. */
+  | { readonly type: "skills"; readonly project: string; readonly skills?: readonly Skill[] }
   /** `servers` is absent when Claude Code could not be asked. */
   | { readonly type: "mcp"; readonly project: string; readonly servers?: readonly McpServer[] }
   /** Paths relative to the project. The core serves each at `/project-icon?dir=&path=&token=`. */

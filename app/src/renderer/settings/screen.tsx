@@ -7,6 +7,7 @@ import { AppearancePage } from "./appearance"
 import { McpsPage } from "./mcps"
 import { ProjectsPage } from "./projects"
 import { ProvidersPage } from "./providers"
+import { SkillsPage } from "./skills"
 import "./settings.css"
 
 const PAGES: Record<SettingsPage, { label: string; icon: IconName }> = {
@@ -14,6 +15,7 @@ const PAGES: Record<SettingsPage, { label: string; icon: IconName }> = {
   appearance: { label: "Appearance", icon: "appearance" },
   projects: { label: "Projects", icon: "folder" },
   mcps: { label: "MCP servers", icon: "mcp" },
+  skills: { label: "Skills", icon: "post-skill" },
 }
 
 /**
@@ -67,6 +69,9 @@ export function SettingsScreen() {
               </Match>
               <Match when={state.settingsPage === "mcps"}>
                 <McpsPage />
+              </Match>
+              <Match when={state.settingsPage === "skills"}>
+                <SkillsPage />
               </Match>
             </Switch>
           </div>

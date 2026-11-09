@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, type AppearanceSettings, type ClaudeAccount, type McpServer, type ClaudeSettings, type CommandInfo, type ProjectSettings, type CommandProcess, type CommandSource, type CoreMessage, type FileChange, type ModelOption, type PlanUsage, type RunSettings, type Space, type TabInfo, type ThreadEvent, type ThreadSummary } from "@desk/protocol"
+import { DEFAULT_SETTINGS, type AppearanceSettings, type ClaudeAccount, type McpServer, type Skill, type ClaudeSettings, type CommandInfo, type ProjectSettings, type CommandProcess, type CommandSource, type CoreMessage, type FileChange, type ModelOption, type PlanUsage, type RunSettings, type Space, type TabInfo, type ThreadEvent, type ThreadSummary } from "@desk/protocol"
 import { batch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
@@ -56,12 +56,14 @@ export interface ProjectData {
   iconFiles?: readonly string[]
   /** The project's MCP servers. Undefined while reading, null when Claude Code could not be asked. */
   mcp?: readonly McpServer[] | null
+  /** The project's skills and custom commands. Undefined while reading, null when Claude Code could not be asked. */
+  skills?: readonly Skill[] | null
 }
 
 const EMPTY_PROJECT: ProjectData = { commands: [], threads: [] }
 
 /** The settings screen's pages, in the order its sidebar lists them. */
-export const SETTINGS_PAGES = ["providers", "appearance", "projects", "mcps"] as const
+export const SETTINGS_PAGES = ["providers", "appearance", "projects", "mcps", "skills"] as const
 export type SettingsPage = (typeof SETTINGS_PAGES)[number]
 
 const [state, setState] = createStore({
@@ -146,6 +148,12 @@ export function openSettings(page: SettingsPage = SETTINGS_PAGES[0]) {
 
 export function closeSettings() {
   setState("settingsPage", undefined)
+}
+
+/** Reads the project's skills and custom commands. */
+export function readSkills(project: string) {
+  updateProject(project, () => ({ skills: undefined }))
+  core.send({ type: "skills.get", project })
 }
 
 /** Reads the project's MCP servers again. Claude Code starts them to report on them, so it takes a moment. */
@@ -404,6 +412,7 @@ core.listen((message: CoreMessage) => {
   else if (message.type === "account") setState({ account: message.account, accountRead: true })
   else if (message.type === "threads") updateProject(message.project, () => ({ threads: message.threads }))
   else if (message.type === "commands") updateProject(message.project, () => ({ commands: message.commands }))
+  else if (message.type === "skills") updateProject(message.project, () => ({ skills: message.skills ?? null }))
   else if (message.type === "mcp") updateProject(message.project, () => ({ mcp: message.servers ?? null }))
   else if (message.type === "project.icons") updateProject(message.project, () => ({ iconFiles: message.files }))
   else if (message.type === "commands.found") updateProject(message.project, () => ({ commandSources: message.sources }))

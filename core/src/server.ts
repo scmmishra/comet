@@ -6,6 +6,7 @@ import { sameRunSettings, Session } from "./session"
 import { readMcpServers, toggleMcpServer } from "./mcp"
 import { findIconFiles, iconFile } from "./project-icons"
 import { loadSettings, saveSettings, updateSettings } from "./settings"
+import { readSkills } from "./skills"
 import { isProjectFolder, Spaces } from "./spaces"
 import { loadWindowState, saveWindowState, type SavedTab, type WindowState } from "./window-state"
 import { openInEditor, resolveSpaceFile } from "./files"
@@ -217,6 +218,8 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
         return void refreshUsage()
       case "project.icons":
         return send(ws, { type: "project.icons", project: message.project, files: findIconFiles(message.project) })
+      case "skills.get":
+        return void readSkills(message.project).then((skills) => send(ws, { type: "skills", project: message.project, skills }))
       case "mcp.get":
         return void readMcpServers(message.project, (servers) => send(ws, { type: "mcp", project: message.project, servers }))
       case "mcp.toggle":
