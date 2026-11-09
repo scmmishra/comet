@@ -6,7 +6,7 @@ import { openThread, refreshThreads, state } from "./store"
 
 const [open, setOpen] = createSignal(false)
 
-/** Opens thread search, or closes it when it is open. ⌘⇧0 and the View menu call this. */
+/** Opens thread search, or closes it when it is open. ⌘⇧O and the View menu call this. */
 export function toggleThreadSearch() {
   if (!open()) refreshThreads()
   setOpen(!open())
