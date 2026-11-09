@@ -21,6 +21,16 @@ Always build code cleanly, modularly, and with proper architecture and separatio
 
 Keep logic in the core. The UI may later move to Anomaly's Rust framework, and the core stays as it is.
 
+## UI components
+
+Build the UI from `@opencode/ui`. Anomaly's Rust framework ships `rune-kit`, whose components match `@opencode/ui` by name, variant and state. Screens built from it port to Rust by name.
+
+- Before you write a component, look for one in `@opencode/ui`. Its `package.json` exports list what it has. Its stories in `~/scmmishra/reference/opencode/packages/ui` show how to use each one.
+- Use the component as it is. Change its look with a class only when Desk's design needs it.
+- Take icons from its catalog through `app/src/renderer/icons.tsx`. Add a Desk glyph there only when the catalog has no icon for the job.
+- Colour with Desk's tokens. `index.css` points `@opencode/ui`'s tokens at Desk's palette, so its components draw in Desk's colours. Add a token to that bridge when a component reads one it lacks.
+- Write a component of your own only when no component fits. Say why in a comment.
+
 ## Run
 
 - `mise run dev` starts the app. It opens `DESK_DIR` if set, then the most recent project, then asks for one. ⌘O opens another folder. Recent projects live in `projects.json` in the app's data folder.
@@ -49,3 +59,6 @@ T3 Code and OpenCode are cloned in `~/scmmishra/reference`. T3 Code's server sho
 ## Known quirks
 
 - A Desk started from inside Claude Code inherits that session's `CLAUDECODE` and `CLAUDE_CODE_*` variables. Claude sessions that Desk starts would then take themselves for children of that session. The core removes those variables at start.
+- `@opencode/ui`'s `menu.css` sits outside Tailwind's layers. Its rules beat utility classes, so an override needs `!`.
+- An `@opencode/ui` popover closes when focus leaves its content. A menu inside a popover must render without `Menu.Portal`.
+- `@opencode/ui` names its source before its types, so TypeScript checks its `.tsx` files under the app's tsconfig. The app's tsconfig turns off `verbatimModuleSyntax` and uses the ES2025 lib for that.
