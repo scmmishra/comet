@@ -1,5 +1,5 @@
 import { query, type CanUseTool, type PermissionResult, type Query, type SDKRateLimitInfo, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
-import { DEFAULT_MODEL, type Effort, type ThreadEvent } from "@desk/protocol"
+import { DEFAULT_MODEL, type RunSettings, type ThreadEvent } from "@desk/protocol"
 import { ThreadMapper } from "./thread"
 
 type Emit = (event: ThreadEvent) => void
@@ -37,8 +37,7 @@ class Inbox implements AsyncIterable<SDKUserMessage> {
 export interface SessionOptions {
   /** A Claude session to continue, from an earlier run of Desk. */
   readonly resume?: string
-  readonly model: string
-  readonly effort?: Effort
+  readonly settings: RunSettings
   /** Called when Claude names the session, so it can be resumed later. */
   readonly onSessionId?: (id: string) => void
   /** Called with each plan rate-limit update Claude sends during a turn. */
@@ -53,8 +52,7 @@ export class Session {
   private permissions = new Map<string, (result: PermissionResult) => void>()
   private sent = 0
   private sessionId?: string
-  private model: string
-  private effort?: Effort
+  private settings: RunSettings
 
   constructor(
     private readonly dir: string,
@@ -62,18 +60,17 @@ export class Session {
     private readonly options: SessionOptions,
   ) {
     this.sessionId = options.resume
-    this.model = options.model
-    this.effort = options.effort
+    this.settings = options.settings
   }
 
-  /** Changes the model and effort. A running thread takes them from its next reply. */
-  async configure(model: string, effort: Effort | undefined) {
-    this.model = model
-    this.effort = effort
+  /** Changes how the thread runs. A running thread takes the change from its next reply. */
+  async configure(settings: RunSettings) {
+    this.settings = settings
     if (!this.query) return
-    await this.query.setModel(sdkModel(model))
-    // null drops the session's effort, so the model's default applies again.
-    await this.query.applyFlagSettings({ effortLevel: effort ?? null })
+    await this.query.setModel(sdkModel(settings.model))
+    // null drops a flag, so the model's default effort, or standard speed, applies again.
+    await this.query.applyFlagSettings({ effortLevel: settings.effort ?? null, fastMode: settings.fast || null })
+    await this.query.setPermissionMode(settings.permissionMode)
   }
 
   send(text: string) {
@@ -110,8 +107,13 @@ export class Session {
         includePartialMessages: true,
         systemPrompt: { type: "preset", preset: "claude_code" },
         canUseTool: this.askPermission,
-        model: sdkModel(this.model),
-        ...(this.effort ? { effort: this.effort } : {}),
+        model: sdkModel(this.settings.model),
+        ...(this.settings.effort ? { effort: this.settings.effort } : {}),
+        ...(this.settings.fast ? { settings: { fastMode: true } } : {}),
+        permissionMode: this.settings.permissionMode,
+        // Full access needs this at start. Passing it always lets a thread switch to Full access later.
+        // It allows the mode and does not set it.
+        allowDangerouslySkipPermissions: true,
         ...(this.sessionId ? { resume: this.sessionId } : {}),
       },
     })
@@ -162,3 +164,7 @@ export class Session {
 
 /** Claude Code's default model is the absence of a model option. */
 const sdkModel = (model: string) => (model === DEFAULT_MODEL ? undefined : model)
+
+/** Whether two tabs run the same way, so a save can skip reconfiguring a session. */
+export const sameRunSettings = (a: RunSettings, b: RunSettings) =>
+  a.model === b.model && a.effort === b.effort && !!a.fast === !!b.fast && a.permissionMode === b.permissionMode

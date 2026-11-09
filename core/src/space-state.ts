@@ -39,8 +39,11 @@ export function loadSpaceState(dir: string): SpaceState {
   try {
     const parsed = JSON.parse(readFileSync(spaceStatePath(dir), "utf8")) as Partial<SpaceState>
     const tabs = Array.isArray(parsed.tabs) ? parsed.tabs : []
-    // Files saved before panel terminals or models were saved lack them.
-    return { tabs: tabs.map((tab) => ({ ...tab, terminals: tab.terminals ?? [], model: tab.model ?? DEFAULT_MODEL })), active: parsed.active }
+    // Files saved before panel terminals, models or permission modes were saved lack them.
+    return {
+      tabs: tabs.map((tab) => ({ ...tab, terminals: tab.terminals ?? [], model: tab.model ?? DEFAULT_MODEL, permissionMode: tab.permissionMode ?? "default" })),
+      active: parsed.active,
+    }
   } catch {
     return EMPTY
   }

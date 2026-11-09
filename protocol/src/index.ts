@@ -78,6 +78,23 @@ export const DEFAULT_MODEL = "default"
 /** How much Claude thinks before it answers. */
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max"
 
+/**
+ * How Claude Code handles tool calls, as T3 Code names them: Supervised asks first, Auto-accept edits
+ * lets edits through, Auto lets a classifier decide, and Full access never asks.
+ */
+export type PermissionMode = "default" | "acceptEdits" | "auto" | "bypassPermissions"
+
+/** How a tab's thread runs. A change applies to a running thread from its next reply. */
+export interface RunSettings {
+  /** The model, as a ModelOption value. */
+  readonly model: string
+  /** Absent means the model's default effort. */
+  readonly effort?: Effort
+  /** Fast mode, on a model that has it. */
+  readonly fast?: boolean
+  readonly permissionMode: PermissionMode
+}
+
 /** A model Claude Code offers the account, as its /model menu lists it. */
 export interface ModelOption {
   /** What a session is started with, such as "opus". "default" is Claude Code's own default. */
@@ -90,6 +107,10 @@ export interface ModelOption {
   readonly efforts: readonly Effort[]
   /** The effort Claude Code uses when the tab sets none, after the user's own settings. */
   readonly defaultEffort?: Effort
+  /** Whether the model has fast mode. */
+  readonly fast: boolean
+  /** Whether the model takes the Auto permission mode. */
+  readonly autoMode: boolean
 }
 
 /** A past thread in the space, as Claude Code saved it. */
@@ -111,17 +132,13 @@ export interface TerminalInfo {
 }
 
 /** A top tab as the app shows it. The core saves tabs per space and sends them back on connect. */
-export interface TabInfo {
+export interface TabInfo extends RunSettings {
   readonly id: string
   readonly title: string
   /** The terminals in this tab's panel, in order. The core closes any shell that no tab lists. */
   readonly terminals: readonly TerminalInfo[]
   /** The panel tab on show, as a terminal's id. Absent means Review. */
   readonly panelActive?: string
-  /** The model this tab's thread runs on, as a ModelOption value. */
-  readonly model: string
-  /** Absent means the model's default effort. */
-  readonly effort?: Effort
 }
 
 export type ClientMessage =

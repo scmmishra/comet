@@ -17,15 +17,15 @@ test("names the file after the folder and a hash of its path", () => {
 })
 
 test("saves and loads a space's tabs", () => {
-  const tab = { id: "t1", title: "Fix tabs", sessionId: "s1", terminals: [{ id: "x1", title: "Terminal" }], panelActive: "x1", model: "opus", effort: "high" as const }
+  const tab = { id: "t1", title: "Fix tabs", sessionId: "s1", terminals: [{ id: "x1", title: "Terminal" }], panelActive: "x1", model: "opus", effort: "high" as const, fast: true, permissionMode: "acceptEdits" as const }
   saveSpaceState("/work/desk", { tabs: [tab], active: "t1" })
   expect(loadSpaceState("/work/desk")).toEqual({ tabs: [tab], active: "t1" })
 })
 
-test("gives tabs saved before terminals and models were saved no terminals and the default model", () => {
+test("gives tabs saved before terminals, models and permission modes the defaults", () => {
   mkdirSync(dirname(spaceStatePath("/work/old")), { recursive: true })
   writeFileSync(spaceStatePath("/work/old"), JSON.stringify({ tabs: [{ id: "t1", title: "Old" }] }))
-  expect(loadSpaceState("/work/old")).toEqual({ tabs: [{ id: "t1", title: "Old", terminals: [], model: "default" }], active: undefined })
+  expect(loadSpaceState("/work/old")).toEqual({ tabs: [{ id: "t1", title: "Old", terminals: [], model: "default", permissionMode: "default" }], active: undefined })
 })
 
 test("starts empty when nothing is saved", () => {

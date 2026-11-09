@@ -46,6 +46,8 @@ export function modelOptions(models: readonly ModelInfo[], defaultEfforts: Reado
       ...(model.resolvedModel ? { resolvedModel: model.resolvedModel } : {}),
       efforts: model.supportsEffort ? (model.supportedEffortLevels ?? []) : [],
       ...(defaultEffort ? { defaultEffort } : {}),
+      fast: !!model.supportsFastMode,
+      autoMode: !!model.supportsAutoMode,
     }
   })
 }

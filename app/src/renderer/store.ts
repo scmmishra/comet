@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL, type CoreMessage, type Effort, type FileChange, type ModelOption, type PlanUsage, type Space, type TabInfo, type ThreadEvent, type ThreadSummary } from "@desk/protocol"
+import { DEFAULT_MODEL, type CoreMessage, type FileChange, type ModelOption, type PlanUsage, type RunSettings, type Space, type TabInfo, type ThreadEvent, type ThreadSummary } from "@desk/protocol"
 import { batch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
@@ -14,14 +14,14 @@ export type Item = { arrivedAt?: number } & (
   | { readonly type: "error"; readonly id: string; readonly message: string }
 )
 
-export interface Tab {
+/** A tab's run settings are writable here, so the picker can change them. */
+type Writable<T> = { -readonly [K in keyof T]: T[K] }
+
+export interface Tab extends Writable<RunSettings> {
   readonly id: string
   title: string
   items: Item[]
   busy: boolean
-  /** The model and effort chosen for this thread. */
-  model: string
-  effort?: Effort
   /** The model that ran, as the session reported it. */
   resolvedModel?: string
   context?: { percent: number; tokens: number; maxTokens: number }
@@ -69,6 +69,8 @@ export function newTab(place: "end" | "next" = "end"): string {
     busy: false,
     model: from?.model ?? DEFAULT_MODEL,
     effort: from?.effort,
+    fast: from?.fast,
+    permissionMode: from?.permissionMode ?? "default",
     panelTabs: [REVIEW_TAB],
     panelActive: REVIEW_TAB.id,
   }
@@ -114,11 +116,11 @@ export function send(text: string) {
   core.send({ type: "session.send", sessionId: tab.id, text })
 }
 
-/** Sets the active tab's model and effort. A running thread takes them from its next reply. */
-export function chooseModel(model: string, effort: Effort | undefined) {
+/** Changes how the active tab's thread runs. A running thread takes the change from its next reply. */
+export function updateRunSettings(change: Partial<RunSettings>) {
   const tab = activeTab()
   if (!tab) return
-  setState("tabs", (found) => found.id === tab.id, { model, effort })
+  setState("tabs", (found) => found.id === tab.id, change)
   saveTabs()
 }
 
@@ -221,6 +223,8 @@ function saveTabs() {
       panelActive: tab.panelActive === REVIEW_TAB.id ? undefined : tab.panelActive,
       model: tab.model,
       effort: tab.effort,
+      fast: tab.fast,
+      permissionMode: tab.permissionMode,
     })),
     active: state.active,
   })
@@ -235,7 +239,7 @@ function restoreTabs(tabs: readonly TabInfo[], active: string | undefined) {
   setState({
     tabs: tabs.map((tab) => {
       const panelTabs: PanelTab[] = [REVIEW_TAB, ...tab.terminals.map((terminal) => ({ kind: "terminal" as const, ...terminal }))]
-      return { id: tab.id, title: tab.title, items: [], busy: false, model: tab.model, effort: tab.effort, panelTabs, panelActive: tab.panelActive ?? REVIEW_TAB.id }
+      return { id: tab.id, title: tab.title, items: [], busy: false, model: tab.model, effort: tab.effort, fast: tab.fast, permissionMode: tab.permissionMode, panelTabs, panelActive: tab.panelActive ?? REVIEW_TAB.id }
     }),
     active: active ?? tabs[0]!.id,
   })
