@@ -22,7 +22,16 @@ Keep logic in the core. The UI may later move to Anomaly's Rust framework, and t
 ## Run
 
 - `mise run dev` starts the app. Set `DESK_DIR` to the repo to open. It defaults to this repo.
+- The app starts the core with `bun` from `PATH`. Set `DESK_BUN` to use another binary. The core needs Bun 1.4 or newer.
 - `mise run check` typechecks, runs the core tests and builds the app.
+
+## Check the UI
+
+Do not take screen captures. Start the app with `DESK_DEBUG_PORT=9333`, then drive the page with agent-browser: `agent-browser connect 9333`, `snapshot -i`, `fill`, `press`, `get text`, and `screenshot` of the page.
+
+## References
+
+T3 Code and OpenCode are cloned in `~/scmmishra/reference`. T3 Code's server shows how to drive the Agent SDK and shape thread items. OpenCode's `packages/ui` and `packages/session-ui` show how `@opencode/ui` is meant to be used.
 
 ## Glossary
 
