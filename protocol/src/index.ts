@@ -1,37 +1,64 @@
 /** Messages between the Desk app and the core, sent as JSON over one WebSocket. */
 
-export const PROTOCOL_VERSION = 2
-
 /** The line the core prints on stdout once it listens, so the app knows where to connect. */
 export interface CoreReady {
-  readonly ready: true
   readonly port: number
 }
 
-/**
- * One step of a thread, already shaped for drawing. The core turns the Agent SDK's messages into
- * these, so the app never reads SDK types.
- */
-export type ThreadEvent =
-  /** `at` is when it was sent, in milliseconds since the epoch, when that is known. */
-  | { readonly kind: "user"; readonly id: string; readonly text: string; readonly at?: number }
-  /** Assistant text. A later event with the same id replaces the text; `delta` appends to it. */
-  /** `at` is when the text finished, when that is known. A text still streaming has none. */
-  | { readonly kind: "text"; readonly id: string; readonly text: string; readonly done: boolean; readonly at?: number }
-  | { readonly kind: "text.delta"; readonly id: string; readonly delta: string }
-  | { readonly kind: "thinking"; readonly id: string }
-  | { readonly kind: "tool"; readonly id: string; readonly name: string; readonly input: Record<string, unknown> }
-  | { readonly kind: "tool.result"; readonly id: string; readonly output: string; readonly isError: boolean }
-  | { readonly kind: "permission"; readonly id: string; readonly tool: string; readonly input: Record<string, unknown> }
-  | { readonly kind: "permission.resolved"; readonly id: string; readonly allowed: boolean }
-  | { readonly kind: "result"; readonly id: string; readonly durationMs: number; readonly costUsd?: number; readonly isError: boolean }
-  | { readonly kind: "status"; readonly busy: boolean }
-  | { readonly kind: "init"; readonly model: string }
-  /** How full the context window is, read after each turn. */
-  | { readonly kind: "context"; readonly percent: number; readonly tokens: number; readonly maxTokens: number }
-  | { readonly kind: "error"; readonly id: string; readonly message: string }
+/** How full a thread's context window is. */
+export interface ContextReading {
+  readonly percent: number
+  readonly tokens: number
+  readonly maxTokens: number
+}
 
-/** The repo and branch the window shows, for the Space card. */
+/** The before and after text of one edit a tool made. */
+export interface TextEdit {
+  readonly before: string
+  readonly after: string
+}
+
+/**
+ * One item of a thread, shaped for drawing. The core turns the Agent SDK's messages into these, so the
+ * app never reads SDK types or tool inputs. Items are told apart by id within their thread.
+ */
+export type ThreadItem =
+  /** `at` is when it was sent, in milliseconds since the epoch, when that is known. */
+  | { readonly type: "user"; readonly id: string; readonly text: string; readonly at?: number }
+  /** Assistant text. `at` is when it finished. Text still streaming is not done and has none. */
+  | { readonly type: "text"; readonly id: string; readonly text: string; readonly done: boolean; readonly at?: number }
+  | { readonly type: "thinking"; readonly id: string }
+  /**
+   * A tool call. `summary` is what it was given in short, such as its command or path, relative to the
+   * project. A call that edits a file carries the file's path and its edits.
+   */
+  | {
+      readonly type: "tool"
+      readonly id: string
+      readonly name: string
+      readonly summary: string
+      readonly file?: string
+      readonly edits?: readonly TextEdit[]
+      readonly result?: { readonly output: string; readonly isError: boolean }
+    }
+  /** A tool call waiting for the user. `detail` is its input in full. `requestId` answers it. */
+  | { readonly type: "permission"; readonly id: string; readonly requestId: string; readonly tool: string; readonly detail: string; readonly answer?: boolean }
+  /** The end of a turn. */
+  | { readonly type: "result"; readonly id: string; readonly durationMs: number; readonly isError: boolean }
+  | { readonly type: "error"; readonly id: string; readonly message: string }
+
+/** A change to a thread. An item replaces the item with the same id, or joins the thread after the others. */
+export type ThreadEvent =
+  | { readonly kind: "item"; readonly item: ThreadItem }
+  /** More text for a text item still streaming. */
+  | { readonly kind: "text.delta"; readonly id: string; readonly delta: string }
+  | { readonly kind: "status"; readonly busy: boolean }
+  /** The model that runs, as the session reports it. */
+  | { readonly kind: "init"; readonly model: string }
+  /** Read after each turn. */
+  | { readonly kind: "context"; readonly reading: ContextReading }
+
+/** The repo and branch a project is on, for the Space card. */
 export interface Space {
   readonly name: string
   readonly root: string
@@ -70,15 +97,17 @@ export interface UsageWindow {
   readonly resetsAt?: string
 }
 
+/** Plan usage. It has at least one window. */
 export interface PlanUsage {
-  readonly windows: readonly UsageWindow[]
+  readonly windows: readonly [UsageWindow, ...UsageWindow[]]
 }
 
 /** Claude Code's own default model, as a ModelOption value. */
 export const DEFAULT_MODEL = "default"
 
-/** How much Claude thinks before it answers. */
-export type Effort = "low" | "medium" | "high" | "xhigh" | "max"
+/** How much Claude thinks before it answers, from least to most. */
+export const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const
+export type Effort = (typeof EFFORTS)[number]
 
 /**
  * How Claude Code handles tool calls, as T3 Code names them: Supervised asks first, Auto-accept edits
@@ -115,7 +144,7 @@ export interface ModelOption {
   readonly autoMode: boolean
 }
 
-/** A past thread in the space, as Claude Code saved it. */
+/** A past thread in a project, as Claude Code saved it. */
 export interface ThreadSummary {
   /** Claude's session id, which resumes the thread. */
   readonly id: string
@@ -128,7 +157,11 @@ export interface ThreadSummary {
 }
 
 /** How the window draws itself. Auto follows the system. */
-export type ThemeChoice = "dark" | "light" | "auto"
+export const THEMES = ["dark", "light", "auto"] as const
+export type ThemeChoice = (typeof THEMES)[number]
+
+/** Thread text sizes Desk allows, in px. Outside them, text either crowds or no longer fits a line. */
+export const FONT_SIZES = { min: 11, max: 20 } as const
 
 export interface AppearanceSettings {
   readonly theme: ThemeChoice
@@ -178,8 +211,10 @@ export interface ClaudeAccount {
 export interface McpServer {
   readonly name: string
   readonly status: "connected" | "failed" | "needs-auth" | "pending" | "disabled"
-  /** Where it is configured, such as "user", "project" or "local". */
+  /** Where it is configured, as Claude Code names it, such as "user" or "project". */
   readonly scope?: string
+  /** Whether it is configured for this project only, rather than for every project. */
+  readonly ownProject: boolean
   /** What the server runs: its command, or its URL. */
   readonly target?: string
   /** The tools it offers, when connected. */
@@ -188,15 +223,15 @@ export interface McpServer {
   readonly error?: string
 }
 
-/** A skill or custom command Claude Code offers in a project. */
+/** A skill or custom command Claude Code offers in a project. The core lists skills grouped by `group`, in order. */
 export interface Skill {
   /** What follows the slash, such as "pdf" or "figma:figma-use". */
   readonly name: string
   readonly description: string
-  /** Where it comes from, as Claude Code marks it: "user", "project", "claude.ai sync", a plugin's name, or "other". */
-  readonly source: string
-  /** Set when a plugin ships it. */
-  readonly plugin?: boolean
+  /** Whether it lives in this project, rather than being available to every project. */
+  readonly ownProject: boolean
+  /** Where a skill available to every project comes from, such as "User" or "Plugin: figma". */
+  readonly group: string
 }
 
 export interface DeskSettings {
@@ -213,11 +248,21 @@ export const DEFAULT_SETTINGS: DeskSettings = {
   projects: {},
 }
 
-/** A command saved for the space, such as a dev server. The core runs it in the background. */
+/**
+ * A change to the settings. Named fields change and the rest stay. JSON has no undefined, so null
+ * clears an optional field. A project's settings replace what the project had.
+ */
+export interface SettingsChange {
+  readonly appearance?: Partial<AppearanceSettings>
+  readonly claude?: Partial<Omit<ClaudeSettings, "effort">> & { readonly effort?: Effort | null }
+  readonly project?: { readonly dir: string; readonly settings: ProjectSettings }
+}
+
+/** A command saved for a project, such as a dev server. The core runs it in the background. */
 export interface SpaceCommand {
   readonly id: string
   readonly name: string
-  /** A shell command line, run at the space's root. */
+  /** A shell command line, run in the project's folder. */
   readonly command: string
   /** Commands that share a group show as one row and run and stop together, as Rune's did. */
   readonly group?: string
@@ -244,12 +289,34 @@ export interface CommandInfo extends SpaceCommand {
   readonly run: CommandRun
 }
 
-/** A file in the space that defines commands, such as a Procfile, and the commands found in it. */
+/** A file in a project that defines commands, such as a Procfile, and the commands found in it. */
 export interface CommandSource {
   /** What the menu calls it, such as "Procfile.dev" or "package.json". */
   readonly name: string
   readonly commands: readonly { readonly name: string; readonly command: string }[]
 }
+
+/**
+ * What Desk reads about a project, by part. The app asks for a part and the core answers with a
+ * `project` message. Commands are sent again whenever they change, such as a command's run. MCP
+ * servers are sent again while they connect, to the client that asked.
+ */
+export interface ProjectParts {
+  /** Null when the folder is not a Git repo. */
+  readonly space: Space | null
+  readonly commands: readonly CommandInfo[]
+  /** Commands the project's files define, for the import menu. */
+  readonly commandSources: readonly CommandSource[]
+  /** The project's recent threads, open in a tab or not. */
+  readonly threads: readonly ThreadSummary[]
+  /** Images in the project that look like its logo, as paths relative to it. The core serves each at `/project-icon`. */
+  readonly icons: readonly string[]
+  /** Null when Claude Code could not be asked. Reading starts the servers, so it takes a few seconds. */
+  readonly mcp: readonly McpServer[] | null
+  /** Skills and custom commands. Null when Claude Code could not be asked. */
+  readonly skills: readonly Skill[] | null
+}
+export type ProjectPart = keyof ProjectParts
 
 /** A terminal in a tab's panel. Its shell runs in the core under this id. */
 export interface TerminalInfo {
@@ -258,8 +325,8 @@ export interface TerminalInfo {
 }
 
 /**
- * A top tab as the app shows it. The core saves the window's tabs, in their order, and sends them back
- * on connect. Each tab works in one project.
+ * A top tab as the app keeps it. The core saves the window's tabs, in their order, as the app sends
+ * them, and sends them back on connect. Each tab works in one project.
  */
 export interface TabInfo extends RunSettings {
   readonly id: string
@@ -277,37 +344,18 @@ export interface TabInfo extends RunSettings {
  * thread or panel name the tab or terminal, and the core finds the project from the saved tabs.
  */
 export type ClientMessage =
-  | { readonly type: "ping"; readonly id: number }
-  | { readonly type: "settings.get" }
-  /** Changes the named settings and keeps the rest. A project's settings replace what it had. */
-  | {
-      readonly type: "settings.update"
-      readonly appearance?: Partial<AppearanceSettings>
-      readonly claude?: Partial<ClaudeSettings>
-      readonly project?: { readonly dir: string; readonly settings: ProjectSettings }
-    }
-  | { readonly type: "space.get"; readonly project: string }
-  /** Images in the project that look like its logo, for the icon picker. */
-  | { readonly type: "project.icons"; readonly project: string }
-  /** The MCP servers Claude Code loads in the project. Reading starts them, so it takes a few seconds. */
-  | { readonly type: "mcp.get"; readonly project: string }
-  /** The skills and custom commands Claude Code offers in the project. */
-  | { readonly type: "skills.get"; readonly project: string }
+  | { readonly type: "settings.update"; readonly change: SettingsChange }
+  | { readonly type: "project.get"; readonly project: string; readonly part: ProjectPart }
   /** Turns an MCP server on or off for the project. Claude Code keeps the choice. */
   | { readonly type: "mcp.toggle"; readonly project: string; readonly name: string; readonly enabled: boolean }
   | { readonly type: "usage.get" }
   | { readonly type: "models.get" }
-  /** The project's recent threads, open in a tab or not. */
-  | { readonly type: "threads.get"; readonly project: string }
   /** Continues a past thread in a tab that has not started one. */
-  | { readonly type: "thread.resume"; readonly sessionId: string; readonly threadId: string }
+  | { readonly type: "thread.resume"; readonly tabId: string; readonly threadId: string }
   /** Starts a terminal, or reattaches to one already running under this id. */
   | { readonly type: "terminal.open"; readonly id: string; readonly cols: number; readonly rows: number }
   | { readonly type: "terminal.input"; readonly id: string; readonly data: string }
   | { readonly type: "terminal.resize"; readonly id: string; readonly cols: number; readonly rows: number }
-  | { readonly type: "commands.get"; readonly project: string }
-  /** Looks for commands to import in the project's Procfiles, mise tasks and package.json. */
-  | { readonly type: "commands.discover"; readonly project: string }
   /**
    * Replaces the commands in `replacing` with `processes`, in their place. One process saves as a plain
    * command called `name`, several as a group called `name`. Adding replaces nothing.
@@ -315,52 +363,41 @@ export type ClientMessage =
   | { readonly type: "commands.save"; readonly project: string; readonly name: string; readonly processes: readonly CommandProcess[]; readonly replacing: readonly string[] }
   /** Removes commands, such as every command in a group, stopping those that run. */
   | { readonly type: "commands.remove"; readonly project: string; readonly ids: readonly string[] }
-  | { readonly type: "command.run"; readonly project: string; readonly id: string }
-  | { readonly type: "command.stop"; readonly project: string; readonly id: string }
-  /** Runs every command in the group that is not running. */
-  | { readonly type: "group.run"; readonly project: string; readonly group: string }
-  | { readonly type: "group.stop"; readonly project: string; readonly group: string }
+  /** Runs the commands that are not running, such as every command in a group. */
+  | { readonly type: "commands.run"; readonly project: string; readonly ids: readonly string[] }
+  | { readonly type: "commands.stop"; readonly project: string; readonly ids: readonly string[] }
   /** The files a tab's thread changed since its first message. */
-  | { readonly type: "review.get"; readonly sessionId: string }
+  | { readonly type: "review.get"; readonly tabId: string }
   /** The window's tabs, in order, sent whenever they change. */
   | { readonly type: "tabs.save"; readonly tabs: readonly TabInfo[]; readonly active?: string }
   /** Opens a file from the thread in the editor. The core refuses paths outside the project. */
   | { readonly type: "file.open"; readonly project: string; readonly path: string; readonly line?: number }
-  | { readonly type: "session.send"; readonly sessionId: string; readonly text: string }
-  | { readonly type: "session.interrupt"; readonly sessionId: string }
-  | { readonly type: "session.close"; readonly sessionId: string }
-  | { readonly type: "permission.answer"; readonly sessionId: string; readonly id: string; readonly allow: boolean }
+  | { readonly type: "session.send"; readonly tabId: string; readonly text: string }
+  | { readonly type: "session.interrupt"; readonly tabId: string }
+  | { readonly type: "permission.answer"; readonly tabId: string; readonly requestId: string; readonly allow: boolean }
 
 export type CoreMessage =
-  /** `project` is the folder a new tab opens in when the window has none. */
-  | { readonly type: "hello"; readonly protocol: number; readonly core: string; readonly bun: string; readonly project: string }
-  | { readonly type: "pong"; readonly id: number }
   /** Desk's settings, sent on connect and again after every change. */
   | { readonly type: "settings"; readonly settings: DeskSettings }
-  /** The window's saved tabs. Each restored tab's thread follows as a session.history message. */
+  /**
+   * The window's saved tabs, sent once on connect. Each restored tab's thread follows as a
+   * session.history message.
+   */
   | { readonly type: "tabs"; readonly tabs: readonly TabInfo[]; readonly active?: string }
-  | { readonly type: "threads"; readonly project: string; readonly threads: readonly ThreadSummary[] }
-  /** The models Claude Code offers, read once when the core starts. */
+  /** Folders tabs have opened, most recent first. Sent on connect, before the tabs, and when a tab opens a folder. */
+  | { readonly type: "recent"; readonly projects: readonly string[] }
+  | { [K in ProjectPart]: { readonly type: "project"; readonly project: string; readonly part: K; readonly value: ProjectParts[K] } }[ProjectPart]
+  /** The models Claude Code offers, read once when first asked. */
   | { readonly type: "models"; readonly models: readonly ModelOption[] }
   /** Who Claude Code is signed in as, read with the models. Absent when it is not signed in. */
   | { readonly type: "account"; readonly account?: ClaudeAccount }
   /** `usage` is absent when Claude has no plan limits, such as with an API key. */
   | { readonly type: "usage"; readonly usage?: PlanUsage }
-  | { readonly type: "review"; readonly sessionId: string; readonly files: readonly FileChange[] }
-  /** The project's commands and how each one runs, sent again on every change. */
-  | { readonly type: "commands"; readonly project: string; readonly commands: readonly CommandInfo[] }
-  | { readonly type: "commands.found"; readonly project: string; readonly sources: readonly CommandSource[] }
+  | { readonly type: "review"; readonly tabId: string; readonly files: readonly FileChange[] }
   | { readonly type: "terminal.output"; readonly id: string; readonly data: string }
   | { readonly type: "terminal.exit"; readonly id: string; readonly code: number }
-  /** `skills` is absent when Claude Code could not be asked. */
-  | { readonly type: "skills"; readonly project: string; readonly skills?: readonly Skill[] }
-  /** `servers` is absent when Claude Code could not be asked. */
-  | { readonly type: "mcp"; readonly project: string; readonly servers?: readonly McpServer[] }
-  /** Paths relative to the project. The core serves each at `/project-icon?dir=&path=&token=`. */
-  | { readonly type: "project.icons"; readonly project: string; readonly files: readonly string[] }
-  /** `space` is absent when the folder is not a Git repo. */
-  | { readonly type: "space"; readonly project: string; readonly space?: Space }
-  | { readonly type: "session.event"; readonly sessionId: string; readonly event: ThreadEvent }
+  | { readonly type: "session.event"; readonly tabId: string; readonly event: ThreadEvent }
   /** A restored thread, read back from Claude's transcript in one message, so the app can tell it from live events. */
-  | { readonly type: "session.history"; readonly sessionId: string; readonly events: readonly ThreadEvent[] }
+  | { readonly type: "session.history"; readonly tabId: string; readonly items: readonly ThreadItem[]; readonly context?: ContextReading }
+  /** Something the user asked for failed. The app shows the message. */
   | { readonly type: "error"; readonly message: string }
