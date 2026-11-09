@@ -27,8 +27,29 @@ export type ThreadEvent =
   | { readonly kind: "init"; readonly model: string }
   | { readonly kind: "error"; readonly id: string; readonly message: string }
 
+/** The repo and branch the window shows, for the Space card. */
+export interface Space {
+  readonly name: string
+  readonly root: string
+  readonly branch: string
+  /** Commits ahead of and behind the upstream branch, when there is one. */
+  readonly upstream?: { readonly ahead: number; readonly behind: number }
+  /** Uncommitted changes against HEAD, untracked files included. */
+  readonly changes: { readonly files: number; readonly additions: number; readonly deletions: number }
+  /** The branch's pull request, when `gh` finds one. */
+  readonly pr?: {
+    readonly number: number
+    readonly title: string
+    readonly url: string
+    readonly state: "OPEN" | "CLOSED" | "MERGED"
+    readonly draft: boolean
+    readonly checks: { readonly passed: number; readonly failed: number; readonly pending: number }
+  }
+}
+
 export type ClientMessage =
   | { readonly type: "ping"; readonly id: number }
+  | { readonly type: "space.get" }
   | { readonly type: "session.send"; readonly sessionId: string; readonly text: string }
   | { readonly type: "session.interrupt"; readonly sessionId: string }
   | { readonly type: "session.close"; readonly sessionId: string }
@@ -37,5 +58,7 @@ export type ClientMessage =
 export type CoreMessage =
   | { readonly type: "hello"; readonly protocol: number; readonly core: string; readonly bun: string }
   | { readonly type: "pong"; readonly id: number }
+  /** `space` is absent when the folder is not a Git repo. */
+  | { readonly type: "space"; readonly space?: Space }
   | { readonly type: "session.event"; readonly sessionId: string; readonly event: ThreadEvent }
   | { readonly type: "error"; readonly message: string }

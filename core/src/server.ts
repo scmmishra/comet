@@ -2,6 +2,7 @@ import { PROTOCOL_VERSION, type ClientMessage, type CoreMessage } from "@desk/pr
 import type { ServerWebSocket } from "bun"
 import pkg from "../package.json"
 import { Session } from "./session"
+import { readSpace } from "./space"
 
 export interface CoreServer {
   readonly port: number
@@ -39,6 +40,8 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
     switch (message.type) {
       case "ping":
         return send(ws, { type: "pong", id: message.id })
+      case "space.get":
+        return void readSpace(dir).then((space) => send(ws, { type: "space", space }))
       case "session.send":
         return session(message.sessionId).send(message.text)
       case "session.interrupt":
