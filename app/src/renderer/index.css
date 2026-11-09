@@ -504,3 +504,63 @@ body {
 .desk-terminal textarea {
   caret-color: transparent;
 }
+
+/*
+ * The command palette, after T3 Code's: a bare search field over a line, plain section labels,
+ * and a footer of key hints. The search list's rules sit outside Tailwind's layers, so these
+ * selectors carry the dialog's attribute to outrank them.
+ */
+/* The palette sits in the window's upper part, so its height can change without the field moving. */
+[data-component="dialog-v2"]:has(> .desk-palette) {
+  align-items: flex-start;
+  padding-top: 14vh;
+}
+[data-component="dialog-v2"][data-size] [data-slot="dialog-container"].desk-palette {
+  width: 576px;
+  height: auto;
+  max-height: min(30rem, 70vh);
+  border-radius: var(--radius-3xl);
+  box-shadow: var(--v2-elevation-overlay), inset 0 0 0 1px var(--color-outline);
+}
+[data-component="dialog-v2"] .desk-palette [data-component="search-list"] {
+  --search-list-surface: var(--v2-background-bg-layer-01);
+  [data-slot="search-list-search"] {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--v2-border-border-base);
+    [data-component="text-input-v2"],
+    [data-component="text-input-v2"]:where(:hover, :focus-within):not([data-disabled], [data-invalid]) {
+      height: 40px;
+      background: transparent;
+    }
+    input {
+      font-size: 14px;
+    }
+  }
+  [data-slot="search-list-results"] {
+    padding: 6px 8px 8px;
+  }
+  [data-slot="search-list-header"] {
+    height: 26px;
+    margin-inline: -8px;
+    padding-inline: 18px;
+    font-size: 12px;
+  }
+  [data-slot="search-list-row"] {
+    gap: 12px;
+    border-radius: var(--radius-xl);
+  }
+  /* A shortcut reads as one word, such as ⌘T, as T3 Code prints it. */
+  [data-slot="search-list-row"] [data-component="keybind-v2"][data-variant="ghost"] {
+    gap: 0;
+    [data-slot="keybind-v2-key"] {
+      min-width: 0;
+      padding-inline: 1px;
+    }
+  }
+  [data-slot="search-list-footer"] {
+    padding: 9px 16px;
+    border-top: 1px solid var(--v2-border-border-base);
+    background: color-mix(in srgb, var(--color-fg) 2.5%, transparent);
+    font-size: 12px;
+  }
+}

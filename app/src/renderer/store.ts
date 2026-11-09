@@ -229,20 +229,26 @@ export function updateRunSettings(change: Partial<RunSettings>) {
   saveTabs()
 }
 
-export function refreshThreads() {
-  core.send({ type: "threads.get", project: activeProject() })
+/** Asks the core for a project's threads, the active tab's project by default. */
+export function refreshThreads(project = activeProject()) {
+  core.send({ type: "threads.get", project })
 }
 
+/** The threads the window knows for a project. */
+export const projectThreads = (project: string): readonly ThreadSummary[] => state.projects[project]?.threads ?? []
+
 /**
- * Shows a past thread: its tab if one has it open, else the active tab when that tab has not started
- * a thread, else a new tab. Its history follows from the core.
+ * Shows a past thread of `project`, the active tab's project by default: its tab if one has it open,
+ * else the active tab when that tab works in the project and has not started a thread, else a new tab
+ * in the project. Its history follows from the core.
  */
-export function openThread(thread: ThreadSummary) {
+export function openThread(thread: ThreadSummary, project = activeProject()) {
   if (thread.tabId) return selectTab(thread.tabId)
-  if (activeTab()?.items.length !== 0) newTab()
+  const active = activeTab()
+  if (active?.project !== project || active.items.length !== 0) newTab("end", project)
   const tab = activeTab()!
   setState("tabs", (found) => found.id === tab.id, "title", titleFrom(thread.title))
-  updateProject(tab.project, (data) => ({ threads: data.threads.map((found) => (found.id === thread.id ? { ...found, tabId: tab.id } : found)) }))
+  updateProject(project, (data) => ({ threads: data.threads.map((found) => (found.id === thread.id ? { ...found, tabId: tab.id } : found)) }))
   saveTabs()
   core.send({ type: "thread.resume", sessionId: tab.id, threadId: thread.id })
 }
