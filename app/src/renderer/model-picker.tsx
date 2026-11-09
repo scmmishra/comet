@@ -1,11 +1,18 @@
 import type { Effort, ModelOption } from "@desk/protocol"
-import { createMemo, createSignal, For, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { modelLabel } from "./format"
 import { Icon } from "./icons"
 import { createPopover, PopoverPanel } from "./popover"
 import { chooseModel, state, type Tab } from "./store"
 
 const EFFORT_LABEL: Record<Effort, string> = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max" }
+
+/**
+ * ⌘1–⌘9 belong to the app menu, which switches tabs, and macOS hands menu shortcuts the key before
+ * the page. While the picker is open, the menu's command asks it first.
+ */
+let pickByNumber: ((index: number) => boolean) | undefined
+export const pickModelByNumber = (index: number) => pickByNumber?.(index) ?? false
 
 /**
  * Aliases such as "opus" follow the newest model of a family, so they lead the list. Pinned
@@ -47,16 +54,16 @@ export function ModelPicker(props: { tab: Tab }) {
   const pickModel = (option: ModelOption) => chooseModel(option.value, props.tab.effort && option.efforts.includes(props.tab.effort) ? props.tab.effort : undefined)
 
   // ⌘1–⌘9 pick an alias while the popover is open.
-  const onKey = (event: KeyboardEvent) => {
-    if (!popover.isOpen() || !event.metaKey || !/^[1-9]$/.test(event.key)) return
-    const option = aliases()[Number(event.key) - 1]
-    if (!option) return
-    event.preventDefault()
-    event.stopPropagation()
-    pickModel(option)
+  const pickNumber = (index: number) => {
+    const option = aliases()[index]
+    if (option) pickModel(option)
+    return !!option
   }
-  document.addEventListener("keydown", onKey, true)
-  onCleanup(() => document.removeEventListener("keydown", onKey, true))
+  createEffect(() => {
+    if (popover.isOpen()) pickByNumber = pickNumber
+    else if (pickByNumber === pickNumber) pickByNumber = undefined
+  })
+  onCleanup(() => pickByNumber === pickNumber && (pickByNumber = undefined))
 
   return (
     <div class="ml-auto" onClick={(event) => event.stopPropagation()}>

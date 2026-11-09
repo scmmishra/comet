@@ -4,7 +4,7 @@ import { Composer } from "./composer"
 import { formatAgo } from "./format"
 import { Icon } from "./icons"
 import { createPopover, PopoverPanel } from "./popover"
-import { refreshThreads, resumeThread, state, type Tab } from "./store"
+import { openThread, refreshThreads, state, type Tab } from "./store"
 
 /** A new tab: the composer, the project and branch it works in, and threads to pick up again. */
 export function StartScreen(props: { tab: Tab }) {
@@ -103,13 +103,14 @@ function ProjectSwitcher() {
 
 /** Threads in this space that no tab has open. Picking one continues it in this tab. */
 function RecentThreads() {
+  const closed = () => state.threads.filter((thread) => !thread.tabId).slice(0, 8)
   return (
-    <Show when={state.threads.length > 0}>
+    <Show when={closed().length > 0}>
       <section class="grid gap-1 pt-2">
         <h2 class="px-2 pb-1 text-[12px] text-fg-3">Recent threads</h2>
-        <For each={state.threads.slice(0, 8)}>
+        <For each={closed()}>
           {(thread) => (
-            <button type="button" class="group flex h-9 min-w-0 items-center gap-3 rounded-lg px-2 text-left hover:bg-hover" onClick={() => resumeThread(thread)}>
+            <button type="button" class="group flex h-9 min-w-0 items-center gap-3 rounded-lg px-2 text-left hover:bg-hover" onClick={() => openThread(thread)}>
               <span class="min-w-0 flex-1 truncate text-fg-2 group-hover:text-fg">{thread.title}</span>
               <Show when={thread.branch && thread.branch !== state.space?.branch}>
                 <span class="flex shrink-0 items-center gap-1 text-[12px] text-fg-3">
@@ -117,7 +118,7 @@ function RecentThreads() {
                   {thread.branch}
                 </span>
               </Show>
-              <span class="w-8 shrink-0 text-right text-[12px] tabular-nums text-fg-3">{formatAgo(thread.updatedAt)}</span>
+              <span class="w-12 shrink-0 whitespace-nowrap text-right text-[12px] tabular-nums text-fg-3">{formatAgo(thread.updatedAt)}</span>
             </button>
           )}
         </For>

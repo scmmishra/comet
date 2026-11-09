@@ -48,7 +48,7 @@ const [state, setState] = createStore({
   space: undefined as Space | undefined,
   usage: undefined as PlanUsage | undefined,
   models: [] as readonly ModelOption[],
-  /** The space's recent threads that no tab has open, for the start screen. */
+  /** The space's recent threads, for the start screen and thread search. */
   threads: [] as readonly ThreadSummary[],
   /** Whether the panel beside the thread is open. A per-window preference, so it lives in the page's storage. */
   panelOpen: localStorage.getItem(PANEL_KEY) === "open",
@@ -126,12 +126,16 @@ export function refreshThreads() {
   core.send({ type: "threads.get" })
 }
 
-/** Continues a past thread in the active tab, which has not started one. Its history follows from the core. */
-export function resumeThread(thread: ThreadSummary) {
-  const tab = activeTab()
-  if (!tab) return
+/**
+ * Shows a past thread: its tab if one has it open, else the active tab when that tab has not started
+ * a thread, else a new tab. Its history follows from the core.
+ */
+export function openThread(thread: ThreadSummary) {
+  if (thread.tabId) return selectTab(thread.tabId)
+  if (activeTab()?.items.length !== 0) newTab()
+  const tab = activeTab()!
   setState("tabs", (found) => found.id === tab.id, "title", titleFrom(thread.title))
-  setState("threads", (threads) => threads.filter((found) => found.id !== thread.id))
+  setState("threads", (threads) => threads.map((found) => (found.id === thread.id ? { ...found, tabId: tab.id } : found)))
   saveTabs()
   core.send({ type: "thread.resume", sessionId: tab.id, threadId: thread.id })
 }

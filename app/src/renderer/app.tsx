@@ -3,11 +3,13 @@ import { ProjectAvatar } from "./avatar"
 import { Composer } from "./composer"
 import { Icon } from "./icons"
 import { ContextRing, UsageButton } from "./meters"
+import { pickModelByNumber } from "./model-picker"
 import { ReviewView } from "./review"
 import { SpaceCard, SpaceChip } from "./space"
 import { StartScreen } from "./start-screen"
 import { activeTab, closePanelTab, closeTab, newTab, newTerminal, refreshSpace, refreshUsage, selectPanelTab, selectTab, selectTabAt, state, togglePanel, type Tab } from "./store"
 import { TerminalView } from "./terminal"
+import { ThreadSearch, toggleThreadSearch } from "./thread-search"
 import { Thread } from "./thread"
 
 const USAGE_REFRESH_MS = 5 * 60_000
@@ -19,7 +21,11 @@ export function App() {
       else if (command === "tab.close" && state.active) closeTab(state.active)
       else if (command === "panel.toggle") togglePanelInstantly()
       else if (command === "terminal.new") newTerminal()
-      else if (command.startsWith("tab.select:")) selectTabAt(Number(command.slice("tab.select:".length)))
+      else if (command === "threads.search") toggleThreadSearch()
+      else if (command.startsWith("tab.select:")) {
+        const index = Number(command.slice("tab.select:".length))
+        if (!pickModelByNumber(index)) selectTabAt(index)
+      }
     })
     // Coming back to the window is when files and usage most likely changed outside Desk.
     const refresh = () => {
@@ -38,6 +44,7 @@ export function App() {
   return (
     <div class="flex h-full flex-col bg-ground text-fg">
       <TabBar />
+      <ThreadSearch />
       <Show when={activeTab()} keyed>
         {(tab) => (
           <main class="flex min-h-0 flex-1 px-2 pb-2">

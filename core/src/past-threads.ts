@@ -3,23 +3,28 @@ import type { ThreadEvent, ThreadSummary } from "@desk/protocol"
 import type { SavedTab } from "./space-state"
 import { historyEvents } from "./thread"
 
-const RECENT_LIMIT = 20
+/** Enough for thread search to reach back months. Listing reads only each transcript's head and tail. */
+const THREAD_LIMIT = 200
 
-/** The space's newest threads that no tab has open. A failed read gives none, because the list is a convenience. */
-export async function recentThreads(dir: string, open: ReadonlySet<string>): Promise<ThreadSummary[]> {
-  const sessions = await listSessions({ dir, limit: RECENT_LIMIT + open.size }).catch(() => [])
-  return threadSummaries(sessions, open).slice(0, RECENT_LIMIT)
+/**
+ * The space's newest threads. `tabs` maps a Claude session id to the tab that has it open. A failed
+ * read gives none, because the list is a convenience.
+ */
+export async function recentThreads(dir: string, tabs: ReadonlyMap<string, string>): Promise<ThreadSummary[]> {
+  return threadSummaries(await listSessions({ dir, limit: THREAD_LIMIT }).catch(() => []), tabs)
 }
 
-export function threadSummaries(sessions: readonly SDKSessionInfo[], open: ReadonlySet<string>): ThreadSummary[] {
-  return sessions
-    .filter((session) => !open.has(session.sessionId))
-    .map((session) => ({
+export function threadSummaries(sessions: readonly SDKSessionInfo[], tabs: ReadonlyMap<string, string>): ThreadSummary[] {
+  return sessions.map((session) => {
+    const tabId = tabs.get(session.sessionId)
+    return {
       id: session.sessionId,
       title: session.summary,
       ...(session.gitBranch ? { branch: session.gitBranch } : {}),
       updatedAt: session.lastModified,
-    }))
+      ...(tabId ? { tabId } : {}),
+    }
+  })
 }
 
 /** A tab's thread read back from Claude's transcript, with the last context reading Desk saved. */

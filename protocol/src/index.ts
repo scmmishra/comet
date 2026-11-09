@@ -100,6 +100,8 @@ export interface ThreadSummary {
   readonly branch?: string
   /** Milliseconds since the epoch. */
   readonly updatedAt: number
+  /** The tab that has the thread open, if one does. */
+  readonly tabId?: string
 }
 
 /** A terminal in a tab's panel. Its shell runs in the core under this id. */
@@ -127,7 +129,7 @@ export type ClientMessage =
   | { readonly type: "space.get" }
   | { readonly type: "usage.get" }
   | { readonly type: "models.get" }
-  /** The space's recent threads that no tab has open. */
+  /** The space's recent threads, open in a tab or not. */
   | { readonly type: "threads.get" }
   /** Continues a past thread in a tab that has not started one. */
   | { readonly type: "thread.resume"; readonly sessionId: string; readonly threadId: string }

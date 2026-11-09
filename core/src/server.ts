@@ -147,8 +147,8 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
       case "session.interrupt":
         return void sessions.get(message.sessionId)?.interrupt()
       case "threads.get": {
-        const open = new Set(saved.tabs.flatMap((tab) => (tab.sessionId ? [tab.sessionId] : [])))
-        return void recentThreads(dir, open).then((threads) => send(ws, { type: "threads", threads }))
+        const tabs = new Map(saved.tabs.flatMap((tab) => (tab.sessionId ? [[tab.sessionId, tab.id] as const] : [])))
+        return void recentThreads(dir, tabs).then((threads) => send(ws, { type: "threads", threads }))
       }
       case "thread.resume": {
         // The tab may hold a session that never sent a message. The resumed thread replaces it.
