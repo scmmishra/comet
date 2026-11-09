@@ -96,22 +96,22 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
         return openInEditor(file, message.line)
       }
       case "tabs.save":
-        // The app owns order and titles. The core keeps each tab's Claude session.
-        return persist({
+        // The app owns order, titles and panel terminals. The core keeps each tab's Claude session.
+        persist({
           tabs: message.tabs.map((tab) => {
             const { sessionId, context, baseline } = saved.tabs.find((found) => found.id === tab.id) ?? {}
             return { ...tab, sessionId, context, baseline }
           }),
           active: message.active,
         })
+        // A closed tab or panel terminal drops out of the list, so its shell ends here.
+        return terminals.retain(new Set(message.tabs.flatMap((tab) => tab.terminals.map((terminal) => terminal.id))))
       case "terminal.open":
         return terminals.open(message.id, message.cols, message.rows)
       case "terminal.input":
         return terminals.input(message.id, message.data)
       case "terminal.resize":
         return terminals.resize(message.id, message.cols, message.rows)
-      case "terminal.close":
-        return terminals.close(message.id)
       case "usage.get":
         return void refreshUsage()
       case "space.get":
@@ -177,7 +177,7 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
 
 /** Sends the saved tabs, then each tab's conversation read back from Claude's transcript. */
 async function sendSavedTabs(ws: ServerWebSocket, dir: string, saved: SpaceState) {
-  send(ws, { type: "tabs", tabs: saved.tabs.map(({ id, title }) => ({ id, title })), active: saved.active })
+  send(ws, { type: "tabs", tabs: saved.tabs.map(({ id, title, terminals, panelActive }) => ({ id, title, terminals, panelActive })), active: saved.active })
   for (const tab of saved.tabs) {
     if (!tab.sessionId) continue
     const messages = await getSessionMessages(tab.sessionId, { dir }).catch(() => [])

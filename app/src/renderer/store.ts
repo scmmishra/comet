@@ -58,9 +58,6 @@ export function newTab() {
 
 export function closeTab(id: string) {
   core.send({ type: "session.close", sessionId: id })
-  for (const panelTab of state.tabs.find((tab) => tab.id === id)?.panelTabs ?? []) {
-    if (panelTab.kind === "terminal") core.send({ type: "terminal.close", id: panelTab.id })
-  }
   setState(produce((draft) => {
     const index = draft.tabs.findIndex((tab) => tab.id === id)
     if (index < 0) return
@@ -126,23 +123,27 @@ export function newTerminal() {
     draft.panelTabs.push({ kind: "terminal", id, title: count ? `Terminal ${count + 1}` : "Terminal" })
     draft.panelActive = id
   }))
+  saveTabs()
   if (!state.panelOpen) togglePanel()
 }
 
 export function selectPanelTab(id: string) {
   const tab = activeTab()
-  if (tab) setState("tabs", (found) => found.id === tab.id, "panelActive", id)
+  if (!tab) return
+  setState("tabs", (found) => found.id === tab.id, "panelActive", id)
+  saveTabs()
   if (id === REVIEW_TAB.id) refreshReview()
 }
 
 export function closePanelTab(id: string) {
   const tab = activeTab()
   if (!tab || id === REVIEW_TAB.id) return
-  core.send({ type: "terminal.close", id })
   setState("tabs", (found) => found.id === tab.id, produce((draft) => {
     draft.panelTabs = draft.panelTabs.filter((panelTab) => panelTab.id !== id)
     if (draft.panelActive === id) draft.panelActive = REVIEW_TAB.id
   }))
+  // The core ends the shell of a terminal the saved tabs no longer list.
+  saveTabs()
 }
 
 /** Asks for the active tab's changes, when the panel is open to show them. */
@@ -155,16 +156,32 @@ export function refreshUsage() {
   core.send({ type: "usage.get" })
 }
 
-/** The core saves tab order and titles per space, so Desk reopens with the same tabs. */
+/**
+ * The core saves the tabs per space, so Desk reopens with the same tabs and panel terminals. A reload
+ * reattaches each terminal to its running shell. After a restart, each one starts a new shell.
+ */
 function saveTabs() {
-  core.send({ type: "tabs.save", tabs: state.tabs.map(({ id, title }) => ({ id, title })), active: state.active })
+  core.send({
+    type: "tabs.save",
+    tabs: state.tabs.map((tab) => ({
+      id: tab.id,
+      title: tab.title,
+      terminals: tab.panelTabs.flatMap((panelTab) => (panelTab.kind === "terminal" ? [{ id: panelTab.id, title: panelTab.title }] : [])),
+      panelActive: tab.panelActive === REVIEW_TAB.id ? undefined : tab.panelActive,
+    })),
+    active: state.active,
+  })
 }
 
 /** Puts back the tabs the core saved. Their threads follow as session events. */
 function restoreTabs(tabs: readonly TabInfo[], active: string | undefined) {
   if (tabs.length === 0) return newTab()
   setState({
-    tabs: tabs.map((tab) => ({ id: tab.id, title: tab.title, items: [], busy: false, panelTabs: [REVIEW_TAB], panelActive: REVIEW_TAB.id })),
+    tabs: tabs.map((tab) => {
+      const panelTabs: PanelTab[] = [REVIEW_TAB, ...tab.terminals.map((terminal) => ({ kind: "terminal" as const, ...terminal }))]
+      const panelActive = panelTabs.some((panelTab) => panelTab.id === tab.panelActive) ? tab.panelActive! : REVIEW_TAB.id
+      return { id: tab.id, title: tab.title, items: [], busy: false, panelTabs, panelActive }
+    }),
     active: tabs.some((tab) => tab.id === active) ? active! : tabs[0]!.id,
   })
   refreshReview()

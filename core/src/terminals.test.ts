@@ -29,3 +29,14 @@ test("runs a shell on a PTY, takes input and replays output to a reopened view",
   expect(exited).toBe(true)
   terminals.closeAll()
 })
+
+test("retain closes the terminals it is not given", async () => {
+  const exited: string[] = []
+  const terminals = new Terminals(tmpdir(), { output: () => {}, exit: (id) => exited.push(id) })
+  terminals.open("kept", 80, 24)
+  terminals.open("dropped", 80, 24)
+  terminals.retain(new Set(["kept"]))
+  await until(() => exited.includes("dropped"))
+  expect(exited).toEqual(["dropped"])
+  terminals.closeAll()
+})

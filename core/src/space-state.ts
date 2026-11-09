@@ -2,11 +2,10 @@ import { createHash } from "node:crypto"
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { basename, join } from "node:path"
+import type { TabInfo } from "@desk/protocol"
 
-/** A tab as it is saved: enough to put it back and resume its conversation. */
-export interface SavedTab {
-  readonly id: string
-  readonly title: string
+/** A tab as it is saved: what the app shows, plus what the core needs to resume its conversation. */
+export interface SavedTab extends TabInfo {
   /** The Claude session to resume. Absent until the tab's first message. */
   readonly sessionId?: string
   /**
@@ -39,7 +38,9 @@ export function spaceStatePath(dir: string): string {
 export function loadSpaceState(dir: string): SpaceState {
   try {
     const parsed = JSON.parse(readFileSync(spaceStatePath(dir), "utf8")) as Partial<SpaceState>
-    return { tabs: Array.isArray(parsed.tabs) ? parsed.tabs : [], active: parsed.active }
+    const tabs = Array.isArray(parsed.tabs) ? parsed.tabs : []
+    // Files saved before panel terminals were saved have no terminal list.
+    return { tabs: tabs.map((tab) => ({ ...tab, terminals: tab.terminals ?? [] })), active: parsed.active }
   } catch {
     return EMPTY
   }

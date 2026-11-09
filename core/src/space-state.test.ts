@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import { loadSpaceState, saveSpaceState, spaceStatePath } from "./space-state"
 
 const home = mkdtempSync(join(tmpdir(), "desk-home-"))
@@ -17,8 +17,15 @@ test("names the file after the folder and a hash of its path", () => {
 })
 
 test("saves and loads a space's tabs", () => {
-  saveSpaceState("/work/desk", { tabs: [{ id: "t1", title: "Fix tabs", sessionId: "s1" }], active: "t1" })
-  expect(loadSpaceState("/work/desk")).toEqual({ tabs: [{ id: "t1", title: "Fix tabs", sessionId: "s1" }], active: "t1" })
+  const tab = { id: "t1", title: "Fix tabs", sessionId: "s1", terminals: [{ id: "x1", title: "Terminal" }], panelActive: "x1" }
+  saveSpaceState("/work/desk", { tabs: [tab], active: "t1" })
+  expect(loadSpaceState("/work/desk")).toEqual({ tabs: [tab], active: "t1" })
+})
+
+test("gives tabs saved before panel terminals an empty terminal list", () => {
+  mkdirSync(dirname(spaceStatePath("/work/old")), { recursive: true })
+  writeFileSync(spaceStatePath("/work/old"), JSON.stringify({ tabs: [{ id: "t1", title: "Old" }] }))
+  expect(loadSpaceState("/work/old")).toEqual({ tabs: [{ id: "t1", title: "Old", terminals: [] }], active: undefined })
 })
 
 test("starts empty when nothing is saved", () => {

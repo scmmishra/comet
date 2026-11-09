@@ -62,7 +62,7 @@ export class Terminals {
     if (cols > 0 && rows > 0) this.running.get(id)?.process.terminal?.resize(cols, rows)
   }
 
-  close(id: string) {
+  private close(id: string) {
     const entry = this.running.get(id)
     if (!entry) return
     this.running.delete(id)
@@ -70,8 +70,13 @@ export class Terminals {
     entry.process.kill()
   }
 
+  /** Closes every terminal not in `ids`. The saved tabs list the terminals that should exist. */
+  retain(ids: ReadonlySet<string>) {
+    for (const id of [...this.running.keys()]) if (!ids.has(id)) this.close(id)
+  }
+
   closeAll() {
-    for (const id of [...this.running.keys()]) this.close(id)
+    this.retain(new Set())
   }
 
   private receive(id: string, data: string) {

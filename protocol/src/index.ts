@@ -72,10 +72,20 @@ export interface PlanUsage {
   readonly windows: readonly UsageWindow[]
 }
 
+/** A terminal in a tab's panel. Its shell runs in the core under this id. */
+export interface TerminalInfo {
+  readonly id: string
+  readonly title: string
+}
+
 /** A top tab as the app shows it. The core saves tabs per space and sends them back on connect. */
 export interface TabInfo {
   readonly id: string
   readonly title: string
+  /** The terminals in this tab's panel, in order. The core closes any shell that no tab lists. */
+  readonly terminals: readonly TerminalInfo[]
+  /** The panel tab on show, as a terminal's id. Absent means Review. */
+  readonly panelActive?: string
 }
 
 export type ClientMessage =
@@ -86,7 +96,6 @@ export type ClientMessage =
   | { readonly type: "terminal.open"; readonly id: string; readonly cols: number; readonly rows: number }
   | { readonly type: "terminal.input"; readonly id: string; readonly data: string }
   | { readonly type: "terminal.resize"; readonly id: string; readonly cols: number; readonly rows: number }
-  | { readonly type: "terminal.close"; readonly id: string }
   /** The files a tab's thread changed since its first message. */
   | { readonly type: "review.get"; readonly sessionId: string }
   /** The app's tabs, in order, sent whenever they change. */
