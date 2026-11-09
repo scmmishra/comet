@@ -112,7 +112,8 @@ function IconPicker(props: { project: string; current?: string; onPick: (icon: s
         {(found) => (
           <div class="grid gap-2">
             <Show when={found().length > 0} fallback={<div class="px-1 py-2 text-fg-3">No logo, icon or favicon images in this project.</div>}>
-              <div class="grid max-h-[300px] grid-cols-6 gap-1.5 overflow-y-auto">
+              {/* A scrolling box clips at its edges, so the padding keeps the chosen icon's outline inside it. The margin cancels it. */}
+              <div class="-m-1 grid max-h-[300px] grid-cols-6 gap-1.5 overflow-y-auto p-1">
                 <For each={found()}>
                   {(file) => (
                     <Tooltip value={file} placement="top">
