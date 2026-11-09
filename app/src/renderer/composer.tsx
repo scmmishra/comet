@@ -27,7 +27,7 @@ export function Composer(props: { tab: Tab }) {
 
   return (
     <form
-      class="mx-auto flex w-full max-w-[720px] flex-col gap-2 rounded-xl border border-border-weak-base bg-surface-raised-base px-3 pb-2 pt-2.5"
+      class="mx-auto grid w-full max-w-[720px] gap-1.5 rounded-3xl bg-raised pb-2 pl-3.5 pr-2.5 pt-[11px] shadow-[0_0_0_1px_var(--color-line)]"
       onSubmit={(event) => {
         event.preventDefault()
         submit()
@@ -35,10 +35,10 @@ export function Composer(props: { tab: Tab }) {
     >
       <textarea
         ref={input}
-        data-composer
         rows={1}
-        class="w-full resize-none bg-transparent text-text-strong outline-none placeholder:text-text-weaker"
-        placeholder="Ask anything…"
+        aria-label="Message"
+        class="min-h-[22px] w-full resize-none bg-transparent text-fg outline-none placeholder:text-fg-3"
+        placeholder="Ask anything, / for commands, @ for context…"
         value={text()}
         onInput={(event) => {
           setText(event.currentTarget.value)
@@ -52,22 +52,32 @@ export function Composer(props: { tab: Tab }) {
           if (event.key === "Escape" && props.tab.busy) interrupt()
         }}
       />
-      <div class="flex items-center gap-2 text-sm text-text-weak">
-        <span class="text-text-base">{modelLabel(props.tab.model)}</span>
+      <div class="flex items-center gap-1 text-fg-2">
+        <span class="inline-flex h-[26px] items-center gap-1.5 rounded-md px-[7px]">
+          <span class="size-1.5 rounded-full bg-claude" />
+          {/* The SDK names the model once the session starts. */}
+          <Show when={props.tab.model} fallback="Claude Code">
+            {(model) => (
+              <>
+                <span class="text-fg-3">Claude Code /</span> {modelLabel(model())}
+              </>
+            )}
+          </Show>
+        </span>
         <Show
           when={props.tab.busy}
           fallback={
             <button
               type="submit"
               aria-label="Send"
-              class="ml-auto grid size-7 place-items-center rounded-full bg-text-strong text-background-base transition-opacity disabled:opacity-30"
-              disabled={!text().trim()}
+              class="ml-auto grid size-7 place-items-center rounded-lg bg-fg-3 text-ground transition-colors"
+              classList={{ "bg-fg!": !!text().trim() }}
             >
               <Icon name="up" />
             </button>
           }
         >
-          <button type="button" aria-label="Stop" class="ml-auto grid size-7 place-items-center rounded-full bg-surface-strong text-text-strong" onClick={interrupt}>
+          <button type="button" aria-label="Stop" class="ml-auto grid size-7 place-items-center rounded-lg bg-fg text-ground" onClick={interrupt}>
             <Icon name="stop" />
           </button>
         </Show>

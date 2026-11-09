@@ -1,16 +1,16 @@
-import { Button } from "@opencode/ui/button"
-import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { editTexts, lineDiff } from "./diff"
 import { formatDuration, modelLabel } from "./format"
+import { Icon } from "./icons"
 import { Markdown } from "./markdown"
 import { answerPermission, state, type Item, type Tab } from "./store"
 
 type ToolItem = Extract<Item, { type: "tool" }>
+type PermissionItem = Extract<Item, { type: "permission" }>
 type Row = { readonly type: "tools"; readonly id: string; readonly tools: ToolItem[] } | Item
 
 /** Edits show as diffs on their own. Other tool calls in a row fold into one "Used N" line. */
-function rows(items: Item[]): Row[] {
+function rows(items: readonly Item[]): Row[] {
   const out: Row[] = []
   for (const item of items) {
     if (item.type === "tool" && !editTexts(item.name, item.input)) {
@@ -25,31 +25,45 @@ function rows(items: Item[]): Row[] {
 export function Thread(props: { tab: Tab }) {
   const grouped = createMemo(() => rows(props.tab.items))
   return (
-    <div class="mx-auto flex w-full max-w-[720px] flex-col gap-3.5 px-6 pb-4 pt-2">
+    <div class="mx-auto flex w-full max-w-[720px] flex-col gap-3.5 px-6 pb-4 pt-2.5">
       <For each={grouped()}>
         {(row) => (
           <Switch>
             <Match when={row.type === "user" && row}>
-              {(item) => <div class="max-w-[80%] self-end whitespace-pre-wrap rounded-xl bg-surface-raised-base px-3 py-1.5 text-text-strong">{item().text}</div>}
+              {(item) => <div class="desk-rise max-w-[80%] self-end whitespace-pre-wrap rounded-3xl bg-raised px-3.5 py-[9px]">{item().text}</div>}
             </Match>
-            <Match when={row.type === "text" && row}>{(item) => <Markdown text={item().text} />}</Match>
+            <Match when={row.type === "text" && row}>
+              {(item) => (
+                <div class="desk-rise">
+                  <Markdown text={item().text} />
+                </div>
+              )}
+            </Match>
             <Match when={row.type === "thinking"}>
-              <div class="text-sm text-text-weaker">Thought</div>
+              <div class="desk-rise text-[12px] text-fg-3">Thought</div>
             </Match>
             <Match when={row.type === "tools" && row}>{(group) => <ToolGroup tools={group().tools} />}</Match>
-            <Match when={row.type === "tool" && row}>{(item) => <EditBlock tool={item()} />}</Match>
-            <Match when={row.type === "permission" && row}>{(item) => <PermissionBlock item={item()} />}</Match>
+            <Match when={row.type === "tool" && row}>{(item) => <EditBlock tool={item() as ToolItem} />}</Match>
+            <Match when={row.type === "permission" && row}>{(item) => <PermissionCard item={item() as PermissionItem} />}</Match>
             <Match when={row.type === "result" && row}>
-              {(item) => <div class="text-sm text-text-weaker">{`${modelLabel(props.tab.model)} · ${formatDuration(item().durationMs)}`}</div>}
+              {(item) => (
+                <div class="desk-rise flex items-center gap-1.5 text-[12px] text-fg-3">
+                  <Icon name="bot" class="size-[15px]" />
+                  {`${modelLabel(props.tab.model)} · ${formatDuration(item().durationMs)}`}
+                </div>
+              )}
             </Match>
             <Match when={row.type === "error" && row}>
-              {(item) => <div class="text-sm text-text-diff-delete-base">{item().message}</div>}
+              {(item) => <div class="desk-rise rounded-2xl bg-del-soft px-3 py-2 text-del">{item().message}</div>}
             </Match>
           </Switch>
         )}
       </For>
       <Show when={props.tab.busy}>
-        <TextShimmer text="Working…" class="text-sm text-text-weak" />
+        <div class="flex items-center gap-2 text-fg-3">
+          <span class="desk-spin" />
+          Working…
+        </div>
       </Show>
     </div>
   )
@@ -58,20 +72,14 @@ export function Thread(props: { tab: Tab }) {
 function ToolGroup(props: { tools: ToolItem[] }) {
   const [open, setOpen] = createSignal(false)
   const names = () => [...new Set(props.tools.map((tool) => tool.name))].join(", ")
-  const running = () => props.tools.some((tool) => !tool.result)
   return (
-    <div class="flex flex-col gap-1.5">
-      <button class="flex w-fit items-center gap-1.5 text-sm text-text-weak hover:text-text-base" onClick={() => setOpen(!open())}>
-        <span class={`inline-block transition-transform ${open() ? "rotate-90" : ""}`}>›</span>
-        <span>
-          Used <span class="text-text-base">{props.tools.length}</span> · {names()}
-        </span>
-        <Show when={running()}>
-          <span class="text-text-weaker">running</span>
-        </Show>
+    <div class="desk-rise grid gap-1.5">
+      <button class="inline-flex w-fit items-center gap-1.5 text-fg-3 hover:[&_b]:text-fg" onClick={() => setOpen(!open())}>
+        <Icon name="chevron" class={`size-[15px] transition-transform duration-150 ${open() ? "rotate-90" : ""}`} />
+        Used <b class="font-medium text-fg-2">{props.tools.length}</b> · {names()}
       </button>
       <Show when={open()}>
-        <div class="ml-1.5 flex flex-col gap-2 border-l border-border-weak-base pl-3">
+        <div class="ml-[7px] grid gap-0.5 pl-[13px] shadow-[inset_1px_0_0_var(--color-line)]">
           <For each={props.tools}>{(tool) => <ToolRow tool={tool} />}</For>
         </div>
       </Show>
@@ -80,15 +88,17 @@ function ToolGroup(props: { tools: ToolItem[] }) {
 }
 
 function ToolRow(props: { tool: ToolItem }) {
+  const [open, setOpen] = createSignal(false)
   return (
-    <div class="flex min-w-0 flex-col gap-1 text-sm">
-      <div class="flex min-w-0 gap-2">
-        <span class="font-medium text-text-base">{props.tool.name}</span>
-        <span class="truncate font-mono text-text-weak">{summarize(props.tool.input)}</span>
-      </div>
-      <Show when={props.tool.result}>
+    <div class="grid py-[3px] text-[12.5px]">
+      <button class="grid grid-cols-[auto_1fr] gap-x-2 text-left" onClick={() => setOpen(!open())}>
+        <span class="font-medium text-fg-2">{props.tool.name}</span>
+        <span class="min-w-0 truncate font-mono text-[12px] text-fg-2">{summarize(props.tool.input)}</span>
+        <span class="col-start-2 text-[12px] text-fg-3">{outcome(props.tool)}</span>
+      </button>
+      <Show when={open() && props.tool.result}>
         {(result) => (
-          <pre class={`max-h-60 overflow-auto whitespace-pre-wrap rounded-md bg-surface-inset-base p-2 font-mono text-xs ${result().isError ? "text-text-diff-delete-base" : "text-text-weak"}`}>
+          <pre class="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap rounded-2xl bg-ground px-3 py-2.5 font-mono text-[12px] text-fg-2 shadow-[0_0_0_1px_var(--color-line)]">
             {result().output || "(no output)"}
           </pre>
         )}
@@ -102,58 +112,69 @@ function EditBlock(props: { tool: ToolItem }) {
   const added = () => lines().filter((line) => line.kind === "add").length
   const removed = () => lines().filter((line) => line.kind === "del").length
   return (
-    <div class="overflow-hidden rounded-lg border border-border-weak-base">
-      <div class="flex items-center gap-2 bg-surface-raised-base px-3 py-1.5 text-xs">
-        <span class="truncate font-mono text-text-base">{relativePath(String(props.tool.input.file_path ?? ""))}</span>
-        <span class="ml-auto font-mono text-text-diff-add-base">+{added()}</span>
-        <span class="font-mono text-text-diff-delete-base">−{removed()}</span>
+    <div class="desk-rise overflow-hidden rounded-2xl bg-ground shadow-[0_0_0_1px_var(--color-line)]">
+      <div class="flex min-w-0 items-center gap-2 bg-raised px-3 py-[7px] text-[12px] text-fg-2">
+        <Icon name="edit" class="size-[15px]" />
+        <span class="min-w-0 truncate font-mono text-fg">{relativePath(String(props.tool.input.file_path ?? ""))}</span>
+        <span class="ml-auto flex shrink-0 gap-2 font-mono tabular-nums">
+          <span class="text-add">+{added()}</span>
+          <span class="text-del">−{removed()}</span>
+        </span>
       </div>
-      <div class="max-h-80 overflow-auto bg-surface-inset-base font-mono text-xs leading-5">
+      <div class="max-h-80 overflow-auto font-mono text-[12px] leading-5">
         <For each={lines()}>
           {(line) => (
-            <div
-              class="whitespace-pre px-3"
-              classList={{
-                "bg-surface-diff-add-base text-text-diff-add-strong": line.kind === "add",
-                "bg-surface-diff-delete-base text-text-diff-delete-strong": line.kind === "del",
-                "text-text-weak": line.kind === "same",
-              }}
-            >
-              {`${line.kind === "add" ? "+" : line.kind === "del" ? "−" : " "} ${line.text}`}
+            <div class="whitespace-pre px-2.5" classList={{ "bg-add-soft": line.kind === "add", "bg-del-soft": line.kind === "del" }}>
+              <span class="mr-2" classList={{ "text-add": line.kind === "add", "text-del": line.kind === "del" }}>
+                {line.kind === "add" ? "+" : line.kind === "del" ? "−" : " "}
+              </span>
+              {line.text}
             </div>
           )}
         </For>
       </div>
       <Show when={props.tool.result?.isError}>
-        <div class="px-3 py-1.5 text-xs text-text-diff-delete-base">{props.tool.result!.output}</div>
+        <div class="bg-raised px-3 py-[7px] text-[12px] text-del">{props.tool.result!.output}</div>
       </Show>
     </div>
   )
 }
 
-function PermissionBlock(props: { item: Extract<Item, { type: "permission" }> }) {
+function PermissionCard(props: { item: PermissionItem }) {
   return (
-    <div class="flex flex-col gap-2 rounded-xl bg-surface-raised-base p-3">
-      <div class="text-sm">
-        Claude wants to use <span class="font-medium">{props.item.tool}</span>
+    <div class="desk-rise overflow-hidden rounded-3xl bg-raised">
+      <div class="flex items-center gap-2 px-3.5 pt-2.5 text-[12px] text-fg-3">
+        <Icon name="lock" class="size-[15px]" />
+        Claude wants to use {props.item.tool}
       </div>
-      <pre class="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-surface-inset-base p-2 font-mono text-xs text-text-weak">{summarize(props.item.input, true)}</pre>
+      <pre class="mx-3.5 mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-2xl bg-ground px-3 py-2 font-mono text-[12px] text-fg shadow-[0_0_0_1px_var(--color-line)]">
+        {summarize(props.item.input, true)}
+      </pre>
       <Show
         when={props.item.answer === undefined}
-        fallback={<div class="text-sm text-text-weak">{props.item.answer ? "Allowed" : "Declined"}</div>}
+        fallback={<div class="px-3.5 pb-3 pt-2.5 text-[12px] text-fg-3">{props.item.answer ? "Allowed" : "Declined"}</div>}
       >
-        <div class="flex gap-2">
-          <Button variant="contrast" onClick={() => answerPermission(props.item.requestId, true)}>
+        <div class="flex gap-1.5 px-3 pb-3 pt-2.5">
+          <button class="h-7 rounded-lg bg-fg px-[11px] font-medium text-ground hover:bg-[#fff]" onClick={() => answerPermission(props.item.requestId, true)}>
             Allow
-          </Button>
-          <Button onClick={() => answerPermission(props.item.requestId, false)}>Decline</Button>
+          </button>
+          <button class="h-7 rounded-lg bg-hover px-[11px] hover:bg-[#2e2e33]" onClick={() => answerPermission(props.item.requestId, false)}>
+            Decline
+          </button>
         </div>
       </Show>
     </div>
   )
 }
 
-/** One line that says what a tool call does: the command, path or pattern it was given. */
+function outcome(tool: ToolItem) {
+  if (!tool.result) return "Running…"
+  if (tool.result.isError) return "Failed"
+  const first = tool.result.output.split("\n").find((line) => line.trim())
+  return first ? first.slice(0, 120) : "Done"
+}
+
+/** What a tool call was given, in short: the command, path or pattern. */
 function summarize(input: Record<string, unknown>, full = false) {
   const key = ["command", "file_path", "pattern", "path", "url", "query", "description"].find((name) => typeof input[name] === "string")
   if (key && !full) return relativePath(String(input[key]))
