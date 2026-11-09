@@ -27,6 +27,21 @@ const THEME = {
 }
 
 /**
+ * ⌘ chords, after OpenCode. ghostty-web sends the plain letter to the shell for them, so ⌘K would type
+ * "k". Returning true keeps a key from the shell. ⌘C and ⌘V stay native, so copy and paste work.
+ */
+function handleCommandKey(term: Terminal, event: KeyboardEvent): boolean {
+  if (!event.metaKey || event.ctrlKey || event.altKey) return false
+  if (event.key === "Backspace" && !event.shiftKey) {
+    // ⌘⌫ deletes the line, as in Terminal.app: Ctrl+U to the shell.
+    term.input("\x15", true)
+    return true
+  }
+  if (event.code === "KeyC" || event.code === "KeyV") return false
+  return event.key.length === 1
+}
+
+/**
  * A terminal drawn by ghostty-web. The shell runs in the core, so drawing this view again reattaches
  * to the same shell, and the core replays what it showed.
  */
@@ -51,6 +66,7 @@ export function TerminalView(props: { id: string }) {
       scrollback: 10_000,
       theme: THEME,
     })
+    term.attachCustomKeyEventHandler((event) => handleCommandKey(term, event))
     const fit: FitAddon = new mod.FitAddon()
     term.loadAddon(fit)
     term.open(container)
