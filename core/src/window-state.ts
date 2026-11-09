@@ -1,10 +1,10 @@
-import { DEFAULT_MODEL, type TabInfo } from "@desk/protocol"
+import type { ContextReading, TabInfo } from "@desk/protocol"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { deskHome, spaceDataPath, writeJsonFile } from "./data-files"
+import { deskHome, writeJsonFile } from "./data-files"
 
-/** A tab as it is saved: what the app shows, plus what the core needs to resume its conversation. */
-export interface SavedTab extends TabInfo {
+/** What the core keeps about a tab's thread. The app never sees it. */
+export interface TabThread {
   /** The Claude session to resume. Absent until the tab's first message. */
   readonly sessionId?: string
   /**
@@ -13,51 +13,41 @@ export interface SavedTab extends TabInfo {
    */
   readonly baseline?: string
   /** The last context reading. A restored session is not live until its next message, so it cannot be asked. */
-  readonly context?: { readonly percent: number; readonly tokens: number; readonly maxTokens: number }
+  readonly context?: ContextReading
 }
 
-/** The window's tabs, in their order across projects. */
+/** The window: its tabs in their order across projects, each tab's thread, and the folders tabs have opened. */
 export interface WindowState {
-  readonly tabs: readonly SavedTab[]
+  readonly tabs: readonly TabInfo[]
   readonly active?: string
+  readonly threads: Readonly<Record<string, TabThread>>
+  /** Most recent first. */
+  readonly recent: readonly string[]
 }
 
-export const windowStatePath = () => join(deskHome(), "window.json")
+const windowStatePath = () => join(deskHome(), "window.json")
 
-/**
- * The window's saved tabs. Before tabs held projects, each project saved its own tabs in
- * `~/.desk/spaces`. With no window file yet, the tabs of `project`, the one the window opens on, move
- * into the window, so they are not lost.
- */
-export function loadWindowState(project: string): WindowState {
-  const window = readState(windowStatePath())
-  if (window) return { tabs: window.tabs.map((tab) => withDefaults(tab, project)), active: window.active }
-  const old = readState(spaceDataPath("spaces", project))
-  return old ? { tabs: old.tabs.map((tab) => withDefaults(tab, project)), active: old.active } : { tabs: [] }
+/** The saved window. A missing or broken file gives an empty window, and a tab that is not whole is dropped. */
+export function loadWindowState(): WindowState {
+  let saved: Partial<WindowState>
+  try {
+    saved = JSON.parse(readFileSync(windowStatePath(), "utf8")) as Partial<WindowState>
+  } catch {
+    return { tabs: [], threads: {}, recent: [] }
+  }
+  return {
+    tabs: Array.isArray(saved.tabs) ? saved.tabs.filter(isTab) : [],
+    ...(typeof saved.active === "string" ? { active: saved.active } : {}),
+    threads: typeof saved.threads === "object" && saved.threads ? saved.threads : {},
+    recent: Array.isArray(saved.recent) ? saved.recent.filter((dir) => typeof dir === "string") : [],
+  }
 }
 
 export function saveWindowState(state: WindowState) {
   writeJsonFile(windowStatePath(), state)
 }
 
-function readState(path: string): { tabs: Partial<SavedTab>[]; active?: string } | undefined {
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf8")) as { tabs?: unknown; active?: string }
-    return { tabs: Array.isArray(parsed.tabs) ? parsed.tabs : [], active: parsed.active }
-  } catch {
-    return undefined
-  }
-}
-
-/** Tabs saved before projects, panel terminals, models or permission modes were saved lack them. */
-function withDefaults(tab: Partial<SavedTab>, project: string): SavedTab {
-  return {
-    ...tab,
-    id: tab.id ?? crypto.randomUUID(),
-    title: tab.title ?? "New session",
-    project: tab.project ?? project,
-    terminals: tab.terminals ?? [],
-    model: tab.model ?? DEFAULT_MODEL,
-    permissionMode: tab.permissionMode ?? "default",
-  }
+function isTab(value: unknown): value is TabInfo {
+  const tab = value as Partial<TabInfo> | null
+  return typeof tab?.id === "string" && typeof tab.title === "string" && typeof tab.project === "string" && Array.isArray(tab.terminals) && typeof tab.model === "string" && typeof tab.permissionMode === "string"
 }

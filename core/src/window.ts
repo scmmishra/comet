@@ -1,0 +1,222 @@
+import type { SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
+import type { CoreMessage, FileChange, TabInfo, ThreadEvent } from "@desk/protocol"
+import { changesSince, snapshot } from "./checkpoints"
+import { threadContext, threadHistory } from "./past-threads"
+import { isProjectFolder, requireProjectFolder } from "./project-path"
+import { sameRunSettings, Session } from "./session"
+import { Terminals } from "./terminals"
+import { loadWindowState, saveWindowState, type TabThread, type WindowState } from "./window-state"
+
+type Send = (message: CoreMessage) => void
+
+/** Enough recent folders to pick from. */
+const MAX_RECENT = 20
+
+interface WindowHooks {
+  /** Sends to every client. */
+  readonly broadcast: Send
+  /** Whether to compact a large thread that sat idle, read at each ask. */
+  readonly compactIdle: () => boolean
+  readonly rateLimit: (info: SDKRateLimitInfo) => void
+}
+
+/**
+ * The window's tabs and what runs for them: each tab's Claude session and its panel terminals. The
+ * app owns the tabs and sends them on every change. The core keeps each tab's thread: its session,
+ * its baseline for Review and its last context reading.
+ */
+export class Window {
+  private state: WindowState = loadWindowState()
+  private sessions = new Map<string, Session>()
+  private terminals: Terminals
+
+  constructor(private readonly hooks: WindowHooks) {
+    this.terminals = new Terminals({
+      output: (id, data) => hooks.broadcast({ type: "terminal.output", id, data }),
+      exit: (id, code) => hooks.broadcast({ type: "terminal.exit", id, code }),
+    })
+  }
+
+  /** Sends a client the window: its recent folders, then its tabs, then each tab's thread. */
+  async greet(reply: Send) {
+    reply({ type: "recent", projects: this.recent() })
+    reply({ type: "tabs", tabs: this.state.tabs, active: this.state.active })
+    for (const tab of this.state.tabs) {
+      const thread = this.thread(tab.id)
+      if (!thread.sessionId) continue
+      reply({ type: "session.history", tabId: tab.id, items: await this.history(tab, thread.sessionId), context: thread.context })
+      if (!thread.context) this.fillContext(tab.id, thread.sessionId)
+    }
+  }
+
+  /**
+   * Takes the app's tabs. A tab that opened a folder makes it the most recent. A tab that moved to
+   * another project starts its session there. A tab that closed ends its session and its shells.
+   */
+  save(tabs: readonly TabInfo[], active: string | undefined) {
+    const before = new Map(this.state.tabs.map((tab) => [tab.id, tab]))
+    // Only a folder a tab opens now is checked, so a folder deleted under an older tab does not block every save.
+    const opened = tabs.filter((tab) => before.get(tab.id)?.project !== tab.project).map((tab) => tab.project)
+    for (const dir of opened) requireProjectFolder(dir)
+    // A thread's transcript, baseline and Review belong to its folder, so only a tab with no thread can move.
+    const moved = tabs.find((tab) => before.has(tab.id) && before.get(tab.id)!.project !== tab.project && this.thread(tab.id).sessionId)
+    if (moved) throw new Error("A tab can change its project only before its thread starts.")
+    this.persist({
+      tabs,
+      active,
+      threads: Object.fromEntries(tabs.flatMap((tab) => (this.state.threads[tab.id] ? [[tab.id, this.state.threads[tab.id]!]] : []))),
+    })
+    for (const tab of tabs) {
+      const old = before.get(tab.id)
+      if (old && old.project !== tab.project) this.closeSession(tab.id)
+      else if (old && !sameRunSettings(old, tab))
+        this.sessions
+          .get(tab.id)
+          ?.configure(tab)
+          .catch((error) => this.hooks.broadcast({ type: "error", message: `Desk could not change how the thread runs: ${message(error)}` }))
+    }
+    for (const id of before.keys()) if (!tabs.some((tab) => tab.id === id)) this.closeSession(id)
+    if (opened.length) this.remember(opened)
+    this.terminals.retain(new Set(tabs.flatMap((tab) => tab.terminals.map((terminal) => terminal.id))))
+  }
+
+  /** Sends a message in a tab. A thread's first message snapshots the project first, so Review can show what the thread changed. */
+  async send(tabId: string, text: string) {
+    const tab = this.tab(tabId)
+    if (!this.thread(tabId).baseline) {
+      const baseline = await snapshot(tab.project)
+      if (baseline) this.updateThread(tabId, { baseline })
+    }
+    this.session(tab).send(text)
+  }
+
+  /** Continues a past thread in a tab. The tab may hold a session that never sent a message; the thread replaces it. */
+  async resume(tabId: string, threadId: string, reply: Send) {
+    const tab = this.tab(tabId)
+    this.closeSession(tabId)
+    this.setThread(tabId, { sessionId: threadId })
+    reply({ type: "session.history", tabId, items: await this.history(tab, threadId) })
+    this.fillContext(tabId, threadId)
+  }
+
+  interrupt(tabId: string) {
+    return this.sessions.get(tabId)?.interrupt()
+  }
+
+  answerPermission(tabId: string, requestId: string, allow: boolean) {
+    this.sessions.get(tabId)?.answerPermission(requestId, allow)
+  }
+
+  closeSession(tabId: string) {
+    this.sessions.get(tabId)?.close()
+    this.sessions.delete(tabId)
+  }
+
+  /** What a tab's thread changed since its first message. A baseline that `git gc` pruned shows nothing. */
+  async review(tabId: string): Promise<FileChange[]> {
+    const baseline = this.thread(tabId).baseline
+    if (!baseline) return []
+    return changesSince(this.tab(tabId).project, baseline).catch(() => [])
+  }
+
+  /** Which tab has each of a project's threads open, by Claude session id. */
+  openThreads(project: string): ReadonlyMap<string, string> {
+    return new Map(this.state.tabs.flatMap((tab) => (tab.project === project && this.thread(tab.id).sessionId ? [[this.thread(tab.id).sessionId!, tab.id] as const] : [])))
+  }
+
+  /** Starts a terminal in the project of the tab that lists it, or reattaches to it. */
+  openTerminal(id: string, cols: number, rows: number) {
+    const tab = this.state.tabs.find((found) => found.terminals.some((terminal) => terminal.id === id))
+    if (!tab) throw new Error("Desk could not find the tab this terminal belongs to.")
+    this.terminals.open(id, tab.project, cols, rows)
+  }
+
+  terminalInput(id: string, data: string) {
+    this.terminals.input(id, data)
+  }
+
+  resizeTerminal(id: string, cols: number, rows: number) {
+    this.terminals.resize(id, cols, rows)
+  }
+
+  stop() {
+    for (const session of this.sessions.values()) session.close()
+    this.terminals.closeAll()
+  }
+
+  private tab(tabId: string): TabInfo {
+    const tab = this.state.tabs.find((found) => found.id === tabId)
+    if (!tab) throw new Error("Desk could not find the tab.")
+    return tab
+  }
+
+  /** Folders tabs have opened, most recent first. A folder that no longer exists is left out. */
+  private recent() {
+    return this.state.recent.filter(isProjectFolder)
+  }
+
+  private thread(tabId: string): TabThread {
+    return this.state.threads[tabId] ?? {}
+  }
+
+  private session(tab: TabInfo) {
+    let found = this.sessions.get(tab.id)
+    if (!found) {
+      const emit = (event: ThreadEvent) => {
+        if (event.kind === "context") this.updateThread(tab.id, { context: event.reading })
+        this.hooks.broadcast({ type: "session.event", tabId: tab.id, event })
+      }
+      found = new Session(tab.project, emit, {
+        resume: this.thread(tab.id).sessionId,
+        settings: tab,
+        compactIdle: this.hooks.compactIdle,
+        onSessionId: (sessionId) => this.updateThread(tab.id, { sessionId }),
+        onRateLimit: this.hooks.rateLimit,
+      })
+      this.sessions.set(tab.id, found)
+    }
+    return found
+  }
+
+  /** A thread that cannot be read shows empty, and the user is told. */
+  private history(tab: TabInfo, sessionId: string) {
+    return threadHistory(tab.project, sessionId).catch((error) => {
+      this.hooks.broadcast({ type: "error", message: `Desk could not read the thread in “${tab.title}”: ${message(error)}` })
+      return []
+    })
+  }
+
+  /** A thread with no context reading gets one now, so its ring shows before its next reply. */
+  private fillContext(tabId: string, sessionId: string) {
+    const tab = this.state.tabs.find((found) => found.id === tabId)
+    if (!tab) return
+    void threadContext(tab.project, sessionId).then((context) => {
+      // The tab may have moved to another thread, or taken a live reading, while the probe ran.
+      const thread = this.state.threads[tabId]
+      if (!context || thread?.sessionId !== sessionId || thread.context) return
+      this.updateThread(tabId, { context })
+      this.hooks.broadcast({ type: "session.event", tabId, event: { kind: "context", reading: context } })
+    })
+  }
+
+  /** Moves folders to the front of the recent list. */
+  private remember(projects: readonly string[]) {
+    this.persist({ recent: [...new Set([...projects, ...this.recent()])].slice(0, MAX_RECENT) })
+    this.hooks.broadcast({ type: "recent", projects: this.state.recent })
+  }
+
+  private updateThread(tabId: string, change: Partial<TabThread>) {
+    this.setThread(tabId, { ...this.thread(tabId), ...change })
+  }
+
+  private setThread(tabId: string, thread: TabThread) {
+    this.persist({ threads: { ...this.state.threads, [tabId]: thread } })
+  }
+
+  private persist(change: Partial<WindowState>) {
+    this.state = { ...this.state, ...change }
+    saveWindowState(this.state)
+  }
+}
+
+const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
