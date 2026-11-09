@@ -50,6 +50,8 @@ export interface Space {
 export type ClientMessage =
   | { readonly type: "ping"; readonly id: number }
   | { readonly type: "space.get" }
+  /** Opens a file from the thread in the editor. The core refuses paths outside the space. */
+  | { readonly type: "file.open"; readonly path: string; readonly line?: number }
   | { readonly type: "session.send"; readonly sessionId: string; readonly text: string }
   | { readonly type: "session.interrupt"; readonly sessionId: string }
   | { readonly type: "session.close"; readonly sessionId: string }

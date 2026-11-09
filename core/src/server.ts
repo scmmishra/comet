@@ -2,6 +2,7 @@ import { PROTOCOL_VERSION, type ClientMessage, type CoreMessage } from "@desk/pr
 import type { ServerWebSocket } from "bun"
 import pkg from "../package.json"
 import { Session } from "./session"
+import { openInEditor, resolveSpaceFile } from "./files"
 import { readSpace } from "./space"
 
 export interface CoreServer {
@@ -40,6 +41,11 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
     switch (message.type) {
       case "ping":
         return send(ws, { type: "pong", id: message.id })
+      case "file.open": {
+        const file = resolveSpaceFile(dir, message.path)
+        if (!file) return send(ws, { type: "error", message: `Desk can only open files inside the space: ${message.path}` })
+        return openInEditor(file, message.line)
+      }
       case "space.get":
         return void readSpace(dir).then((space) => send(ws, { type: "space", space }))
       case "session.send":
