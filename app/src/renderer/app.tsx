@@ -15,20 +15,21 @@ import { ProjectMark, projectLabel } from "./project-mark"
 import { SettingsScreen } from "./settings/screen"
 import { activeData, activeTab, closePanelTab, openSettings, closeTab, newTab, newTerminal, refreshSpace, refreshUsage, selectPanelTab, selectTab, selectTabAt, state, togglePanel, type Tab } from "./store"
 import { TerminalView } from "./terminal"
-import { useThreadSearch } from "./thread-search"
+import { usePalette } from "./palette"
 import { Thread } from "./thread"
 
 const USAGE_REFRESH_MS = 5 * 60_000
 
 export function App() {
-  const toggleThreadSearch = useThreadSearch()
+  const togglePalette = usePalette()
   onMount(() => {
     const stop = window.desk.onCommand((command) => {
       if (command === "tab.new") newTab()
       else if (command === "tab.close" && state.active) closeTab(state.active)
       else if (command === "panel.toggle") togglePanelInstantly()
       else if (command === "terminal.new") newTerminal()
-      else if (command === "threads.search") toggleThreadSearch()
+      else if (command === "palette.toggle") togglePalette()
+      else if (command === "threads.search") togglePalette("threads")
       else if (command === "settings.open") openSettings()
       else if (command.startsWith("project.open:")) newTab("end", command.slice("project.open:".length))
       else if (command.startsWith("tab.select:")) {

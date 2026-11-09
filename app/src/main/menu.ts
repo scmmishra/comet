@@ -55,6 +55,7 @@ export function installMenu(actions: MenuActions) {
         })),
         { type: "separator" },
         { label: "Toggle Panel", accelerator: "CmdOrCtrl+\\", click: () => command("panel.toggle") },
+        { label: "Command Palette…", accelerator: "CmdOrCtrl+K", click: () => command("palette.toggle") },
         { label: "Search Threads…", accelerator: "CmdOrCtrl+Shift+O", click: () => command("threads.search") },
         { type: "separator" },
         { role: "reload" },
