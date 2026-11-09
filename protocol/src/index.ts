@@ -174,6 +174,20 @@ export interface ClaudeAccount {
   readonly apiKeySource?: string
 }
 
+/** An MCP server Claude Code loads in a project, and how its connection stands. */
+export interface McpServer {
+  readonly name: string
+  readonly status: "connected" | "failed" | "needs-auth" | "pending" | "disabled"
+  /** Where it is configured, such as "user", "project" or "local". */
+  readonly scope?: string
+  /** What the server runs: its command, or its URL. */
+  readonly target?: string
+  /** The tools it offers, when connected. */
+  readonly tools: number
+  /** Why it failed, when it did. */
+  readonly error?: string
+}
+
 export interface DeskSettings {
   readonly appearance: AppearanceSettings
   readonly claude: ClaudeSettings
@@ -264,6 +278,10 @@ export type ClientMessage =
   | { readonly type: "space.get"; readonly project: string }
   /** Images in the project that look like its logo, for the icon picker. */
   | { readonly type: "project.icons"; readonly project: string }
+  /** The MCP servers Claude Code loads in the project. Reading starts them, so it takes a few seconds. */
+  | { readonly type: "mcp.get"; readonly project: string }
+  /** Turns an MCP server on or off for the project. Claude Code keeps the choice. */
+  | { readonly type: "mcp.toggle"; readonly project: string; readonly name: string; readonly enabled: boolean }
   | { readonly type: "usage.get" }
   | { readonly type: "models.get" }
   /** The project's recent threads, open in a tab or not. */
@@ -321,6 +339,8 @@ export type CoreMessage =
   | { readonly type: "commands.found"; readonly project: string; readonly sources: readonly CommandSource[] }
   | { readonly type: "terminal.output"; readonly id: string; readonly data: string }
   | { readonly type: "terminal.exit"; readonly id: string; readonly code: number }
+  /** `servers` is absent when Claude Code could not be asked. */
+  | { readonly type: "mcp"; readonly project: string; readonly servers?: readonly McpServer[] }
   /** Paths relative to the project. The core serves each at `/project-icon?dir=&path=&token=`. */
   | { readonly type: "project.icons"; readonly project: string; readonly files: readonly string[] }
   /** `space` is absent when the folder is not a Git repo. */

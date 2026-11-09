@@ -48,6 +48,6 @@ export async function threadContext(dir: string, threadId: string): Promise<Save
       const usage = await running.getContextUsage({ detail: "summary" })
       return { percent: usage.percentage, tokens: usage.totalTokens, maxTokens: usage.maxTokens }
     },
-    threadId,
+    { thread: threadId },
   )
 }

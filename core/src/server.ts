@@ -3,6 +3,7 @@ import type { ServerWebSocket } from "bun"
 import pkg from "../package.json"
 import { discoverCommands } from "./command-sources"
 import { sameRunSettings, Session } from "./session"
+import { readMcpServers, toggleMcpServer } from "./mcp"
 import { findIconFiles, iconFile } from "./project-icons"
 import { loadSettings, saveSettings, updateSettings } from "./settings"
 import { isProjectFolder, Spaces } from "./spaces"
@@ -216,6 +217,10 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
         return void refreshUsage()
       case "project.icons":
         return send(ws, { type: "project.icons", project: message.project, files: findIconFiles(message.project) })
+      case "mcp.get":
+        return void readMcpServers(message.project, (servers) => send(ws, { type: "mcp", project: message.project, servers }))
+      case "mcp.toggle":
+        return void toggleMcpServer(message.project, message.name, message.enabled, (servers) => send(ws, { type: "mcp", project: message.project, servers }))
       case "space.get":
         return void readSpace(message.project).then((space) => send(ws, { type: "space", project: message.project, space }))
       case "session.send":

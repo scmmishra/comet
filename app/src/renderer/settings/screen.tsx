@@ -4,6 +4,7 @@ import { Tabs } from "@opencode/ui/tabs"
 import { For, Match, onMount, Switch } from "solid-js"
 import { closeSettings, openSettings, SETTINGS_PAGES, state, type SettingsPage } from "../store"
 import { AppearancePage } from "./appearance"
+import { McpsPage } from "./mcps"
 import { ProjectsPage } from "./projects"
 import { ProvidersPage } from "./providers"
 import "./settings.css"
@@ -12,6 +13,7 @@ const PAGES: Record<SettingsPage, { label: string; icon: IconName }> = {
   providers: { label: "Providers", icon: "providers" },
   appearance: { label: "Appearance", icon: "appearance" },
   projects: { label: "Projects", icon: "folder" },
+  mcps: { label: "MCP servers", icon: "mcp" },
 }
 
 /**
@@ -62,6 +64,9 @@ export function SettingsScreen() {
               </Match>
               <Match when={state.settingsPage === "projects"}>
                 <ProjectsPage />
+              </Match>
+              <Match when={state.settingsPage === "mcps"}>
+                <McpsPage />
               </Match>
             </Switch>
           </div>
