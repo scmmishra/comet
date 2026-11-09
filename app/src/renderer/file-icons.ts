@@ -10,6 +10,8 @@ const SOURCES = import.meta.glob<string>("../../node_modules/@opencode/ui/src/as
   import: "default",
 })
 const FALLBACK = "Document"
+/** Icons Desk swaps for OpenCode's choice. A README is a Markdown file, so it gets the Markdown mark, not an info badge. */
+const OVERRIDES: Record<string, string> = { Readme: "Markdown" }
 const SPRITE_ID = "desk-file-icon-sprite"
 
 // The icon set's names are its file names in PascalCase, as @opencode/ui's sprite generator writes them.
@@ -27,7 +29,8 @@ const requested = new Set<string>()
 
 /** The icon a file gets, such as "Typescript" for a .ts file. */
 export function fileIconName(path: string): string {
-  const name = chooseIconName(path, "file", false)
+  const chosen = chooseIconName(path, "file", false)
+  const name = OVERRIDES[chosen] ?? chosen
   return loaders.has(name) ? name : FALLBACK
 }
 
@@ -44,6 +47,11 @@ function addSymbol(name: string, svg: string) {
   const parsed = new DOMParser().parseFromString(svg, "image/svg+xml").documentElement
   const symbol = document.createElementNS("http://www.w3.org/2000/svg", "symbol")
   symbol.id = fileIconId(name)
+  // Some icons set fill="none" on their root, with a placeholder path that relies on it. The symbol keeps
+  // the root's attributes, so children inherit them and that path stays unpainted instead of black.
+  for (const attribute of Array.from(parsed.attributes)) {
+    if (!["xmlns", "width", "height"].includes(attribute.name)) symbol.setAttribute(attribute.name, attribute.value)
+  }
   symbol.setAttribute("viewBox", parsed.getAttribute("viewBox") ?? "0 0 24 24")
   symbol.append(...Array.from(parsed.childNodes))
   sprite().append(symbol)
