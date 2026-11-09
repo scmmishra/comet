@@ -42,11 +42,8 @@ export function McpsPage() {
     <>
       <SettingsHeader
         title="MCP servers"
-        description={
-          scope() === GLOBAL
-            ? "Available to all projects, from your user settings, claude.ai and plugins. Turn one off from a project's pill."
-            : `Servers in ${projectLabel(project())}. Turning one off keeps it off in this project only.`
-        }
+        // One subtitle for every pill, so the header keeps its height and the list below does not jump.
+        description="The servers Claude Code loads. Global ones load in every project. A project's switches act in that project only."
         actions={
           <Button variant="ghost" onClick={() => readMcpServers(project())} disabled={all() === undefined}>
             Refresh
@@ -55,6 +52,9 @@ export function McpsPage() {
       />
       <div class="settings-tab-body">
         <ScopePills value={scope()} onChange={setScope} />
+        <Show when={scope() === GLOBAL}>
+          <p class="text-fg-3">From your user settings, claude.ai and plugins. To turn one off, open a project's pill.</p>
+        </Show>
         <Show when={all() !== undefined} fallback={<p class="text-fg-3">Starting the servers to read them…</p>}>
           <Show when={all() !== null} fallback={<p class="text-fg-3">Desk could not ask Claude Code for its MCP servers.</p>}>
             <Show

@@ -1,7 +1,6 @@
 import type { Skill } from "@desk/protocol"
 import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js"
 import { Icon } from "../icons"
-import { projectLabel } from "../project-mark"
 import { activeProject, readSkills, state } from "../store"
 import { SettingsHeader, SettingsList, SettingsRow, SettingsSection } from "./layout"
 import { GLOBAL, ScopePills, type Scope } from "./scope-pills"
@@ -39,11 +38,8 @@ export function SkillsPage() {
     <>
       <SettingsHeader
         title="Skills"
-        description={
-          scope() === GLOBAL
-            ? "Available to all projects, from your user folder, claude.ai and plugins. Type / in a thread to use one."
-            : `The skills and commands in ${projectLabel(project())}'s .claude folder. Type / in a thread to use one.`
-        }
+        // One subtitle for every pill, so the header keeps its height and the list below does not jump.
+        description="The skills and commands Claude Code offers. Type / in a thread to use one."
       />
       <div class="settings-tab-body">
         <ScopePills value={scope()} onChange={setScope} />
