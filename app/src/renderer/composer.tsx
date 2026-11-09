@@ -3,8 +3,22 @@ import { modelLabel } from "./format"
 import { Icon } from "./icons"
 import { interrupt, send, type Tab } from "./store"
 
-const MAX_HEIGHT_PX = 200
+const MAX_HEIGHT_PX = 240
 
+/** Claude's starburst mark: eight lines through the centre make sixteen rays. */
+function ClaudeMark() {
+  return (
+    <svg viewBox="0 0 16 16" class="size-4 shrink-0 text-claude" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" aria-hidden="true">
+      <path d="M8 1.5v13M1.5 8h13M3.4 3.4l9.2 9.2M12.6 3.4l-9.2 9.2M5.3 1.9l5.4 12.2M10.7 1.9 5.3 14.1M1.9 5.3l12.2 5.4M14.1 5.3 1.9 10.7" />
+    </svg>
+  )
+}
+
+/**
+ * The message box, laid out as T3 Code's: a tall text area, then a row with the model and the
+ * send button on the right. The row has room for attachments, permission mode and context, which
+ * join it when Desk supports them.
+ */
 export function Composer(props: { tab: Tab }) {
   const [text, setText] = createSignal("")
   let input!: HTMLTextAreaElement
@@ -27,7 +41,8 @@ export function Composer(props: { tab: Tab }) {
 
   return (
     <form
-      class="mx-auto grid w-full max-w-[720px] gap-1.5 rounded-3xl bg-raised pb-2 pl-3.5 pr-2.5 pt-[11px] shadow-[0_0_0_1px_var(--color-line)]"
+      class="mx-auto flex w-full max-w-[720px] flex-col rounded-3xl bg-card shadow-[0_0_0_1px_var(--color-line)] transition-shadow focus-within:shadow-[0_0_0_1px_var(--color-hover)]"
+      onClick={() => input.focus()}
       onSubmit={(event) => {
         event.preventDefault()
         submit()
@@ -35,10 +50,10 @@ export function Composer(props: { tab: Tab }) {
     >
       <textarea
         ref={input}
-        rows={1}
+        rows={2}
         aria-label="Message"
-        class="min-h-[22px] w-full resize-none bg-transparent text-fg outline-none placeholder:text-fg-3"
-        placeholder="Ask anything, / for commands, @ for context…"
+        class="min-h-[52px] w-full resize-none bg-transparent px-4 pt-3.5 text-[14px] leading-relaxed text-fg outline-none placeholder:text-fg-3"
+        placeholder="Ask anything…"
         value={text()}
         onInput={(event) => {
           setText(event.currentTarget.value)
@@ -52,16 +67,12 @@ export function Composer(props: { tab: Tab }) {
           if (event.key === "Escape" && props.tab.busy) interrupt()
         }}
       />
-      <div class="flex items-center gap-1 text-fg-2">
-        <span class="inline-flex h-[26px] items-center gap-1.5 rounded-md px-[7px]">
-          <span class="size-1.5 rounded-full bg-claude" />
+      <div class="flex items-center gap-1 px-2.5 pb-2.5 pt-1">
+        <span class="ml-auto inline-flex h-8 items-center gap-2 rounded-lg px-2 text-[13px]">
+          <ClaudeMark />
           {/* The SDK names the model once the session starts. */}
-          <Show when={props.tab.model} fallback="Claude Code">
-            {(model) => (
-              <>
-                <span class="text-fg-3">Claude Code /</span> {modelLabel(model())}
-              </>
-            )}
+          <Show when={props.tab.model} fallback={<span class="text-fg-2">Claude Code</span>}>
+            {(model) => <span class="text-fg">{modelLabel(model())}</span>}
           </Show>
         </span>
         <Show
@@ -70,14 +81,14 @@ export function Composer(props: { tab: Tab }) {
             <button
               type="submit"
               aria-label="Send"
-              class="ml-auto grid size-7 place-items-center rounded-lg bg-fg-3 text-ground transition-colors"
-              classList={{ "bg-fg!": !!text().trim() }}
+              class="grid size-8 place-items-center rounded-full bg-raised text-fg-2 transition-colors"
+              classList={{ "bg-fg! text-ground!": !!text().trim() }}
             >
               <Icon name="up" />
             </button>
           }
         >
-          <button type="button" aria-label="Stop" class="ml-auto grid size-7 place-items-center rounded-lg bg-fg text-ground" onClick={interrupt}>
+          <button type="button" aria-label="Stop" class="grid size-8 place-items-center rounded-full bg-fg text-ground" onClick={interrupt}>
             <Icon name="stop" />
           </button>
         </Show>
