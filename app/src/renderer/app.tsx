@@ -7,7 +7,6 @@ import { Thread } from "./thread"
 
 export function App() {
   onMount(() => {
-    if (state.tabs.length === 0) newTab()
     const stop = window.desk.onCommand((command) => {
       if (command === "tab.new") newTab()
       else if (command === "tab.close" && state.active) closeTab(state.active)

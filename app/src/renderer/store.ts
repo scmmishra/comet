@@ -1,4 +1,4 @@
-import type { CoreMessage, Space, ThreadEvent } from "@desk/protocol"
+import type { CoreMessage, Space, TabInfo, ThreadEvent } from "@desk/protocol"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
 
@@ -39,6 +39,7 @@ export function newTab() {
     draft.tabs.splice(index + 1, 0, tab)
     draft.active = tab.id
   }))
+  saveTabs()
 }
 
 export function closeTab(id: string) {
@@ -50,10 +51,12 @@ export function closeTab(id: string) {
     if (draft.active === id) draft.active = draft.tabs[Math.max(0, index - 1)]?.id ?? ""
   }))
   if (state.tabs.length === 0) newTab()
+  else saveTabs()
 }
 
 export function selectTab(id: string) {
   setState("active", id)
+  saveTabs()
 }
 
 export function selectTabAt(index: number) {
@@ -64,7 +67,10 @@ export function selectTabAt(index: number) {
 export function send(text: string) {
   const tab = activeTab()
   if (!tab) return
-  if (tab.title === NEW_TAB_TITLE) setState("tabs", (found) => found.id === tab.id, "title", titleFrom(text))
+  if (tab.title === NEW_TAB_TITLE) {
+    setState("tabs", (found) => found.id === tab.id, "title", titleFrom(text))
+    saveTabs()
+  }
   core.send({ type: "session.send", sessionId: tab.id, text })
 }
 
@@ -86,6 +92,20 @@ export function refreshSpace() {
   core.send({ type: "space.get" })
 }
 
+/** The core saves tab order and titles per space, so Desk reopens with the same tabs. */
+function saveTabs() {
+  core.send({ type: "tabs.save", tabs: state.tabs.map(({ id, title }) => ({ id, title })), active: state.active })
+}
+
+/** Puts back the tabs the core saved. Their threads follow as session events. */
+function restoreTabs(tabs: readonly TabInfo[], active: string | undefined) {
+  if (tabs.length === 0) return newTab()
+  setState({
+    tabs: tabs.map((tab) => ({ id: tab.id, title: tab.title, items: [], busy: false })),
+    active: tabs.some((tab) => tab.id === active) ? active! : tabs[0]!.id,
+  })
+}
+
 function titleFrom(text: string) {
   const line = text.trim().split("\n")[0] ?? ""
   return line.length > TITLE_LENGTH ? `${line.slice(0, TITLE_LENGTH)}…` : line || NEW_TAB_TITLE
@@ -95,7 +115,8 @@ core.listen((message: CoreMessage) => {
   if (message.type === "hello") {
     setState("connected", true)
     refreshSpace()
-  } else if (message.type === "space") setState("space", message.space)
+  } else if (message.type === "tabs") restoreTabs(message.tabs, message.active)
+  else if (message.type === "space") setState("space", message.space)
   else if (message.type === "session.event") apply(message.sessionId, message.event)
 })
 
