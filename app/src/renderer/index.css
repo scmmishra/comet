@@ -185,12 +185,12 @@ body {
 /* Thread text. */
 /*
  * Thread text, with T3 Code's measures in px, because Desk's root is 13px: 14px text on a 1.625 line,
- * blocks 10.4px apart, and the text at 90% of the foreground.
+ * and blocks 10.4px apart.
  */
 .desk-prose {
   font-size: 14px;
   line-height: 1.625;
-  color: color-mix(in srgb, var(--color-fg) 90%, transparent);
+  color: var(--color-fg);
   overflow-wrap: anywhere;
 }
 .desk-prose > :first-child {
