@@ -135,13 +135,17 @@ export function newTab(place: "end" | "next" = "end", project?: string): string 
     const index = place === "next" ? draft.tabs.findIndex((found) => found.id === draft.active) + 1 : draft.tabs.length
     draft.tabs.splice(index, 0, tab)
     draft.active = tab.id
+    draft.settingsPage = undefined
   }))
   saveTabs()
   loadProject(tab.project)
   return tab.id
 }
 
-/** Shows the settings screen in place of the session, on a page. */
+/**
+ * Shows the settings screen in place of the session, on a page. No tab is active while it shows.
+ * Any action that shows a tab, such as selecting, opening or closing one, closes it first.
+ */
 export function openSettings(page: SettingsPage = SETTINGS_PAGES[0]) {
   setState("settingsPage", page)
 }
@@ -194,13 +198,14 @@ export function closeTab(id: string) {
     if (index < 0) return
     draft.tabs.splice(index, 1)
     if (draft.active === id) draft.active = draft.tabs[Math.max(0, index - 1)]?.id ?? ""
+    draft.settingsPage = undefined
   }))
   if (state.tabs.length === 0) newTab()
   else saveTabs()
 }
 
 export function selectTab(id: string) {
-  setState("active", id)
+  setState({ active: id, settingsPage: undefined })
   saveTabs()
   refreshReview()
   refreshSpace()
@@ -275,6 +280,7 @@ export function refreshSpace() {
 }
 
 export function togglePanel() {
+  closeSettings()
   setState("panelOpen", !state.panelOpen)
   localStorage.setItem(PANEL_KEY, state.panelOpen ? "open" : "closed")
   refreshReview()
@@ -321,6 +327,7 @@ export function stopGroup(group: string) {
 export function newTerminal() {
   const tab = activeTab()
   if (!tab) return
+  closeSettings()
   const id = crypto.randomUUID()
   const count = tab.panelTabs.filter((panelTab) => panelTab.kind === "terminal").length
   setState("tabs", (found) => found.id === tab.id, produce((draft) => {
