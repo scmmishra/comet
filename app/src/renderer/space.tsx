@@ -3,6 +3,7 @@ import { Badge } from "@opencode/ui/badge"
 import { DiffChanges } from "@opencode/ui/diff-changes"
 import { HoverCard } from "@opencode/ui/hover-card"
 import { Show, type JSX } from "solid-js"
+import { CommandsCard } from "./commands"
 import { Icon, type IconName } from "./icons"
 
 /**
@@ -47,8 +48,8 @@ export function SpaceCard(props: { space: Space }) {
 }
 
 /**
- * The Space card folded into the session header, for when the panel takes the room. Hovering or
- * focusing the chip opens the full card.
+ * The Space and Commands cards folded into the session header, for when the panel takes the room.
+ * Hovering or focusing the chip opens both cards.
  */
 export function SpaceChip(props: { space: Space }) {
   return (
@@ -64,7 +65,10 @@ export function SpaceChip(props: { space: Space }) {
         </button>
       }
     >
-      <SpaceCard space={props.space} />
+      <div class="flex flex-col gap-2">
+        <SpaceCard space={props.space} />
+        <CommandsCard />
+      </div>
     </HoverCard>
   )
 }

@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL, type CoreMessage, type FileChange, type ModelOption, type PlanUsage, type RunSettings, type Space, type TabInfo, type ThreadEvent, type ThreadSummary } from "@desk/protocol"
+import { DEFAULT_MODEL, type CommandInfo, type CommandProcess, type CommandSource, type CoreMessage, type FileChange, type ModelOption, type PlanUsage, type RunSettings, type Space, type TabInfo, type ThreadEvent, type ThreadSummary } from "@desk/protocol"
 import { batch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
@@ -48,6 +48,10 @@ const [state, setState] = createStore({
   space: undefined as Space | undefined,
   usage: undefined as PlanUsage | undefined,
   models: [] as readonly ModelOption[],
+  /** The space's saved commands and their runs, for the Space card. */
+  commands: [] as readonly CommandInfo[],
+  /** Commands the space's files define, for the Import menu. Undefined until the core has looked. */
+  commandSources: undefined as readonly CommandSource[] | undefined,
   /** The space's recent threads, for the start screen and thread search. */
   threads: [] as readonly ThreadSummary[],
   /** Whether the panel beside the thread is open. A per-window preference, so it lives in the page's storage. */
@@ -166,6 +170,42 @@ export function togglePanel() {
   refreshReview()
 }
 
+/** Looks again for commands to import. The space's files may have changed since the last look. */
+export function discoverCommands() {
+  setState("commandSources", undefined)
+  core.send({ type: "commands.discover" })
+}
+
+/**
+ * Replaces the commands in `replacing` with `processes`. One process saves as a plain command called
+ * `name`, several as a group called `name`. Adding replaces nothing.
+ */
+export function saveCommands(name: string, processes: readonly CommandProcess[], replacing: readonly string[]) {
+  core.send({ type: "commands.save", name, processes, replacing })
+}
+
+/** Removes commands, such as every command in a group, stopping those that run. */
+export function removeCommands(ids: readonly string[]) {
+  core.send({ type: "commands.remove", ids })
+}
+
+export function runCommand(id: string) {
+  core.send({ type: "command.run", id })
+}
+
+export function stopCommand(id: string) {
+  core.send({ type: "command.stop", id })
+}
+
+/** Runs the group's commands that are not running. */
+export function runGroup(group: string) {
+  core.send({ type: "group.run", group })
+}
+
+export function stopGroup(group: string) {
+  core.send({ type: "group.stop", group })
+}
+
 /** Opens a terminal in the active tab's panel, opening the panel if it is closed. */
 export function newTerminal() {
   const tab = activeTab()
@@ -257,11 +297,14 @@ core.listen((message: CoreMessage) => {
     refreshSpace()
     refreshUsage()
     core.send({ type: "models.get" })
+    core.send({ type: "commands.get" })
   } else if (message.type === "tabs") restoreTabs(message.tabs, message.active)
   else if (message.type === "space") setState("space", message.space)
   else if (message.type === "usage") setState("usage", message.usage)
   else if (message.type === "models") setState("models", message.models)
   else if (message.type === "threads") setState("threads", message.threads)
+  else if (message.type === "commands") setState("commands", message.commands)
+  else if (message.type === "commands.found") setState("commandSources", message.sources)
   else if (message.type === "review") setState("tabs", (tab) => tab.id === message.sessionId, "review", [...message.files])
   else if (message.type === "session.event") apply(message.sessionId, message.event, performance.now())
   else if (message.type === "session.history") batch(() => message.events.forEach((event) => apply(message.sessionId, event)))

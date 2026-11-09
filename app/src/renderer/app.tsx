@@ -9,6 +9,7 @@ import { Icon } from "./icons"
 import { ContextRing, UsageButton } from "./meters"
 import { pickModelByNumber } from "./model-picker"
 import { ReviewView } from "./review"
+import { CommandsCard } from "./commands"
 import { SpaceCard, SpaceChip } from "./space"
 import { StartScreen } from "./start-screen"
 import { activeTab, closePanelTab, closeTab, newTab, newTerminal, refreshSpace, refreshUsage, selectPanelTab, selectTab, selectTabAt, state, togglePanel, type Tab } from "./store"
@@ -68,7 +69,7 @@ export function App() {
                     <Show when={tab.context}>{(context) => <ContextRing {...context()} />}</Show>
                   </span>
                 </header>
-                {/* The Space card floats over the session's corner, so the thread stays centred. With the panel open, it folds into the header chip. */}
+                {/* The Space and Commands cards float over the session's corner, so the thread stays centred. With the panel open, they fold into the header chip. */}
                 <div class="relative flex min-h-0 flex-1">
                   <div class="flex min-w-0 flex-1 flex-col">
                     <Show when={tab.items.length > 0} fallback={<StartScreen tab={tab} />}>
@@ -82,6 +83,7 @@ export function App() {
                     {(space) => (
                       <aside class="desk-rail desk-no-scrollbar absolute right-2 top-0 flex max-h-full w-[264px] flex-col gap-2 overflow-y-auto pb-2">
                         <SpaceCard space={space()} />
+                        <CommandsCard />
                       </aside>
                     )}
                   </Show>
