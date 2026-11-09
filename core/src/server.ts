@@ -1,9 +1,9 @@
-import { PROTOCOL_VERSION, type ClientMessage, type CoreMessage, type PlanUsage } from "@desk/protocol"
+import { PROTOCOL_VERSION, type ClientMessage, type CoreMessage, type PlanUsage, type ThreadEvent } from "@desk/protocol"
 import type { ServerWebSocket } from "bun"
 import pkg from "../package.json"
 import { getSessionMessages } from "@anthropic-ai/claude-agent-sdk"
 import { Session } from "./session"
-import { loadSpaceState, saveSpaceState, type SpaceState } from "./space-state"
+import { loadSpaceState, saveSpaceState, type SavedTab, type SpaceState } from "./space-state"
 import { openInEditor, resolveSpaceFile } from "./files"
 import { readSpace } from "./space"
 import { historyEvents } from "./thread"
@@ -44,8 +44,8 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
     saved = next
     saveSpaceState(dir, saved)
   }
-  const rememberSession = (tabId: string, sessionId: string) =>
-    persist({ ...saved, tabs: saved.tabs.map((tab) => (tab.id === tabId ? { ...tab, sessionId } : tab)) })
+  const updateTab = (tabId: string, change: Partial<SavedTab>) =>
+    persist({ ...saved, tabs: saved.tabs.map((tab) => (tab.id === tabId ? { ...tab, ...change } : tab)) })
   const broadcast = (message: CoreMessage) => {
     const data = JSON.stringify(message)
     for (const client of clients) client.send(data)
@@ -54,9 +54,13 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
   const session = (id: string) => {
     let found = sessions.get(id)
     if (!found) {
-      found = new Session(dir, (event) => broadcast({ type: "session.event", sessionId: id, event }), {
+      const emit = (event: ThreadEvent) => {
+        if (event.kind === "context") updateTab(id, { context: { percent: event.percent, tokens: event.tokens, maxTokens: event.maxTokens } })
+        broadcast({ type: "session.event", sessionId: id, event })
+      }
+      found = new Session(dir, emit, {
         resume: saved.tabs.find((tab) => tab.id === id)?.sessionId,
-        onSessionId: (sessionId) => rememberSession(id, sessionId),
+        onSessionId: (sessionId) => updateTab(id, { sessionId }),
         onRateLimit: (info) => {
           usage = applyRateLimit(usage, info)
           broadcast({ type: "usage", usage })
@@ -79,7 +83,10 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
       case "tabs.save":
         // The app owns order and titles. The core keeps each tab's Claude session.
         return persist({
-          tabs: message.tabs.map((tab) => ({ ...tab, sessionId: saved.tabs.find((found) => found.id === tab.id)?.sessionId })),
+          tabs: message.tabs.map((tab) => {
+            const { sessionId, context } = saved.tabs.find((found) => found.id === tab.id) ?? {}
+            return { ...tab, sessionId, context }
+          }),
           active: message.active,
         })
       case "usage.get":
@@ -146,6 +153,7 @@ async function sendSavedTabs(ws: ServerWebSocket, dir: string, saved: SpaceState
     if (!tab.sessionId) continue
     const messages = await getSessionMessages(tab.sessionId, { dir }).catch(() => [])
     for (const event of historyEvents(messages)) send(ws, { type: "session.event", sessionId: tab.id, event })
+    if (tab.context) send(ws, { type: "session.event", sessionId: tab.id, event: { kind: "context", ...tab.context } })
   }
 }
 

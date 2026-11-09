@@ -9,6 +9,8 @@ export interface SavedTab {
   readonly title: string
   /** The Claude session to resume. Absent until the tab's first message. */
   readonly sessionId?: string
+  /** The last context reading. A restored session is not live until its next message, so it cannot be asked. */
+  readonly context?: { readonly percent: number; readonly tokens: number; readonly maxTokens: number }
 }
 
 export interface SpaceState {
