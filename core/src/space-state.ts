@@ -25,14 +25,25 @@ export interface SpaceState {
 const EMPTY: SpaceState = { tabs: [] }
 
 /**
- * Where a space's tabs are saved: `~/.desk/spaces/<folder>-<hash>.json`, as Rune names its space
- * files. The hash keeps two checkouts with the same folder name apart. DESK_HOME moves the folder,
- * for tests.
+ * Where Desk keeps one kind of data for a space: `~/.desk/<kind>/<folder>-<hash>.json`, as Rune names
+ * its space files. The hash keeps two checkouts with the same folder name apart. DESK_HOME moves the
+ * folder, for tests.
  */
-export function spaceStatePath(dir: string): string {
+export function spaceDataPath(kind: string, dir: string): string {
   const home = process.env.DESK_HOME ?? join(homedir(), ".desk")
   const hash = createHash("sha256").update(dir).digest("hex").slice(0, 8)
-  return join(home, "spaces", `${basename(dir)}-${hash}.json`)
+  return join(home, kind, `${basename(dir)}-${hash}.json`)
+}
+
+/** Where a space's tabs are saved. */
+export const spaceStatePath = (dir: string) => spaceDataPath("spaces", dir)
+
+/** Writes through a temporary file, so a crash mid-write never leaves a broken file. */
+export function writeJsonFile(path: string, value: unknown) {
+  mkdirSync(join(path, ".."), { recursive: true })
+  const temporary = `${path}.tmp`
+  writeFileSync(temporary, JSON.stringify(value, null, 2))
+  renameSync(temporary, path)
 }
 
 export function loadSpaceState(dir: string): SpaceState {
@@ -49,11 +60,6 @@ export function loadSpaceState(dir: string): SpaceState {
   }
 }
 
-/** Writes through a temporary file, so a crash mid-write never leaves a broken file. */
 export function saveSpaceState(dir: string, state: SpaceState) {
-  const path = spaceStatePath(dir)
-  mkdirSync(join(path, ".."), { recursive: true })
-  const temporary = `${path}.tmp`
-  writeFileSync(temporary, JSON.stringify(state, null, 2))
-  renameSync(temporary, path)
+  writeJsonFile(spaceStatePath(dir), state)
 }

@@ -1,6 +1,8 @@
 import { DEFAULT_MODEL, PROTOCOL_VERSION, type ClientMessage, type CoreMessage, type ModelOption, type PlanUsage, type ThreadEvent } from "@desk/protocol"
 import type { ServerWebSocket } from "bun"
 import pkg from "../package.json"
+import { discoverCommands } from "./command-sources"
+import { Commands } from "./commands"
 import { sameRunSettings, Session } from "./session"
 import { loadSpaceState, saveSpaceState, type SavedTab, type SpaceState } from "./space-state"
 import { openInEditor, resolveSpaceFile } from "./files"
@@ -35,6 +37,7 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
     output: (id, data) => broadcast({ type: "terminal.output", id, data }),
     exit: (id, code) => broadcast({ type: "terminal.exit", id, code }),
   })
+  const commands = new Commands(dir, (list) => broadcast({ type: "commands", commands: list }))
   let saved = loadSpaceState(dir)
   // Plan usage: probed at most once a minute, and kept current by sessions' rate-limit events.
   let usage: PlanUsage | undefined
@@ -143,6 +146,26 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
         return terminals.input(message.id, message.data)
       case "terminal.resize":
         return terminals.resize(message.id, message.cols, message.rows)
+      case "commands.get":
+        return send(ws, { type: "commands", commands: commands.list() })
+      case "commands.discover":
+        return void discoverCommands(dir).then((sources) => send(ws, { type: "commands.found", sources }))
+      case "commands.save":
+        try {
+          return commands.save(message.name, message.processes, message.replacing)
+        } catch (error) {
+          return send(ws, { type: "error", message: error instanceof Error ? error.message : String(error) })
+        }
+      case "commands.remove":
+        return commands.remove(message.ids)
+      case "command.run":
+        return commands.run(message.id)
+      case "command.stop":
+        return commands.stop(message.id)
+      case "group.run":
+        return commands.runGroup(message.group)
+      case "group.stop":
+        return commands.stopGroup(message.group)
       case "models.get":
         return sendModels(ws)
       case "usage.get":
@@ -218,6 +241,7 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
     stop() {
       for (const found of sessions.values()) found.close()
       terminals.closeAll()
+      commands.stopAll()
       server.stop(true)
     },
   }

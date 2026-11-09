@@ -127,6 +127,44 @@ export interface ThreadSummary {
   readonly tabId?: string
 }
 
+/** A command saved for the space, such as a dev server. The core runs it in the background. */
+export interface SpaceCommand {
+  readonly id: string
+  readonly name: string
+  /** A shell command line, run at the space's root. */
+  readonly command: string
+  /** Commands that share a group show as one row and run and stop together, as Rune's did. */
+  readonly group?: string
+}
+
+/**
+ * Where a command's last run stands. A command not run since the core started is idle. Stop makes it
+ * idle again, so only a command that exits on its own reports exited or failed.
+ */
+export type CommandRun =
+  | { readonly state: "idle" }
+  | { readonly state: "running" }
+  | { readonly state: "exited" }
+  | { readonly state: "failed"; readonly code: number }
+
+/** A process in the command editor. `id` is the saved command it replaces, when it replaces one. */
+export interface CommandProcess {
+  readonly id?: string
+  readonly name: string
+  readonly command: string
+}
+
+export interface CommandInfo extends SpaceCommand {
+  readonly run: CommandRun
+}
+
+/** A file in the space that defines commands, such as a Procfile, and the commands found in it. */
+export interface CommandSource {
+  /** What the menu calls it, such as "Procfile.dev" or "package.json". */
+  readonly name: string
+  readonly commands: readonly { readonly name: string; readonly command: string }[]
+}
+
 /** A terminal in a tab's panel. Its shell runs in the core under this id. */
 export interface TerminalInfo {
   readonly id: string
@@ -156,6 +194,21 @@ export type ClientMessage =
   | { readonly type: "terminal.open"; readonly id: string; readonly cols: number; readonly rows: number }
   | { readonly type: "terminal.input"; readonly id: string; readonly data: string }
   | { readonly type: "terminal.resize"; readonly id: string; readonly cols: number; readonly rows: number }
+  | { readonly type: "commands.get" }
+  /** Looks for commands to import in the space's Procfiles, mise tasks and package.json. */
+  | { readonly type: "commands.discover" }
+  /**
+   * Replaces the commands in `replacing` with `processes`, in their place. One process saves as a plain
+   * command called `name`, several as a group called `name`. Adding replaces nothing.
+   */
+  | { readonly type: "commands.save"; readonly name: string; readonly processes: readonly CommandProcess[]; readonly replacing: readonly string[] }
+  /** Removes commands, such as every command in a group, stopping those that run. */
+  | { readonly type: "commands.remove"; readonly ids: readonly string[] }
+  | { readonly type: "command.run"; readonly id: string }
+  | { readonly type: "command.stop"; readonly id: string }
+  /** Runs every command in the group that is not running. */
+  | { readonly type: "group.run"; readonly group: string }
+  | { readonly type: "group.stop"; readonly group: string }
   /** The files a tab's thread changed since its first message. */
   | { readonly type: "review.get"; readonly sessionId: string }
   /** The app's tabs, in order, sent whenever they change. */
@@ -179,6 +232,9 @@ export type CoreMessage =
   /** `usage` is absent when Claude has no plan limits, such as with an API key. */
   | { readonly type: "usage"; readonly usage?: PlanUsage }
   | { readonly type: "review"; readonly sessionId: string; readonly files: readonly FileChange[] }
+  /** The space's commands and how each one runs, sent again on every change. */
+  | { readonly type: "commands"; readonly commands: readonly CommandInfo[] }
+  | { readonly type: "commands.found"; readonly sources: readonly CommandSource[] }
   | { readonly type: "terminal.output"; readonly id: string; readonly data: string }
   | { readonly type: "terminal.exit"; readonly id: string; readonly code: number }
   /** `space` is absent when the folder is not a Git repo. */
