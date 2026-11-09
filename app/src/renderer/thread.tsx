@@ -1,16 +1,18 @@
 import { createMemo, createSignal, For, Index, Match, Show, Switch } from "solid-js"
 import { editTexts, lineDiff } from "./diff"
-import { formatDuration, modelLabel } from "./format"
+import { formatDuration } from "./format"
 import { Icon } from "./icons"
 import { Markdown } from "./markdown"
 import { answerPermission, state, type Item, type Tab } from "./store"
 
 type ToolItem = Extract<Item, { type: "tool" }>
 type PermissionItem = Extract<Item, { type: "permission" }>
-type Row = { readonly type: "tools"; readonly id: string; readonly tools: ToolItem[] } | Item
+type ToolsRow = { readonly type: "tools"; readonly id: string; readonly tools: ToolItem[] }
+type WorkRow = { readonly type: "work"; readonly id: string; readonly items: Item[]; readonly durationMs?: number }
+type Row = ToolsRow | WorkRow | Item
 
 /** Edits show as diffs on their own. Other tool calls in a row fold into one "Used N" line. */
-function rows(items: readonly Item[]): Row[] {
+function groupTools(items: readonly Item[]): Row[] {
   const out: Row[] = []
   for (const item of items) {
     if (item.type === "tool" && !editTexts(item.name, item.input)) {
@@ -22,46 +24,52 @@ function rows(items: readonly Item[]): Row[] {
   return out
 }
 
+/**
+ * The thread as rows. A finished turn folds its work, everything before its closing text, into one
+ * "Worked for" row, after T3 Code. Errors stay out of the fold. The turn in progress shows each step.
+ * A turn is finished once another message follows it, or once the tab stops working, so restored
+ * threads, which carry no result events, fold the same way.
+ */
+function threadRows(items: readonly Item[], busy: boolean): Row[] {
+  const out: Row[] = []
+  let turn: Item[] = []
+  const close = (finished: boolean) => {
+    const result = turn.find((item) => item.type === "result")
+    const body = turn.filter((item) => item.type !== "result")
+    turn = []
+    if (!finished) return void out.push(...groupTools(body))
+    let end = body.length
+    while (end > 0 && body[end - 1]!.type === "text") end--
+    const work = body.slice(0, end).filter((item) => item.type !== "error")
+    if (work.length) out.push({ type: "work", id: `work:${work[0]!.id}`, items: work, durationMs: result?.type === "result" ? result.durationMs : undefined })
+    out.push(...body.slice(0, end).filter((item) => item.type === "error"), ...body.slice(end))
+  }
+  for (const item of items) {
+    if (item.type === "user") {
+      close(true)
+      out.push(item)
+    } else turn.push(item)
+  }
+  close(!busy)
+  return out
+}
+
 export function Thread(props: { tab: Tab }) {
-  const grouped = createMemo(() => rows(props.tab.items))
+  const shown = createMemo(() => threadRows(props.tab.items, props.tab.busy))
   // Only what arrives while the thread is on screen rises in. A tab switch, a reload or a restored
   // transcript shows the thread at once, so switching tabs never replays motion.
   const mountedAt = performance.now()
   const rise = (row: Row) => {
-    const item = row.type === "tools" ? row.tools[0] : row
+    const item = row.type === "tools" ? row.tools[0] : row.type === "work" ? row.items[0] : row
     return (item?.arrivedAt ?? 0) > mountedAt ? "desk-rise" : ""
   }
   return (
     <div class="mx-auto flex w-full max-w-[720px] flex-col gap-3.5 px-6 pb-4 pt-2.5">
-      {/* Rows only append, and a tool group is rebuilt each time an item arrives. Index keys rows by position, so a growing group keeps its element and its open state. */}
-      <Index each={grouped()}>
+      {/* Rows mostly append, and groups are rebuilt each time an item arrives. Index keys rows by position, so a growing group keeps its element and its open state. */}
+      <Index each={shown()}>
         {(row) => (
           <div class={rise(row())}>
-            <Switch>
-              <Match when={row().type === "user" && (row() as Item)}>
-                {(item) => <div class="ml-auto w-fit max-w-[80%] whitespace-pre-wrap rounded-3xl bg-raised px-3.5 py-[9px]">{(item() as Extract<Item, { type: "user" }>).text}</div>}
-              </Match>
-              <Match when={row().type === "text" && (row() as Extract<Item, { type: "text" }>)}>
-                {(item) => <Markdown text={item().text} done={item().done} />}
-              </Match>
-              <Match when={row().type === "thinking"}>
-                <div class="text-[12px] text-fg-3">Thought</div>
-              </Match>
-              <Match when={row().type === "tools" && (row() as Extract<Row, { type: "tools" }>)}>{(group) => <ToolGroup tools={group().tools} />}</Match>
-              <Match when={row().type === "tool" && row()}>{(item) => <EditBlock tool={item() as ToolItem} />}</Match>
-              <Match when={row().type === "permission" && row()}>{(item) => <PermissionCard item={item() as PermissionItem} />}</Match>
-              <Match when={row().type === "result" && (row() as Extract<Item, { type: "result" }>)}>
-                {(item) => (
-                  <div class="flex items-center gap-1.5 text-[12px] text-fg-3">
-                    <Icon name="bot" class="size-[15px]" />
-                    {`${modelLabel(props.tab.resolvedModel)} · ${formatDuration(item().durationMs)}`}
-                  </div>
-                )}
-              </Match>
-              <Match when={row().type === "error" && (row() as Extract<Item, { type: "error" }>)}>
-                {(item) => <div class="rounded-2xl bg-del-soft px-3 py-2 text-del">{item().message}</div>}
-              </Match>
-            </Switch>
+            <RowView row={row()} />
           </div>
         )}
       </Index>
@@ -69,6 +77,48 @@ export function Thread(props: { tab: Tab }) {
         <div class="flex items-center gap-2 text-fg-3">
           <span class="desk-spin" />
           Working…
+        </div>
+      </Show>
+    </div>
+  )
+}
+
+function RowView(props: { row: Row }) {
+  return (
+    <Switch>
+      <Match when={props.row.type === "user" && (props.row as Extract<Item, { type: "user" }>)}>
+        {(item) => <div class="ml-auto w-fit max-w-[80%] whitespace-pre-wrap rounded-3xl bg-raised px-3.5 py-[9px]">{item().text}</div>}
+      </Match>
+      <Match when={props.row.type === "text" && (props.row as Extract<Item, { type: "text" }>)}>{(item) => <Markdown text={item().text} done={item().done} />}</Match>
+      <Match when={props.row.type === "thinking"}>
+        <div class="text-[12px] text-fg-3">Thought</div>
+      </Match>
+      <Match when={props.row.type === "work" && (props.row as WorkRow)}>{(work) => <WorkView work={work()} />}</Match>
+      <Match when={props.row.type === "tools" && (props.row as ToolsRow)}>{(group) => <ToolGroup tools={group().tools} />}</Match>
+      <Match when={props.row.type === "tool" && (props.row as ToolItem)}>{(item) => <EditBlock tool={item()} />}</Match>
+      <Match when={props.row.type === "permission" && (props.row as PermissionItem)}>{(item) => <PermissionCard item={item()} />}</Match>
+      <Match when={props.row.type === "error" && (props.row as Extract<Item, { type: "error" }>)}>
+        {(item) => <div class="rounded-2xl bg-del-soft px-3 py-2 text-del">{item().message}</div>}
+      </Match>
+    </Switch>
+  )
+}
+
+/** A finished turn's work, folded. A restored turn has no timing, so it counts its steps instead. */
+function WorkView(props: { work: WorkRow }) {
+  const [open, setOpen] = createSignal(false)
+  const steps = () => props.work.items.filter((item) => item.type === "tool" || item.type === "thinking").length
+  const label = () =>
+    props.work.durationMs !== undefined ? `Worked for ${formatDuration(props.work.durationMs)}` : `Worked through ${steps()} ${steps() === 1 ? "step" : "steps"}`
+  return (
+    <div class="grid gap-3.5">
+      <button class="inline-flex w-fit items-center gap-1 text-fg-3 hover:text-fg-2" aria-expanded={open()} onClick={() => setOpen(!open())}>
+        {label()}
+        <Icon name="chevron" class={`size-[15px] transition-transform duration-150 ${open() ? "rotate-90" : ""}`} />
+      </button>
+      <Show when={open()}>
+        <div class="grid gap-3.5">
+          <For each={groupTools(props.work.items)}>{(row) => <RowView row={row} />}</For>
         </div>
       </Show>
     </div>
