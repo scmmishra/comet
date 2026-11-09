@@ -1,6 +1,14 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterAll, afterEach, expect, test } from "bun:test"
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import type { CoreMessage } from "@desk/protocol"
 import { startCore, type CoreServer } from "./server"
+
+// Saved tabs go to a temporary folder, never the user's ~/.desk.
+const home = mkdtempSync(join(tmpdir(), "desk-home-"))
+process.env.DESK_HOME = home
+afterAll(() => rmSync(home, { recursive: true, force: true }))
 
 let core: CoreServer | undefined
 afterEach(() => core?.stop())
@@ -22,6 +30,7 @@ test("greets the client and answers a ping", async () => {
   const client = connect(core.port, "secret")
   await client.opened
   expect(await client.next()).toMatchObject({ type: "hello", protocol: 1, bun: Bun.version })
+  expect(await client.next()).toEqual({ type: "tabs", tabs: [] })
   client.ws.send(JSON.stringify({ type: "ping", id: 7 }))
   expect(await client.next()).toEqual({ type: "pong", id: 7 })
   client.ws.close()

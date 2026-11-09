@@ -1,9 +1,12 @@
 import { PROTOCOL_VERSION, type ClientMessage, type CoreMessage } from "@desk/protocol"
 import type { ServerWebSocket } from "bun"
 import pkg from "../package.json"
+import { getSessionMessages } from "@anthropic-ai/claude-agent-sdk"
 import { Session } from "./session"
+import { loadSpaceState, saveSpaceState, type SpaceState } from "./space-state"
 import { openInEditor, resolveSpaceFile } from "./files"
 import { readSpace } from "./space"
+import { historyEvents } from "./thread"
 
 export interface CoreServer {
   readonly port: number
@@ -23,6 +26,13 @@ export interface CoreOptions {
 export function startCore({ token, dir }: CoreOptions): CoreServer {
   const clients = new Set<ServerWebSocket>()
   const sessions = new Map<string, Session>()
+  let saved = loadSpaceState(dir)
+  const persist = (next: SpaceState) => {
+    saved = next
+    saveSpaceState(dir, saved)
+  }
+  const rememberSession = (tabId: string, sessionId: string) =>
+    persist({ ...saved, tabs: saved.tabs.map((tab) => (tab.id === tabId ? { ...tab, sessionId } : tab)) })
   const broadcast = (message: CoreMessage) => {
     const data = JSON.stringify(message)
     for (const client of clients) client.send(data)
@@ -31,7 +41,10 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
   const session = (id: string) => {
     let found = sessions.get(id)
     if (!found) {
-      found = new Session(dir, (event) => broadcast({ type: "session.event", sessionId: id, event }))
+      found = new Session(dir, (event) => broadcast({ type: "session.event", sessionId: id, event }), {
+        resume: saved.tabs.find((tab) => tab.id === id)?.sessionId,
+        onSessionId: (sessionId) => rememberSession(id, sessionId),
+      })
       sessions.set(id, found)
     }
     return found
@@ -46,6 +59,12 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
         if (!file) return send(ws, { type: "error", message: `Desk can only open files inside the space: ${message.path}` })
         return openInEditor(file, message.line)
       }
+      case "tabs.save":
+        // The app owns order and titles. The core keeps each tab's Claude session.
+        return persist({
+          tabs: message.tabs.map((tab) => ({ ...tab, sessionId: saved.tabs.find((found) => found.id === tab.id)?.sessionId })),
+          active: message.active,
+        })
       case "space.get":
         return void readSpace(dir).then((space) => send(ws, { type: "space", space }))
       case "session.send":
@@ -75,6 +94,7 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
       open(ws) {
         clients.add(ws)
         send(ws, { type: "hello", protocol: PROTOCOL_VERSION, core: pkg.version, bun: Bun.version })
+        void sendSavedTabs(ws, dir, saved)
       },
       close(ws) {
         clients.delete(ws)
@@ -97,6 +117,16 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
       for (const found of sessions.values()) found.close()
       server.stop(true)
     },
+  }
+}
+
+/** Sends the saved tabs, then each tab's conversation read back from Claude's transcript. */
+async function sendSavedTabs(ws: ServerWebSocket, dir: string, saved: SpaceState) {
+  send(ws, { type: "tabs", tabs: saved.tabs.map(({ id, title }) => ({ id, title })), active: saved.active })
+  for (const tab of saved.tabs) {
+    if (!tab.sessionId) continue
+    const messages = await getSessionMessages(tab.sessionId, { dir }).catch(() => [])
+    for (const event of historyEvents(messages)) send(ws, { type: "session.event", sessionId: tab.id, event })
   }
 }
 

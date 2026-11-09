@@ -47,9 +47,17 @@ export interface Space {
   }
 }
 
+/** A top tab as the app shows it. The core saves tabs per space and sends them back on connect. */
+export interface TabInfo {
+  readonly id: string
+  readonly title: string
+}
+
 export type ClientMessage =
   | { readonly type: "ping"; readonly id: number }
   | { readonly type: "space.get" }
+  /** The app's tabs, in order, sent whenever they change. */
+  | { readonly type: "tabs.save"; readonly tabs: readonly TabInfo[]; readonly active?: string }
   /** Opens a file from the thread in the editor. The core refuses paths outside the space. */
   | { readonly type: "file.open"; readonly path: string; readonly line?: number }
   | { readonly type: "session.send"; readonly sessionId: string; readonly text: string }
@@ -60,6 +68,8 @@ export type ClientMessage =
 export type CoreMessage =
   | { readonly type: "hello"; readonly protocol: number; readonly core: string; readonly bun: string }
   | { readonly type: "pong"; readonly id: number }
+  /** The tabs saved for this space. Each restored tab's thread follows as session events. */
+  | { readonly type: "tabs"; readonly tabs: readonly TabInfo[]; readonly active?: string }
   /** `space` is absent when the folder is not a Git repo. */
   | { readonly type: "space"; readonly space?: Space }
   | { readonly type: "session.event"; readonly sessionId: string; readonly event: ThreadEvent }
