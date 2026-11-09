@@ -65,8 +65,8 @@ export function App() {
 function SpaceAvatar(props: { small?: boolean }) {
   return (
     <span
-      class="grid shrink-0 place-items-center bg-[#3a3a40] font-semibold text-fg"
-      classList={{ "size-[18px] rounded-[5px] text-[11px]": !props.small, "size-4 rounded-[4px] text-[10px]": props.small }}
+      class="grid shrink-0 place-items-center bg-[#3a3a40] font-semibold leading-none text-fg"
+      classList={{ "size-[18px] rounded-[5px] text-[11px]": !props.small, "size-[16px] rounded-[4px] text-[10px]": props.small }}
     >
       {(state.space?.name ?? "?").charAt(0).toUpperCase()}
     </span>
