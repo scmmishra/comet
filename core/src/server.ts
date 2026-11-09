@@ -7,7 +7,7 @@ import { openInEditor, resolveSpaceFile } from "./files"
 import { readSpace } from "./space"
 import { changesSince, snapshot } from "./checkpoints"
 import { Terminals } from "./terminals"
-import { recentThreads, threadHistory } from "./past-threads"
+import { recentThreads, threadContext, threadHistory } from "./past-threads"
 import { applyRateLimit, probeUsage } from "./usage"
 import { probeModels } from "./models"
 
@@ -68,6 +68,15 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
     const data = JSON.stringify(message)
     for (const client of clients) client.send(data)
   }
+  // A thread with no context reading gets one now, so its ring shows before its next reply.
+  const fillContext = (tabId: string, threadId: string) =>
+    void threadContext(dir, threadId).then((context) => {
+      // The tab may have moved to another thread, or taken a live reading, while the probe ran.
+      const tab = saved.tabs.find((found) => found.id === tabId)
+      if (!context || tab?.sessionId !== threadId || tab.context) return
+      updateTab(tabId, { context })
+      broadcast({ type: "session.event", sessionId: tabId, event: { kind: "context", ...context } })
+    })
 
   const session = (id: string) => {
     let found = sessions.get(id)
@@ -160,6 +169,7 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
         updateTab(message.sessionId, { sessionId: message.threadId, baseline: undefined, context: undefined })
         const tab = saved.tabs.find((found) => found.id === message.sessionId)
         if (!tab) return send(ws, { type: "error", message: "Desk could not find the tab to resume the thread in." })
+        fillContext(tab.id, message.threadId)
         return void threadHistory(dir, tab).then((events) => send(ws, { type: "session.history", sessionId: tab.id, events }))
       }
       case "session.close":
@@ -186,6 +196,7 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
         clients.add(ws)
         send(ws, { type: "hello", protocol: PROTOCOL_VERSION, core: pkg.version, bun: Bun.version, dir })
         void sendSavedTabs(ws, dir, saved)
+        for (const tab of saved.tabs) if (tab.sessionId && !tab.context) fillContext(tab.id, tab.sessionId)
       },
       close(ws) {
         clients.delete(ws)
