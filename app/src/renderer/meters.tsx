@@ -33,7 +33,7 @@ export function UsageButton(props: { usage: PlanUsage }) {
         onClick={() => setOpen(!open())}
       >
         <Icon name="gauge" />
-        <span class="block h-[5px] w-[26px] shrink-0 overflow-hidden rounded-full bg-line">
+        <span class="block h-[5px] w-[26px] shrink-0 overflow-hidden rounded-full bg-track">
           <span class="block h-full rounded-full bg-fg-2" style={{ width: `${fullest().percent}%` }} />
         </span>
         {Math.round(fullest().percent)}%
@@ -55,7 +55,7 @@ function UsageRow(props: { window: UsageWindow }) {
         <span>{props.window.label}</span>
         <b class="font-medium tabular-nums text-fg">{Math.round(props.window.percent)}%</b>
       </div>
-      <div class="h-1.5 overflow-hidden rounded-full bg-line">
+      <div class="h-1.5 overflow-hidden rounded-full bg-track">
         <i class="block h-full rounded-full bg-accent" style={{ width: `${props.window.percent}%` }} />
       </div>
       <Show when={props.window.resetsAt}>{(at) => <small class="text-[12px] text-fg-3">{resetLabel(at())}</small>}</Show>
@@ -83,7 +83,7 @@ export function ContextRing(props: { percent: number; tokens: number; maxTokens:
       title={`${NUMBER.format(props.tokens)} of ${NUMBER.format(props.maxTokens)} tokens in context`}
     >
       <svg viewBox="0 0 16 16" class="size-[15px] -rotate-90">
-        <circle cx="8" cy="8" r={RING_RADIUS} fill="none" stroke="var(--color-line)" stroke-width="2" />
+        <circle cx="8" cy="8" r={RING_RADIUS} fill="none" stroke="var(--color-track)" stroke-width="2" />
         <circle
           cx="8"
           cy="8"

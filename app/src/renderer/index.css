@@ -17,6 +17,7 @@
   --color-hover: #222326;
   --color-line: #232427;
   --color-outline: rgb(255 255 255 / 4%);
+  --color-track: rgb(255 255 255 / 12%);
   --color-fg: #e3e4e8;
   --color-fg-2: #8a8f98;
   --color-fg-3: #62666d;
@@ -43,6 +44,10 @@
 }
 
 :root {
+  /* A fixed spacing unit. @opencode/ui sets 0.25rem, which Desk's 13px root shrinks to 3.25px, so
+     every padding, gap and size came out a fifth smaller than written. Its theme layer sets the
+     value after Tailwind's theme, so the override lives here, outside the layers. */
+  --spacing: 4px;
   --font-family-sans: "Geist Variable", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
   --font-family-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
   color-scheme: dark;
