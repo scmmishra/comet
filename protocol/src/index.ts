@@ -13,9 +13,11 @@ export interface CoreReady {
  * these, so the app never reads SDK types.
  */
 export type ThreadEvent =
-  | { readonly kind: "user"; readonly id: string; readonly text: string }
+  /** `at` is when it was sent, in milliseconds since the epoch, when that is known. */
+  | { readonly kind: "user"; readonly id: string; readonly text: string; readonly at?: number }
   /** Assistant text. A later event with the same id replaces the text; `delta` appends to it. */
-  | { readonly kind: "text"; readonly id: string; readonly text: string; readonly done: boolean }
+  /** `at` is when the text finished, when that is known. A text still streaming has none. */
+  | { readonly kind: "text"; readonly id: string; readonly text: string; readonly done: boolean; readonly at?: number }
   | { readonly kind: "text.delta"; readonly id: string; readonly delta: string }
   | { readonly kind: "thinking"; readonly id: string }
   | { readonly kind: "tool"; readonly id: string; readonly name: string; readonly input: Record<string, unknown> }

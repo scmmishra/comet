@@ -74,7 +74,7 @@ export class Session {
   }
 
   send(text: string) {
-    this.emit({ kind: "user", id: `user-${++this.sent}`, text })
+    this.emit({ kind: "user", id: `user-${++this.sent}`, text, at: Date.now() })
     this.emit({ kind: "status", busy: true })
     this.inbox.push({ type: "user", message: { role: "user", content: text }, parent_tool_use_id: null })
     if (!this.query) this.start()
@@ -128,7 +128,7 @@ export class Session {
           this.options.onSessionId?.(message.session_id)
         }
         if (message.type === "rate_limit_event") this.options.onRateLimit?.(message.rate_limit_info)
-        for (const event of this.mapper.map(message)) this.emit(event)
+        for (const event of this.mapper.map(message, Date.now())) this.emit(event)
         if (message.type === "result") {
           this.emit({ kind: "status", busy: false })
           void this.reportContext(running)

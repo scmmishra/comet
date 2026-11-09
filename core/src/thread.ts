@@ -11,7 +11,8 @@ const MAX_TOOL_OUTPUT = 4000
 export class ThreadMapper {
   private streaming?: string
 
-  map(message: SDKMessage): ThreadEvent[] {
+  /** `at` stamps finished text: now for a live message, its own time for a stored one. */
+  map(message: SDKMessage, at?: number): ThreadEvent[] {
     switch (message.type) {
       case "system":
         return message.subtype === "init" ? [{ kind: "init", model: message.model }] : []
@@ -20,7 +21,7 @@ export class ThreadMapper {
       case "assistant":
         // A subagent's own steps stay inside its tool call.
         if (message.parent_tool_use_id) return []
-        return this.mapAssistant(message.message.content, message.uuid)
+        return this.mapAssistant(message.message.content, message.uuid, at)
       case "user":
         if (message.parent_tool_use_id) return []
         return mapToolResults(message.message.content)
@@ -51,13 +52,13 @@ export class ThreadMapper {
     return []
   }
 
-  private mapAssistant(content: SDKAssistantMessage["message"]["content"], uuid: string): ThreadEvent[] {
+  private mapAssistant(content: SDKAssistantMessage["message"]["content"], uuid: string, at: number | undefined): ThreadEvent[] {
     const events: ThreadEvent[] = []
     content.forEach((block, index) => {
       if (block.type === "text") {
         const id = this.streaming ?? `${uuid}:${index}`
         this.streaming = undefined
-        events.push({ kind: "text", id, text: block.text, done: true })
+        events.push({ kind: "text", id, text: block.text, done: true, ...(at !== undefined ? { at } : {}) })
       } else if (block.type === "thinking") {
         events.push({ kind: "thinking", id: `${uuid}:${index}` })
       } else if (block.type === "tool_use") {
@@ -96,26 +97,42 @@ export interface StoredMessage {
   readonly uuid: string
   readonly message: unknown
   readonly parent_tool_use_id: string | null
+  /** When it was written. The SDK returns it but leaves it out of its type. */
+  readonly timestamp?: string
 }
 
 /**
- * Rebuilds a thread from a stored transcript, so a restored tab shows its conversation. Turn
- * timings are not stored, so a restored thread has no result lines.
+ * Rebuilds a thread from a stored transcript, so a restored tab shows its conversation. Each turn
+ * ends with a result, timed from the user's message to the last reply, so restored turns fold the
+ * way live ones do.
  */
 export function historyEvents(messages: readonly StoredMessage[]): ThreadEvent[] {
   const mapper = new ThreadMapper()
   const events: ThreadEvent[] = []
+  let turn: { id: string; start: number; end?: number } | undefined
+  const closeTurn = () => {
+    if (turn?.end !== undefined) events.push({ kind: "result", id: `result:${turn.id}`, durationMs: turn.end - turn.start, isError: false })
+    turn = undefined
+  }
   for (const stored of messages) {
     if (stored.parent_tool_use_id) continue
+    const at = stored.timestamp ? Date.parse(stored.timestamp) : undefined
     if (stored.type === "assistant") {
-      events.push(...mapper.map({ type: "assistant", uuid: stored.uuid, parent_tool_use_id: null, message: stored.message } as SDKMessage))
+      if (turn && at !== undefined) turn.end = at
+      events.push(...mapper.map({ type: "assistant", uuid: stored.uuid, parent_tool_use_id: null, message: stored.message } as SDKMessage, at))
     } else if (stored.type === "user") {
       const content = (stored.message as { content?: unknown }).content
       const text = userText(content)
-      if (text !== undefined) events.push({ kind: "user", id: stored.uuid, text })
-      else events.push(...mapToolResults(content))
+      if (text === undefined) {
+        events.push(...mapToolResults(content))
+        continue
+      }
+      closeTurn()
+      if (at !== undefined) turn = { id: stored.uuid, start: at }
+      events.push({ kind: "user", id: stored.uuid, text, ...(at !== undefined ? { at } : {}) })
     }
   }
+  closeTurn()
   return events
 }
 

@@ -9,11 +9,11 @@ test("streams text and finishes it with the full assistant message", () => {
   const mapper = new ThreadMapper()
   const start = mapper.map(sdk({ type: "stream_event", uuid: "s1", parent_tool_use_id: null, event: { type: "content_block_start", content_block: { type: "text" } } }))
   const delta = mapper.map(sdk({ type: "stream_event", uuid: "s2", parent_tool_use_id: null, event: { type: "content_block_delta", delta: { type: "text_delta", text: "Hel" } } }))
-  const full = mapper.map(sdk({ type: "assistant", uuid: "a1", parent_tool_use_id: null, message: { content: [{ type: "text", text: "Hello" }] } }))
+  const full = mapper.map(sdk({ type: "assistant", uuid: "a1", parent_tool_use_id: null, message: { content: [{ type: "text", text: "Hello" }] } }), 5)
 
   expect(start).toEqual([{ kind: "text", id: "s1", text: "", done: false }])
   expect(delta).toEqual([{ kind: "text.delta", id: "s1", delta: "Hel" }])
-  expect(full).toEqual([{ kind: "text", id: "s1", text: "Hello", done: true }])
+  expect(full).toEqual([{ kind: "text", id: "s1", text: "Hello", done: true, at: 5 }])
 })
 
 test("maps a tool call and its result", () => {
@@ -30,18 +30,20 @@ test("hides a subagent's own steps", () => {
   expect(mapper.map(sdk({ type: "assistant", uuid: "a1", parent_tool_use_id: "task-1", message: { content: [{ type: "text", text: "inner" }] } }))).toEqual([])
 })
 
-test("rebuilds a thread from a stored transcript", () => {
+test("rebuilds a thread from a stored transcript, timing each turn", () => {
   const events = historyEvents([
-    { type: "user", uuid: "u1", parent_tool_use_id: null, message: { role: "user", content: "List files" } },
-    { type: "assistant", uuid: "a1", parent_tool_use_id: null, message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "ls" } }] } },
+    { type: "user", uuid: "u1", parent_tool_use_id: null, timestamp: "2026-11-09T10:00:00.000Z", message: { role: "user", content: "List files" } },
+    { type: "assistant", uuid: "a1", parent_tool_use_id: null, timestamp: "2026-11-09T10:00:02.000Z", message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "ls" } }] } },
     { type: "user", uuid: "u2", parent_tool_use_id: null, message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "README.md" }] } },
-    { type: "assistant", uuid: "a2", parent_tool_use_id: null, message: { content: [{ type: "text", text: "One file." }] } },
+    { type: "assistant", uuid: "a2", parent_tool_use_id: null, timestamp: "2026-11-09T10:00:05.000Z", message: { content: [{ type: "text", text: "One file." }] } },
     { type: "user", uuid: "u3", parent_tool_use_id: null, message: { content: "<system-reminder>hidden</system-reminder>" } },
   ])
+  const start = Date.parse("2026-11-09T10:00:00.000Z")
   expect(events).toEqual([
-    { kind: "user", id: "u1", text: "List files" },
+    { kind: "user", id: "u1", text: "List files", at: start },
     { kind: "tool", id: "t1", name: "Bash", input: { command: "ls" } },
     { kind: "tool.result", id: "t1", output: "README.md", isError: false },
-    { kind: "text", id: "a2:0", text: "One file.", done: true },
+    { kind: "text", id: "a2:0", text: "One file.", done: true, at: start + 5000 },
+    { kind: "result", id: "result:u1", durationMs: 5000, isError: false },
   ])
 })

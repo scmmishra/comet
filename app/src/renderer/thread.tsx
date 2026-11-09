@@ -1,6 +1,6 @@
 import { createMemo, createSignal, For, Index, Match, Show, Switch } from "solid-js"
 import { editTexts, lineDiff } from "./diff"
-import { formatDuration } from "./format"
+import { formatDuration, formatMessageTime } from "./format"
 import { Icon } from "./icons"
 import { Markdown } from "./markdown"
 import { answerPermission, state, type Item, type Tab } from "./store"
@@ -87,9 +87,24 @@ function RowView(props: { row: Row }) {
   return (
     <Switch>
       <Match when={props.row.type === "user" && (props.row as Extract<Item, { type: "user" }>)}>
-        {(item) => <div class="ml-auto w-fit max-w-[80%] whitespace-pre-wrap rounded-3xl bg-raised px-3.5 py-[9px] text-[14px] leading-[1.625]">{item().text}</div>}
+        {(item) => (
+          <div class="group/message flex flex-col items-end gap-1">
+            <div class="w-fit max-w-[80%] whitespace-pre-wrap rounded-3xl bg-raised px-3.5 py-[9px] text-[14px] leading-[1.625]">{item().text}</div>
+            <MessageMeta text={item().text} at={item().at} />
+          </div>
+        )}
       </Match>
-      <Match when={props.row.type === "text" && (props.row as Extract<Item, { type: "text" }>)}>{(item) => <Markdown text={item().text} done={item().done} />}</Match>
+      <Match when={props.row.type === "text" && (props.row as Extract<Item, { type: "text" }>)}>
+        {(item) => (
+          <div class="group/message flex flex-col items-start gap-1">
+            <Markdown text={item().text} done={item().done} />
+            {/* A reply still streaming has nothing final to copy. */}
+            <Show when={item().done}>
+              <MessageMeta text={item().text} at={item().at} />
+            </Show>
+          </div>
+        )}
+      </Match>
       <Match when={props.row.type === "thinking"}>
         <div class="text-[12px] text-fg-3">Thought</div>
       </Match>
@@ -101,6 +116,29 @@ function RowView(props: { row: Row }) {
         {(item) => <div class="rounded-2xl bg-del-soft px-3 py-2 text-del">{item().message}</div>}
       </Match>
     </Switch>
+  )
+}
+
+const COPIED_MS = 1500
+
+/**
+ * A message's copy button and time, after T3 Code. They stay hidden until the message is hovered,
+ * or a button in them has focus, so the thread reads as text.
+ */
+function MessageMeta(props: { text: string; at?: number }) {
+  const [copied, setCopied] = createSignal(false)
+  const copy = async () => {
+    await navigator.clipboard.writeText(props.text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), COPIED_MS)
+  }
+  return (
+    <div class="flex h-6 items-center gap-1.5 text-[12px] tabular-nums text-fg-3 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/message:opacity-100">
+      <button type="button" class="grid size-6 place-items-center rounded-md hover:bg-hover hover:text-fg" aria-label="Copy message" title="Copy" onClick={() => void copy()}>
+        <Icon name={copied() ? "check" : "copy"} class="size-[13px]" />
+      </button>
+      <Show when={props.at}>{(at) => <span title={new Date(at()).toLocaleString()}>{formatMessageTime(at())}</span>}</Show>
+    </div>
   )
 }
 

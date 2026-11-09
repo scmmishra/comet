@@ -5,8 +5,8 @@ import { core } from "./core"
 
 /** `arrivedAt` is when an item arrived live, from performance.now(). Items replayed from a transcript have none. */
 export type Item = { arrivedAt?: number } & (
-  | { readonly type: "user"; readonly id: string; readonly text: string }
-  | { readonly type: "text"; readonly id: string; text: string; done: boolean }
+  | { readonly type: "user"; readonly id: string; readonly text: string; readonly at?: number }
+  | { readonly type: "text"; readonly id: string; text: string; done: boolean; at?: number }
   | { readonly type: "thinking"; readonly id: string }
   | { readonly type: "tool"; readonly id: string; readonly name: string; readonly input: Record<string, unknown>; result?: { readonly output: string; readonly isError: boolean } }
   | { readonly type: "permission"; readonly id: string; readonly requestId: string; readonly tool: string; readonly input: Record<string, unknown>; answer?: boolean }
@@ -274,14 +274,15 @@ function apply(sessionId: string, event: ThreadEvent, arrivedAt?: number) {
     const find = (id: string) => items.find((item) => item.id === id)
     switch (event.kind) {
       case "user":
-        items.push({ type: "user", id: event.id, text: event.text })
+        items.push({ type: "user", id: event.id, text: event.text, at: event.at })
         break
       case "text": {
         const found = find(event.id)
         if (found?.type === "text") {
           found.text = event.text || found.text
           found.done = event.done
-        } else items.push({ type: "text", id: event.id, text: event.text, done: event.done })
+          found.at = event.at
+        } else items.push({ type: "text", id: event.id, text: event.text, done: event.done, at: event.at })
         break
       }
       case "text.delta": {

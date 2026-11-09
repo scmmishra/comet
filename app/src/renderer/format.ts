@@ -23,3 +23,17 @@ export function formatAgo(time: number, now = Date.now()) {
   if (days < 7) return `${days}d`
   return new Date(time).toLocaleDateString(undefined, { month: "short", day: "numeric" })
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** A message's time, as T3 Code shows it: "15:54" today, "yesterday at 15:54", then a date. */
+export function formatMessageTime(at: number, now = Date.now()) {
+  const date = new Date(at)
+  const time = date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+  const startOfDay = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime()
+  const days = Math.round((startOfDay(new Date(now)) - startOfDay(date)) / DAY_MS)
+  if (days <= 0) return time
+  if (days === 1) return `yesterday at ${time}`
+  const sameYear = date.getFullYear() === new Date(now).getFullYear()
+  return `${date.toLocaleDateString(undefined, { day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) })} ${time}`
+}
