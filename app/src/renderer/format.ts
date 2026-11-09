@@ -9,7 +9,9 @@ export function modelLabel(id: string | undefined) {
 
 export function formatDuration(ms: number) {
   const seconds = Math.round(ms / 1000)
-  return seconds < 60 ? `${seconds} s` : `${Math.floor(seconds / 60)} min ${seconds % 60} s`
+  if (seconds < 60) return `${seconds} s`
+  const minutes = Math.floor(seconds / 60)
+  return seconds % 60 ? `${minutes} min ${seconds % 60} s` : `${minutes} min`
 }
 
 /** How long ago a time was, in the largest whole unit: "now", "5m", "3h", "2d", then a date. */
