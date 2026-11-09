@@ -1,4 +1,4 @@
-import { query, type CanUseTool, type PermissionResult, type Query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
+import { query, type CanUseTool, type PermissionResult, type Query, type SDKRateLimitInfo, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 import type { ThreadEvent } from "@desk/protocol"
 import { ThreadMapper } from "./thread"
 
@@ -39,6 +39,8 @@ export interface SessionOptions {
   readonly resume?: string
   /** Called when Claude names the session, so it can be resumed later. */
   readonly onSessionId?: (id: string) => void
+  /** Called with each plan rate-limit update Claude sends during a turn. */
+  readonly onRateLimit?: (info: SDKRateLimitInfo) => void
 }
 
 /** One Claude conversation, in one tab. It starts on the first message. */
@@ -105,13 +107,27 @@ export class Session {
           this.sessionId = message.session_id
           this.options.onSessionId?.(message.session_id)
         }
+        if (message.type === "rate_limit_event") this.options.onRateLimit?.(message.rate_limit_info)
         for (const event of this.mapper.map(message)) this.emit(event)
-        if (message.type === "result") this.emit({ kind: "status", busy: false })
+        if (message.type === "result") {
+          this.emit({ kind: "status", busy: false })
+          void this.reportContext(running)
+        }
       }
     } catch (error) {
       this.emit({ kind: "error", id: `error-${Date.now()}`, message: error instanceof Error ? error.message : String(error) })
       this.emit({ kind: "status", busy: false })
       this.query = undefined
+    }
+  }
+
+  /** "summary" answers from the last response's usage, without asking the API to count tokens. */
+  private async reportContext(running: Query) {
+    try {
+      const usage = await running.getContextUsage({ detail: "summary" })
+      this.emit({ kind: "context", percent: usage.percentage, tokens: usage.totalTokens, maxTokens: usage.maxTokens })
+    } catch {
+      // Context usage is extra information. A turn still counts as done without it.
     }
   }
 

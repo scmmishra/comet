@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION, type ClientMessage, type CoreMessage } from "@desk/protocol"
+import { PROTOCOL_VERSION, type ClientMessage, type CoreMessage, type PlanUsage } from "@desk/protocol"
 import type { ServerWebSocket } from "bun"
 import pkg from "../package.json"
 import { getSessionMessages } from "@anthropic-ai/claude-agent-sdk"
@@ -7,6 +7,9 @@ import { loadSpaceState, saveSpaceState, type SpaceState } from "./space-state"
 import { openInEditor, resolveSpaceFile } from "./files"
 import { readSpace } from "./space"
 import { historyEvents } from "./thread"
+import { applyRateLimit, probeUsage } from "./usage"
+
+const USAGE_PROBE_INTERVAL_MS = 60_000
 
 export interface CoreServer {
   readonly port: number
@@ -27,6 +30,16 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
   const clients = new Set<ServerWebSocket>()
   const sessions = new Map<string, Session>()
   let saved = loadSpaceState(dir)
+  // Plan usage: probed at most once a minute, and kept current by sessions' rate-limit events.
+  let usage: PlanUsage | undefined
+  let probedAt = 0
+  const refreshUsage = async () => {
+    if (Date.now() - probedAt >= USAGE_PROBE_INTERVAL_MS) {
+      probedAt = Date.now()
+      usage = (await probeUsage(dir)) ?? usage
+    }
+    broadcast({ type: "usage", usage })
+  }
   const persist = (next: SpaceState) => {
     saved = next
     saveSpaceState(dir, saved)
@@ -44,6 +57,10 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
       found = new Session(dir, (event) => broadcast({ type: "session.event", sessionId: id, event }), {
         resume: saved.tabs.find((tab) => tab.id === id)?.sessionId,
         onSessionId: (sessionId) => rememberSession(id, sessionId),
+        onRateLimit: (info) => {
+          usage = applyRateLimit(usage, info)
+          broadcast({ type: "usage", usage })
+        },
       })
       sessions.set(id, found)
     }
@@ -65,6 +82,8 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
           tabs: message.tabs.map((tab) => ({ ...tab, sessionId: saved.tabs.find((found) => found.id === tab.id)?.sessionId })),
           active: message.active,
         })
+      case "usage.get":
+        return void refreshUsage()
       case "space.get":
         return void readSpace(dir).then((space) => send(ws, { type: "space", space }))
       case "session.send":

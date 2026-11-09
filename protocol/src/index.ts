@@ -25,6 +25,8 @@ export type ThreadEvent =
   | { readonly kind: "result"; readonly id: string; readonly durationMs: number; readonly costUsd?: number; readonly isError: boolean }
   | { readonly kind: "status"; readonly busy: boolean }
   | { readonly kind: "init"; readonly model: string }
+  /** How full the context window is, read after each turn. */
+  | { readonly kind: "context"; readonly percent: number; readonly tokens: number; readonly maxTokens: number }
   | { readonly kind: "error"; readonly id: string; readonly message: string }
 
 /** The repo and branch the window shows, for the Space card. */
@@ -47,6 +49,19 @@ export interface Space {
   }
 }
 
+/** One plan usage window, such as the 5-hour session limit. */
+export interface UsageWindow {
+  readonly id: "five_hour" | "seven_day"
+  readonly label: string
+  /** Percentage used, 0–100. */
+  readonly percent: number
+  readonly resetsAt?: string
+}
+
+export interface PlanUsage {
+  readonly windows: readonly UsageWindow[]
+}
+
 /** A top tab as the app shows it. The core saves tabs per space and sends them back on connect. */
 export interface TabInfo {
   readonly id: string
@@ -56,6 +71,7 @@ export interface TabInfo {
 export type ClientMessage =
   | { readonly type: "ping"; readonly id: number }
   | { readonly type: "space.get" }
+  | { readonly type: "usage.get" }
   /** The app's tabs, in order, sent whenever they change. */
   | { readonly type: "tabs.save"; readonly tabs: readonly TabInfo[]; readonly active?: string }
   /** Opens a file from the thread in the editor. The core refuses paths outside the space. */
@@ -70,6 +86,8 @@ export type CoreMessage =
   | { readonly type: "pong"; readonly id: number }
   /** The tabs saved for this space. Each restored tab's thread follows as session events. */
   | { readonly type: "tabs"; readonly tabs: readonly TabInfo[]; readonly active?: string }
+  /** `usage` is absent when Claude has no plan limits, such as with an API key. */
+  | { readonly type: "usage"; readonly usage?: PlanUsage }
   /** `space` is absent when the folder is not a Git repo. */
   | { readonly type: "space"; readonly space?: Space }
   | { readonly type: "session.event"; readonly sessionId: string; readonly event: ThreadEvent }
