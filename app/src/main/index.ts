@@ -52,7 +52,8 @@ function createWindow() {
     show: false,
     backgroundColor: "#0c0c0d",
     titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 14, y: 15 },
+    // Centres the window buttons on the 44px tab bar. macOS 26 draws them larger than before.
+    trafficLightPosition: { x: 14, y: 14 },
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       sandbox: true,
