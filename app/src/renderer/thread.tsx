@@ -103,7 +103,8 @@ function RowView(props: { row: Row }) {
       </Match>
       <Match when={props.row.type === "text" && (props.row as Extract<Item, { type: "text" }>)}>
         {(item) => (
-          <div class="group/message flex flex-col items-start gap-1">
+          <div class="group/message flex flex-col gap-1">
+            {/* The reply stretches to the column, so a long code line scrolls inside its block instead of widening the reply. */}
             <Markdown text={item().text} done={item().done} />
             {/* A reply still streaming has nothing final to copy. */}
             <Show when={item().done}>
