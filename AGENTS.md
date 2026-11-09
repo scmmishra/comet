@@ -16,7 +16,7 @@ Always build code cleanly, modularly, and with proper architecture and separatio
 ## Structure
 
 - `core/` is a Bun process. It owns sessions, the Claude Agent SDK, Git, PTYs, commands and space data, for every project the window's tabs work in. Later it also owns cards, variables and the MCP server.
-- `app/` is Electron with Solid and `@opencode/ui`. It is a thin client: it draws what the core sends.
+- `app/` is Electron with Solid and `@opencode/ui`. It is a thin client: it draws what the core sends. Its state lives in four modules by concern: `workspace.ts` (tabs and what shows), `threads.ts` (each tab's thread), `projects.ts` (what is read about each project) and `account.ts` (settings, models and usage).
 - `protocol/` holds the message types the two share. They talk JSON over one WebSocket on loopback, guarded by a token.
 
 Keep logic in the core. The UI may later move to Anomaly's Rust framework, and the core stays as it is.
@@ -33,17 +33,17 @@ Build the UI from `@opencode/ui`. Anomaly's Rust framework ships `rune-kit`, who
 
 ## Run
 
-- `mise run dev` starts the app. A window with no tabs opens on `DESK_DIR` if set, then the most recent project, then asks for one. ⌘O opens a folder in a new tab. Recent projects live in `projects.json` in the app's data folder.
-- `bin/desk <folder>` opens a folder in Desk. When Desk already runs, the folder opens in a new tab there. Link it onto your PATH to use `desk .`.
+- `mise run dev` starts the app. A window with no tabs opens on the most recent project, else asks for a folder. ⌘O opens a folder in a new tab. The core keeps recent projects in `~/.desk/window.json`.
+- `bin/desk <folder>` opens the folder in a new tab, in the running Desk if there is one. Link it onto your PATH to use `desk .`.
 - One Desk runs at a time, with one window. Its tabs are saved in `~/.desk/window.json`.
 - The app starts the core with `bun` from `PATH`. Set `DESK_BUN` to use another binary. The core needs Bun 1.4 or newer.
-- `mise run check` typechecks, runs the core tests and builds the app.
+- `mise run check` typechecks, runs the core and app tests, and builds the app.
 
 ## Check the UI
 
 Do not take screen captures. Start the app with `DESK_DEBUG_PORT=9333`, then drive the page with agent-browser: `agent-browser connect 9333`, `snapshot -i`, `fill`, `press`, `get text`, and `screenshot` of the page.
 
-Menu shortcuts such as ⌘K never reach the page from agent-browser, because the main process handles them. In development, run the same command from the page instead: `window.__deskCommand("palette.toggle")`. The commands are the ones `app/src/main/menu.ts` sends.
+Menu shortcuts such as ⌘K never reach the page from agent-browser, because the main process handles them. In development, run the same command from the page instead: `window.__deskCommand({ id: "palette.toggle" })`. The commands are listed in `app/src/shared/commands.ts`.
 
 ## References
 
@@ -61,7 +61,8 @@ T3 Code and OpenCode are cloned in `~/scmmishra/reference`. T3 Code's server sho
 
 ## Known quirks
 
-- A Desk started from inside Claude Code inherits that session's `CLAUDECODE` and `CLAUDE_CODE_*` variables. Claude sessions that Desk starts would then take themselves for children of that session. The core removes those variables at start.
+- A Desk started from inside Claude Code inherits that session's `CLAUDECODE` and `CLAUDE_CODE_*` variables. Claude sessions that Desk starts would then take themselves for children of that session. The core removes those variables at start, by prefix.
+- `@opencode/ui`'s Tabs select their first tab when the chosen one has no trigger yet, and report it as a change. Add a tab before you select it.
 - `@opencode/ui`'s `menu.css` sits outside Tailwind's layers. Its rules beat utility classes, so an override needs `!`.
 - An `@opencode/ui` popover closes when focus leaves its content. A menu inside a popover must render without `Menu.Portal`.
 - `@opencode/ui` names its source before its types, so TypeScript checks its `.tsx` files under the app's tsconfig. The app's tsconfig turns off `verbatimModuleSyntax` and uses the ES2025 lib for that.
