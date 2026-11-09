@@ -49,14 +49,16 @@ export { state }
 
 export const activeTab = () => state.tabs.find((tab) => tab.id === state.active)
 
-export function newTab() {
+/** Opens a tab at the end of the bar, or right after the active tab. Returns its id. */
+export function newTab(place: "end" | "next" = "end"): string {
   const tab: Tab = { id: crypto.randomUUID(), title: NEW_TAB_TITLE, items: [], busy: false, panelTabs: [REVIEW_TAB], panelActive: REVIEW_TAB.id }
   setState(produce((draft) => {
-    const index = draft.tabs.findIndex((found) => found.id === draft.active)
-    draft.tabs.splice(index + 1, 0, tab)
+    const index = place === "next" ? draft.tabs.findIndex((found) => found.id === draft.active) + 1 : draft.tabs.length
+    draft.tabs.splice(index, 0, tab)
     draft.active = tab.id
   }))
   saveTabs()
+  return tab.id
 }
 
 export function closeTab(id: string) {
@@ -178,7 +180,10 @@ function saveTabs() {
 
 /** Puts back the tabs the core saved. Their threads follow as session events. */
 function restoreTabs(tabs: readonly TabInfo[], active: string | undefined) {
-  if (tabs.length === 0) return newTab()
+  if (tabs.length === 0) {
+    newTab()
+    return
+  }
   setState({
     tabs: tabs.map((tab) => {
       const panelTabs: PanelTab[] = [REVIEW_TAB, ...tab.terminals.map((terminal) => ({ kind: "terminal" as const, ...terminal }))]

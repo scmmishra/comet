@@ -1,4 +1,4 @@
-import { createEffect, For, on, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
 import { Composer } from "./composer"
 import { Icon } from "./icons"
 import { ContextRing, UsageButton } from "./meters"
@@ -201,14 +201,21 @@ function StartScreen(props: { tab: Tab }) {
 }
 
 function TabBar() {
+  // The tab opened from the + button. Only it animates in: tabs from ⌘T or the menu appear at once.
+  const [entering, setEntering] = createSignal<string>()
+  let strip!: HTMLDivElement
+  // A new tab opens at the end, which may be past the bar's edge. Keep the active tab in view.
+  createEffect(() => strip.querySelector(`[data-tab="${state.active}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" }))
+
   return (
     <nav class="desk-titlebar flex h-11 shrink-0 items-center gap-1 pl-[84px] pr-2.5">
-      <div class="desk-no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1">
+      <div ref={strip} class="desk-no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1">
         <For each={state.tabs}>
           {(tab) => (
             <button
+              data-tab={tab.id}
               class="desk-no-drag group flex h-8 w-[210px] shrink-0 items-center gap-2 rounded-xl pl-2 pr-1.5 text-left"
-              classList={{ "bg-raised text-fg": tab.id === state.active, "text-fg-3 hover:bg-panel hover:text-fg-2": tab.id !== state.active }}
+              classList={{ "desk-tab-enter": tab.id === entering(), "bg-raised text-fg": tab.id === state.active, "text-fg-3 hover:bg-panel hover:text-fg-2": tab.id !== state.active }}
               onClick={() => selectTab(tab.id)}
             >
               <SpaceAvatar small />
@@ -231,7 +238,12 @@ function TabBar() {
             </button>
           )}
         </For>
-        <button class="desk-no-drag grid size-[30px] shrink-0 place-items-center rounded-lg text-fg-2 hover:bg-hover hover:text-fg" aria-label="New tab" onClick={newTab}>
+        <button
+          class="desk-no-drag grid size-[30px] shrink-0 place-items-center rounded-lg text-fg-2 hover:bg-hover hover:text-fg"
+          aria-label="New tab"
+          title="New tab (⌘-click to open next to this one)"
+          onClick={(event) => setEntering(newTab(event.metaKey ? "next" : "end"))}
+        >
           <Icon name="plus" />
         </button>
       </div>
