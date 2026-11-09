@@ -13,7 +13,8 @@ import { CommandsCard } from "./commands"
 import { SpaceCard, SpaceChip } from "./space"
 import { StartScreen } from "./start-screen"
 import { projectName } from "./format"
-import { activeData, activeTab, closePanelTab, closeTab, newTab, newTerminal, refreshSpace, refreshUsage, selectPanelTab, selectTab, selectTabAt, state, togglePanel, type Tab } from "./store"
+import { SettingsScreen } from "./settings/screen"
+import { activeData, activeTab, closePanelTab, openSettings, closeTab, newTab, newTerminal, refreshSpace, refreshUsage, selectPanelTab, selectTab, selectTabAt, state, togglePanel, type Tab } from "./store"
 import { TerminalView } from "./terminal"
 import { useThreadSearch } from "./thread-search"
 import { Thread } from "./thread"
@@ -29,6 +30,7 @@ export function App() {
       else if (command === "panel.toggle") togglePanelInstantly()
       else if (command === "terminal.new") newTerminal()
       else if (command === "threads.search") toggleThreadSearch()
+      else if (command === "settings.open") openSettings()
       else if (command.startsWith("project.open:")) newTab("end", command.slice("project.open:".length))
       else if (command.startsWith("tab.select:")) {
         const index = Number(command.slice("tab.select:".length))
@@ -52,7 +54,14 @@ export function App() {
   return (
     <div class="flex h-full flex-col bg-ground text-fg">
       <TabBar />
-      <Show when={activeTab()} keyed>
+      <Show when={state.settingsPage}>
+        <main class="flex min-h-0 flex-1 px-2 pb-2">
+          <section class="flex min-w-0 flex-1 rounded-3xl border border-outline bg-panel">
+            <SettingsScreen />
+          </section>
+        </main>
+      </Show>
+      <Show when={!state.settingsPage && activeTab()} keyed>
         {(tab) => (
           <main class="flex min-h-0 flex-1 px-2 pb-2">
             {/* The session and the panel share one box. The session's width and the panel's slide run on the same curve, so the gap between them stays put while the panel opens. */}

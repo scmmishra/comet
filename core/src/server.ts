@@ -3,6 +3,7 @@ import type { ServerWebSocket } from "bun"
 import pkg from "../package.json"
 import { discoverCommands } from "./command-sources"
 import { sameRunSettings, Session } from "./session"
+import { loadSettings, saveSettings, updateSettings } from "./settings"
 import { isProjectFolder, Spaces } from "./spaces"
 import { loadWindowState, saveWindowState, type SavedTab, type WindowState } from "./window-state"
 import { openInEditor, resolveSpaceFile } from "./files"
@@ -40,6 +41,7 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
     commandsChanged: (project, commands) => broadcast({ type: "commands", project, commands }),
   })
   let saved = loadWindowState(dir)
+  let settings = loadSettings()
   // Plan usage: probed at most once a minute, and kept current by sessions' rate-limit events.
   let usage: PlanUsage | undefined
   let probedAt = 0
@@ -134,6 +136,12 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
     switch (message.type) {
       case "ping":
         return send(ws, { type: "pong", id: message.id })
+      case "settings.get":
+        return send(ws, { type: "settings", settings })
+      case "settings.update":
+        settings = updateSettings(settings, message)
+        saveSettings(settings)
+        return broadcast({ type: "settings", settings })
       case "file.open": {
         const file = resolveSpaceFile(message.project, message.path)
         if (!file) return send(ws, { type: "error", message: `Desk can only open files inside the project: ${message.path}` })
@@ -239,6 +247,7 @@ export function startCore({ token, dir }: CoreOptions): CoreServer {
       open(ws) {
         clients.add(ws)
         send(ws, { type: "hello", protocol: PROTOCOL_VERSION, core: pkg.version, bun: Bun.version, project: dir })
+        send(ws, { type: "settings", settings })
         void sendSavedTabs(ws, saved)
         for (const tab of saved.tabs) if (tab.sessionId && !tab.context) fillContext(tab.id, tab.sessionId)
       },

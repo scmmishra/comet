@@ -30,6 +30,7 @@ test("greets the client and answers a ping", async () => {
   const client = connect(core.port, "secret")
   await client.opened
   expect(await client.next()).toMatchObject({ type: "hello", protocol: PROTOCOL_VERSION, bun: Bun.version, project: process.cwd() })
+  expect(await client.next()).toMatchObject({ type: "settings" })
   expect(await client.next()).toEqual({ type: "tabs", tabs: [] })
   client.ws.send(JSON.stringify({ type: "ping", id: 7 }))
   expect(await client.next()).toEqual({ type: "pong", id: 7 })
@@ -48,6 +49,7 @@ test("refuses a tab whose project is not a folder", async () => {
   await client.opened
   await client.next()
   await client.next()
+  await client.next()
   const tab = { id: "t1", title: "New session", project: "/no/such/folder", terminals: [], model: "default", permissionMode: "default" }
   client.ws.send(JSON.stringify({ type: "tabs.save", tabs: [tab] }))
   expect(await client.next()).toMatchObject({ type: "error" })
@@ -60,6 +62,7 @@ test("keeps each project's commands apart", async () => {
   const two = mkdtempSync(join(tmpdir(), "desk-two-"))
   const client = connect(core.port, "secret")
   await client.opened
+  await client.next()
   await client.next()
   await client.next()
   client.ws.send(JSON.stringify({ type: "commands.save", project: one, name: "Dev", processes: [{ name: "", command: "true" }], replacing: [] }))

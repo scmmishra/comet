@@ -1,6 +1,7 @@
 import type { FitAddon, Ghostty, Terminal } from "ghostty-web"
 import wasmUrl from "ghostty-web/ghostty-vt.wasm?url"
-import { onCleanup, onMount } from "solid-js"
+import { createEffect, createRoot, on, onCleanup, onMount } from "solid-js"
+import { colorScheme, themeColor } from "./appearance"
 import { core } from "./core"
 
 type GhosttyModule = typeof import("ghostty-web")
@@ -17,14 +18,14 @@ function loadGhostty() {
   return loading
 }
 
-/** The terminal sits on the panel itself, with no background of its own. */
-const THEME = {
-  background: "#0f1011",
-  foreground: "#e3e4e8",
-  cursor: "#e3e4e8",
-  cursorAccent: "#0f1011",
-  selectionBackground: "rgba(110, 168, 254, 0.3)",
-}
+/** The terminal sits on the panel itself, with no background of its own, in the active theme's colours. */
+const terminalTheme = () => ({
+  background: themeColor("panel"),
+  foreground: themeColor("fg"),
+  cursor: themeColor("fg"),
+  cursorAccent: themeColor("panel"),
+  selectionBackground: themeColor("accent-soft"),
+})
 
 /**
  * ⌘ chords, after OpenCode. ghostty-web sends the plain letter to the shell for them, so ⌘K would type
@@ -64,7 +65,7 @@ export function TerminalView(props: { id: string }) {
       cursorBlink: true,
       cursorStyle: "bar",
       scrollback: 10_000,
-      theme: THEME,
+      theme: terminalTheme(),
     })
     term.attachCustomKeyEventHandler((event) => handleCommandKey(term, event))
     const fit: FitAddon = new mod.FitAddon()
@@ -90,6 +91,11 @@ export function TerminalView(props: { id: string }) {
     const observer = new ResizeObserver(() => container.clientWidth > 0 && container.clientHeight > 0 && fit.fit())
     observer.observe(container)
     cleanups.push(() => observer.disconnect())
+    // A theme change recolours the open terminal. The page's theme attribute changes in the same update, so the colours are read after it.
+    createRoot((dispose) => {
+      cleanups.push(dispose)
+      createEffect(on(colorScheme, () => queueMicrotask(() => (term.options.theme = terminalTheme())), { defer: true }))
+    })
     term.focus()
   })
 

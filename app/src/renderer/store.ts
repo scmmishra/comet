@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL, type CommandInfo, type CommandProcess, type CommandSource, type CoreMessage, type FileChange, type ModelOption, type PlanUsage, type RunSettings, type Space, type TabInfo, type ThreadEvent, type ThreadSummary } from "@desk/protocol"
+import { DEFAULT_SETTINGS, type AppearanceSettings, type ClaudeSettings, type CommandInfo, type ProjectSettings, type CommandProcess, type CommandSource, type CoreMessage, type FileChange, type ModelOption, type PlanUsage, type RunSettings, type Space, type TabInfo, type ThreadEvent, type ThreadSummary } from "@desk/protocol"
 import { batch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
@@ -56,9 +56,16 @@ export interface ProjectData {
 
 const EMPTY_PROJECT: ProjectData = { commands: [], threads: [] }
 
+/** The settings screen's pages, in the order its sidebar lists them. */
+export const SETTINGS_PAGES = ["appearance"] as const
+export type SettingsPage = (typeof SETTINGS_PAGES)[number]
+
 const [state, setState] = createStore({
   /** The folder a new tab opens in when the window has none, as the core names it. */
   defaultProject: "",
+  settings: DEFAULT_SETTINGS,
+  /** The settings page on show in place of the session. Undefined shows the session. */
+  settingsPage: undefined as SettingsPage | undefined,
   tabs: [] as Tab[],
   active: "",
   /** Each project a tab has shown, by folder. */
@@ -98,16 +105,17 @@ function loadProject(project: string) {
  * the active tab's project. Returns its id.
  */
 export function newTab(place: "end" | "next" = "end", project?: string): string {
-  // A new thread starts on the project, model and effort of the one in front of you.
+  // A new thread starts on the default model and effort, and on the project, speed and permission mode of the one in front of you.
   const from = activeTab()
+  const defaults = state.settings.claude
   const tab: Tab = {
     id: crypto.randomUUID(),
     title: NEW_TAB_TITLE,
     project: project ?? from?.project ?? state.defaultProject,
     items: [],
     busy: false,
-    model: from?.model ?? DEFAULT_MODEL,
-    effort: from?.effort,
+    model: defaults.model,
+    effort: defaults.effort,
     fast: from?.fast,
     permissionMode: from?.permissionMode ?? "default",
     panelTabs: [REVIEW_TAB],
@@ -121,6 +129,20 @@ export function newTab(place: "end" | "next" = "end", project?: string): string 
   saveTabs()
   loadProject(tab.project)
   return tab.id
+}
+
+/** Shows the settings screen in place of the session, on a page. */
+export function openSettings(page: SettingsPage = SETTINGS_PAGES[0]) {
+  setState("settingsPage", page)
+}
+
+export function closeSettings() {
+  setState("settingsPage", undefined)
+}
+
+/** Changes the named settings. The core saves them and sends them back. */
+export function updateSettings(change: { appearance?: Partial<AppearanceSettings>; claude?: Partial<ClaudeSettings>; project?: { dir: string; settings: ProjectSettings } }) {
+  core.send({ type: "settings.update", ...change })
 }
 
 /** Moves the active tab to another project. Only a tab whose thread has not started can move. */
@@ -349,7 +371,8 @@ core.listen((message: CoreMessage) => {
     setState({ connected: true, defaultProject: message.project })
     refreshUsage()
     core.send({ type: "models.get" })
-  } else if (message.type === "tabs") restoreTabs(message.tabs, message.active)
+  } else if (message.type === "settings") setState("settings", message.settings)
+  else if (message.type === "tabs") restoreTabs(message.tabs, message.active)
   else if (message.type === "space") updateProject(message.project, () => ({ space: message.space }))
   else if (message.type === "usage") setState("usage", message.usage)
   else if (message.type === "models") setState("models", message.models)

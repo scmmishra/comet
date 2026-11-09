@@ -127,6 +127,55 @@ export interface ThreadSummary {
   readonly tabId?: string
 }
 
+/** How the window draws itself. Auto follows the system. */
+export type ThemeChoice = "dark" | "light" | "auto"
+
+export interface AppearanceSettings {
+  readonly theme: ThemeChoice
+  /** Thread text, in px. Code and the composer follow it. */
+  readonly fontSize: number
+  /** A CSS font family list for the interface. Empty means Desk's own. */
+  readonly uiFont: string
+  /** A CSS font family list for code and terminals. Empty means Desk's own. */
+  readonly codeFont: string
+}
+
+/** What a new tab starts Claude with. */
+export interface ClaudeSettings {
+  /** A ModelOption value. */
+  readonly model: string
+  /** Absent means the model's default effort. */
+  readonly effort?: Effort
+  /** Compacts a thread's context once it has sat idle, so picking it up again starts small. */
+  readonly compactIdle: boolean
+}
+
+/** The colors a project's avatar can take, as @opencode/ui's ProjectAvatar names them. */
+export const PROJECT_COLORS = ["orange", "yellow", "cyan", "green", "red", "pink", "blue", "purple", "gray"] as const
+export type ProjectColor = (typeof PROJECT_COLORS)[number]
+
+/** How a project shows in tabs and menus. Each is optional; without it, Desk uses the folder's. */
+export interface ProjectSettings {
+  readonly name?: string
+  readonly color?: ProjectColor
+  /** An image in the project to use as its icon, as a path relative to its folder. */
+  readonly icon?: string
+}
+
+export interface DeskSettings {
+  readonly appearance: AppearanceSettings
+  readonly claude: ClaudeSettings
+  /** By project folder. */
+  readonly projects: Readonly<Record<string, ProjectSettings>>
+}
+
+/** Desk's settings before anyone changes them. The app uses them until the core sends the saved ones. */
+export const DEFAULT_SETTINGS: DeskSettings = {
+  appearance: { theme: "dark", fontSize: 14, uiFont: "", codeFont: "" },
+  claude: { model: DEFAULT_MODEL, compactIdle: false },
+  projects: {},
+}
+
 /** A command saved for the space, such as a dev server. The core runs it in the background. */
 export interface SpaceCommand {
   readonly id: string
@@ -192,6 +241,14 @@ export interface TabInfo extends RunSettings {
  */
 export type ClientMessage =
   | { readonly type: "ping"; readonly id: number }
+  | { readonly type: "settings.get" }
+  /** Changes the named settings and keeps the rest. A project's settings replace what it had. */
+  | {
+      readonly type: "settings.update"
+      readonly appearance?: Partial<AppearanceSettings>
+      readonly claude?: Partial<ClaudeSettings>
+      readonly project?: { readonly dir: string; readonly settings: ProjectSettings }
+    }
   | { readonly type: "space.get"; readonly project: string }
   | { readonly type: "usage.get" }
   | { readonly type: "models.get" }
@@ -233,6 +290,8 @@ export type CoreMessage =
   /** `project` is the folder a new tab opens in when the window has none. */
   | { readonly type: "hello"; readonly protocol: number; readonly core: string; readonly bun: string; readonly project: string }
   | { readonly type: "pong"; readonly id: number }
+  /** Desk's settings, sent on connect and again after every change. */
+  | { readonly type: "settings"; readonly settings: DeskSettings }
   /** The window's saved tabs. Each restored tab's thread follows as a session.history message. */
   | { readonly type: "tabs"; readonly tabs: readonly TabInfo[]; readonly active?: string }
   | { readonly type: "threads"; readonly project: string; readonly threads: readonly ThreadSummary[] }

@@ -4,7 +4,8 @@ import { getSharedHighlighter, type DiffsHighlighter, type SupportedLanguages } 
  * Syntax highlighting for code blocks, set up the way T3 Code does it: @pierre/diffs' shared
  * highlighter with its WASM lexers, one cached load per language, and a cache of finished blocks.
  */
-const THEME = "pierre-dark"
+/** Both themes at once: each token carries a colour for each, as CSS variables, and the page's theme picks one. */
+const THEMES = { light: "pierre-light", dark: "pierre-dark" } as const
 const PLAIN = "text"
 const MAX_CACHED_BLOCKS = 300
 
@@ -15,7 +16,7 @@ function highlighterFor(language: string): Promise<DiffsHighlighter> {
   const cached = highlighters.get(language)
   if (cached) return cached
   const promise = getSharedHighlighter({
-    themes: [THEME],
+    themes: [THEMES.light, THEMES.dark],
     langs: [language as SupportedLanguages],
     preferredHighlighter: "highlights",
   }).catch((error) => {
@@ -39,9 +40,9 @@ export async function highlight(code: string, language: string): Promise<string>
   const highlighter = await highlighterFor(language)
   let html: string
   try {
-    html = highlighter.codeToHtml(code, { lang: language, theme: THEME })
+    html = highlighter.codeToHtml(code, { lang: language, themes: THEMES, defaultColor: false })
   } catch {
-    html = highlighter.codeToHtml(code, { lang: PLAIN, theme: THEME })
+    html = highlighter.codeToHtml(code, { lang: PLAIN, themes: THEMES, defaultColor: false })
   }
   const inner = html.slice(html.indexOf(">", html.indexOf("<code")) + 1, html.lastIndexOf("</code>"))
 

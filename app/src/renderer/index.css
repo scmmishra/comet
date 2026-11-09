@@ -53,19 +53,48 @@
      every padding, gap and size came out a fifth smaller than written. Its theme layer sets the
      value after Tailwind's theme, so the override lives here, outside the layers. */
   --spacing: 4px;
-  --font-family-sans: "Geist Variable", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
-  --font-family-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+  /* Appearance settings set --desk-ui-font, --desk-code-font and --desk-text-size on the root element. A font
+     the user names replaces Desk's first choice, and the fallbacks after it stay. */
+  --font-family-sans: var(--desk-ui-font, "Geist Variable"), ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+  --font-family-mono: var(--desk-code-font, "Geist Mono Variable"), ui-monospace, "SF Mono", Menlo, monospace;
+  /* Thread text. Code blocks and the composer follow it. */
+  --desk-text-size: 14px;
   color-scheme: dark;
   /* A strong ease-out for things that appear. Built-in ease starts too slowly for UI. */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
+/* The light theme: the same roles as the dark palette above, on a white ground. */
+:root[data-color-scheme="light"] {
+  color-scheme: light;
+  --color-ground: #f2f3f5;
+  --color-panel: #ffffff;
+  --color-code: #f6f7f9;
+  --color-card: #fafafb;
+  --color-raised: #eef0f2;
+  --color-hover: #e7e9ec;
+  --color-line: #e1e3e7;
+  --color-outline: rgb(0 0 0 / 7%);
+  --color-track: rgb(0 0 0 / 10%);
+  --color-fg: #1c1d20;
+  --color-fg-2: #5f646d;
+  --color-fg-3: #8b9099;
+  --color-mark: #ebecef;
+  --color-accent: #2b6be0;
+  --color-accent-soft: rgb(43 107 224 / 10%);
+  --color-add: #1f8a4c;
+  --color-add-soft: rgb(31 138 76 / 9%);
+  --color-del: #cf3b45;
+  --color-del-soft: rgb(207 59 69 / 8%);
+  --color-fast: #c98a00;
+}
+
 /*
- * Desk's palette under @opencode/ui's semantic tokens, so its components draw in Desk's colours.
- * Desk's colours stay the source. The tokens' own file sets them in a layer for
- * [data-color-scheme="dark"], and this unlayered rule wins over it.
+ * Desk's palette under @opencode/ui's semantic tokens, so its components draw in Desk's colours in
+ * either theme. Desk's colours stay the source. The tokens' own file sets them in a layer, and this
+ * unlayered rule wins over it.
  */
-:root[data-color-scheme="dark"] {
+:root {
   --v2-background-bg-deep: var(--color-ground);
   --v2-background-bg-base: var(--color-panel);
   --v2-background-bg-layer-01: var(--color-card);
@@ -206,11 +235,11 @@ body {
 
 /* Thread text. */
 /*
- * Thread text, with T3 Code's measures in px, because Desk's root is 13px: 14px text on a 1.625 line,
- * and blocks 10.4px apart.
+ * Thread text, with T3 Code's measures in px, because Desk's root is 13px: 14px text by default, set
+ * in Appearance, on a 1.625 line, and blocks 10.4px apart.
  */
 .desk-prose {
-  font-size: 14px;
+  font-size: var(--desk-text-size);
   line-height: 1.625;
   color: var(--color-fg);
   overflow-wrap: anywhere;
@@ -252,7 +281,7 @@ body {
 .desk-prose h5,
 .desk-prose h6 {
   margin: 20px 0 8px;
-  font-size: 14px;
+  font-size: var(--desk-text-size);
   font-weight: 600;
   line-height: 1.3;
   color: var(--color-fg);
@@ -339,7 +368,7 @@ body {
   padding: 4px 12px 12px;
   overflow-x: auto;
   font-family: var(--font-family-mono);
-  font-size: 14px;
+  font-size: var(--desk-text-size);
   line-height: 1.6;
   color: var(--color-fg);
 }
@@ -347,6 +376,13 @@ body {
 /* Highlighted code keeps the card's background; the theme only colours the tokens. */
 .desk-code code span[style] {
   background-color: transparent !important;
+}
+/* Code is highlighted once in both themes. Each token carries both colours, and the theme picks one. */
+.desk-code code span[style] {
+  color: var(--shiki-dark);
+}
+:root[data-color-scheme="light"] .desk-code code span[style] {
+  color: var(--shiki-light);
 }
 
 /* A file named in a reply: a chip that opens it in the editor. */

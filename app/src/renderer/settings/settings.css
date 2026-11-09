@@ -1,0 +1,208 @@
+/*
+ * The settings screen's layout, ported from OpenCode's settings.css: a sidebar of pages beside a page of
+ * rows grouped in lists. The screen fills the card the session normally fills.
+ */
+.settings-screen {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  justify-content: center;
+  overflow: hidden;
+  outline: none;
+}
+
+/* Centres the 1048px layout and leaves the gutters to the page scroller. */
+.settings-screen > .settings {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding-inline: max(0px, calc((100% - 1048px) / 2));
+}
+
+.settings-screen > .settings > .settings-sidebar {
+  min-height: 0;
+  flex-shrink: 0;
+  width: 280px;
+  padding-block: 40px;
+  padding-inline: 24px 40px;
+}
+
+.settings-screen > .settings > .settings-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  max-width: 720px;
+}
+
+.settings-content > .settings-panel {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: none;
+  /* Leaves room for raised card shadows inside the scrollport. */
+  padding-inline: 4px;
+}
+
+.settings-nav {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-nav > .settings-back {
+  margin-block-end: 20px;
+}
+
+.settings-back {
+  display: flex;
+  flex-shrink: 0;
+  height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding-inline: 6px;
+  border-radius: 4px;
+  color: var(--v2-text-text-muted);
+  text-align: start;
+}
+
+.settings-back:hover,
+.settings-back:focus-visible {
+  background: var(--v2-background-bg-layer-03);
+  color: var(--v2-text-text-base);
+}
+
+.settings-nav-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.settings-nav-groups [data-slot="tabs-v2-trigger-wrapper"] {
+  width: 100%;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  color: var(--v2-text-text-muted);
+}
+
+.settings-nav-groups [data-slot="tabs-v2-trigger"] {
+  width: 100%;
+  height: 100%;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 0 6px;
+}
+
+.settings-nav-groups [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) {
+  background: var(--v2-background-bg-layer-03);
+  color: var(--v2-text-text-base);
+}
+
+.settings-nav-groups [data-slot="tabs-v2-trigger-wrapper"]:not(:has([data-selected])):hover {
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+.settings-tab-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 40px 40px 0;
+  background: var(--v2-background-bg-base);
+}
+
+/* Content fades out under the sticky header as it scrolls. */
+.settings-tab-header::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+  height: 24px;
+  background: linear-gradient(to bottom, var(--v2-background-bg-base), transparent);
+  pointer-events: none;
+}
+
+.settings-tab-title {
+  font-size: 15px;
+  font-weight: 640;
+  color: var(--v2-text-text-base);
+}
+
+.settings-tab-description {
+  font-size: 12px;
+  color: var(--v2-text-text-muted);
+}
+
+.settings-tab-body {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  padding: 24px 40px 80px;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-section-title {
+  font-size: 13px;
+  font-weight: 530;
+  color: var(--v2-text-text-base);
+}
+
+[data-component="settings-list"] {
+  border-radius: 8px;
+  background-color: var(--v2-background-bg-layer-01);
+  padding-inline: 20px;
+  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
+}
+
+[data-component="settings-row"] {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-block: 18px;
+  border-bottom: 0.5px solid var(--v2-border-border-base);
+}
+
+[data-component="settings-row"][data-align="start"] {
+  align-items: flex-start;
+}
+
+[data-component="settings-row"]:last-child {
+  border-bottom: none;
+}
+
+[data-slot="settings-row-copy"] {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+}
+
+[data-slot="settings-row-title"] {
+  font-size: 13px;
+  font-weight: 530;
+  color: var(--v2-text-text-base);
+}
+
+[data-slot="settings-row-description"] {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--v2-text-text-muted);
+}
+
+[data-slot="settings-row-control"] {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+}

@@ -1,13 +1,14 @@
 import { DiffChanges } from "@opencode/ui/diff-changes"
 import { FileDiff, getSingularPatch } from "@pierre/diffs"
-import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
+import { colorScheme } from "./appearance"
 import { fileIconId, fileIconName, requestFileIcon } from "./file-icons"
 import { Icon } from "./icons"
 import type { Tab } from "./store"
 
 /** Diff options as OpenCode sets them: unified, word-level changes, and no file header of Pierre's own. */
 const DIFF_OPTIONS = {
-  theme: "pierre-dark",
+  theme: { light: "pierre-light", dark: "pierre-dark" },
   preferredHighlighter: "highlights",
   diffStyle: "unified",
   diffIndicators: "bars",
@@ -89,7 +90,8 @@ export function ReviewView(props: { tab: Tab }) {
 /** One file's patch, drawn by @pierre/diffs. */
 function PatchDiff(props: { patch: string }) {
   let container!: HTMLDivElement
-  const diff = new FileDiff(DIFF_OPTIONS)
+  const diff = new FileDiff({ ...DIFF_OPTIONS, themeType: colorScheme() })
+  createEffect(on(colorScheme, (scheme) => diff.setThemeType(scheme), { defer: true }))
   onMount(() => {
     createEffect(() => diff.render({ fileDiff: getSingularPatch(props.patch), forceRender: true, containerWrapper: container }))
   })

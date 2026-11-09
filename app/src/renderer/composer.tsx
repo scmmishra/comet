@@ -44,7 +44,7 @@ export function Composer(props: { tab: Tab }) {
         ref={input}
         rows={2}
         aria-label="Message"
-        class="min-h-[52px] w-full resize-none bg-transparent px-4 pt-3.5 text-[14px] leading-relaxed text-fg outline-none placeholder:text-fg-3"
+        class="min-h-[52px] w-full resize-none bg-transparent px-4 pt-3.5 text-[length:var(--desk-text-size)] leading-relaxed text-fg outline-none placeholder:text-fg-3"
         placeholder="Ask anything…"
         value={text()}
         onInput={(event) => {

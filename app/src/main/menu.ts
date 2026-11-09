@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, type MenuItemConstructorOptions } from "electron"
+import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from "electron"
 
 const TAB_SHORTCUTS = 9
 
@@ -7,7 +7,7 @@ function command(name: string) {
 }
 
 export interface MenuActions {
-  /** Picks a folder and opens it in the window. */
+  /** Picks a folder and opens it in a new tab. */
   readonly openFolder: () => void
 }
 
@@ -17,7 +17,23 @@ export interface MenuActions {
  */
 export function installMenu(actions: MenuActions) {
   const template: MenuItemConstructorOptions[] = [
-    { role: "appMenu" },
+    // The standard app menu, with Settings added where macOS apps put it.
+    {
+      label: app.name,
+      submenu: [
+        { role: "about" },
+        { type: "separator" },
+        { label: "Settings…", accelerator: "CmdOrCtrl+,", click: () => command("settings.open") },
+        { type: "separator" },
+        { role: "services" },
+        { type: "separator" },
+        { role: "hide" },
+        { role: "hideOthers" },
+        { role: "unhide" },
+        { type: "separator" },
+        { role: "quit" },
+      ],
+    },
     {
       label: "File",
       submenu: [
