@@ -660,7 +660,7 @@ export type ClientMessage =
   | { readonly type: "tab.reopen" }
   /** The window's tabs, in order, sent whenever they change. */
   | { readonly type: "tabs.save"; readonly tabs: readonly TabInfo[]; readonly active?: string }
-  /** Opens a file from the thread in the editor. The core refuses paths outside the project. */
+  /** Opens a file from the thread in the editor. A relative path is in the project. The core refuses anything that is not a file. */
   | { readonly type: "file.open"; readonly project: string; readonly path: string; readonly line?: number }
   /** Sends a message. While Claude works, `followUp` says whether it steers the turn or waits in the queue. */
   | { readonly type: "session.send"; readonly tabId: string; readonly text: string; readonly images?: readonly ImageAttachment[]; readonly followUp?: FollowUp }

@@ -2,7 +2,7 @@ import type { ClientMessage, CoreMessage, ProjectPart, ProjectParts } from "@des
 import type { ServerWebSocket } from "bun"
 import { discoverCommands } from "./command-sources"
 import { Commands } from "./commands"
-import { openInEditor, projectFile } from "./files"
+import { openableFile, openInEditor } from "./files"
 import { checkImages } from "./images"
 import { readMcpServers, toggleMcpServer } from "./mcp"
 import { Models } from "./models"
@@ -97,8 +97,8 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       case "mcp.toggle":
         return toggleMcpServer(message.project, message.name, message.enabled, (servers) => reply(project(message.project, "mcp", servers)))
       case "file.open": {
-        const file = projectFile(message.project, message.path)
-        if (!file) throw new Error(`Desk can only open files inside the project: ${message.path}`)
+        const file = openableFile(message.project, message.path)
+        if (!file) throw new Error(`Desk can only open a file that exists: ${message.path}`)
         return openInEditor(file, message.line)
       }
       case "commands.save":

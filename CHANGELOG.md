@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- A file named in a reply opens even when it is outside the project, such as a report Claude wrote to a temporary folder. Folders and missing files still do not open.
 - Drag a tab to move it in the bar. The order is saved, and ⌘1–⌘9 follow it. A press that does not move still selects the tab.
 - Commands Claude leaves running in the background show in a row above the message box, after T3 Code: "Running" or "Waiting" and what runs, how long it has run, and Stop. "Waiting" means the turn has ended and Claude picks up again when the command finishes. Subagents keep their own card.
 - A turn that switches branches, resets or rebases no longer lists every file that differs between the two branches as its changes. Its summary is left out. A turn that commits, pulls or merges still lists what it changed.
