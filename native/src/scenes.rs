@@ -61,7 +61,7 @@ fn thread(s: &mut Desk) {
             { "type": "result", "id": "r1", "durationMs": 63_000.0, "isError": false },
             { "type": "changes", "id": "ch1", "files": [{ "path": "src/login.ts", "status": "modified", "additions": 3, "deletions": 1 }] },
             { "type": "compaction", "id": "c1", "status": "done", "preTokens": 180_000.0, "postTokens": 32_000.0 },
-            { "type": "user", "id": "u2", "text": "Now add a test for it", "at": at(25.0), "steered": true },
+            { "type": "user", "id": "u2", "text": "Now add a test for it. Yes, in phases. The Electron app stays the shipped Desk until the last phase. Each phase should end with something that runs, so we can stop between them.", "at": at(25.0), "steered": true },
             { "type": "tool", "id": "t4", "name": "Bash", "summary": "npm test -- login", "kind": "command", "label": "Running npm" },
             { "type": "permission", "id": "p1", "requestId": "r1", "tool": "Bash", "kind": "command", "detail": "rm -rf dist && npm run build", "reason": "It deletes the build folder", "allowSession": true }
         ] },

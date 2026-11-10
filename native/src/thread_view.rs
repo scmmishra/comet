@@ -23,8 +23,10 @@ const ROW_GAP: f32 = 14.0;
 const LANE_TOP: f32 = 10.0;
 /// A first guess at a row's height, before it is measured.
 const ROW_ESTIMATE: f32 = 64.0;
-/// A message's bubble takes at most this share of the lane.
-const BUBBLE_SHARE: f32 = 0.8;
+/// A message's bubble takes at most 80% of the lane, `max-w-[80%]`.
+pub const BUBBLE_MAX: f32 = (COLUMN - 2.0 * LANE_PADDING) * 0.8;
+/// A message's bubble's padding on each side, `px-3.5`.
+const BUBBLE_PAD_X: f32 = 14.0;
 /// Rows of steps: `h-6`.
 const STEP_HEIGHT: f32 = 24.0;
 /// Icons beside steps, `size-[14px]`.
@@ -185,13 +187,17 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
             let steered = steered.then(|| {
                 row().gap(4.0).items_center().child(icon(&ic::ARROW_UP_RIGHT, 12.0).color(k.c.text_faint)).child(text("Steered").font(k.ty.text_xsmall).color(k.c.text_faint))
             });
-            let bubble = el()
-                .max_w((COLUMN - 2.0 * LANE_PADDING) * BUBBLE_SHARE)
-                .fill(k.c.layer_02)
-                .radius(BUBBLE_RADIUS)
-                .px(14.0)
-                .py(9.0)
-                .child(text(words.clone()).wrap_anywhere().font(theme::thread_text(k, c.size)).color(k.c.text_base).selectable(true).selection_color(k.selection()));
+            // The text shrinks and wraps inside the bubble's cap, as `w-fit max-w-[80%]` lays it out.
+            let bubble = el().max_w(BUBBLE_MAX).min_w(0.0).fill(k.c.layer_02).radius(BUBBLE_RADIUS).px(BUBBLE_PAD_X).py(9.0).child(
+                text(words.clone())
+                    .wrap_anywhere()
+                    .shrink()
+                    .min_w(0.0)
+                    .font(theme::thread_text(k, c.size))
+                    .color(k.c.text_base)
+                    .selectable(true)
+                    .selection_color(k.selection()),
+            );
             col().w_full().items_end().gap(4.0).children(steered).children((!words.is_empty()).then_some(bubble))
         }
         // Markdown makes its own selection group. Leaving it joins its texts to the thread's, so a drag crosses messages.

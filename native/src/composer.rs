@@ -612,12 +612,14 @@ fn queued(s: &Desk, tab: &str, message: &QueuedMessage, k: &Kit) -> El {
     let ids = || (tab.to_owned(), message.id.clone());
     let bubble = el()
         .max_w(COLUMN * 0.8)
+        .min_w(0.0)
         .radius(10.0)
         .border(1.0, k.c.text_faint.alpha(0.4))
         .border_dash(4.0, 3.0)
         .px(12.0)
         .py(8.0)
-        .child(text(message.text.clone()).wrap_anywhere().font(theme::thread_text(k, s.account.text_size())).color(k.c.text_muted));
+        // The text shrinks and wraps inside the bubble's cap, as `max-w-[80%]` lays it out.
+        .child(text(message.text.clone()).wrap_anywhere().shrink().min_w(0.0).font(theme::thread_text(k, s.account.text_size())).color(k.c.text_muted));
     let (send_tab, send_id) = ids();
     let (edit_tab, edit_id) = ids();
     let (remove_tab, remove_id) = ids();

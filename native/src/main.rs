@@ -45,11 +45,25 @@ const COMMANDS: &[Command] = &[
     ("Tab 9", "cmd+9", "View", commands::show_tab::<8>),
 ];
 
+/// Whether Rune will run headless, by its flags. Rune keeps the rule in `Args::headless`, which it
+/// does not export, so this follows it: these flags always run headless, and a script, trace or frame
+/// log runs headless unless `--native` asks for a window.
+fn headless() -> bool {
+    const ALWAYS: [&str; 7] = ["--snap", "--tree", "--html", "--video", "--strip", "--list-scenes", "--first-pixels"];
+    const UNLESS_NATIVE: [&str; 5] = ["--script", "--trace", "--frames", "--duration", "--out"];
+    let args: Vec<String> = std::env::args().collect();
+    let has = |flag: &str| args.iter().any(|a| a == flag);
+    ALWAYS.iter().any(|f| has(f)) || (!has("--native") && UNLESS_NATIVE.iter().any(|f| has(f)))
+}
+
 fn main() {
-    let Some(_lock) = instance::lock() else {
+    // Headless runs, such as `--snap`, start no core and save nothing, so they run beside a Desk.
+    let headless = headless();
+    let _lock = if headless { None } else { instance::lock() };
+    if !headless && _lock.is_none() {
         eprintln!("desk: Desk is already running.");
         return;
-    };
+    }
     rune::prewarm_gpu();
     let core = core::Core::default();
     let state = core.clone();
