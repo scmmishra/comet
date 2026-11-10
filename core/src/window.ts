@@ -83,11 +83,17 @@ export class Window {
     this.terminals.retain(new Set(tabs.flatMap((tab) => tab.terminals.map((terminal) => terminal.id))))
   }
 
-  /** Sends a message in a tab. A thread's first message snapshots the project first, so Review can show what the thread changed. */
+  /**
+   * Sends a message in a tab. A thread's first message snapshots the project first, so Review can show
+   * what the thread changed. A plugin may move the tab to another thread during the snapshot. The message
+   * then belongs to no thread the tab shows, so it is not sent.
+   */
   async send(tabId: string, text: string) {
     const tab = this.tab(tabId)
+    const key = this.thread(tabId).key
     if (!this.thread(tabId).baseline) {
       const baseline = await snapshot(tab.project)
+      if (this.thread(tabId).key !== key) throw new Error(MOVED)
       if (baseline) this.updateThread(tabId, { baseline })
     }
     this.session(tab).send(text)
@@ -118,7 +124,8 @@ export class Window {
     if (this.thread(tabId).key !== thread.key) return
     this.hooks.broadcast({ type: "session.history", tabId, items })
     if (sessionId) this.fillContext(tabId, sessionId)
-    else if (thread.prompt) await this.send(tabId, thread.prompt)
+    // A newer key that took the tab during the send has its own prompt, so this one goes unsaid.
+    else if (thread.prompt) await this.send(tabId, thread.prompt).catch((error: Error) => { if (error.message !== MOVED) throw error })
   }
 
   interrupt(tabId: string) {
@@ -198,7 +205,11 @@ export class Window {
   private session(tab: TabInfo) {
     let found = this.sessions.get(tab.id)
     if (!found) {
+      // A closed session may still deliver a message. It no longer speaks for the tab, so it is ignored.
+      const key = this.thread(tab.id).key
+      const current = () => this.sessions.get(tab.id) === created
       const emit = (event: ThreadEvent) => {
+        if (!current()) return
         if (event.kind === "context") this.updateThread(tab.id, { context: event.reading })
         this.hooks.broadcast({ type: "session.event", tabId: tab.id, event })
       }
@@ -207,13 +218,14 @@ export class Window {
         settings: tab,
         compactIdle: this.hooks.compactIdle,
         onSessionId: (sessionId) => {
+          if (!current()) return
           this.updateThread(tab.id, { sessionId })
-          const key = this.thread(tab.id).key
           if (key) this.persist({ keys: { ...this.state.keys, [threadKey(tab.project, key)]: sessionId } })
         },
         onRateLimit: this.hooks.rateLimit,
       })
-      this.sessions.set(tab.id, found)
+      const created = found
+      this.sessions.set(tab.id, created)
     }
     return found
   }
@@ -259,7 +271,10 @@ export class Window {
   }
 }
 
-/** Keys belong to a project, so two projects' plugins can use the same key. */
+/** Thrown by `send` when a plugin moved the tab to another thread before the message went out. */
+const MOVED = "The tab moved to another thread before the message was sent."
+
+/** Keys belong to a project, so two projects' plugins can use the same key. The plugin names its own keys. */
 const threadKey = (project: string, key: string) => `${project}\n${key}`
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
