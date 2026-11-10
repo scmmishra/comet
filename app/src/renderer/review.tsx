@@ -2,6 +2,7 @@ import { DiffChanges } from "@opencode/ui/diff-changes"
 import { IconButton } from "@opencode/ui/icon-button"
 import { SegmentedControl, SegmentedControlItem } from "@opencode/ui/segmented-control"
 import { Select } from "@opencode/ui/select"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { FileDiff, getSingularPatch } from "@pierre/diffs"
 import { createEffect, createRoot, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
 import { REVIEW_SCOPES, type FileChange, type ReviewScope, type TabInfo } from "@desk/protocol"
@@ -80,6 +81,12 @@ export function ReviewView(props: { tab: TabInfo; review: readonly FileChange[] 
     if (!next.delete(path)) next.add(path)
     setToggled(next)
   }
+  const allOpen = () => files().every((file) => isOpen(file.path))
+  // Opens every diff, or folds every one once all are open. A file is flipped when its default differs from the goal.
+  const toggleAll = () => {
+    const open = !allOpen()
+    setToggled(new Set(files().filter((file) => (files().length <= OPEN_FILE_LIMIT) !== open).map((file) => file.path)))
+  }
 
   return (
     <>
@@ -98,9 +105,32 @@ export function ReviewView(props: { tab: TabInfo; review: readonly FileChange[] 
           <span class="text-fg-3">{plural(files().length, "file")}</span>
           <DiffChanges changes={totals()} />
         </Show>
-        <SegmentedControl class="ml-auto" value={diffStyle()} onChange={(style) => style && setDiffStyle(style as DiffStyle)}>
-          <SegmentedControlItem value="unified">Unified</SegmentedControlItem>
-          <SegmentedControlItem value="split">Split</SegmentedControlItem>
+        <Show when={files().length > 0}>
+          <Tooltip value={allOpen() ? "Collapse all" : "Expand all"} placement="bottom" class="ml-auto">
+            <IconButton variant="ghost-muted" size="normal" aria-label={allOpen() ? "Collapse all" : "Expand all"} icon={<Icon name={allOpen() ? "collapse" : "expand"} />} onClick={toggleAll} />
+          </Tooltip>
+        </Show>
+        {/*
+          Icons only, as OpenCode's review draws it: the control is as wide as its icons, not the row. Each
+          tooltip's trigger is a flex box, so the control still measures its items.
+        */}
+        <SegmentedControl
+          class="!w-auto shrink-0 [&_[data-component=tooltip-v2-trigger]]:flex [&_[data-slot=segmented-control-v2-item]]:flex-none"
+          classList={{ "ml-auto": files().length === 0 }}
+          aria-label="Diff view"
+          value={diffStyle()}
+          onChange={(style) => style && setDiffStyle(style as DiffStyle)}
+        >
+          <Tooltip value="Unified diff" placement="bottom">
+            <SegmentedControlItem value="unified" aria-label="Unified diff">
+              <Icon name="unified" />
+            </SegmentedControlItem>
+          </Tooltip>
+          <Tooltip value="Split diff" placement="bottom">
+            <SegmentedControlItem value="split" aria-label="Split diff">
+              <Icon name="split" />
+            </SegmentedControlItem>
+          </Tooltip>
         </SegmentedControl>
       </div>
       <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
