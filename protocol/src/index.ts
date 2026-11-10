@@ -77,13 +77,47 @@ export type ThreadItem =
       readonly edits?: readonly TextEdit[]
       readonly result?: { readonly output: string; readonly isError: boolean }
     }
-  /** A tool call waiting for the user. `detail` is its input in full. `requestId` answers it. */
-  | { readonly type: "permission"; readonly id: string; readonly requestId: string; readonly tool: string; readonly detail: string; readonly answer?: boolean }
+  /**
+   * A tool call waiting for the user's approval, after T3 Code. `detail` is what the user approves: the
+   * command itself, else Claude Code's sentence for the request. `reason` says why Claude Code asks, when
+   * that adds to `detail`. `requestId` answers it. It leaves the thread once answered.
+   */
+  | {
+      readonly type: "permission"
+      readonly id: string
+      readonly requestId: string
+      readonly tool: string
+      readonly kind: PermissionKind
+      readonly detail: string
+      readonly reason?: string
+      /** Whether "Always allow this session" is offered. Claude Code withholds it when its rule would grant more than this call. */
+      readonly allowSession: boolean
+      readonly answered?: boolean
+    }
+  /** Questions Claude asks with AskUserQuestion, waiting for answers. `requestId` answers them. It leaves the thread once answered. */
+  | { readonly type: "question"; readonly id: string; readonly requestId: string; readonly questions: readonly Question[]; readonly answered?: boolean }
   /** The end of a turn. `stopped` means the user stopped it. */
   | { readonly type: "result"; readonly id: string; readonly durationMs: number; readonly isError: boolean; readonly stopped?: boolean }
   | { readonly type: "error"; readonly id: string; readonly message: string }
   /** The files a turn changed, without their diffs, added once the turn ends. */
   | { readonly type: "changes"; readonly id: string; readonly files: readonly ChangedFile[] }
+
+/** What a permission request would let Claude do, which picks its icon and label, after T3 Code. */
+export type PermissionKind = "command" | "file-change" | "file-read" | "permission"
+
+/**
+ * The user's answer to a permission request. "allow-session" also allows calls like it for the rest of
+ * the session. "cancel" declines and stops the turn.
+ */
+export type PermissionAnswer = "allow" | "allow-session" | "decline" | "cancel"
+
+/** One question of an AskUserQuestion call. */
+export interface Question {
+  readonly header: string
+  readonly question: string
+  readonly options: readonly { readonly label: string; readonly description?: string }[]
+  readonly multiSelect: boolean
+}
 
 /** A change to a thread. An item replaces the item with the same id, or joins the thread after the others. */
 export type ThreadEvent =
@@ -692,7 +726,9 @@ export type ClientMessage =
   | { readonly type: "setups.get"; readonly project: string }
   /** Starts a fresh session in a tab, as /clear asks. */
   | { readonly type: "thread.clear"; readonly tabId: string }
-  | { readonly type: "permission.answer"; readonly tabId: string; readonly requestId: string; readonly allow: boolean }
+  | { readonly type: "permission.answer"; readonly tabId: string; readonly requestId: string; readonly answer: PermissionAnswer }
+  /** Answers an AskUserQuestion call, by question text. Without `answers`, the user dismissed it. */
+  | { readonly type: "question.answer"; readonly tabId: string; readonly requestId: string; readonly answers?: Readonly<Record<string, string>> }
   /** Asks for what plugins show in a saved tab. The core draws it and answers with `layout`. */
   | { readonly type: "layout.get"; readonly tabId: string }
   /** Opens a panel instance in a saved tab, or brings the open one to the front. */

@@ -4,15 +4,16 @@ import { DiffChanges } from "@opencode/ui/diff-changes"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Spinner } from "@opencode/ui/spinner"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEffect, createMemo, createSignal, For, Index, Match, on, Show, Switch } from "solid-js"
-import type { TabInfo, ThreadItem } from "@desk/protocol"
+import type { PermissionAnswer, TabInfo, ThreadItem } from "@desk/protocol"
 import { imageUrl } from "./attachments"
 import { now } from "./clock"
 import { lineDiff } from "./diff"
 import { fileIcon } from "./file-icons"
 import { COPIED_MS, formatDuration, formatMessageTime, plural } from "./format"
-import { Chevron, Icon } from "./icons"
+import { Chevron, Icon, type IconName } from "./icons"
 import { Markdown } from "./markdown"
 import { openFile } from "./projects"
 import { threadRows, type Fold, type Group, type Row as ThreadRow, type Working } from "./thread-rows"
@@ -102,7 +103,7 @@ function RowView(props: { row: Row; tab: TabInfo }) {
       <Match when={props.row.type === "fold" && (props.row as Fold<Exclude<Item, Step>>)}>{(fold) => <FoldView fold={fold()} tab={props.tab} />}</Match>
       <Match when={props.row.type === "group" && (props.row as Group)}>{(group) => <GroupView group={group()} tab={props.tab} />}</Match>
       <Match when={props.row.type === "changes" && (props.row as ChangesItem)}>{(item) => <TurnChanges item={item()} tab={props.tab} />}</Match>
-      <Match when={props.row.type === "permission" && (props.row as PermissionItem)}>{(item) => <PermissionCard item={item()} tabId={props.tab.id} />}</Match>
+      <Match when={props.row.type === "permission" && (props.row as PermissionItem)}>{(item) => <PermissionRow item={item()} tabId={props.tab.id} />}</Match>
       <Match when={props.row.type === "error" && (props.row as Extract<Item, { type: "error" }>)}>
         {(item) => <div class="rounded-2xl bg-del-soft px-3 py-2 text-del">{item().message}</div>}
       </Match>
@@ -382,27 +383,62 @@ function EditBlock(props: { tool: ToolItem }) {
   )
 }
 
-function PermissionCard(props: { item: PermissionItem; tabId: string }) {
+/** How each kind of permission request reads, after T3 Code. Requests share the icons of the steps they would run. */
+const PERMISSION: Record<PermissionItem["kind"], { icon: IconName; label: string }> = {
+  command: { icon: ICON_BY_KIND.command, label: "Command approval" },
+  "file-change": { icon: ICON_BY_KIND.edit, label: "File change approval" },
+  "file-read": { icon: ICON_BY_KIND.read, label: "File read approval" },
+  permission: { icon: "lock", label: "Permission approval" },
+}
+
+/**
+ * A tool call waiting for approval, as a work row after T3 Code: what Claude would run or touch, why
+ * Claude Code asks, then Decline and Approve. More holds Always allow this session and Cancel, which also
+ * stops the turn.
+ */
+function PermissionRow(props: { item: PermissionItem; tabId: string }) {
+  const answer = (value: PermissionAnswer) => answerPermission(props.tabId, props.item.requestId, value)
   return (
-    <div class="overflow-hidden rounded-3xl bg-raised">
-      <div class="flex items-center gap-2 px-3.5 pt-2.5 text-[12px] text-fg-3">
-        <Icon name="lock" class="size-[15px]" />
-        Claude wants to use {props.item.tool}
+    <div role="group" aria-label={PERMISSION[props.item.kind].label} class="flex min-w-0 flex-col gap-1 text-[13px]">
+      <div class="flex min-w-0 items-start gap-2">
+        <span class="flex h-5 shrink-0 items-center">
+          <Icon name={PERMISSION[props.item.kind].icon} class="size-[14px] text-fg-3" />
+        </span>
+        <code tabIndex={0} class="block max-h-40 min-w-0 select-text overflow-auto whitespace-pre-wrap font-mono text-[12px] leading-5 text-fg [overflow-wrap:anywhere]">
+          {props.item.detail}
+        </code>
       </div>
-      <pre class="mx-3.5 mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-2xl bg-ground px-3 py-2 font-mono text-[12px] text-fg shadow-[0_0_0_1px_var(--color-line)]">
-        {props.item.detail}
-      </pre>
-      <Show
-        when={props.item.answer === undefined}
-        fallback={<div class="px-3.5 pb-3 pt-2.5 text-[12px] text-fg-3">{props.item.answer ? "Allowed" : "Declined"}</div>}
-      >
-        <div class="flex gap-1.5 px-3 pb-3 pt-2.5">
-          <Button variant="contrast" onClick={() => answerPermission(props.tabId, props.item.requestId, true)}>
-            Allow
+      <div class="flex min-w-0 flex-col gap-1 pl-[22px] text-[12px]">
+        <Show when={props.item.reason}>{(reason) => <span class="select-text text-fg-3 [overflow-wrap:anywhere]">{reason()}</span>}</Show>
+        <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+          <span class="inline-flex items-center gap-1 text-warning">
+            <Icon name="lock" class="size-3 shrink-0" />
+            Waiting for approval
+          </span>
+          <span aria-hidden="true" class="text-fg-3">
+            ·
+          </span>
+          <Button size="small" variant="ghost-muted" onClick={() => answer("decline")}>
+            Decline
           </Button>
-          <Button onClick={() => answerPermission(props.tabId, props.item.requestId, false)}>Decline</Button>
+          <Button size="small" variant="contrast" onClick={() => answer("allow")}>
+            Approve
+          </Button>
+          <Menu>
+            <Menu.Trigger as={Button} size="small" variant="ghost-muted" aria-label="More approval options">
+              More
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Content>
+                <Show when={props.item.allowSession}>
+                  <Menu.Item onSelect={() => answer("allow-session")}>Always allow this session</Menu.Item>
+                </Show>
+                <Menu.Item onSelect={() => answer("cancel")}>Cancel and stop the turn</Menu.Item>
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu>
         </div>
-      </Show>
+      </div>
     </div>
   )
 }

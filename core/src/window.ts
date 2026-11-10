@@ -1,5 +1,5 @@
 import type { SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
-import { followUpFor, type ChangedFile, type CoreMessage, type FileChange, type FollowUp, type ImageAttachment, type PluginLayout, type QueuedMessage, type ReviewScope, type TabInfo, type ThreadEvent, type ThreadItem } from "@desk/protocol"
+import { followUpFor, type ChangedFile, type CoreMessage, type FileChange, type FollowUp, type ImageAttachment, type PermissionAnswer, type PluginLayout, type QueuedMessage, type ReviewScope, type TabInfo, type ThreadEvent, type ThreadItem } from "@desk/protocol"
 import { branchBase, capture, changesSince, checkpointChanges, headTree, keepCheckpoints } from "./checkpoints"
 import { threadContext, threadHistory } from "./past-threads"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
@@ -237,8 +237,12 @@ export class Window {
     return this.sessions.get(tabId)?.stopTasks(ids)
   }
 
-  answerPermission(tabId: string, requestId: string, allow: boolean) {
-    this.sessions.get(tabId)?.answerPermission(requestId, allow)
+  answerPermission(tabId: string, requestId: string, answer: PermissionAnswer) {
+    this.sessions.get(tabId)?.answerPermission(requestId, answer)
+  }
+
+  answerQuestion(tabId: string, requestId: string, answers: Readonly<Record<string, string>> | undefined) {
+    this.sessions.get(tabId)?.answerQuestion(requestId, answers)
   }
 
   /**

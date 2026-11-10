@@ -69,6 +69,8 @@ function label(step: Step): string {
       return `Fetched ${target}`
     case "TodoWrite":
       return "Updated the plan"
+    case "AskUserQuestion":
+      return step.result ? "Asked a question" : "Asking a question"
     case "Task":
     case "Agent":
       return `Started an agent: ${target}`

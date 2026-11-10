@@ -1,11 +1,12 @@
 import { query, type CanUseTool, type PermissionResult, type Query, type SDKMessage, type SDKRateLimitInfo, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
-import type { ImageAttachment, RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
+import type { ImageAttachment, PermissionAnswer, RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
 import { readContext } from "./context"
 import { sdkModel } from "./models"
 import { BackgroundTasks } from "./background-tasks"
 import { claudeCodePath } from "./claude-code"
 import { Subagents } from "./subagents"
-import { ThreadMapper, toolDetail } from "./thread"
+import { ASK_USER_QUESTION, permissionItem, permissionResult, questionItem, questionResult } from "./requests"
+import { ThreadMapper } from "./thread"
 
 type Emit = (event: ThreadEvent) => void
 
@@ -52,6 +53,17 @@ interface SessionOptions {
 }
 
 /** One Claude conversation, in one tab. It starts on the first message. */
+type RequestSuggestions = Parameters<CanUseTool>[2]["suggestions"]
+
+/** A request waiting for the user: the item that shows it, what Claude asked with, and how to answer Claude Code. */
+interface OpenRequest {
+  readonly item: Extract<ThreadItem, { type: "permission" | "question" }>
+  readonly tool: string
+  readonly input: Record<string, unknown>
+  readonly suggestions: RequestSuggestions
+  readonly resolve: (result: PermissionResult) => void
+}
+
 export class Session {
   /** Each query reads its own inbox. A failed query's input loop may still wait on its inbox, and must not take the next message. */
   private inbox = new Inbox()
@@ -59,8 +71,8 @@ export class Session {
   private mapper: ThreadMapper
   private subagents: Subagents
   private backgroundTasks: BackgroundTasks
-  /** Open permission requests: how to answer each, and the item that shows it. */
-  private permissions = new Map<string, { readonly resolve: (result: PermissionResult) => void; readonly item: Extract<ThreadItem, { type: "permission" }> }>()
+  /** Open requests, permissions and questions, by request id. */
+  private requests = new Map<string, OpenRequest>()
   private sessionId?: string
   /** Set while a turn the user stopped winds down, until its result arrives. */
   private stopping = false
@@ -135,18 +147,25 @@ export class Session {
   }
 
   close() {
-    for (const { resolve } of this.permissions.values()) resolve({ behavior: "deny", message: "The tab was closed." })
-    this.permissions.clear()
+    for (const { resolve } of this.requests.values()) resolve({ behavior: "deny", message: "The tab was closed." })
+    this.requests.clear()
     this.inbox.close()
     this.query?.close()
   }
 
-  answerPermission(requestId: string, allow: boolean) {
-    const request = this.permissions.get(requestId)
-    if (!request) return
-    this.permissions.delete(requestId)
-    this.emit({ kind: "item", item: { ...request.item, answer: allow } })
-    request.resolve(allow ? { behavior: "allow" } : { behavior: "deny", message: "The user declined this tool call." })
+  answerPermission(requestId: string, answer: PermissionAnswer) {
+    this.answer(requestId, "permission", (input, tool, suggestions) => permissionResult(answer, tool, input, suggestions))
+  }
+
+  answerQuestion(requestId: string, answers: Readonly<Record<string, string>> | undefined) {
+    this.answer(requestId, "question", (input) => questionResult(input, answers))
+  }
+
+  /** Answers an open request of `type`. A stale answer, or one for another kind of request, is ignored. */
+  private answer(requestId: string, type: OpenRequest["item"]["type"], result: (input: Record<string, unknown>, tool: string, suggestions: RequestSuggestions) => PermissionResult) {
+    const request = this.requests.get(requestId)
+    if (request?.item.type !== type) return
+    this.respond(request, result(request.input, request.tool, request.suggestions))
   }
 
   /**
@@ -251,19 +270,27 @@ export class Session {
     }
   }
 
-  /** A request shows as its own item. Its id differs from the tool call's, which shows separately once allowed. */
-  private askPermission: CanUseTool = (tool, input, { signal, toolUseID: requestId }) =>
+  /**
+   * A request shows as its own item until it is answered. Its id differs from the tool call's, which
+   * shows separately. An AskUserQuestion call asks its questions, and any other tool asks for approval.
+   */
+  private askPermission: CanUseTool = (tool, input, options) =>
     new Promise((resolve) => {
-      const item = { type: "permission", id: `permission:${requestId}`, requestId, tool, detail: toolDetail(input) } as const
-      this.permissions.set(requestId, { resolve, item })
-      // An interrupted turn cancels its request, which then shows as declined.
-      signal.addEventListener("abort", () => {
-        this.permissions.delete(requestId)
-        this.emit({ kind: "item", item: { ...item, answer: false } })
-        resolve({ behavior: "deny", message: "The request was cancelled." })
-      })
+      const item = tool === ASK_USER_QUESTION ? questionItem(input, options.toolUseID) : permissionItem(tool, input, options)
+      const request = { item, tool, input, suggestions: options.suggestions, resolve }
+      this.requests.set(item.requestId, request)
+      // An interrupted turn cancels its request.
+      options.signal.addEventListener("abort", () => this.respond(request, { behavior: "deny", message: "The request was cancelled." }))
       this.emit({ kind: "item", item })
     })
+
+  /** Closes a request once, so its item leaves the thread, and gives Claude Code its result. */
+  private respond(request: OpenRequest, result: PermissionResult) {
+    if (this.requests.get(request.item.requestId) !== request) return
+    this.requests.delete(request.item.requestId)
+    this.emit({ kind: "item", item: { ...request.item, answered: true } })
+    request.resolve(result)
+  }
 }
 
 /** Whether two tabs run the same way, so a save can skip reconfiguring a session. */

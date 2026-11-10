@@ -1,4 +1,4 @@
-import type { BackgroundTask, ContextReading, FileChange, FollowUp, ImageAttachment, QueuedMessage, ReviewScope, Subagent, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
+import type { BackgroundTask, ContextReading, FileChange, FollowUp, ImageAttachment, PermissionAnswer, QueuedMessage, ReviewScope, Subagent, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
 import { createEffect, createMemo, createRoot, on } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
@@ -61,9 +61,17 @@ export function interrupt(tabId: string) {
   if (threadOf(tabId).busy) core.send({ type: "session.interrupt", tabId })
 }
 
-export function answerPermission(tabId: string, requestId: string, allow: boolean) {
-  core.send({ type: "permission.answer", tabId, requestId, allow })
+export function answerPermission(tabId: string, requestId: string, answer: PermissionAnswer) {
+  core.send({ type: "permission.answer", tabId, requestId, answer })
 }
+
+/** Answers Claude's questions, by question text. Without `answers`, they are dismissed. */
+export function answerQuestion(tabId: string, requestId: string, answers?: Readonly<Record<string, string>>) {
+  core.send({ type: "question.answer", tabId, requestId, ...(answers ? { answers } : {}) })
+}
+
+/** The questions Claude is waiting on in a tab, if any. */
+export const pendingQuestion = (tabId: string) => threadOf(tabId).items.findLast((item): item is Extract<Item, { type: "question" }> => item.type === "question" && !item.answered)
 
 /**
  * Shows a past thread of `project`: its tab if one has it open, else the active tab when that tab

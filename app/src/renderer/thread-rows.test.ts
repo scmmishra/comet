@@ -46,3 +46,10 @@ test("keeps a turn's file summary under its answer, out of the fold", () => {
   const rows = threadRows([user("u1"), tool("a"), text("answer"), { type: "result", id: "r", durationMs: 1000, isError: false }, changes], false)
   expect(kinds(rows)).toEqual(["user", "fold", "text", "changes"])
 })
+
+test("shows a permission request only while it waits, and Claude's questions never, as they show in the composer", () => {
+  const permission = (answered?: boolean): ThreadItem => ({ type: "permission", id: "p", requestId: "p", tool: "Bash", kind: "command", detail: "ls", allowSession: true, ...(answered ? { answered } : {}) })
+  const question: ThreadItem = { type: "question", id: "q", requestId: "q", questions: [] }
+  expect(kinds(threadRows([user("u1"), tool("a"), permission(), question, text("answer")], false))).toEqual(["user", "fold", "permission", "text"])
+  expect(kinds(threadRows([user("u1"), tool("a"), permission(true), question, text("answer")], false))).toEqual(["user", "fold", "text"])
+})

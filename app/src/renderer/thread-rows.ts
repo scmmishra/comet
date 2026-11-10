@@ -11,8 +11,14 @@ export type Row<T> = T | Group | Fold<T> | Working
 
 type NotStep<T> = Exclude<T, Step>
 
-/** What a folded turn keeps in view: errors, and requests still waiting for the user. */
-const staysOut = (item: ThreadItem) => item.type === "error" || (item.type === "permission" && item.answer === undefined)
+/** What a folded turn keeps in view: errors, and permission requests still waiting for the user. */
+const staysOut = (item: ThreadItem) => item.type === "error" || item.type === "permission"
+
+/**
+ * Requests show only while they wait, after T3 Code: an answered one leaves, and its tool call shows what
+ * happened. Questions show in the composer, never in the thread.
+ */
+const shown = (item: ThreadItem) => !(item.type === "question" || (item.type === "permission" && item.answered))
 
 /** Items with each run of steps gathered into a group. Anything else, such as text or a request, ends a group. */
 function grouped<T extends ThreadItem>(items: readonly T[], live: boolean): (NotStep<T> | Group)[] {
@@ -31,7 +37,7 @@ function grouped<T extends ThreadItem>(items: readonly T[], live: boolean): (Not
 /**
  * The thread as rows, after T3 Code. A running turn opens with a "Working for" head, and shows its work
  * as groups, with the last one live. A finished turn folds everything before its closing text into one
- * row. Errors and open requests stay out of the fold. A turn is finished once another message follows
+ * row. Errors and open permission requests stay out of the fold. A turn is finished once another message follows
  * it, or once the tab stops working, so restored threads, which carry no live events, fold the same way.
  */
 export function threadRows<T extends ThreadItem>(items: readonly T[], busy: boolean): Row<NotStep<T>>[] {
@@ -55,7 +61,7 @@ export function threadRows<T extends ThreadItem>(items: readonly T[], busy: bool
     if (work.length) out.push({ type: "fold", id: `fold:${id}`, rows: grouped(work, false), durationMs: result?.durationMs, stopped: !!result?.stopped })
     out.push(...(body.slice(0, end).filter(staysOut) as NotStep<T>[]), ...(body.slice(end) as NotStep<T>[]), ...summary)
   }
-  for (const item of items) {
+  for (const item of items.filter(shown)) {
     if (item.type === "user") {
       if (opener || turn.length) close(true)
       opener = item as Extract<T, { type: "user" }>

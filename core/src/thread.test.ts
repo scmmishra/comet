@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk"
-import { ThreadMapper, toolDetail, toolItem } from "./thread"
+import { ThreadMapper, toolItem } from "./thread"
 
 // Hand-built SDK messages carry only the fields the mapper reads.
 const sdk = (message: object) => message as SDKMessage
@@ -40,11 +40,6 @@ test("shapes an edit with its file relative to the project, and other calls by t
   })
   expect(toolItem(DIR, "t2", "Grep", { pattern: "TODO", glob: "*.ts" }).summary).toBe("TODO")
   expect(toolItem(DIR, "t3", "Custom", { level: 2 }).summary).toBe('{"level":2}')
-})
-
-test("shows a permission request's single input as itself, and several as JSON", () => {
-  expect(toolDetail({ command: "rm -rf build" })).toBe("rm -rf build")
-  expect(toolDetail({ file_path: "a.ts", content: "x" })).toBe('{\n  "file_path": "a.ts",\n  "content": "x"\n}')
 })
 
 test("rebuilds a thread from a stored transcript, timing each turn and hiding Claude Code's own messages", () => {

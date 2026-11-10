@@ -1,4 +1,5 @@
 import { followUpFor, IMAGE_TYPES, type FollowUp, type ImageAttachment, type QueuedMessage, type TabInfo } from "@desk/protocol"
+import { Button } from "@opencode/ui/button"
 import { IconButton } from "@opencode/ui/icon-button"
 import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
@@ -12,7 +13,8 @@ import { Icon } from "./icons"
 import { ModelPicker, openModelPicker } from "./model-picker"
 import { findFiles, projectData, readProject } from "./projects"
 import { QueuedMessages } from "./queue"
-import { clearThread, interrupt, removeQueued, send, threadOf } from "./threads"
+import { advanceQuestion, canAdvance, isLastQuestion, QuestionPanel, typedAnswer, typeQuestionAnswer } from "./question-panel"
+import { clearThread, interrupt, pendingQuestion, removeQueued, send, threadOf } from "./threads"
 import { complete, matchCommands, triggerAt, type Trigger } from "./triggers"
 
 const MAX_HEIGHT_PX = 240
@@ -44,7 +46,9 @@ const FOLLOW_UP: Record<FollowUp, { label: string; icon: "arrow-up-right" | "out
  * The message box, laid out as T3 Code's: images, a tall text area, then a row with the attach
  * button on the left and the model and send button on the right. Typing @ lists the project's
  * files, and / at the start lists commands. Images come from the attach button, a paste or a drop. While Claude works, a message steers
- * the turn or waits in the queue, as the Follow-ups setting says, and ⌘Enter does the other.
+ * the turn or waits in the queue, as the Follow-ups setting says, and ⌘Enter does the other. While
+ * Claude asks questions, they show at the top, and the text area answers the current one in the user's
+ * own words, after T3 Code.
  */
 export function Composer(props: { tab: TabInfo }) {
   // The message being written is the tab's draft, so it survives a tab switch and a restart.
@@ -57,6 +61,7 @@ export function Composer(props: { tab: TabInfo }) {
   const [files, setFiles] = createSignal<readonly string[]>([])
   const [active, setActive] = createSignal(0)
   const busy = () => threadOf(props.tab.id).busy
+  const question = () => pendingQuestion(props.tab.id)
   const canSend = () => !!text().trim() || images().length > 0
   /** What sending does while Claude works. `alternate` is ⌘Enter or a ⌘-click, which does the other. */
   const followUp = (alternate: boolean): FollowUp => {
@@ -152,6 +157,8 @@ export function Composer(props: { tab: TabInfo }) {
   }
 
   const submit = (alternate = false) => {
+    const asked = question()
+    if (asked) return advanceQuestion(props.tab.id, asked)
     if (!canSend()) return
     send(props.tab.id, text().trim(), images(), busy() ? followUp(alternate) : undefined)
     setText("")
@@ -203,6 +210,7 @@ export function Composer(props: { tab: TabInfo }) {
         void addImages(event.dataTransfer.files)
       }}
     >
+      <Show when={question()}>{(asked) => <QuestionPanel tab={props.tab} item={asked()} />}</Show>
       <Show when={listing()}>
         <div
           role="listbox"
@@ -256,11 +264,15 @@ export function Composer(props: { tab: TabInfo }) {
         rows={2}
         aria-label="Message"
         class="min-h-[52px] w-full resize-none bg-transparent px-4 pt-3.5 text-[length:var(--desk-text-size)] leading-relaxed text-fg outline-none placeholder:text-fg-3"
-        placeholder="Ask anything, @ to add files, / for commands"
-        value={text()}
+        placeholder={question() ? "Type your own answer, or leave this blank to use the selected option" : "Ask anything, @ to add files, / for commands"}
+        value={question() ? typedAnswer(question()!) : text()}
         onInput={(event) => {
-          setText(event.currentTarget.value)
-          readTrigger()
+          const asked = question()
+          if (asked) typeQuestionAnswer(asked, event.currentTarget.value)
+          else {
+            setText(event.currentTarget.value)
+            readTrigger()
+          }
           resize()
         }}
         // Moving the caret out of a trigger closes its list.
@@ -311,6 +323,14 @@ export function Composer(props: { tab: TabInfo }) {
         />
         <ModelPicker tab={props.tab} />
         <Show
+          when={!question()}
+          fallback={
+            <Button type="submit" variant="contrast" size="normal" class="rounded-full" disabled={!canAdvance(question()!)}>
+              {!isLastQuestion(question()!) ? "Next question" : question()!.questions.length > 1 ? "Submit answers" : "Submit answer"}
+            </Button>
+          }
+        >
+        <Show
           when={busy()}
           fallback={<IconButton type="submit" variant="submit" size="large" class="size-8 rounded-full" aria-label="Send" disabled={!canSend()} icon={<Icon name="arrow-up" />} />}
         >
@@ -333,6 +353,7 @@ export function Composer(props: { tab: TabInfo }) {
               />
             </Tooltip>
           </Show>
+        </Show>
         </Show>
       </div>
     </form>

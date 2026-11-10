@@ -142,7 +142,9 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       case "tasks.stop":
         return window.stopTasks(message.tabId, message.ids)
       case "permission.answer":
-        return window.answerPermission(message.tabId, message.requestId, message.allow)
+        return window.answerPermission(message.tabId, message.requestId, message.answer)
+      case "question.answer":
+        return window.answerQuestion(message.tabId, message.requestId, message.answers)
       case "thread.resume":
         return window.resume(message.tabId, message.threadId, reply)
       case "review.get":

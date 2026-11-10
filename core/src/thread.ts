@@ -156,12 +156,6 @@ export function toolItem(dir: string, id: string, name: string, input: Record<st
   }
 }
 
-/** A tool call's input in full, for the user to judge before allowing it. A single field shows as its value. */
-export function toolDetail(input: Record<string, unknown>): string {
-  const fields = Object.values(input)
-  return fields.length === 1 && typeof fields[0] === "string" ? fields[0] : JSON.stringify(input, null, 2)
-}
-
 /** The edits of an Edit, MultiEdit or Write call, as Claude Code names their inputs. Other tools make none. */
 function toolEdits(name: string, input: Record<string, unknown>): TextEdit[] | undefined {
   if (name === "Edit") return [{ before: String(input.old_string ?? ""), after: String(input.new_string ?? "") }]
