@@ -8,6 +8,10 @@ use rune_kit::shell::{TabDragState, TabItem, TabOrientation, TabStrip, WindowTit
 
 /// The tab bar's height. The window's buttons sit centred in it.
 pub const TITLEBAR_HEIGHT: f32 = 44.0;
+/// The ground shown around the main panel, on its sides and below it.
+const PANEL_INSET: f32 = 8.0;
+/// The main panel's corners, Desk's `rounded-3xl`.
+const PANEL_RADIUS: f32 = 12.0;
 
 #[derive(Debug, Default, PartialEq)]
 pub enum CoreState {
@@ -101,9 +105,12 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
         .center()
         .gap(8.0)
         .fill(k.c.bg_base)
+        .radius(PANEL_RADIUS)
+        .border(1.0, k.c.border_muted)
         .child(status.key("status"))
         .children(s.error.clone().map(|e| text(e).key("error").font(k.ty.ui).color(k.c.danger.fg)));
-    rune_kit::root(col().key("window").w_full().h_full().fill(k.c.bg_deep).child(titlebar).child(body), layer)
+    let main = col().key("main").w_full().grow(1.0).min_h(0.0).px(PANEL_INSET).pb(PANEL_INSET).child(body);
+    rune_kit::root(col().key("window").w_full().h_full().fill(k.c.bg_deep).child(titlebar).child(main), layer)
 }
 
 #[cfg(test)]
