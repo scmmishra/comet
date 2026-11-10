@@ -54,6 +54,12 @@ function RowView(props: { row: Row; tab: TabInfo }) {
       <Match when={props.row.type === "user" && (props.row as Extract<Item, { type: "user" }>)}>
         {(item) => (
           <div class="group/message flex flex-col items-end gap-1">
+            <Show when={item().steered}>
+              <span class="flex items-center gap-1 text-[12px] text-fg-3" title="Sent into the turn while Claude worked">
+                <Icon name="arrow-up-right" class="size-3" />
+                Steered
+              </span>
+            </Show>
             <Show when={item().images?.length}>
               <div class="flex max-w-[80%] flex-wrap justify-end gap-2">
                 <For each={item().images}>{(image) => <img src={imageUrl(image)} alt="" class="max-h-48 max-w-[240px] rounded-2xl object-cover shadow-[0_0_0_1px_var(--color-line)]" />}</For>

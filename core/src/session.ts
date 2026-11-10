@@ -1,4 +1,4 @@
-import { query, type CanUseTool, type PermissionResult, type Query, type SDKRateLimitInfo, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
+import { query, type CanUseTool, type PermissionResult, type Query, type SDKMessage, type SDKRateLimitInfo, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 import type { ImageAttachment, RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
 import { readContext } from "./context"
 import { sdkModel } from "./models"
@@ -62,6 +62,9 @@ export class Session {
   private sessionId?: string
   /** Set while a turn the user stopped winds down, until its result arrives. */
   private stopping = false
+  private running = false
+  /** Set from a steered message until Claude Code takes it in, or its turn ends without it. */
+  private steering = false
   private settings: RunSettings
 
   constructor(
@@ -85,16 +88,31 @@ export class Session {
     await this.query.setPermissionMode(settings.permissionMode)
   }
 
+  /** Whether a turn runs, from a message until its turn's final result. */
+  get busy() {
+    return this.running
+  }
+
+  /** Starts a turn with a message. */
   send(text: string, images: readonly ImageAttachment[] = []) {
     this.emit({ kind: "item", item: { type: "user", id: `user-${++this.sent}`, text, ...(images.length ? { images } : {}), at: Date.now() } })
+    this.running = true
     this.emit({ kind: "status", busy: true })
     if (!this.query) this.inbox = new Inbox()
-    // Images go before the text, as the API recommends.
-    const content = images.length
-      ? [...images.map((image) => ({ type: "image" as const, source: { type: "base64" as const, media_type: image.mediaType, data: image.data } })), ...(text ? [{ type: "text" as const, text }] : [])]
-      : text
-    this.inbox.push({ type: "user", message: { role: "user", content }, parent_tool_use_id: null })
+    this.inbox.push({ type: "user", message: { role: "user", content: userContent(text, images) }, parent_tool_use_id: null })
     if (!this.query) this.start()
+  }
+
+  /**
+   * Sends a message into the running turn. Claude Code cuts the turn's current step short, reports that
+   * step's end as an aborted result, and goes on with the message. A turn that ends before the message
+   * lands takes it as its next turn instead.
+   */
+  steer(text: string, images: readonly ImageAttachment[] = []) {
+    if (!this.running) return this.send(text, images)
+    this.emit({ kind: "item", item: { type: "user", id: `user-${++this.sent}`, text, ...(images.length ? { images } : {}), at: Date.now(), steered: true } })
+    this.steering = true
+    this.inbox.push({ type: "user", message: { role: "user", content: userContent(text, images) }, parent_tool_use_id: null, priority: "now" })
   }
 
   async interrupt() {
@@ -155,6 +173,7 @@ export class Session {
         }
         if (message.type === "rate_limit_event") this.options.onRateLimit(message.rate_limit_info)
         this.subagents.handle(message)
+        if (message.type === "result" && this.steered(message)) continue
         for (const event of this.mapper.map(message, Date.now())) {
           // The result of a turn the user stopped says so, so the thread can tell it from one that finished.
           const stopped = this.stopping && event.kind === "item" && event.item.type === "result"
@@ -162,16 +181,32 @@ export class Session {
         }
         if (message.type === "result") {
           this.stopping = false
+          // A steered message that missed the turn starts the next one, so the tab stays busy.
+          if (this.steering) {
+            this.steering = false
+            continue
+          }
+          this.running = false
           this.emit({ kind: "status", busy: false })
           void this.reportContext(running)
         }
       }
     } catch (error) {
+      this.running = false
+      this.steering = false
       this.emit({ kind: "item", item: { type: "error", id: `error-${Date.now()}`, message: error instanceof Error ? error.message : String(error) } })
       this.emit({ kind: "status", busy: false })
       this.inbox.close()
       this.query = undefined
     }
+  }
+
+  /** Whether a result only ends the step a steered message cut short. The turn goes on with the message. */
+  private steered(result: Extract<SDKMessage, { type: "result" }>) {
+    const cut = result.terminal_reason === "aborted_streaming" || result.terminal_reason === "aborted_tools"
+    if (!cut || !this.steering || this.stopping) return false
+    this.steering = false
+    return true
   }
 
   private async reportContext(running: Query) {
@@ -200,3 +235,10 @@ export class Session {
 /** Whether two tabs run the same way, so a save can skip reconfiguring a session. */
 export const sameRunSettings = (a: RunSettings, b: RunSettings) =>
   a.model === b.model && a.effort === b.effort && !!a.fast === !!b.fast && a.permissionMode === b.permissionMode
+
+/** A message's content for Claude. Images go before the text, as the API recommends. */
+function userContent(text: string, images: readonly ImageAttachment[]) {
+  if (!images.length) return text
+  const blocks = images.map((image) => ({ type: "image" as const, source: { type: "base64" as const, media_type: image.mediaType, data: image.data } }))
+  return [...blocks, ...(text ? [{ type: "text" as const, text }] : [])]
+}

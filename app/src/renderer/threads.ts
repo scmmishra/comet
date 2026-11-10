@@ -1,4 +1,4 @@
-import type { ContextReading, FileChange, ImageAttachment, Subagent, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
+import type { ContextReading, FileChange, FollowUp, ImageAttachment, QueuedMessage, Subagent, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
 import { createEffect, createMemo, createRoot, on } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
@@ -19,6 +19,10 @@ export interface Thread {
   review?: readonly FileChange[]
   /** The subagents of the latest turn, and any still running from an earlier one, by id. */
   subagents?: Record<string, Subagent>
+  /** Messages waiting for the running turn to end, as the core keeps them. */
+  queue?: readonly QueuedMessage[]
+  /** Whether a stop or an error paused the queue. */
+  queueHeld?: boolean
 }
 
 /** What a tab with no thread yet shows. A tab that gets a thread gets a record of its own. */
@@ -31,15 +35,21 @@ export const threadOf = (tabId: string): Thread => threads[tabId] ?? EMPTY
 /** Starts a tab's thread record the first time something arrives for it. */
 const ensure = (tabId: string) => setThreads(tabId, (thread) => thread ?? { items: [], busy: false })
 
-/** Sends a message in a tab. A tab with no name takes it from the message's text. */
-export function send(tabId: string, text: string, images: readonly ImageAttachment[] = []) {
+/** Sends a message in a tab. While Claude works, `followUp` says whether it steers the turn or waits. A tab with no name takes it from the message's text. */
+export function send(tabId: string, text: string, images: readonly ImageAttachment[] = [], followUp?: FollowUp) {
   const tab = workspace.tabs.find((found) => found.id === tabId)
   if (tab && isUntitled(tab) && text) nameTab(tabId, text)
-  // A new turn starts a new set of subagents. Those still running stay.
-  const running = Object.values(threadOf(tabId).subagents ?? {}).filter((subagent) => subagent.status === "running")
-  if (threads[tabId]) setThreads(tabId, produce((thread) => void (thread.subagents = Object.fromEntries(running.map((subagent) => [subagent.id, subagent])))))
-  core.send({ type: "session.send", tabId, text, ...(images.length ? { images } : {}) })
+  // A new turn starts a new set of subagents, and those still running stay. A message sent while Claude works joins its turn or waits, so nothing resets.
+  if (threads[tabId] && !threadOf(tabId).busy) {
+    const running = Object.values(threadOf(tabId).subagents ?? {}).filter((subagent) => subagent.status === "running")
+    setThreads(tabId, produce((thread) => void (thread.subagents = Object.fromEntries(running.map((subagent) => [subagent.id, subagent])))))
+  }
+  core.send({ type: "session.send", tabId, text, ...(images.length ? { images } : {}), ...(followUp ? { followUp } : {}) })
 }
+
+export const sendQueued = (tabId: string, id: string) => core.send({ type: "queue.send", tabId, id })
+export const removeQueued = (tabId: string, id: string) => core.send({ type: "queue.remove", tabId, id })
+export const resumeQueue = (tabId: string) => core.send({ type: "queue.resume", tabId })
 
 export function interrupt(tabId: string) {
   if (threadOf(tabId).busy) core.send({ type: "session.interrupt", tabId })
@@ -99,7 +109,13 @@ function apply(tabId: string, event: ThreadEvent, arrivedAt?: number) {
 core.listen((message) => {
   if (message.type === "session.event") apply(message.tabId, message.event, performance.now())
   else if (message.type === "session.history") setThreads(message.tabId, { items: [...message.items], busy: false, context: message.context })
-  else if (message.type === "review") {
+  else if (message.type === "queue") {
+    ensure(message.tabId)
+    setThreads(message.tabId, produce((thread) => {
+      thread.queue = message.messages
+      thread.queueHeld = message.held
+    }))
+  } else if (message.type === "review") {
     ensure(message.tabId)
     setThreads(message.tabId, "review", message.files)
   }

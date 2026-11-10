@@ -1,4 +1,4 @@
-import type { ContextReading, PluginLayout, TabInfo } from "@desk/protocol"
+import type { ContextReading, PluginLayout, QueuedMessage, TabInfo } from "@desk/protocol"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { instanceHome, writeJsonFile } from "./data-files"
@@ -16,6 +16,10 @@ export interface TabThread {
   readonly context?: ContextReading
   /** The key a plugin opened the thread under, such as a conversation's id. */
   readonly key?: string
+  /** Messages waiting for the running turn to end. They are saved, so a restart keeps them. */
+  readonly queue?: readonly QueuedMessage[]
+  /** Set when a stop or an error paused the queue, until the user resumes it. */
+  readonly queueHeld?: boolean
 }
 
 /** The window: its tabs in their order across projects, each tab's thread, and the folders tabs have opened. */

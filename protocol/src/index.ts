@@ -23,6 +23,20 @@ export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"
 /** The largest image Claude takes, in bytes before base64. */
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
+/**
+ * What a message sent while Claude works does: steer joins the running turn, and queue waits for the turn
+ * to end. ⌘Enter does the other one, for one message.
+ */
+export const FOLLOW_UPS = ["steer", "queue"] as const
+export type FollowUp = (typeof FOLLOW_UPS)[number]
+
+/** A message waiting for the running turn to end. The core sends queued messages in order, one turn each. */
+export interface QueuedMessage {
+  readonly id: string
+  readonly text: string
+  readonly images?: readonly ImageAttachment[]
+}
+
 /** An image sent with a message, as base64. */
 export interface ImageAttachment {
   readonly mediaType: (typeof IMAGE_TYPES)[number]
@@ -35,7 +49,8 @@ export interface ImageAttachment {
  */
 export type ThreadItem =
   /** `at` is when it was sent, in milliseconds since the epoch, when that is known. */
-  | { readonly type: "user"; readonly id: string; readonly text: string; readonly images?: readonly ImageAttachment[]; readonly at?: number }
+  /** `steered` marks a message sent into a turn that was still running. */
+  | { readonly type: "user"; readonly id: string; readonly text: string; readonly images?: readonly ImageAttachment[]; readonly at?: number; readonly steered?: boolean }
   /** Assistant text. `at` is when it finished. Text still streaming is not done and has none. */
   | { readonly type: "text"; readonly id: string; readonly text: string; readonly done: boolean; readonly at?: number }
   /** Claude's thinking. `text` is what it thought, when Claude Code shares it. */
@@ -218,6 +233,8 @@ export interface ClaudeSettings {
   readonly effort?: Effort
   /** A model without Auto mode starts Supervised instead. */
   readonly permissionMode: PermissionMode
+  /** What Enter does while Claude works. */
+  readonly followUp: FollowUp
   /** Compacts a thread's context once it has sat idle, so picking it up again starts small. */
   readonly compactIdle: boolean
 }
@@ -283,7 +300,7 @@ export interface DeskSettings {
 /** Desk's settings before anyone changes them. The app uses them until the core sends the saved ones. */
 export const DEFAULT_SETTINGS: DeskSettings = {
   appearance: { theme: "dark", fontSize: 14, uiFont: "", codeFont: "" },
-  claude: { model: DEFAULT_MODEL, permissionMode: "auto", compactIdle: false },
+  claude: { model: DEFAULT_MODEL, permissionMode: "auto", followUp: "steer", compactIdle: false },
   projects: {},
 }
 
@@ -591,7 +608,13 @@ export type ClientMessage =
   | { readonly type: "tabs.save"; readonly tabs: readonly TabInfo[]; readonly active?: string }
   /** Opens a file from the thread in the editor. The core refuses paths outside the project. */
   | { readonly type: "file.open"; readonly project: string; readonly path: string; readonly line?: number }
-  | { readonly type: "session.send"; readonly tabId: string; readonly text: string; readonly images?: readonly ImageAttachment[] }
+  /** Sends a message. While Claude works, `followUp` says whether it steers the turn or waits in the queue. */
+  | { readonly type: "session.send"; readonly tabId: string; readonly text: string; readonly images?: readonly ImageAttachment[]; readonly followUp?: FollowUp }
+  /** Sends a queued message now: into the running turn, or as a new turn when none runs. */
+  | { readonly type: "queue.send"; readonly tabId: string; readonly id: string }
+  | { readonly type: "queue.remove"; readonly tabId: string; readonly id: string }
+  /** Sends the queue again after a stop or an error paused it. */
+  | { readonly type: "queue.resume"; readonly tabId: string }
   /** Finds files in the project whose path matches `query`, for an @ mention. The core answers with `files.found`. */
   | { readonly type: "files.search"; readonly project: string; readonly query: string }
   | { readonly type: "session.interrupt"; readonly tabId: string }
@@ -626,6 +649,8 @@ export type CoreMessage =
   /** `usage` is absent when Claude has no plan limits, such as with an API key. */
   | { readonly type: "usage"; readonly usage?: PlanUsage }
   | { readonly type: "review"; readonly tabId: string; readonly files: readonly FileChange[] }
+  /** A tab's queued messages, sent whole on each change. `held` means a stop or an error paused them. */
+  | { readonly type: "queue"; readonly tabId: string; readonly messages: readonly QueuedMessage[]; readonly held: boolean }
   /** The answer to `files.search`, with the query it answers: paths relative to the project, best match first. */
   | { readonly type: "files.found"; readonly project: string; readonly query: string; readonly paths: readonly string[] }
   | { readonly type: "terminal.output"; readonly id: string; readonly data: string }

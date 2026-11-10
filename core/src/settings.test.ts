@@ -12,13 +12,13 @@ test("starts from the defaults and keeps a change across a reload", () => {
   expect(loadSettings()).toEqual(DEFAULT_SETTINGS)
   const changed = updateSettings(DEFAULT_SETTINGS, { appearance: { theme: "light", fontSize: 15 }, claude: { model: "opus", effort: "high" } })
   saveSettings(changed)
-  expect(loadSettings()).toEqual({ ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_SETTINGS.appearance, theme: "light", fontSize: 15 }, claude: { model: "opus", effort: "high", permissionMode: "auto", compactIdle: false } })
+  expect(loadSettings()).toEqual({ ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_SETTINGS.appearance, theme: "light", fontSize: 15 }, claude: { model: "opus", effort: "high", permissionMode: "auto", followUp: "steer", compactIdle: false } })
   rmSync(settingsPath())
 })
 
 test("null clears an optional field and cannot clear a required one", () => {
   const high = updateSettings(DEFAULT_SETTINGS, { claude: { effort: "high" } })
-  expect(updateSettings(high, { claude: { effort: null } }).claude).toEqual({ model: "default", permissionMode: "auto", compactIdle: false })
+  expect(updateSettings(high, { claude: { effort: null } }).claude).toEqual({ model: "default", permissionMode: "auto", followUp: "steer", compactIdle: false })
   expect(() => updateSettings(DEFAULT_SETTINGS, { appearance: { theme: null as never } })).toThrow()
 })
 

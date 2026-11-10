@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, EFFORTS, FONT_SIZES, PERMISSION_MODES, PROJECT_COLORS, THEMES, type AppearanceSettings, type ClaudeSettings, type DeskSettings, type ProjectSettings, type SettingsChange } from "@desk/protocol"
+import { DEFAULT_SETTINGS, EFFORTS, FOLLOW_UPS, FONT_SIZES, PERMISSION_MODES, PROJECT_COLORS, THEMES, type AppearanceSettings, type ClaudeSettings, type DeskSettings, type ProjectSettings, type SettingsChange } from "@desk/protocol"
 import { readFileSync } from "node:fs"
 import { isAbsolute, join, relative } from "node:path"
 import { deskHome, writeJsonFile } from "./data-files"
@@ -31,6 +31,7 @@ const CLAUDE: Record<keyof ClaudeSettings, Rule> = {
   model: { valid: (value) => typeof value === "string" && !!value.trim(), clean: (value: string) => value.trim(), message: "A model is named by its value, such as opus." },
   effort: { valid: (value) => EFFORTS.includes(value as never), optional: true, message: `The effort is one of ${EFFORTS.join(", ")}.` },
   permissionMode: { valid: (value) => PERMISSION_MODES.includes(value as never), message: `The permission mode is one of ${PERMISSION_MODES.join(", ")}.` },
+  followUp: { valid: (value) => FOLLOW_UPS.includes(value as never), message: `A follow-up is one of ${FOLLOW_UPS.join(", ")}.` },
   compactIdle: { valid: (value) => typeof value === "boolean", message: "Compacting idle threads is on or off." },
 }
 

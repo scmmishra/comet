@@ -116,7 +116,13 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       case "tabs.save":
         return window.save(message.tabs, message.active)
       case "session.send":
-        return window.send(message.tabId, message.text, checkImages(message.images ?? []))
+        return window.send(message.tabId, message.text, checkImages(message.images ?? []), message.followUp)
+      case "queue.send":
+        return window.sendQueued(message.tabId, message.id)
+      case "queue.remove":
+        return window.removeQueued(message.tabId, message.id)
+      case "queue.resume":
+        return window.resumeQueue(message.tabId)
       case "files.search":
         return reply({ type: "files.found", project: message.project, query: message.query, paths: await searchFiles(message.project, message.query) })
       case "session.interrupt":

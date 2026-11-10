@@ -1,5 +1,5 @@
 import type { SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
-import type { CoreMessage, FileChange, ImageAttachment, PluginLayout, TabInfo, ThreadEvent } from "@desk/protocol"
+import type { CoreMessage, FileChange, FollowUp, ImageAttachment, PluginLayout, QueuedMessage, TabInfo, ThreadEvent } from "@desk/protocol"
 import { changesSince, snapshot } from "./checkpoints"
 import { threadContext, threadHistory } from "./past-threads"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
@@ -45,6 +45,7 @@ export class Window {
     reply({ type: "tabs", tabs: this.state.tabs, active: this.state.active })
     for (const tab of this.state.tabs) {
       const thread = this.thread(tab.id)
+      if (thread.queue?.length) reply({ type: "queue", tabId: tab.id, messages: thread.queue, held: !!thread.queueHeld })
       if (!thread.sessionId) continue
       reply({ type: "session.history", tabId: tab.id, items: await this.history(tab, thread.sessionId), context: thread.context })
       if (!thread.context) this.fillContext(tab.id, thread.sessionId)
@@ -88,7 +89,12 @@ export class Window {
    * what the thread changed. A plugin may move the tab to another thread during the snapshot. The message
    * then belongs to no thread the tab shows, so it is not sent.
    */
-  async send(tabId: string, text: string, images: readonly ImageAttachment[] = []) {
+  async send(tabId: string, text: string, images: readonly ImageAttachment[] = [], followUp: FollowUp = "steer") {
+    const running = this.sessions.get(tabId)
+    if (running?.busy) {
+      if (followUp === "steer") return running.steer(text, images)
+      return this.setQueue(tabId, [...(this.thread(tabId).queue ?? []), { id: crypto.randomUUID(), text, ...(images.length ? { images } : {}) }])
+    }
     const tab = this.tab(tabId)
     const key = this.thread(tabId).key
     if (!this.thread(tabId).baseline) {
@@ -126,6 +132,38 @@ export class Window {
     if (sessionId) this.fillContext(tabId, sessionId)
     // A newer key that took the tab during the send has its own prompt, so this one goes unsaid.
     else if (thread.prompt) await this.send(tabId, thread.prompt).catch((error: Error) => { if (error.message !== MOVED) throw error })
+  }
+
+  /** Sends a queued message now: into the running turn, or as a turn of its own. */
+  async sendQueued(tabId: string, id: string) {
+    const queued = this.thread(tabId).queue?.find((message) => message.id === id)
+    if (!queued) return
+    this.removeQueued(tabId, id)
+    await this.send(tabId, queued.text, queued.images, "steer")
+  }
+
+  removeQueued(tabId: string, id: string) {
+    this.setQueue(tabId, (this.thread(tabId).queue ?? []).filter((message) => message.id !== id))
+  }
+
+  /** Sends the queue again after a stop or an error paused it. */
+  resumeQueue(tabId: string) {
+    this.setQueue(tabId, this.thread(tabId).queue ?? [], false)
+    this.sendNextQueued(tabId)
+  }
+
+  /** Starts the next queued message as its own turn, unless a turn runs or the queue is paused. */
+  private sendNextQueued(tabId: string) {
+    const thread = this.thread(tabId)
+    const [next, ...rest] = thread.queue ?? []
+    if (!next || thread.queueHeld || this.sessions.get(tabId)?.busy) return
+    this.setQueue(tabId, rest)
+    this.send(tabId, next.text, next.images).catch((error) => this.hooks.broadcast({ type: "error", message: `Desk could not send a queued message: ${message(error)}` }))
+  }
+
+  private setQueue(tabId: string, queue: readonly QueuedMessage[], held = this.thread(tabId).queueHeld ?? false) {
+    this.updateThread(tabId, { queue, queueHeld: held && queue.length > 0 })
+    this.hooks.broadcast({ type: "queue", tabId, messages: queue, held: held && queue.length > 0 })
   }
 
   interrupt(tabId: string) {
@@ -208,10 +246,19 @@ export class Window {
       // A closed session may still deliver a message. It no longer speaks for the tab, so it is ignored.
       const key = this.thread(tab.id).key
       const current = () => this.sessions.get(tab.id) === created
+      // A turn the user stopped, or one that failed, pauses the queue. Any other end sends the next queued message.
+      let pause = false
       const emit = (event: ThreadEvent) => {
         if (!current()) return
         if (event.kind === "context") this.updateThread(tab.id, { context: event.reading })
         this.hooks.broadcast({ type: "session.event", tabId: tab.id, event })
+        if (event.kind === "item" && event.item.type === "result") pause = !!event.item.stopped || event.item.isError
+        if (event.kind === "item" && event.item.type === "error") pause = true
+        if (event.kind === "status" && !event.busy) {
+          if (pause && this.thread(tab.id).queue?.length) this.setQueue(tab.id, this.thread(tab.id).queue!, true)
+          else this.sendNextQueued(tab.id)
+          pause = false
+        }
       }
       found = new Session(tab.project, emit, {
         resume: this.thread(tab.id).sessionId,

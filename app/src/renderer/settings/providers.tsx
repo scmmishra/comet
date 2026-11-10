@@ -1,4 +1,4 @@
-import type { Effort, ModelOption } from "@desk/protocol"
+import { FOLLOW_UPS, type Effort, type ModelOption } from "@desk/protocol"
 import { Badge } from "@opencode/ui/badge"
 import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
@@ -70,6 +70,17 @@ export function ProvidersPage() {
                 placement="bottom-end"
                 gutter={6}
                 onSelect={(permissionMode) => permissionMode && updateSettings({ claude: { permissionMode } })}
+              />
+            </SettingsRow>
+            <SettingsRow title="Follow-ups" description="What Enter does while Claude works: steer the running turn, or queue the message for when it ends. ⌘Enter does the other, for one message.">
+              <Select
+                options={[...FOLLOW_UPS]}
+                current={claude().followUp}
+                value={(followUp) => followUp}
+                label={(followUp) => (followUp === "steer" ? "Steer" : "Queue")}
+                placement="bottom-end"
+                gutter={6}
+                onSelect={(followUp) => followUp && updateSettings({ claude: { followUp } })}
               />
             </SettingsRow>
             <SettingsRow title="Compact idle threads" description="When you return to a large thread that sat idle, Claude Code compacts it first, so its next reply reads a summary, not the whole history.">

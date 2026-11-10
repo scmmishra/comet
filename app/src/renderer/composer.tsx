@@ -1,20 +1,29 @@
-import { IMAGE_TYPES, type ImageAttachment, type TabInfo } from "@desk/protocol"
+import { IMAGE_TYPES, type FollowUp, type ImageAttachment, type QueuedMessage, type TabInfo } from "@desk/protocol"
 import { IconButton } from "@opencode/ui/icon-button"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
+import { account } from "./account"
 import { imageUrl, readImages } from "./attachments"
 import { fileIcon } from "./file-icons"
 import { Icon } from "./icons"
 import { insertMention, mentionAt } from "./mentions"
 import { ModelPicker } from "./model-picker"
 import { findFiles } from "./projects"
-import { interrupt, send, threadOf } from "./threads"
+import { QueuedMessages } from "./queue"
+import { interrupt, removeQueued, send, threadOf } from "./threads"
 
 const MAX_HEIGHT_PX = 240
+
+const FOLLOW_UP: Record<FollowUp, { label: string; icon: "arrow-up-right" | "outline-list-changelog"; other: FollowUp }> = {
+  steer: { label: "Steer message", icon: "arrow-up-right", other: "queue" },
+  queue: { label: "Queue message", icon: "outline-list-changelog", other: "steer" },
+}
 
 /**
  * The message box, laid out as T3 Code's: images, a tall text area, then a row with the attach
  * button on the left and the model and send button on the right. Typing @ lists the project's
- * files. Images come from the attach button, a paste or a drop.
+ * files. Images come from the attach button, a paste or a drop. While Claude works, a message steers
+ * the turn or waits in the queue, as the Follow-ups setting says, and ⌘Enter does the other.
  */
 export function Composer(props: { tab: TabInfo }) {
   const [text, setText] = createSignal("")
@@ -24,6 +33,11 @@ export function Composer(props: { tab: TabInfo }) {
   const [active, setActive] = createSignal(0)
   const busy = () => threadOf(props.tab.id).busy
   const canSend = () => !!text().trim() || images().length > 0
+  /** What sending does while Claude works. `alternate` is ⌘Enter or a ⌘-click, which does the other. */
+  const followUp = (alternate: boolean): FollowUp => {
+    const chosen = account.settings.claude.followUp
+    return alternate ? FOLLOW_UP[chosen].other : chosen
+  }
   let input!: HTMLTextAreaElement
   let row!: HTMLDivElement
   let picker!: HTMLInputElement
@@ -68,16 +82,27 @@ export function Composer(props: { tab: TabInfo }) {
     if (added.length) setImages((current) => [...current, ...added])
   }
 
-  const submit = () => {
+  const submit = (alternate = false) => {
     if (!canSend()) return
-    send(props.tab.id, text().trim(), images())
+    send(props.tab.id, text().trim(), images(), busy() ? followUp(alternate) : undefined)
     setText("")
     setImages([])
     setMention(undefined)
     resize()
   }
 
+  /** Takes a queued message back into the composer to edit, after anything already typed. */
+  const edit = (message: QueuedMessage) => {
+    removeQueued(props.tab.id, message.id)
+    setText((current) => (current.trim() ? `${current}\n\n${message.text}` : message.text))
+    setImages((current) => [...current, ...(message.images ?? [])])
+    input.focus()
+    resize()
+  }
+
   return (
+    <>
+    <QueuedMessages tab={props.tab} onEdit={edit} />
     <form
       class="relative flex w-full flex-col rounded-3xl bg-card shadow-[0_0_0_1px_var(--color-line)] transition-shadow focus-within:shadow-[0_0_0_1px_var(--color-hover)]"
       // A click on the box's own blank space types in it. Clicks on its controls, and in their popovers, stay theirs.
@@ -178,7 +203,7 @@ export function Composer(props: { tab: TabInfo }) {
           }
           if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
             event.preventDefault()
-            submit()
+            submit(event.metaKey || event.ctrlKey)
           }
           if (event.key === "Escape") interrupt(props.tab.id)
         }}
@@ -201,9 +226,28 @@ export function Composer(props: { tab: TabInfo }) {
           when={busy()}
           fallback={<IconButton type="submit" variant="submit" size="large" class="size-8 rounded-full" aria-label="Send" disabled={!canSend()} icon={<Icon name="arrow-up" />} />}
         >
-          <IconButton variant="contrast" size="large" class="size-8 rounded-full" aria-label="Stop" icon={<Icon name="stop" />} onClick={() => interrupt(props.tab.id)} />
+          {/* While Claude works, the button sends a follow-up once there is one to send, and stops the turn otherwise. */}
+          <Show
+            when={canSend()}
+            fallback={<IconButton variant="contrast" size="large" class="size-8 rounded-full" aria-label="Stop" icon={<Icon name="stop" />} onClick={() => interrupt(props.tab.id)} />}
+          >
+            <Tooltip value={`Click to ${followUp(false)}, ⌘-click or ⌘Enter to ${followUp(true)}`} placement="top">
+              <IconButton
+                variant="submit"
+                size="large"
+                class="size-8 rounded-full"
+                aria-label={FOLLOW_UP[followUp(false)].label}
+                icon={<Icon name={FOLLOW_UP[followUp(false)].icon} />}
+                onClick={(event: MouseEvent) => {
+                  event.preventDefault()
+                  submit(event.metaKey || event.ctrlKey)
+                }}
+              />
+            </Tooltip>
+          </Show>
         </Show>
       </div>
     </form>
+    </>
   )
 }
