@@ -1,4 +1,4 @@
-import { IMAGE_TYPES, type FollowUp, type ImageAttachment, type QueuedMessage, type TabInfo } from "@desk/protocol"
+import { followUpFor, IMAGE_TYPES, type FollowUp, type ImageAttachment, type QueuedMessage, type TabInfo } from "@desk/protocol"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from "solid-js"
@@ -52,7 +52,7 @@ export function Composer(props: { tab: TabInfo }) {
   /** What sending does while Claude works. `alternate` is ⌘Enter or a ⌘-click, which does the other. */
   const followUp = (alternate: boolean): FollowUp => {
     const chosen = account.settings.claude.followUp
-    return alternate ? FOLLOW_UP[chosen].other : chosen
+    return followUpFor(text(), alternate ? FOLLOW_UP[chosen].other : chosen)
   }
   let input!: HTMLTextAreaElement
   let row!: HTMLDivElement

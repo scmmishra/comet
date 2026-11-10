@@ -1,5 +1,5 @@
 import type { SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
-import type { ChangedFile, CoreMessage, FileChange, FollowUp, ImageAttachment, PluginLayout, QueuedMessage, ReviewScope, TabInfo, ThreadEvent, ThreadItem } from "@desk/protocol"
+import { followUpFor, type ChangedFile, type CoreMessage, type FileChange, type FollowUp, type ImageAttachment, type PluginLayout, type QueuedMessage, type ReviewScope, type TabInfo, type ThreadEvent, type ThreadItem } from "@desk/protocol"
 import { branchBase, changesSince, headTree, snapshot } from "./checkpoints"
 import { threadContext, threadHistory } from "./past-threads"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
@@ -97,7 +97,7 @@ export class Window {
   async send(tabId: string, text: string, images: readonly ImageAttachment[] = [], followUp: FollowUp = "steer") {
     const running = this.sessions.get(tabId)
     if (running?.busy) {
-      if (followUp === "steer") return running.steer(text, images)
+      if (followUpFor(text, followUp) === "steer") return running.steer(text, images)
       return this.setQueue(tabId, [...(this.thread(tabId).queue ?? []), { id: crypto.randomUUID(), text, ...(images.length ? { images } : {}) }])
     }
     const tab = this.tab(tabId)
@@ -152,7 +152,10 @@ export class Window {
     const queued = this.thread(tabId).queue?.find((message) => message.id === id)
     if (!queued) return
     this.removeQueued(tabId, id)
-    await this.send(tabId, queued.text, queued.images, "steer")
+    // Send now is asked for outright, so even a slash command goes into the running turn.
+    const running = this.sessions.get(tabId)
+    if (running?.busy) return running.steer(queued.text, queued.images)
+    await this.send(tabId, queued.text, queued.images)
   }
 
   removeQueued(tabId: string, id: string) {

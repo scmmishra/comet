@@ -30,6 +30,12 @@ export const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 export const FOLLOW_UPS = ["steer", "queue"] as const
 export type FollowUp = (typeof FOLLOW_UPS)[number]
 
+/**
+ * What a message sent while Claude works does. A slash command, such as /rename, is a turn Claude Code
+ * runs on its own, so steering one in would cut the running turn short. It always waits in the queue.
+ */
+export const followUpFor = (text: string, chosen: FollowUp): FollowUp => (text.trimStart().startsWith("/") ? "queue" : chosen)
+
 /** A message waiting for the running turn to end. The core sends queued messages in order, one turn each. */
 export interface QueuedMessage {
   readonly id: string

@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- A slash command sent while Claude works, such as /rename, waits in the queue instead of steering. Steering it cut the running turn short. Send now still sends it at once.
 - The Subagents card and a newly queued message rise in, and an image added to the message box pops in, so each one shows it arrived. Switching tabs shows them at once, without motion.
 - A toast with one line of text, such as the ⌘Q warning, lines its text up with its close button. The text sat a line lower.
 - ⌘Q quits only on a second press within two seconds. The first press shows "Press ⌘Q again to quit Desk.", so a slip no longer stops every running turn. Quit from the menu bar or the Dock still quits at once.
