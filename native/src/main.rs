@@ -54,8 +54,8 @@ fn main() {
     let state = core.clone();
     let mut app = rune::App::new(AppSpec {
         min_size: Some((720.0, 480.0)),
-        fonts: rune_theme_opencode::FONTS,
-        families: rune_theme_opencode::FAMILIES,
+        fonts: theme::FONTS,
+        families: theme::FAMILIES,
         poll: Some(shell::poll),
         scenes: scenes::SCENES,
         ..AppSpec::new("Desk", (1280.0, 820.0), Desk::default, shell::view)

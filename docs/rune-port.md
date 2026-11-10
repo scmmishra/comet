@@ -26,7 +26,7 @@ Spikes on this Mac compared a Rune build with the Electron app:
 What changed from the plan:
 
 - The protocol types are written by hand, not generated. TypeScript 7 ships no JS compiler API, and a generator would need a second TypeScript or a schema toolchain. `protocol/src/fixtures.ts` holds one message of each type the app reads. The typecheck holds it to the protocol, and the native tests decode it.
-- The fonts are the OpenCode theme's, Inter and IBM Plex Mono. Geist waits. Its package ships only woff2, which Rune does not read.
+- The fonts were first the OpenCode theme's, Inter and IBM Plex Mono, because Geist's npm package ships only woff2, which Rune does not read. The app now carries Geist's variable TTFs from Vercel's repo, in `native/assets/fonts`.
 - The client does not reconnect. The Electron app's client does not either.
 - The theme is a module in the crate, not a crate of its own.
 - The single instance is a file lock in `~/.desk/native`. Rune's `single_instance` covers only Windows. A second launch exits. It does not hand its folder over yet.
@@ -78,7 +78,6 @@ Still to do:
 ## Open decisions
 
 - **The tab bar.** Rune's `TabStrip` draws OpenCode's tabs: 13 px medium text and OpenCode's widths. The Electron app draws its own: 210 px tabs with 12 px regular text and the project mark. Either Desk builds its own tab bar in Rune, or the theme changes `ui_compact`, which other components also read.
-- **Geist.** Rune needs the TTF or OTF files.
 - **The project mark.** `@opencode/ui`'s avatar draws generated art. The native app draws the project's initial on a tile until it has an equivalent.
 
 ## Rune gaps

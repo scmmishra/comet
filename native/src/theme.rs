@@ -142,3 +142,8 @@ pub fn markdown(k: &Kit, size: f32) -> MarkdownStyle {
     let d = if k.dark { &DARK } else { &LIGHT };
     MarkdownStyle::from_kit(k).body_font(thread_text(k, size)).code_block(color(d.code), k.c.border_base)
 }
+
+/// Desk's typefaces, Geist and Geist Mono, as the Electron app loads them. Variable fonts, so every
+/// weight the kit asks for draws. From github.com/vercel/geist-font at ef2597c, under the OFL in `assets/fonts`.
+pub const FONTS: &[&[u8]] = &[include_bytes!("../assets/fonts/Geist-Variable.ttf"), include_bytes!("../assets/fonts/GeistMono-Variable.ttf")];
+pub const FAMILIES: (&str, &str) = ("Geist", "Geist Mono");
