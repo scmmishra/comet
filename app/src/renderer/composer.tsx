@@ -206,7 +206,8 @@ export function Composer(props: { tab: TabInfo }) {
         <div class="flex flex-wrap gap-2 px-3.5 pt-3">
           <For each={images()}>
             {(image, index) => (
-              <div class="group/image relative">
+              // An image pops in, so a paste or a drop shows it landed.
+              <div class="desk-pop group/image relative">
                 <img src={imageUrl(image)} alt="" class="size-14 rounded-xl object-cover shadow-[0_0_0_1px_var(--color-line)]" />
                 <IconButton
                   variant="contrast"

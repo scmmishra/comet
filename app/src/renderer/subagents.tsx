@@ -25,9 +25,11 @@ export function SubagentsCard(props: { tab: TabInfo }) {
   const thread = () => threadOf(props.tab.id)
   const list = () => Object.values(thread().subagents ?? {}).sort((a, b) => a.startedAt - b.startedAt)
   const running = () => list().filter((subagent) => subagent.status === "running").length
+  // The card rises in when its first subagent starts while the tab is on screen. Switching tabs shows it at once.
+  const mountedAt = Date.now()
   return (
     <Show when={running() > 0 || (thread().busy && list().length > 0)}>
-      <section class="flex flex-col rounded-3xl border border-outline bg-card p-1.5" aria-label="Subagents">
+      <section class="flex flex-col rounded-3xl border border-outline bg-card p-1.5" classList={{ "desk-rise": (list()[0]?.startedAt ?? 0) > mountedAt }} aria-label="Subagents">
         <span class="px-2 pb-1 pt-1.5 text-[12px] text-fg-3">
           Subagents{running() ? ` · ${running()} running` : ""}
         </span>

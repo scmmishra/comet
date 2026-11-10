@@ -19,6 +19,8 @@ export function QueuedMessages(props: { tab: TabInfo; onEdit: (message: QueuedMe
   const [all, setAll] = createSignal(false)
   const queue = () => threadOf(props.tab.id).queue ?? []
   const shown = () => (all() ? queue() : queue().slice(0, SHOWN))
+  // A message queued while the tab is on screen rises out of the composer. Those already queued show at once.
+  const queuedBefore = new Set(queue().map((message) => message.id))
   return (
     <Show when={queue().length}>
       <div class="mb-2 flex flex-col items-end gap-1.5" aria-label="Queued messages">
@@ -33,7 +35,7 @@ export function QueuedMessages(props: { tab: TabInfo; onEdit: (message: QueuedMe
         <For each={shown()}>
           {(message) => (
             // The message reads in full, as a sent one does, and its actions sit under it, after T3 Code.
-            <div class="flex w-full flex-col items-end gap-1">
+            <div class="flex w-full flex-col items-end gap-1" classList={{ "desk-rise": !queuedBefore.has(message.id) }}>
               {/* Dashed and unfilled: a message not sent yet. */}
               <div class="flex min-w-0 max-w-[80%] flex-col gap-2 rounded-2xl border border-dashed border-fg-3/40 px-3 py-2 text-[length:var(--desk-text-size)] text-fg-2">
                 <Show when={message.images?.length}>

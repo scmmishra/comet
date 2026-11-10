@@ -264,7 +264,7 @@ body {
   mask-image: linear-gradient(to bottom, #000 15%, transparent 92%);
 }
 
-/* A thread item arriving live. */
+/* A thread item arriving live, the Subagents card, or a newly queued message. */
 .desk-rise {
   animation: desk-rise 180ms var(--ease-out) both;
 }
@@ -281,6 +281,10 @@ body {
 }
 :is([data-component="popover-content"], [data-component="menu-v2-content"]) {
   transform-origin: var(--kb-popper-content-transform-origin);
+  animation: desk-pop 150ms var(--ease-out) both;
+}
+/* An image added to the composer. */
+.desk-pop {
   animation: desk-pop 150ms var(--ease-out) both;
 }
 
@@ -531,6 +535,7 @@ body {
     --panel-duration: 0s;
   }
   .desk-rise,
+  .desk-pop,
   .desk-tab-enter,
   :is([data-component="popover-content"], [data-component="menu-v2-content"]) {
     animation-name: desk-fade;
