@@ -3,6 +3,7 @@ import type { ImageAttachment, RunSettings, ThreadEvent, ThreadItem } from "@des
 import { readContext } from "./context"
 import { sdkModel } from "./models"
 import { BackgroundTasks } from "./background-tasks"
+import { claudeCodePath } from "./claude-code"
 import { Subagents } from "./subagents"
 import { ThreadMapper, toolDetail } from "./thread"
 
@@ -64,6 +65,8 @@ export class Session {
   /** Set while a turn the user stopped winds down, until its result arrives. */
   private stopping = false
   private running = false
+  /** Set from the first message, while Claude Code is found and started, until the session fails. */
+  private started = false
   /** Set from a steered message until Claude Code takes it in, or its turn ends without it. */
   private steering = false
   private settings: RunSettings
@@ -102,9 +105,9 @@ export class Session {
     this.emit({ kind: "item", item: { type: "user", id: uuid, text, ...(images.length ? { images } : {}), at: Date.now() } })
     this.running = true
     this.emit({ kind: "status", busy: true })
-    if (!this.query) this.inbox = new Inbox()
+    if (!this.started) this.inbox = new Inbox()
     this.inbox.push({ type: "user", message: { role: "user", content: userContent(text, images) }, parent_tool_use_id: null, uuid })
-    if (!this.query) this.start()
+    if (!this.started) void this.start()
   }
 
   /**
@@ -146,10 +149,22 @@ export class Session {
     request.resolve(allow ? { behavior: "allow" } : { behavior: "deny", message: "The user declined this tool call." })
   }
 
-  private start() {
+  /**
+   * Starts Claude Code on the inbox. It is marked started before it finds Claude Code, so a message sent
+   * meanwhile joins this inbox rather than opening a second session.
+   */
+  private async start() {
+    this.started = true
+    let executable: string
+    try {
+      executable = await claudeCodePath()
+    } catch (error) {
+      return this.fail(error)
+    }
     this.query = query({
       prompt: this.inbox,
       options: {
+        pathToClaudeCodeExecutable: executable,
         cwd: this.dir,
         includePartialMessages: true,
         // A subagent's text and thinking reach Desk too, with a one-line status, for its card.
@@ -205,13 +220,19 @@ export class Session {
         }
       }
     } catch (error) {
-      this.running = false
-      this.steering = false
-      this.emit({ kind: "item", item: { type: "error", id: `error-${Date.now()}`, message: error instanceof Error ? error.message : String(error) } })
-      this.emit({ kind: "status", busy: false })
-      this.inbox.close()
-      this.query = undefined
+      this.fail(error)
     }
+  }
+
+  /** Ends the session after an error, which shows in the thread. The next message starts it again. */
+  private fail(error: unknown) {
+    this.running = false
+    this.steering = false
+    this.emit({ kind: "item", item: { type: "error", id: `error-${Date.now()}`, message: error instanceof Error ? error.message : String(error) } })
+    this.emit({ kind: "status", busy: false })
+    this.inbox.close()
+    this.query = undefined
+    this.started = false
   }
 
   /** Whether a result only ends the step a steered message cut short. The turn goes on with the message. */

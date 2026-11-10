@@ -1,4 +1,5 @@
 import { query, type Query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
+import { claudeCodePath } from "./claude-code"
 
 const PROBE_TIMEOUT_MS = 20_000
 
@@ -25,6 +26,8 @@ export async function probe<T>(dir: string, read: (running: Query) => Promise<T>
       // A probe must leave nothing behind: no saved session, no hooks run, and no MCP servers started unless asked.
       // `resume` loads a thread to read about it. Without persistSession, nothing is written to it.
       options: {
+        // The probe asks the same Claude Code the sessions run.
+        pathToClaudeCodeExecutable: await claudeCodePath(),
         cwd: dir,
         abortController: abort,
         persistSession: false,

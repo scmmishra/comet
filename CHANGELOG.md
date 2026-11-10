@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- Desk runs the Claude Code installed on your Mac, as T3 Code does, instead of a copy bundled with the Agent SDK. Desk.app drops from about 755 MB to 448 MB, and Claude Code updates itself as it always does. Desk finds `claude` on your login shell's PATH, and `DESK_CLAUDE` points it at another. Without Claude Code installed, sending a message says so.
 - Each tab keeps the message you are writing when you switch away, and its text also outlives a restart. Images you added stay until Desk quits.
 - A file named in a reply opens even when it is outside the project, such as a report Claude wrote to a temporary folder. Folders and missing files still do not open.
 - Drag a tab to move it in the bar. The order is saved, and ⌘1–⌘9 follow it. A press that does not move still selects the tab.

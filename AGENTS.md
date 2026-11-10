@@ -33,7 +33,7 @@ Build the UI from `@opencode/ui`. Anomaly's Rust framework ships `rune-kit`, who
 
 ## Run
 
-- `mise run install` builds Desk.app and installs it in `/Applications`. If Desk is running, Desk quits, updates and opens again. `mise run package` only builds it, in `dist/mac-arm64`. The app carries the core's source, its packages and a Bun binary, and is signed ad hoc for this Mac.
+- `mise run install` builds Desk.app and installs it in `/Applications`. If Desk is running, Desk quits, updates and opens again. `mise run package` only builds it, in `dist/mac-arm64`. The app carries the core's source, its packages and a Bun binary, and is signed ad hoc for this Mac. It runs the Claude Code installed on the Mac, found as `claude` on the login shell's PATH. Set `DESK_CLAUDE` to run another.
 - `bin/desk <folder>` opens the folder in a new tab of the installed Desk. Link it onto your PATH to use `desk .`.
 - A window with no tabs opens on the most recent project, else asks for a folder. ⌘O opens a folder in a new tab.
 - One Desk runs at a time, with one window. Its tabs are saved in `~/.desk/window.json`.

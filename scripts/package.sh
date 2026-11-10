@@ -1,6 +1,7 @@
 #!/bin/bash
 # Builds dist/mac-arm64/Desk.app for this Mac. The app carries the core's source, the core's
-# production packages and the Bun binary that runs it, so it needs nothing from the repo or PATH.
+# production packages and the Bun binary that runs it, so it needs nothing from the repo. It runs the
+# Claude Code installed on the Mac, found on the login shell's PATH.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 bun="${DESK_BUN:-$(command -v bun)}"
@@ -23,6 +24,8 @@ cp bun.lock "$stage/core/"
 # so the rest must match the repo's.
 "$bun" -e 'const root = await Bun.file("package.json").json(); root.workspaces = root.workspaces.filter((w) => w !== "app"); await Bun.write(process.argv[1], JSON.stringify(root, null, 2))' "$stage/core/package.json"
 (cd "$stage/core" && "$bun" install --production --linker hoisted)
+# Desk runs the Claude Code installed on the Mac, so the Agent SDK's own copy of it, about 300 MB, stays out.
+rm -rf "$stage/core/node_modules/@anthropic-ai/claude-agent-sdk-darwin-"*
 cp "$(readlink -f "$bun")" "$stage/bun"
 
 (cd app && bunx electron-builder --mac --arm64 --config electron-builder.yml)
