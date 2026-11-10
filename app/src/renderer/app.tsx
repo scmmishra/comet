@@ -252,10 +252,11 @@ function TabBar() {
       <div ref={strip} class="desk-no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1">
         <For each={workspace.tabs}>
           {(tab) => (
+            // The active tab's outline is inset: the strip scrolls sideways, which clips anything outside it above and below.
             <div
               data-tab={tab.id}
               class="desk-no-drag group relative flex h-8 w-[210px] shrink-0 items-center rounded-xl"
-              classList={{ "desk-tab-enter": tab.id === entering(), "bg-tab text-fg shadow-[0_0_0_1px_var(--color-outline)]": shown(tab.id), "text-fg-3 hover:bg-tab-hover hover:text-fg-2": !shown(tab.id) }}
+              classList={{ "desk-tab-enter": tab.id === entering(), "bg-tab text-fg shadow-[inset_0_0_0_1px_var(--color-outline)]": shown(tab.id), "text-fg-3 hover:bg-tab-hover hover:text-fg-2": !shown(tab.id) }}
             >
               {/* The tab and its close button are siblings: a button cannot hold another. */}
               <button class="flex h-full min-w-0 flex-1 items-center gap-2 pl-2 pr-7 text-left" onClick={() => showTab(tab.id)}>
