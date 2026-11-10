@@ -5,6 +5,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { account } from "./account"
 import { imageUrl, readImages } from "./attachments"
+import { BackgroundRow } from "./background"
 import { fileIcon } from "./file-icons"
 import { Icon } from "./icons"
 import { ModelPicker, openModelPicker } from "./model-picker"
@@ -176,6 +177,7 @@ export function Composer(props: { tab: TabInfo }) {
 
   return (
     <>
+    <BackgroundRow tab={props.tab} />
     <QueuedMessages tab={props.tab} onEdit={edit} />
     <form
       class="relative flex w-full flex-col rounded-3xl bg-card shadow-[0_0_0_1px_var(--color-line)] transition-shadow focus-within:shadow-[0_0_0_1px_var(--color-hover)]"

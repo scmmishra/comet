@@ -2,6 +2,7 @@ import { query, type CanUseTool, type PermissionResult, type Query, type SDKMess
 import type { ImageAttachment, RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
 import { readContext } from "./context"
 import { sdkModel } from "./models"
+import { BackgroundTasks } from "./background-tasks"
 import { Subagents } from "./subagents"
 import { ThreadMapper, toolDetail } from "./thread"
 
@@ -56,6 +57,7 @@ export class Session {
   private query?: Query
   private mapper: ThreadMapper
   private subagents: Subagents
+  private backgroundTasks: BackgroundTasks
   /** Open permission requests: how to answer each, and the item that shows it. */
   private permissions = new Map<string, { readonly resolve: (result: PermissionResult) => void; readonly item: Extract<ThreadItem, { type: "permission" }> }>()
   private sessionId?: string
@@ -75,6 +77,7 @@ export class Session {
     this.settings = options.settings
     this.mapper = new ThreadMapper(dir)
     this.subagents = new Subagents(dir, emit)
+    this.backgroundTasks = new BackgroundTasks(emit)
   }
 
   /** Changes how the thread runs. A running thread takes the change from its next reply. */
@@ -115,6 +118,11 @@ export class Session {
     this.emit({ kind: "item", item: { type: "user", id: uuid, text, ...(images.length ? { images } : {}), at: Date.now(), steered: true } })
     this.steering = true
     this.inbox.push({ type: "user", message: { role: "user", content: userContent(text, images) }, parent_tool_use_id: null, priority: "now", uuid })
+  }
+
+  /** Stops commands running in the background. Claude Code reports each as stopped once it ends. */
+  async stopTasks(ids: readonly string[]) {
+    await Promise.all(ids.map((id) => this.query?.stopTask(id)))
   }
 
   async interrupt() {
@@ -175,6 +183,7 @@ export class Session {
         }
         if (message.type === "rate_limit_event") this.options.onRateLimit(message.rate_limit_info)
         this.subagents.handle(message)
+        this.backgroundTasks.handle(message)
         if (message.type === "result" && this.steered(message)) continue
         for (const event of this.mapper.map(message, Date.now())) {
           // The result of a turn the user stopped says so, so the thread can tell it from one that finished.

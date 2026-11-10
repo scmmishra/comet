@@ -97,6 +97,18 @@ export type ThreadEvent =
   | { readonly kind: "context"; readonly reading: ContextReading }
   /** A subagent Claude started, sent whole each time it changes. */
   | { readonly kind: "subagent"; readonly subagent: Subagent }
+  /** The commands running in the background now, sent whole each time the set changes. */
+  | { readonly kind: "background"; readonly tasks: readonly BackgroundTask[] }
+
+/** A command Claude left running in the background, such as a long review or a dev server. */
+export interface BackgroundTask {
+  /** Claude Code's task id. */
+  readonly id: string
+  /** What it runs, as Claude Code describes it: the command, or what Claude named it. */
+  readonly label: string
+  /** When Desk first saw it, in milliseconds since the epoch. */
+  readonly startedAt: number
+}
 
 /**
  * A subagent Claude started in a turn, such as an Explore agent. It runs beside the thread, so Desk shows
@@ -660,6 +672,8 @@ export type ClientMessage =
   /** Finds files in the project whose path matches `query`, for an @ mention. The core answers with `files.found`. */
   | { readonly type: "files.search"; readonly project: string; readonly query: string }
   | { readonly type: "session.interrupt"; readonly tabId: string }
+  /** Stops commands Claude left running in the background in a tab. */
+  | { readonly type: "tasks.stop"; readonly tabId: string; readonly ids: readonly string[] }
   /** Lists the setups of every project with plugins on, the active `project`'s first. The core answers with `setups`. */
   | { readonly type: "setups.get"; readonly project: string }
   /** Starts a fresh session in a tab, as /clear asks. */

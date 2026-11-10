@@ -213,6 +213,10 @@ export class Window {
     return this.sessions.get(tabId)?.interrupt()
   }
 
+  stopTasks(tabId: string, ids: readonly string[]) {
+    return this.sessions.get(tabId)?.stopTasks(ids)
+  }
+
   answerPermission(tabId: string, requestId: string, allow: boolean) {
     this.sessions.get(tabId)?.answerPermission(requestId, allow)
   }

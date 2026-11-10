@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- Commands Claude leaves running in the background show in a row above the message box, after T3 Code: "Running" or "Waiting" and what runs, how long it has run, and Stop. "Waiting" means the turn has ended and Claude picks up again when the command finishes. Subagents keep their own card.
 - A turn that switches branches, resets or rebases no longer lists every file that differs between the two branches as its changes. Its summary is left out. A turn that commits, pulls or merges still lists what it changed.
 - ⌘⇧T reopens the tab closed last, as in a browser, in its old place and with its thread. Desk keeps the last 10 closed tabs, also after a restart. A reopened tab comes back without its terminals, which ended when it closed.
 - A file named in a reply reads as part of the sentence, after T3 Code: its icon and name in the reply's own size, in the accent colour, on the line's baseline. It was a small grey box that sat off the line.

@@ -1,4 +1,4 @@
-import type { ContextReading, FileChange, FollowUp, ImageAttachment, QueuedMessage, ReviewScope, Subagent, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
+import type { BackgroundTask, ContextReading, FileChange, FollowUp, ImageAttachment, QueuedMessage, ReviewScope, Subagent, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
 import { createEffect, createMemo, createRoot, on } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
@@ -19,6 +19,8 @@ export interface Thread {
   review?: readonly FileChange[]
   /** The subagents of the latest turn, and any still running from an earlier one, by id. */
   subagents?: Record<string, Subagent>
+  /** Commands Claude left running in the background. */
+  background?: readonly BackgroundTask[]
   /** Messages waiting for the running turn to end, as the core keeps them. */
   queue?: readonly QueuedMessage[]
   /** Whether a stop or an error paused the queue. */
@@ -50,6 +52,8 @@ export function send(tabId: string, text: string, images: readonly ImageAttachme
 export const sendQueued = (tabId: string, id: string) => core.send({ type: "queue.send", tabId, id })
 export const removeQueued = (tabId: string, id: string) => core.send({ type: "queue.remove", tabId, id })
 export const resumeQueue = (tabId: string) => core.send({ type: "queue.resume", tabId })
+/** Stops commands Claude left running in the background. */
+export const stopTasks = (tabId: string, ids: readonly string[]) => core.send({ type: "tasks.stop", tabId, ids })
 /** Starts a fresh session in a tab, as /clear asks. */
 export const clearThread = (tabId: string) => core.send({ type: "thread.clear", tabId })
 
@@ -101,6 +105,7 @@ function apply(tabId: string, event: ThreadEvent, arrivedAt?: number) {
       else if (event.kind === "init") thread.model = event.model
       else if (event.kind === "context") thread.context = event.reading
       else if (event.kind === "subagent") thread.subagents = { ...thread.subagents, [event.subagent.id]: event.subagent }
+      else if (event.kind === "background") thread.background = event.tasks
     }),
   )
   // A finished turn may have changed files, so the Space card and Review read the repo again.
