@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- A plugin opening a panel, such as the Chatwoot inbox on each conversation, no longer reopens a view pane you closed. The panel comes to the front for when you open the pane. In a tab where you have not opened or closed the pane yet, the panel still opens it.
 - A long word in your message, such as an ID or a URL, wraps inside its bubble. It ran past the bubble's edge.
 - ⌘K › Open setup lists the setups of every project with plugins on, not only the active project's. Each opens in its own project, which the row names.
 - Typing / at the start of a message lists commands, after T3 Code. /model opens the model picker, and /clear starts a fresh session in the tab. Then come Claude Code's own commands, such as /compact and /context, and your skills and custom commands. Picking one puts it in the message box. A command's own output, such as /context's table, shows in the thread.

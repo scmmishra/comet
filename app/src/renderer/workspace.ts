@@ -204,7 +204,9 @@ core.listen((message) => {
   else if (message.type === "tab.title") nameTab(message.tabId, message.title)
   else if (message.type === "panel.show") {
     showPanelTab(message.tabId, message.id)
-    setPanelOpen(message.tabId, true)
+    // A plugin's panel opens the pane only in a tab where the user has not opened or closed it yet.
+    // Once the user closed it, it stays closed, and the panel waits at the front for when they open it.
+    if (workspace.tabs.find((tab) => tab.id === message.tabId)?.panelOpen === undefined) setPanelOpen(message.tabId, true)
   } else if (message.type === "tabs") {
     setWorkspace({ tabs: [...message.tabs], active: message.active ?? message.tabs[0]?.id ?? "", restored: true })
     for (const action of waiting) action()

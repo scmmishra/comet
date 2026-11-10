@@ -483,7 +483,10 @@ export interface TabInfo extends RunSettings {
   readonly panelActive?: string
   /** What Review compares with. Absent means the thread's changes. */
   readonly reviewScope?: ReviewScope
-  /** Whether the view pane is open beside the thread. Each tab keeps its own, and a new tab starts with it closed. */
+  /**
+   * Whether the view pane is open beside the thread. Each tab keeps its own, and a new tab starts with it
+   * closed. Absent means the user has not opened or closed it yet, so a plugin's panel may open it.
+   */
   readonly panelOpen?: boolean
 }
 
