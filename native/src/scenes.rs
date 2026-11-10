@@ -91,6 +91,8 @@ fn thread(s: &mut Desk) {
             { "type": "permission", "id": "p1", "requestId": "r1", "tool": "Bash", "kind": "command", "detail": "rm -rf dist && npm run build", "reason": "It deletes the build folder", "allowSession": true }
         ] },
         { "type": "session.event", "tabId": "tab", "event": { "kind": "status", "busy": true } },
+        { "type": "session.event", "tabId": "tab", "event": { "kind": "context", "reading": { "percent": 38.0, "tokens": 76_000.0, "maxTokens": 200_000.0 } } },
+        { "type": "usage", "usage": { "windows": [{ "id": "five_hour", "label": "Five hours", "percent": 42.0 }, { "id": "seven_day", "label": "Week", "percent": 12.0 }] } },
         { "type": "session.event", "tabId": "tab", "event": { "kind": "item", "item": { "type": "question", "id": "q1", "requestId": "rq", "questions": [
             { "header": "Tests", "question": "Which kind of test should I add?", "options": [{ "label": "Unit test", "description": "Fast, mocks the network" }, { "label": "End-to-end test" }], "multiSelect": false }
         ] } } },

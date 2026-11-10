@@ -130,11 +130,21 @@ export const CORE_MESSAGES = [
   { type: "queue", tabId: "tab-1", messages: [{ id: "m1", text: "Then add a test" }], held: true },
   { type: "error", message: "The folder does not exist." },
   { type: "notice", message: "Copied the link." },
+  {
+    type: "usage",
+    usage: {
+      windows: [
+        { id: "five_hour", label: "Five hours", percent: 42, resetsAt: "2023-11-15T03:00:00.000Z" },
+        { id: "seven_day", label: "Week", percent: 12 },
+      ],
+    },
+  },
 ] satisfies CoreMessage[]
 
 /** In the order the native tests build them. */
 export const CLIENT_MESSAGES = [
   { type: "models.get" },
+  { type: "usage.get" },
   { type: "tab.reopen" },
   { type: "tabs.save", tabs: TABS, active: "tab-2" },
   { type: "session.send", tabId: "tab-1", text: "Add a test", followUp: "queue" },

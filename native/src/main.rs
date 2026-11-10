@@ -13,6 +13,7 @@ mod icons;
 mod ids;
 mod images;
 mod instance;
+mod meters;
 mod model_picker;
 mod models;
 mod palette;

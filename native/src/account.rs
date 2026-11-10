@@ -1,6 +1,6 @@
 //! What the core says about Desk's settings and the Claude account, as `app/src/renderer/account.ts` keeps it.
 
-use crate::protocol::{DeskSettings, ModelOption, ThemeChoice};
+use crate::protocol::{DeskSettings, ModelOption, PlanUsage, ThemeChoice};
 
 /// The thread's text size before the settings arrive, as `DEFAULT_SETTINGS` has it.
 const DEFAULT_TEXT_SIZE: f32 = 14.0;
@@ -10,6 +10,8 @@ pub struct Account {
     /// None until the core sends them, which it does first on connect.
     pub settings: Option<DeskSettings>,
     pub models: Vec<ModelOption>,
+    /// None until read, and when Claude has no plan limits.
+    pub usage: Option<PlanUsage>,
 }
 
 impl Account {

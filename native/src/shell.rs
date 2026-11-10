@@ -57,6 +57,7 @@ pub struct Desk {
     pub palette: crate::palette::Palette,
     pub cards: crate::cards::Cards,
     pub commands_card: crate::commands_card::CommandsCard,
+    pub meters: crate::meters::Meters,
     /// Whether ⌘ is held, so the new tab button opens its tab next to the active one.
     cmd_held: bool,
     strip: TabDragState,
@@ -123,6 +124,7 @@ impl Desk {
             CoreMessage::TerminalOutput { id, data } => self.terminal_output(&id, &data),
             CoreMessage::TerminalExit { id } => self.terminal_exit(&id),
             CoreMessage::File { project, path, file } => self.take_file(project, path, file),
+            CoreMessage::Usage { usage } => self.account.usage = usage,
             CoreMessage::Error { message } => self.toasts.show(message, true),
             CoreMessage::Notice { message } => self.toasts.show(message, false),
             CoreMessage::Other => {}
@@ -248,6 +250,10 @@ pub mod commands {
 pub fn poll(s: &mut Desk, _: f64, tx: &mut Tx) -> bool {
     s.sync_palette();
     let composed = composer::poll(s, tx) | copied_poll(s, tx) | toasts_poll(s, tx);
+    if s.status == CoreState::Ready {
+        let next = s.refresh_usage();
+        tx.wake_after(next);
+    }
     if !s.working() {
         return composed;
     }
@@ -323,7 +329,12 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
         .on_close(close)
         .on_reorder(reorder)
         .build_layered(k, &mut layer);
-    let titlebar = WindowTitlebar::from_insets(cx.chrome_insets(), 1.0).tabs(strip).build(k);
+    let titlebar = WindowTitlebar::from_insets(cx.chrome_insets(), 1.0).tabs(strip);
+    let titlebar = match crate::meters::usage_button(s, k, &mut layer) {
+        Some(usage) => titlebar.trailing(usage),
+        None => titlebar,
+    }
+    .build(k);
 
     let dark = s.dark(cx);
     let line = |words: String| text(words).font(k.ty.ui).color(k.c.text_muted);
@@ -348,7 +359,13 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
     let main = col().key("main").w_full().grow(1.0).min_h(0.0).px(PANEL_INSET).pb(PANEL_INSET).child(cards);
     crate::palette::palette(s, k, &mut layer);
     layer.extend(crate::toasts::region(s, k));
-    rune_kit::root(col().key("window").w_full().h_full().fill(k.c.bg_deep).child(titlebar).child(main), layer)
+    // Coming back to the window is when files and usage most likely changed outside Desk.
+    let window = col().key("window").w_full().h_full().fill(k.c.bg_deep).child(titlebar).child(main).on_window_focus(|s: &mut Desk, focused, _| {
+        if focused && s.status == CoreState::Ready {
+            s.refresh_outside();
+        }
+    });
+    rune_kit::root(window, layer)
 }
 
 /// A tab's session: its header and its thread.
@@ -369,6 +386,7 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, width: Option<f32>, layer: &mut 
         .child(text(tab.title.clone()).font(k.ty.ui_medium).color(k.c.text_base).truncate())
         .child(row().grow(1.0))
         // While the pane is open, its own header holds the toggle, in the window's corner.
+        .children(s.threads.get(&tab.id).and_then(|t| t.context.as_ref()).map(|reading| crate::meters::context_ring(reading, k)))
         .children((tab.panel_open != Some(true)).then(|| crate::panel::toggle(false, k)));
     let started = s.threads.get(&tab.id).is_some_and(|t| !t.items.is_empty());
     let lane = width.map(|w| crate::cards::Lane::for_session(w, thread_view::COLUMN));

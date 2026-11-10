@@ -91,6 +91,61 @@ fn civil_date(seconds: i64) -> (i64, i64, i64) {
     (yoe + era * 400 + i64::from(month <= 2), month, day)
 }
 
+pub const DAY_MS: f64 = 86_400_000.0;
+
+/// An ISO 8601 time with a `Z` or an offset, such as the core sends, in milliseconds since the epoch.
+pub fn iso_ms(iso: &str) -> Option<f64> {
+    let (date, rest) = iso.split_once('T')?;
+    let mut parts = date.split('-').map(|p| p.parse::<i64>());
+    let (year, month, day) = (parts.next()?.ok()?, parts.next()?.ok()?, parts.next()?.ok()?);
+    let zone_at = rest.find(['Z', '+', '-']).unwrap_or(rest.len());
+    let (time, zone) = rest.split_at(zone_at);
+    let mut t = time.split(':');
+    let (h, m) = (t.next()?.parse::<f64>().ok()?, t.next()?.parse::<f64>().ok()?);
+    let sec = t.next().map_or(Some(0.0), |s| s.parse::<f64>().ok())?;
+    let offset_min = match zone {
+        "" | "Z" => 0.0,
+        z => {
+            let sign = if z.starts_with('-') { -1.0 } else { 1.0 };
+            let (oh, om) = z[1..].split_once(':').unwrap_or((&z[1..3], &z[3..]));
+            sign * (oh.parse::<f64>().ok()? * 60.0 + om.parse::<f64>().unwrap_or(0.0))
+        }
+    };
+    let days = days_from_civil(year, month, day) as f64;
+    Some(((days * 86_400.0 + h * 3600.0 + m * 60.0 + sec) - offset_min * 60.0) * 1000.0)
+}
+
+/// Days since the epoch of a date, by Howard Hinnant's days-from-civil.
+fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (month + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+/// "Thursday 09:00", in the system's time zone.
+pub fn weekday_time(at_ms: f64) -> String {
+    const DAYS: [&str; 7] = ["Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday", "Wednesday"];
+    let local = (at_ms / 1000.0) as i64 + local_offset_s();
+    format!("{} {:02}:{:02}", DAYS[local.div_euclid(86_400).rem_euclid(7) as usize], local.rem_euclid(86_400) / 3600, local.rem_euclid(3600) / 60)
+}
+
+/// A whole number with thousands separated by commas, as `Intl.NumberFormat` writes it in English.
+pub fn grouped(n: f64) -> String {
+    let digits = (n.round() as i64).to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
 /// "1 file", "3 files".
 pub fn plural(count: usize, one: &str) -> String {
     if count == 1 { format!("1 {one}") } else { format!("{count} {one}s") }
@@ -135,6 +190,9 @@ mod tests {
         assert_eq!(ago(0.0, 3.0 * 3_600_000.0), "3h");
         assert_eq!(ago(0.0, 2.0 * 86_400_000.0), "2d");
         assert_eq!(civil_date(1_700_000_000), (2023, 11, 14));
+        assert_eq!(iso_ms("2023-11-14T22:13:20.000Z"), Some(1_700_000_000_000.0));
+        assert_eq!(iso_ms("2023-11-15T03:43:20+05:30"), Some(1_700_000_000_000.0));
+        assert_eq!(grouped(1234567.0), "1,234,567");
         let noon = 1_700_000_000_000.0 - (1_700_000_000 + local_offset_s()).rem_euclid(86_400) as f64 * 1000.0 + 12.0 * 3_600_000.0;
         assert_eq!(message_time(noon, noon + 60_000.0), "12:00");
         assert_eq!(message_time(noon, noon + 86_400_000.0), "yesterday at 12:00");

@@ -159,6 +159,21 @@ pub struct QuestionOption {
     pub description: Option<String>,
 }
 
+/// One plan usage window, such as the five-hour one.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageWindow {
+    pub label: String,
+    /// Percentage used, 0 to 100.
+    pub percent: f64,
+    pub resets_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct PlanUsage {
+    pub windows: Vec<UsageWindow>,
+}
+
 /// A past thread of a project, which a tab can continue.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -525,6 +540,9 @@ pub enum CoreMessage {
     /// The answer to `files.search`, with the query it answers: paths relative to the project, best match first.
     #[serde(rename = "files.found")]
     FilesFound { project: String, query: String, paths: Vec<String> },
+    /// Plan usage. Absent when Claude has no plan limits, such as with an API key.
+    #[serde(rename = "usage")]
+    Usage { usage: Option<PlanUsage> },
     /// A tab's queued messages, sent whole on each change. `held` means a stop or an error paused them.
     #[serde(rename = "queue")]
     Queue {
@@ -549,6 +567,8 @@ pub enum CoreMessage {
 pub enum ClientMessage {
     #[serde(rename = "models.get")]
     ModelsGet,
+    #[serde(rename = "usage.get")]
+    UsageGet,
     /// Reopens the tab closed last. The core answers with `tab.reopened`.
     #[serde(rename = "tab.reopen")]
     TabReopen,
@@ -691,6 +711,7 @@ mod tests {
         let CoreMessage::Tabs { tabs, active } = core_messages().remove(1) else { panic!("tabs second") };
         let ours = [
             ClientMessage::ModelsGet,
+            ClientMessage::UsageGet,
             ClientMessage::TabReopen,
             ClientMessage::TabsSave { tabs, active },
             ClientMessage::SessionSend { tab_id: "tab-1".into(), text: "Add a test".into(), images: vec![], follow_up: Some("queue".into()) },
