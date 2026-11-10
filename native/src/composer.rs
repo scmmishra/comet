@@ -2,13 +2,14 @@
 //! text area in a card, then a row with the send button. While Claude works, the button stops the turn,
 //! or sends a follow-up once there is one to send.
 
-use crate::protocol::{ClientMessage, Question, QueuedMessage};
+use crate::protocol::{ClientMessage, Question, QueuedMessage, Skill};
 use crate::questions::{self, Advance, QuestionDraft};
+use crate::triggers::{self, Trigger, TriggerKind};
 use crate::shell::Desk;
 use crate::theme;
 use crate::thread_view::COLUMN;
 use rune::{El, Key, KeyEvent, TextEdit, auto_grow, col, el, icon, row, text, text_input};
-use rune_kit::{Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Keybind, Kit, Markdown};
+use rune_kit::{Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Keybind, Kit, Markdown, Placement, popover};
 use std::collections::HashSet;
 use rune_theme_opencode::icons as ic;
 use std::collections::HashMap;
@@ -28,6 +29,22 @@ const NUMBERED_OPTIONS: usize = 9;
 const QUEUE_SHOWN: usize = 3;
 /// A question scrolls past this height, Desk's `max-h-[40vh]` on a typical window.
 const QUESTION_MAX: f32 = 320.0;
+/// The file and command list scrolls past this height, `max-h-[280px]`.
+const LIST_MAX: f32 = 280.0;
+/// Typing writes the drafts to disk after this pause, not on every key.
+const SAVE_DELAY: std::time::Duration = std::time::Duration::from_millis(400);
+const DRAFTS_FILE: &str = "drafts.json";
+
+/// Desk's own commands, after T3 Code's. They act at once, rather than going to Claude.
+const DESK_COMMANDS: [(&str, &str); 2] = [("model", "Switch the model for this tab"), ("clear", "Start a fresh session; the thread starts empty")];
+
+/// One row of the file and command list.
+#[derive(Clone, Debug, PartialEq)]
+enum Suggestion {
+    File(String),
+    Desk(&'static str, &'static str),
+    Skill(Skill),
+}
 
 /// What a message sent while Claude works does, and the other choice, which ⌘ picks.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -87,10 +104,39 @@ pub struct Drafts {
     folded: HashSet<String>,
     /// Tabs whose queue shows every message.
     all_queued: HashSet<String>,
+    /// When a draft last changed, until it is saved.
+    edited_at: Option<Instant>,
+    /// The highlighted row of the file and command list.
+    active: usize,
+    /// The trigger the user closed with Escape, by tab and where it starts, so the list stays shut for it.
+    dismissed: Option<(String, usize)>,
+    /// The last file search sent, and the paths found for it: project, query and paths.
+    asked: Option<(String, String)>,
+    found: Option<(String, String, Vec<String>)>,
+    /// Projects whose commands were asked for.
+    skills_asked: HashSet<String>,
 }
 
 impl Drafts {
+    /// The drafts saved by an earlier run. A missing or broken file gives none.
+    pub fn load() -> Drafts {
+        let saved: HashMap<String, String> = std::fs::read_to_string(crate::instance::home().join(DRAFTS_FILE)).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+        Drafts { by_tab: saved.into_iter().map(|(tab, text)| (tab, TextEdit::new(text))).collect(), ..Drafts::default() }
+    }
+
+    /// Writes the drafts of open tabs, through a temporary file so a crash never leaves a broken one.
+    fn save(&self, open: &[String]) {
+        let texts: HashMap<&String, &String> = self.by_tab.iter().filter(|(tab, e)| open.contains(tab) && !e.text.is_empty()).map(|(tab, e)| (tab, &e.text)).collect();
+        let path = crate::instance::home().join(DRAFTS_FILE);
+        let temporary = path.with_extension("json.tmp");
+        // Drafts are a convenience. If the disk refuses them, they last until the app quits.
+        if std::fs::write(&temporary, serde_json::to_string(&texts).unwrap_or_default()).is_ok() {
+            let _ = std::fs::rename(temporary, path);
+        }
+    }
+
     fn edit(&mut self, tab: &str) -> &mut TextEdit {
+        self.edited_at = Some(Instant::now());
         self.by_tab.entry(tab.to_owned()).or_insert_with(|| TextEdit::new(""))
     }
 
@@ -165,6 +211,68 @@ impl Desk {
         self.drafts.edit(&tab).clear();
     }
 
+    /// The trigger the active tab's caret is in, unless the user closed its list.
+    fn trigger(&self, tab: &str) -> Option<Trigger> {
+        let edit = self.drafts.by_tab.get(tab).filter(|e| e.focused)?;
+        let found = triggers::trigger_at(&edit.text, edit.range().1)?;
+        (self.drafts.dismissed.as_ref() != Some(&(tab.to_owned(), found.start))).then_some(found)
+    }
+
+    fn suggestions(&self, tab: &str) -> Vec<Suggestion> {
+        let Some(trigger) = self.trigger(tab) else { return Vec::new() };
+        let Some(info) = self.workspace.tabs.iter().find(|t| t.id == tab) else { return Vec::new() };
+        match trigger.kind {
+            TriggerKind::File => match &self.drafts.found {
+                Some((project, query, paths)) if *project == info.project && *query == trigger.query => paths.iter().cloned().map(Suggestion::File).collect(),
+                _ => Vec::new(),
+            },
+            TriggerKind::Command => {
+                let skills = self.projects.get(&info.project).and_then(|p| p.skills.as_deref()).unwrap_or(&[]);
+                let all: Vec<Suggestion> = DESK_COMMANDS.iter().map(|(n, d)| Suggestion::Desk(n, d)).chain(skills.iter().cloned().map(Suggestion::Skill)).collect();
+                triggers::match_commands(&all, &trigger.query, suggestion_name, suggestion_description).into_iter().cloned().collect()
+            }
+        }
+    }
+
+    /// Puts the picked row in place of the trigger, or runs one of Desk's own commands.
+    fn pick_suggestion(&mut self, tab: &str, index: usize) {
+        let (Some(trigger), Some(picked)) = (self.trigger(tab), self.suggestions(tab).into_iter().nth(index)) else { return };
+        let inserted = match picked {
+            Suggestion::File(path) => format!("@{path}"),
+            Suggestion::Skill(skill) => format!("/{}", skill.name),
+            Suggestion::Desk(name, _) => {
+                self.drafts.edit(tab).clear();
+                if name == "model" {
+                    self.toggle_picker();
+                } else {
+                    self.core.send(&ClientMessage::ThreadClear { tab_id: tab.to_owned() });
+                }
+                return;
+            }
+        };
+        let edit = self.drafts.edit(tab);
+        let (text, caret) = triggers::complete(&edit.text, trigger.start, edit.range().1, &inserted);
+        edit.replace_text(text);
+        edit.set_caret(caret);
+        self.drafts.active = 0;
+    }
+
+    /// Arrow keys move through the list, Enter and Tab pick, and Escape closes it. Other keys edit.
+    fn list_key(&mut self, tab: &str, key: &Key) -> bool {
+        let count = self.suggestions(tab).len();
+        if count == 0 {
+            return false;
+        }
+        match key {
+            Key::Down => self.drafts.active = (self.drafts.active + 1) % count,
+            Key::Up => self.drafts.active = (self.drafts.active + count - 1) % count,
+            Key::Enter | Key::Tab => self.pick_suggestion(tab, self.drafts.active.min(count - 1)),
+            Key::Escape => self.drafts.dismissed = self.trigger(tab).map(|t| (tab.to_owned(), t.start)),
+            _ => return false,
+        }
+        true
+    }
+
     pub fn interrupt(&mut self, tab: &str) {
         if self.busy(tab) {
             self.core.send(&ClientMessage::SessionInterrupt { tab_id: tab.to_owned() });
@@ -184,8 +292,20 @@ impl Desk {
 }
 
 /// The composer of `tab`, centred in the thread's column, with the queue above it.
-pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
+/// Where the file and command list opens: above the box, or below it on the start screen, where a list
+/// above would be cut off.
+#[derive(Clone, Copy, PartialEq)]
+pub enum ListAt {
+    Above,
+    Below,
+}
+
+pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &Kit, layer: &mut Vec<El>) -> El {
     let tab = info.id.as_str();
+    if let Some(list) = suggestion_list(s, tab, k) {
+        let placement = if list_at == ListAt::Above { Placement::TopStart } else { Placement::BottomStart };
+        layer.push(popover::anchored(k, list, "composer", placement, 8.0));
+    }
     let edit = s.drafts.by_tab.get(tab).cloned().unwrap_or_else(|| TextEdit::new(""));
     let empty = edit.text.trim().is_empty();
     let question = s.question(tab);
@@ -204,12 +324,17 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, k: &Kit, layer: &mut 
             s.submit(alternate);
         })
         .on_input_key(|s: &mut Desk, key: &KeyEvent, _| {
+            let Some(tab) = s.workspace.active.clone() else { return false };
+            if key.mods.shift || key.mods.cmd || key.mods.alt {
+                return false;
+            }
+            if s.list_key(&tab, &key.key) {
+                return true;
+            }
             if key.key != Key::Escape {
                 return false;
             }
-            if let Some(tab) = s.workspace.active.clone() {
-                s.escape(&tab);
-            }
+            s.escape(&tab);
             true
         });
     let input = col().w_full().px(16.0).pt(14.0).child(auto_grow(field, 2, MAX_LINES));
@@ -230,6 +355,122 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, k: &Kit, layer: &mut 
         .child(input)
         .child(actions);
     col().w_full().items_center().child(col().w_full().max_w(COLUMN).pt(6.0).pb(16.0).children(queue_view(s, tab, k)).child(card))
+}
+
+fn suggestion_name(s: &Suggestion) -> &str {
+    match s {
+        Suggestion::File(path) => path,
+        Suggestion::Desk(name, _) => name,
+        Suggestion::Skill(skill) => &skill.name,
+    }
+}
+
+fn suggestion_description(s: &Suggestion) -> &str {
+    match s {
+        Suggestion::File(_) => "",
+        Suggestion::Desk(_, description) => description,
+        Suggestion::Skill(skill) => &skill.description,
+    }
+}
+
+/// The files or commands that complete what was typed, one row each.
+fn suggestion_list(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
+    let rows = s.suggestions(tab);
+    if rows.is_empty() {
+        return None;
+    }
+    let active = s.drafts.active.min(rows.len() - 1);
+    let items = rows.iter().enumerate().map(|(i, row_data)| {
+        let (mark, label, detail): (&'static rune::Icon, String, String) = match row_data {
+            Suggestion::File(path) => {
+                let (dir, name) = path.rsplit_once('/').map_or(("", path.as_str()), |(d, n)| (d, n));
+                (rune_theme_opencode::file_icons::file(path), name.to_owned(), if dir.is_empty() { String::new() } else { format!("{dir}/") })
+            }
+            Suggestion::Desk(name, description) => (&ic::SETTINGS_GEAR, format!("/{name}"), (*description).to_owned()),
+            Suggestion::Skill(skill) => (
+                if skill.builtin { &ic::OUTLINE_CONSOLE } else { &ic::POST_SKILL },
+                format!("/{}{}", skill.name, skill.argument_hint.as_ref().map_or(String::new(), |h| format!(" {h}"))),
+                skill.description.clone(),
+            ),
+        };
+        let tab = tab.to_owned();
+        row()
+            .key(format!("suggestion-{i}"))
+            .h(32.0)
+            .w_full()
+            .gap(8.0)
+            .items_center()
+            .px(10.0)
+            .radius(8.0)
+            .fill(if i == active { k.c.hover } else { rune::Color::TRANSPARENT })
+            .role("option")
+            .position_in_set(i + 1, rows.len())
+            .on_press(move |s: &mut Desk| s.pick_suggestion(&tab, i))
+            .child(icon(mark, 14.0).color(k.c.text_faint))
+            .child(text(label).font(k.ty.text_small).color(k.c.text_base))
+            .child(text(detail).font(k.ty.text_small).color(k.c.text_faint).truncate().grow(1.0))
+    });
+    let list = col().w_full().padding(6.0).children(items);
+    Some(
+        col()
+            .key("suggestions")
+            .w(COLUMN)
+            .max_h(LIST_MAX)
+            .radius(10.0)
+            .fill(k.c.layer_01)
+            .border(1.0, k.c.border_base)
+            .role("listbox")
+            .active_descendant(format!("suggestion-{active}"))
+            .scroll(rune::ScrollSpec { stick_bottom: false })
+            .child(list),
+    )
+}
+
+/// Asks the core for what the list needs as the user types, and saves the drafts after a pause.
+pub fn poll(s: &mut Desk, tx: &mut rune::Tx) -> bool {
+    if let Some(wait) = sync(s) {
+        tx.wake_after(wait);
+    }
+    false
+}
+
+/// What `poll` does, without the event loop. Returns how long until the drafts are due to be saved.
+fn sync(s: &mut Desk) -> Option<std::time::Duration> {
+    let tab = s.workspace.active_tab().cloned()?;
+    if let Some(trigger) = s.trigger(&tab.id) {
+        match trigger.kind {
+            TriggerKind::File => {
+                let wanted = (tab.project.clone(), trigger.query.clone());
+                if s.drafts.asked.as_ref() != Some(&wanted) {
+                    s.core.send(&ClientMessage::FilesSearch { project: wanted.0.clone(), query: wanted.1.clone() });
+                    s.drafts.asked = Some(wanted);
+                }
+            }
+            // Claude Code's commands are read once per project, when / first opens the list.
+            TriggerKind::Command => {
+                if s.drafts.skills_asked.insert(tab.project.clone()) {
+                    s.core.send(&ClientMessage::ProjectGet { project: tab.project.clone(), part: "skills".into() });
+                }
+            }
+        }
+    }
+    let at = s.drafts.edited_at?;
+    if at.elapsed() < SAVE_DELAY {
+        return Some(SAVE_DELAY - at.elapsed());
+    }
+    let open: Vec<String> = s.workspace.tabs.iter().map(|t| t.id.clone()).collect();
+    s.drafts.save(&open);
+    s.drafts.edited_at = None;
+    None
+}
+
+impl Desk {
+    /// Takes the paths the core found, for the query the list asked about.
+    pub fn found_files(&mut self, project: String, query: String, paths: Vec<String>) {
+        if self.drafts.asked.as_ref() == Some(&(project.clone(), query.clone())) {
+            self.drafts.found = Some((project, query, paths));
+        }
+    }
 }
 
 /// "Next question", or "Submit answer(s)" on the last one. It waits for the question to have an answer.
@@ -514,6 +755,48 @@ mod tests {
         let answer = sent.iter().find(|m| m["type"] == "question.answer").expect("the answers go out");
         assert_eq!(answer["answers"], serde_json::json!({ "Which form?": "Signup", "Add tests?": "Only unit tests" }));
         assert!(sent.iter().all(|m| m["type"] != "session.send"), "an answer is not a message");
+    }
+
+    /// Types `words` with the caret at their end, in a focused composer.
+    fn type_focused(s: &mut Desk, words: &str) {
+        let edit = s.drafts.edit("t");
+        edit.replace_text(words);
+        edit.set_caret(words.len());
+        edit.focused = true;
+    }
+
+    #[test]
+    fn a_file_mention_asks_the_core_and_picks_a_path() {
+        let mut s = desk();
+        type_focused(&mut s, "look at @log");
+        s.drafts.edited_at = None;
+        sync(&mut s);
+        let sent = s.core.sent();
+        assert!(sent.iter().any(|m| m["type"] == "files.search" && m["query"] == "log" && m["project"] == "/code/x"));
+        s.found_files("/code/x".into(), "log".into(), vec!["src/login.ts".into(), "src/logout.ts".into()]);
+        assert!(s.list_key("t", &Key::Down));
+        assert!(s.list_key("t", &Key::Enter));
+        assert_eq!(s.drafts.text("t"), "look at @src/logout.ts ");
+    }
+
+    #[test]
+    fn commands_list_desk_s_own_first_and_clear_runs_at_once() {
+        let mut s = desk();
+        type_focused(&mut s, "/cl");
+        let names: Vec<String> = s.suggestions("t").iter().map(|x| suggestion_name(x).to_owned()).collect();
+        assert_eq!(names, ["clear"]);
+        assert!(s.list_key("t", &Key::Enter));
+        assert_eq!(s.drafts.text("t"), "");
+        assert_eq!(s.core.sent().last().unwrap()["type"], "thread.clear");
+    }
+
+    #[test]
+    fn escape_closes_the_list_for_that_trigger() {
+        let mut s = desk();
+        type_focused(&mut s, "/");
+        assert!(!s.suggestions("t").is_empty());
+        assert!(s.list_key("t", &Key::Escape));
+        assert!(s.suggestions("t").is_empty());
     }
 
     #[test]

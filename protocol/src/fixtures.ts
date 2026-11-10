@@ -84,6 +84,16 @@ export const CORE_MESSAGES = [
     value: { name: "web", root: "/Users/me/code/web", branch: "main", changes: { files: 2, additions: 10, deletions: 3 } },
   },
   { type: "project", project: "/Users/me/code/api", part: "space", value: null },
+  {
+    type: "project",
+    project: "/Users/me/code/web",
+    part: "skills",
+    value: [
+      { name: "compact", description: "Compact the context", builtin: true, ownProject: false, group: "Claude Code" },
+      { name: "pdf", description: "Read PDFs", argumentHint: "<file>", ownProject: false, group: "User" },
+    ],
+  },
+  { type: "files.found", project: "/Users/me/code/web", query: "login", paths: ["src/login.ts", "test/login.test.ts"] },
   { type: "queue", tabId: "tab-1", messages: [{ id: "m1", text: "Then add a test" }], held: true },
   { type: "error", message: "The folder does not exist." },
 ] satisfies CoreMessage[]
@@ -104,4 +114,6 @@ export const CLIENT_MESSAGES = [
   { type: "queue.resume", tabId: "tab-1" },
   { type: "project.get", project: "/Users/me/code/web", part: "threads" },
   { type: "thread.resume", tabId: "tab-2", threadId: "s1" },
+  { type: "files.search", project: "/Users/me/code/web", query: "login" },
+  { type: "thread.clear", tabId: "tab-1" },
 ] satisfies ClientMessage[]

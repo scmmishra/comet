@@ -57,7 +57,7 @@ pub struct Desk {
 
 impl Desk {
     pub fn new(core: Core) -> Desk {
-        Desk { core, ..Desk::default() }
+        Desk { core, drafts: Drafts::load(), ..Desk::default() }
     }
 
     /// Takes what the core said. An empty window with no project needs a folder, which the caller asks for.
@@ -92,6 +92,7 @@ impl Desk {
             CoreMessage::SessionEvent { tab_id, event } => self.threads.apply(&tab_id, event),
             CoreMessage::Queue { tab_id, messages, held } => self.threads.queue(&tab_id, messages, held),
             CoreMessage::Project { project, part, value } => self.projects.read(project, &part, value),
+            CoreMessage::FilesFound { project, query, paths } => self.found_files(project, query, paths),
             CoreMessage::Error { message } => self.error = Some(message),
             CoreMessage::Other => {}
         }
@@ -180,14 +181,15 @@ pub mod commands {
 
 /// Ticks the clock each second while a turn runs. A still window does no work.
 pub fn poll(s: &mut Desk, _: f64, tx: &mut Tx) -> bool {
+    let composed = composer::poll(s, tx);
     if !s.working() {
-        return false;
+        return composed;
     }
     let now = format::now_ms();
     let ticked = (now / 1000.0).floor() != (s.now_ms / 1000.0).floor();
     s.now_ms = now;
     tx.wake_after(Duration::from_millis(1000 - (now as u64 % 1000)));
-    ticked
+    ticked || composed
 }
 
 /// Hears the modifier keys held down each time they change.
@@ -279,7 +281,7 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, layer: &mut Vec<El>) -> El {
         .child(text(tab.title.clone()).font(k.ty.ui_medium).color(k.c.text_base).truncate());
     let started = s.threads.get(&tab.id).is_some_and(|t| !t.items.is_empty());
     let body = if started {
-        col().w_full().grow(1.0).min_h(0.0).child(thread_view::thread(s, &tab.id, dark)).child(composer::composer(s, tab, k, layer))
+        col().w_full().grow(1.0).min_h(0.0).child(thread_view::thread(s, &tab.id, dark)).child(composer::composer(s, tab, composer::ListAt::Above, k, layer))
     } else {
         crate::start_screen::start_screen(s, tab, k, layer)
     };

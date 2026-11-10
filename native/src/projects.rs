@@ -1,6 +1,6 @@
 //! What the core reads about each project, as `app/src/renderer/projects.ts` keeps it.
 
-use crate::protocol::{Space, ThreadSummary};
+use crate::protocol::{Skill, Space, ThreadSummary};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -10,6 +10,8 @@ pub struct Project {
     pub threads: Option<Vec<ThreadSummary>>,
     /// None until read or outside a Git repo.
     pub space: Option<Space>,
+    /// Claude Code's commands in the project. None until read.
+    pub skills: Option<Vec<Skill>>,
 }
 
 #[derive(Default)]
@@ -28,6 +30,7 @@ impl Projects {
         match part {
             "threads" => project.threads = serde_json::from_value(value).ok(),
             "space" => project.space = serde_json::from_value(value).ok(),
+            "skills" => project.skills = serde_json::from_value(value).ok(),
             _ => {}
         }
     }

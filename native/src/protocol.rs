@@ -158,6 +158,20 @@ pub struct Space {
     pub branch: String,
 }
 
+/// A command Claude Code offers: a skill, or one of its own such as /compact.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Skill {
+    /// What follows the slash, such as "pdf".
+    pub name: String,
+    pub description: String,
+    /// What the command takes after its name, such as "<file>".
+    pub argument_hint: Option<String>,
+    /// Whether it is Claude Code's own command, rather than a skill.
+    #[serde(default)]
+    pub builtin: bool,
+}
+
 /// A message waiting for the running turn to end.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct QueuedMessage {
@@ -348,6 +362,9 @@ pub enum CoreMessage {
     /// Something read about a project. `value` decodes by `part`, in `projects.rs`.
     #[serde(rename = "project")]
     Project { project: String, part: String, value: Value },
+    /// The answer to `files.search`, with the query it answers: paths relative to the project, best match first.
+    #[serde(rename = "files.found")]
+    FilesFound { project: String, query: String, paths: Vec<String> },
     /// A tab's queued messages, sent whole on each change. `held` means a stop or an error paused them.
     #[serde(rename = "queue")]
     Queue {
@@ -383,6 +400,12 @@ pub enum ClientMessage {
     /// Asks for one part of what the core reads about a project. The core answers with `project`.
     #[serde(rename = "project.get")]
     ProjectGet { project: String, part: String },
+    /// Finds files in the project whose path matches `query`, for an @ mention. The core answers with `files.found`.
+    #[serde(rename = "files.search")]
+    FilesSearch { project: String, query: String },
+    /// Starts a fresh session in a tab, as /clear asks.
+    #[serde(rename = "thread.clear", rename_all = "camelCase")]
+    ThreadClear { tab_id: String },
     /// Continues a past thread in a tab that has not started one.
     #[serde(rename = "thread.resume", rename_all = "camelCase")]
     ThreadResume { tab_id: String, thread_id: String },
@@ -485,6 +508,8 @@ mod tests {
             ClientMessage::QueueResume { tab_id: "tab-1".into() },
             ClientMessage::ProjectGet { project: "/Users/me/code/web".into(), part: "threads".into() },
             ClientMessage::ThreadResume { tab_id: "tab-2".into(), thread_id: "s1".into() },
+            ClientMessage::FilesSearch { project: "/Users/me/code/web".into(), query: "login".into() },
+            ClientMessage::ThreadClear { tab_id: "tab-1".into() },
         ];
         let encoded: Vec<Value> = ours.iter().map(|m| serde_json::to_value(m).unwrap()).collect();
         assert_eq!(encoded, fixtures("CLIENT_MESSAGES"));

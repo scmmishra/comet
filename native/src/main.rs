@@ -19,6 +19,7 @@ mod start_screen;
 mod theme;
 mod thread_view;
 mod threads;
+mod triggers;
 mod workspace;
 
 use rune::{AppSpec, MenuItem, Titlebar, Tx};
