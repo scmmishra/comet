@@ -21,7 +21,7 @@ import { StartScreen } from "./start-screen"
 import { TerminalView } from "./terminal"
 import { Thread } from "./thread"
 import { threadOf } from "./threads"
-import { closeTab, closeTerminal, newTab, newTerminal, showPanelTab, shownPanelTab, showTab, shownTab, togglePanel, workspace } from "./workspace"
+import { closeTab, closeTerminal, newTab, newTerminal, showPanelTab, shownPanelTab, setPanelOpen, showTab, shownTab, workspace } from "./workspace"
 
 const USAGE_REFRESH_MS = 5 * 60_000
 /** The panel's Tabs value for Review, which has no id of its own. */
@@ -89,7 +89,7 @@ function TabView(props: { tab: TabInfo }) {
         )}
       </Show>
       {/* The session's width and the panel's slide run on the same curve, so the gap between them stays put while the panel opens. */}
-      <div class="desk-split relative min-h-0 flex-1 overflow-hidden" data-panel={workspace.panelOpen ? "open" : "closed"}>
+      <div class="desk-split relative min-h-0 flex-1 overflow-hidden" data-panel={props.tab.panelOpen ? "open" : "closed"}>
         <section class="desk-session flex h-full min-w-0 flex-col rounded-3xl border border-outline bg-panel">
           {/* The right padding leaves room for the panel toggle, which sits over this corner. */}
           <header class="flex h-[46px] shrink-0 items-center gap-2 pl-4 pr-12">
@@ -130,7 +130,7 @@ function TabView(props: { tab: TabInfo }) {
             </aside>
           </div>
         </section>
-        <section class="desk-panel flex flex-col rounded-3xl border border-outline bg-panel" inert={!workspace.panelOpen}>
+        <section class="desk-panel flex flex-col rounded-3xl border border-outline bg-panel" inert={!props.tab.panelOpen}>
           <div class="desk-no-scrollbar flex h-[46px] shrink-0 items-center gap-1 overflow-x-auto pl-2 pr-12">
             <Tabs variant="surface" value={tabsValue()} onChange={(value) => showPanelTab(props.tab.id, value === REVIEW ? undefined : value)} class="min-w-0">
               <Tabs.List>
@@ -188,7 +188,7 @@ function TabView(props: { tab: TabInfo }) {
             </For>
           </div>
         </section>
-        <PanelToggle />
+        <PanelToggle tab={props.tab} />
       </div>
     </main>
   )
@@ -210,15 +210,15 @@ function SidebarStart(props: { tab: TabInfo }) {
  * Opens and closes the panel. It sits over the top-right corner of whichever card is there, so the
  * spot that opened the panel also closes it. Its right pane fills as the panel opens, as OpenCode's does.
  */
-function PanelToggle() {
+function PanelToggle(props: { tab: TabInfo }) {
   return (
     <Tooltip value={`Panel ${keyLabels(COMMANDS["panel.toggle"].accelerator).join("")}`} placement="bottom" class="absolute right-2.5 top-[9px] z-10">
       <IconButton
         variant="ghost-muted"
         size="large"
         aria-label="Toggle panel"
-        aria-expanded={workspace.panelOpen}
-        onClick={togglePanel}
+        aria-expanded={!!props.tab.panelOpen}
+        onClick={() => setPanelOpen(props.tab.id, !props.tab.panelOpen)}
         icon={
           <svg viewBox="0 0 16 16" class="size-[15px]" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" aria-hidden="true">
             <rect x="2" y="2.5" width="12" height="11" rx="2" />

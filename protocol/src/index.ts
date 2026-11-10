@@ -413,6 +413,8 @@ export interface TabInfo extends RunSettings {
   readonly terminals: readonly TerminalInfo[]
   /** The panel tab on show: a terminal's id, or a plugin panel's instance id. Absent means Review. */
   readonly panelActive?: string
+  /** Whether the view pane is open beside the thread. Each tab keeps its own, and a new tab starts with it closed. */
+  readonly panelOpen?: boolean
 }
 
 /** A value a plugin's UI node can hold. A function becomes a handler id, which the app calls back through `plugin.event`. */

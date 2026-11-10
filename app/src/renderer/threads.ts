@@ -103,7 +103,7 @@ core.listen((message) => {
 const reviewShown = createRoot(() => {
   const shown = createMemo(() => {
     const tab = shownTab()
-    return tab && workspace.panelOpen && shownPanelTab(tab) === undefined ? tab.id : undefined
+    return tab && tab.panelOpen && shownPanelTab(tab) === undefined ? tab.id : undefined
   })
   createEffect(on(shown, (tabId) => tabId && readReview(tabId)))
   return shown

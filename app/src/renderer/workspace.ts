@@ -7,7 +7,6 @@ import { applySetup, plugins } from "./plugins"
 
 const NEW_TAB_TITLE = "New session"
 const TITLE_LENGTH = 40
-const PANEL_KEY = "desk.panel"
 
 /** The window: its tabs, which one is in front, and what shows beside or instead of it. */
 const [workspace, setWorkspace] = createStore({
@@ -16,8 +15,6 @@ const [workspace, setWorkspace] = createStore({
   active: "",
   /** The settings page on show in place of the active tab. Undefined shows the tab. */
   settingsPage: undefined as string | undefined,
-  /** Whether the panel beside the thread is open. A per-window preference, so it lives in the page's storage. */
-  panelOpen: localStorage.getItem(PANEL_KEY) === "open",
   /** Folders tabs have opened, most recent first, as the core keeps them. */
   recent: [] as readonly string[],
   /** Whether the saved tabs are back. Until then, a change to the tabs would overwrite them. */
@@ -146,9 +143,17 @@ export function nameTab(tabId: string, text: string) {
   save()
 }
 
+/** Opens or closes a tab's view pane. Each tab keeps its own. */
+export function setPanelOpen(tabId: string, open: boolean) {
+  setWorkspace("tabs", (found) => found.id === tabId, { panelOpen: open })
+  setWorkspace("settingsPage", undefined)
+  save()
+}
+
+/** Opens or closes the active tab's view pane. */
 export function togglePanel() {
-  setWorkspace({ panelOpen: !workspace.panelOpen, settingsPage: undefined })
-  localStorage.setItem(PANEL_KEY, workspace.panelOpen ? "open" : "closed")
+  const tab = activeTab()
+  if (tab) setPanelOpen(tab.id, !tab.panelOpen)
 }
 
 /** Opens a terminal in the active tab's panel, opening the panel if it is closed. */
@@ -157,9 +162,7 @@ export function newTerminal() {
   if (!tab) return
   const terminal: TerminalInfo = { id: crypto.randomUUID(), title: tab.terminals.length ? `Terminal ${tab.terminals.length + 1}` : "Terminal" }
   setWorkspace("tabs", (found) => found.id === tab.id, { terminals: [...tab.terminals, terminal], panelActive: terminal.id })
-  setWorkspace("settingsPage", undefined)
-  save()
-  if (!workspace.panelOpen) togglePanel()
+  setPanelOpen(tab.id, true)
 }
 
 /** Shows a tab's panel tab: a terminal or a plugin panel, or Review when `id` is undefined. */
@@ -186,7 +189,7 @@ core.listen((message) => {
   else if (message.type === "tab.title") nameTab(message.tabId, message.title)
   else if (message.type === "panel.show") {
     showPanelTab(message.tabId, message.id)
-    if (!workspace.panelOpen) togglePanel()
+    setPanelOpen(message.tabId, true)
   } else if (message.type === "tabs") {
     setWorkspace({ tabs: [...message.tabs], active: message.active ?? message.tabs[0]?.id ?? "", restored: true })
     for (const action of waiting) action()

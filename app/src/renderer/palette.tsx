@@ -142,7 +142,7 @@ function Palette(props: { start?: "threads"; run: (command: DeskCommand) => void
     { id: "search-threads", section: "Actions", title: "Search threads", icon: "magnifying-glass", command: "threads.search", page: threadsPage(activeProject()) },
     { id: "search-threads-in", section: "Actions", title: "Search threads in…", icon: "magnifying-glass", page: searchThreadsPage },
     { id: "new-terminal", section: "Actions", title: "New terminal", icon: "terminal", command: "terminal.new" },
-    { id: "toggle-panel", section: "Actions", title: workspace.panelOpen ? "Hide panel" : "Show panel", icon: "layout-right", command: "panel.toggle" },
+    { id: "toggle-panel", section: "Actions", title: activeTab()?.panelOpen ? "Hide panel" : "Show panel", icon: "layout-right", command: "panel.toggle" },
     { id: "open-folder", section: "Actions", title: "Open folder…", icon: "folder", command: "folder.open" },
     { id: "open-setup", section: "Actions", title: "Open setup…", icon: "workspace", page: setupsPage },
     { id: "open-panel", section: "Actions", title: "Open panel…", icon: "layout-right", page: panelsPage },

@@ -6,6 +6,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 - Typing `@` in the message box lists the project's files, best match first. Arrow keys move through the list, and Enter or Tab puts `@path` in the message. Claude reads the file it names.
 - Messages can carry images. Paste one, drop one on the message box, or pick one with the + button. Claude reads PNG, JPEG, GIF and WebP images up to 5 MB. A thread you resume shows the images you sent.
+- Each tab keeps its own view pane open or closed. Opening it in one tab no longer opens it in every tab. A new tab starts with it closed.
 - New tabs start in Auto permission mode. Settings › Providers has a Default permissions setting. A model without Auto mode starts Supervised instead.
 
 ## 0.1.0
