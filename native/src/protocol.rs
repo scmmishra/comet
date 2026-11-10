@@ -47,8 +47,11 @@ pub enum ThemeChoice {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppearanceSettings {
     pub theme: ThemeChoice,
+    /// The thread's text, in points.
+    pub font_size: f32,
 }
 
 /// The run settings a new tab starts with.
@@ -75,6 +78,169 @@ pub struct ModelOption {
     pub auto_mode: bool,
 }
 
+/// How full a thread's context window is.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextReading {
+    pub percent: f64,
+    pub tokens: f64,
+    pub max_tokens: f64,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct TextEdit {
+    pub before: String,
+    pub after: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolResult {
+    pub output: String,
+    pub is_error: bool,
+}
+
+/// A file a turn changed, without its diff.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct ChangedFile {
+    pub path: String,
+    pub status: String,
+    pub additions: u32,
+    pub deletions: u32,
+}
+
+/// What a step did, which picks its icon. The core names it.
+#[derive(Clone, Copy, Debug, Deserialize, Hash, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum StepKind {
+    Thought,
+    Command,
+    Edit,
+    Read,
+    Search,
+    Web,
+    Other,
+}
+
+/// One item of a thread, shaped for drawing by the core. Items are told apart by id within their thread.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "lowercase", rename_all_fields = "camelCase")]
+pub enum ThreadItem {
+    /// A message that starts a turn. `at` is when it was sent, in milliseconds since the epoch.
+    User {
+        id: String,
+        text: String,
+        at: Option<f64>,
+        /// Sent into a turn that was still running.
+        #[serde(default)]
+        steered: bool,
+        /// A turn Claude Code started itself. Its text says why.
+        #[serde(default)]
+        self_started: bool,
+    },
+    /// Assistant text. Text still streaming is not done.
+    Text { id: String, text: String, done: bool, at: Option<f64> },
+    Thinking { id: String, text: Option<String>, kind: StepKind, label: String },
+    Tool {
+        id: String,
+        name: String,
+        /// What the call was given, in short.
+        summary: String,
+        file: Option<String>,
+        edits: Option<Vec<TextEdit>>,
+        result: Option<ToolResult>,
+        kind: StepKind,
+        label: String,
+    },
+    /// A tool call waiting for the user's approval. It leaves the thread once answered.
+    Permission {
+        id: String,
+        request_id: String,
+        tool: String,
+        kind: String,
+        detail: String,
+        reason: Option<String>,
+        allow_session: bool,
+        #[serde(default)]
+        answered: bool,
+    },
+    /// Questions Claude asks. They show in the composer, never in the thread.
+    Question {
+        id: String,
+        request_id: String,
+        #[serde(default)]
+        answered: bool,
+    },
+    Compaction { id: String, status: String, pre_tokens: Option<f64>, post_tokens: Option<f64>, error: Option<String> },
+    /// The end of a turn.
+    Result {
+        id: String,
+        duration_ms: f64,
+        is_error: bool,
+        #[serde(default)]
+        stopped: bool,
+    },
+    Error { id: String, message: String },
+    /// The files a turn changed, added once the turn ends.
+    Changes { id: String, files: Vec<ChangedFile> },
+}
+
+impl ThreadItem {
+    pub fn id(&self) -> &str {
+        match self {
+            ThreadItem::User { id, .. }
+            | ThreadItem::Text { id, .. }
+            | ThreadItem::Thinking { id, .. }
+            | ThreadItem::Tool { id, .. }
+            | ThreadItem::Permission { id, .. }
+            | ThreadItem::Question { id, .. }
+            | ThreadItem::Compaction { id, .. }
+            | ThreadItem::Result { id, .. }
+            | ThreadItem::Error { id, .. }
+            | ThreadItem::Changes { id, .. } => id,
+        }
+    }
+}
+
+/// A row of the thread as the core lays it out. Rows hold item ids.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "lowercase", rename_all_fields = "camelCase")]
+pub enum ThreadRow {
+    Item { id: String },
+    /// Steps in a row. The last group of a running turn is live: it shows its latest step.
+    Group { id: String, steps: Vec<String>, live: bool, summary: String },
+    /// A finished turn's work, folded into one row. Its rows are items and groups.
+    Fold { id: String, rows: Vec<ThreadRow>, duration_ms: Option<f64>, stopped: bool },
+    /// The head of a running turn. `since` is when its message was sent.
+    Working { id: String, since: Option<f64> },
+}
+
+impl ThreadRow {
+    pub fn id(&self) -> &str {
+        match self {
+            ThreadRow::Item { id } | ThreadRow::Group { id, .. } | ThreadRow::Fold { id, .. } | ThreadRow::Working { id, .. } => id,
+        }
+    }
+}
+
+/// A change to a thread. An item replaces the item with the same id, or joins after the others.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "kind")]
+pub enum ThreadEvent {
+    #[serde(rename = "item")]
+    Item { item: ThreadItem },
+    /// More text for a text item still streaming.
+    #[serde(rename = "text.delta")]
+    TextDelta { id: String, delta: String },
+    #[serde(rename = "status")]
+    Status { busy: bool },
+    #[serde(rename = "context")]
+    Context { reading: ContextReading },
+    /// An event the app does not read yet.
+    #[serde(other)]
+    Other,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
 pub enum CoreMessage {
@@ -97,6 +263,27 @@ pub enum CoreMessage {
         #[serde(rename = "tabId")]
         tab_id: String,
         title: String,
+    },
+    #[serde(rename = "session.event")]
+    SessionEvent {
+        #[serde(rename = "tabId")]
+        tab_id: String,
+        event: ThreadEvent,
+    },
+    /// A thread read back from Claude's transcript, in one message.
+    #[serde(rename = "session.history")]
+    SessionHistory {
+        #[serde(rename = "tabId")]
+        tab_id: String,
+        items: Vec<ThreadItem>,
+        context: Option<ContextReading>,
+    },
+    /// A tab's thread as rows, sent after its history and whenever an event changes them.
+    #[serde(rename = "session.rows")]
+    SessionRows {
+        #[serde(rename = "tabId")]
+        tab_id: String,
+        rows: Vec<ThreadRow>,
     },
     /// Something the user asked for failed.
     #[serde(rename = "error")]
@@ -181,6 +368,28 @@ mod tests {
         let ours = [ClientMessage::ModelsGet, ClientMessage::TabReopen, ClientMessage::TabsSave { tabs, active }];
         let encoded: Vec<Value> = ours.iter().map(|m| serde_json::to_value(m).unwrap()).collect();
         assert_eq!(encoded, fixtures("CLIENT_MESSAGES"));
+    }
+
+    #[test]
+    fn reads_a_thread_and_its_rows() {
+        let messages = core_messages();
+        let history = messages.iter().find_map(|m| match m {
+            CoreMessage::SessionHistory { items, .. } => Some(items),
+            _ => None,
+        });
+        let items = history.expect("a history fixture");
+        assert!(matches!(&items[0], ThreadItem::User { steered: true, .. }));
+        assert!(items.iter().any(|i| matches!(i, ThreadItem::Tool { kind: StepKind::Command, result: Some(_), .. })));
+        let rows = messages.iter().find_map(|m| match m {
+            CoreMessage::SessionRows { rows, .. } => Some(rows),
+            _ => None,
+        });
+        assert!(matches!(&rows.expect("a rows fixture")[1], ThreadRow::Fold { rows, duration_ms: Some(_), .. } if matches!(&rows[0], ThreadRow::Group { .. })));
+        for m in &messages {
+            if let CoreMessage::SessionEvent { event, .. } = m {
+                assert!(!matches!(event, ThreadEvent::Other), "an event the app reads: {event:?}");
+            }
+        }
     }
 
     #[test]

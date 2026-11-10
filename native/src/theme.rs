@@ -2,14 +2,16 @@
 //! `@opencode/ui`'s. Components start from the OpenCode theme, which matches `@opencode/ui`, and
 //! draw in Desk's colours. Desk's colours stay the source.
 
-use rune::Color;
-use rune_kit::Kit;
+use rune::{Color, TextStyle};
+use rune_kit::{Kit, MarkdownStyle};
 use std::sync::OnceLock;
 
 /// Desk's colours for one appearance, named as in `index.css`.
 struct Colors {
     ground: &'static str,
     panel: &'static str,
+    /// Code in the thread: a step darker than the panel it sits on, short of the window's ground.
+    code: &'static str,
     card: &'static str,
     raised: &'static str,
     hover: &'static str,
@@ -28,6 +30,7 @@ struct Colors {
 const DARK: Colors = Colors {
     ground: "#08090a",
     panel: "#0f1011",
+    code: "#0b0c0d",
     card: "#131416",
     raised: "#1c1d1f",
     hover: "#222326",
@@ -45,6 +48,7 @@ const DARK: Colors = Colors {
 const LIGHT: Colors = Colors {
     ground: "#f2f3f5",
     panel: "#ffffff",
+    code: "#f6f7f9",
     card: "#fafafb",
     raised: "#eef0f2",
     hover: "#e7e9ec",
@@ -113,4 +117,18 @@ fn build(dark: bool, d: &Colors) -> Kit {
     c.text_strong = fg;
     c.text_weak = fg_3;
     k
+}
+
+/// The thread's text at `size` points, with Desk's line height.
+pub fn thread_text(k: &Kit, size: f32) -> TextStyle {
+    TextStyle { size, line_height: (size * THREAD_LINE_HEIGHT).round(), ..k.ty.body }
+}
+
+/// Desk's `leading-[1.625]` for messages and replies.
+const THREAD_LINE_HEIGHT: f32 = 1.625;
+
+/// Replies in the thread: the thread's text, and code a step darker than the panel.
+pub fn markdown(k: &Kit, size: f32) -> MarkdownStyle {
+    let d = if k.dark { &DARK } else { &LIGHT };
+    MarkdownStyle::from_kit(k).body_font(thread_text(k, size)).code_block(color(d.code), k.c.border_base)
 }

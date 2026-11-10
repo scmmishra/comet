@@ -2,10 +2,14 @@
 
 use crate::account::Account;
 use crate::core::{Core, Event};
-use crate::protocol::{ClientMessage, CoreMessage, ThemeChoice};
+use crate::format;
+use crate::protocol::{ClientMessage, CoreMessage, TabInfo, ThemeChoice, ThreadRow};
 use crate::theme;
+use crate::thread_view;
+use crate::threads::Threads;
 use crate::workspace::{NeedsFolder, Place, Workspace};
-use rune::{Cx, El, FileDialogOptions, Tx, col, text};
+use rune::{Color, Cx, El, FileDialogOptions, Tx, col, row, text};
+use std::time::Duration;
 use rune_kit::shell::{TabDragState, TabItem, TabOrientation, TabReorder, TabStrip, WindowTitlebar};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant};
 use rune_theme_opencode::icons as ic;
@@ -16,6 +20,10 @@ pub const TITLEBAR_HEIGHT: f32 = 44.0;
 const PANEL_INSET: f32 = 8.0;
 /// The main panel's corners, Desk's `rounded-3xl`.
 const PANEL_RADIUS: f32 = 12.0;
+/// The session's header, `h-[46px]`.
+const HEADER_HEIGHT: f32 = 46.0;
+/// The project mark in the session's header, `size-[18px]`.
+const HEADER_MARK: f32 = 18.0;
 
 #[derive(Debug, Default, PartialEq)]
 pub enum CoreState {
@@ -31,6 +39,10 @@ pub struct Desk {
     pub status: CoreState,
     pub account: Account,
     pub workspace: Workspace,
+    pub threads: Threads,
+    /// The wall clock, in milliseconds since the epoch, as of the last tick. It ticks each second
+    /// while a turn runs, for the working head.
+    pub now_ms: f64,
     /// The last error the core reported for something the user asked.
     pub error: Option<String>,
     /// Whether ⌘ is held, so the new tab button opens its tab next to the active one.
@@ -43,30 +55,42 @@ impl Desk {
         Desk { core, ..Desk::default() }
     }
 
-    pub fn receive(&mut self, event: Event, tx: &mut Tx) {
+    /// Takes what the core said. An empty window with no project needs a folder, which the caller asks for.
+    pub fn receive(&mut self, event: Event) -> Result<(), NeedsFolder> {
         match event {
             Event::Ready => self.status = CoreState::Ready,
             Event::Failed(reason) => self.status = CoreState::Failed(reason),
-            Event::Message(message) => self.read(message, tx),
+            Event::Message(message) => return self.read(message),
+        }
+        Ok(())
+    }
+
+    /// Takes what the core said, as the event loop runs it, asking for a folder when one is needed.
+    pub fn receive_in(&mut self, event: Event, tx: &mut Tx) {
+        if self.receive(event).is_err() {
+            open_folder(tx);
         }
     }
 
-    fn read(&mut self, message: CoreMessage, tx: &mut Tx) {
+    fn read(&mut self, message: CoreMessage) -> Result<(), NeedsFolder> {
         let (w, account, core) = (&mut self.workspace, &self.account, &self.core);
+        let mut result = Ok(());
         match message {
             CoreMessage::Settings { settings } => self.account.settings = Some(settings),
             CoreMessage::Models { models } => self.account.models = models,
             CoreMessage::Recent { projects } => w.recent = projects,
-            CoreMessage::Tabs { tabs, active } => {
-                if w.restore(tabs, active, account, core).is_err() {
-                    open_folder(tx);
-                }
-            }
+            CoreMessage::Tabs { tabs, active } => result = w.restore(tabs, active, account, core),
             CoreMessage::TabReopened { tab, index } => w.reopened(tab, index, core),
             CoreMessage::TabTitle { tab_id, title } => w.name_tab(&tab_id, &title, core),
+            CoreMessage::SessionHistory { tab_id, items, context } => self.threads.history(&tab_id, items, context),
+            CoreMessage::SessionRows { tab_id, rows } => self.threads.rows(&tab_id, rows),
+            CoreMessage::SessionEvent { tab_id, event } => self.threads.apply(&tab_id, event),
             CoreMessage::Error { message } => self.error = Some(message),
             CoreMessage::Other => {}
         }
+        let tabs: Vec<String> = self.workspace.tabs.iter().map(|t| t.id.clone()).collect();
+        self.threads.keep(&tabs);
+        result
     }
 
     /// Opens a tab, or asks for a folder when the window has no project yet.
@@ -80,6 +104,12 @@ impl Desk {
         if let Err(NeedsFolder) = self.workspace.close_tab(id, &self.account, &self.core) {
             open_folder(tx);
         }
+    }
+
+    /// Whether the active tab's turn is running, so its head counts seconds.
+    fn working(&self) -> bool {
+        let thread = self.workspace.active.as_deref().and_then(|tab| self.threads.get(tab));
+        thread.is_some_and(|t| t.rows.iter().any(|r| matches!(r, ThreadRow::Working { .. })))
     }
 
     fn dark(&self, cx: &Cx<Desk>) -> bool {
@@ -128,6 +158,18 @@ pub mod commands {
     }
 }
 
+/// Ticks the clock each second while a turn runs. A still window does no work.
+pub fn poll(s: &mut Desk, _: f64, tx: &mut Tx) -> bool {
+    if !s.working() {
+        return false;
+    }
+    let now = format::now_ms();
+    let ticked = (now / 1000.0).floor() != (s.now_ms / 1000.0).floor();
+    s.now_ms = now;
+    tx.wake_after(Duration::from_millis(1000 - (now as u64 % 1000)));
+    ticked
+}
+
 /// Hears the modifier keys held down each time they change.
 pub fn modifiers(s: &mut Desk, mods: rune::Mods, _: &mut Tx) {
     s.cmd_held = mods.cmd;
@@ -170,27 +212,63 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
         .build_layered(k, &mut layer);
     let titlebar = WindowTitlebar::from_insets(cx.chrome_insets(), 1.0).tabs(strip).build(k);
 
+    let dark = s.dark(cx);
     let line = |words: String| text(words).font(k.ty.ui).color(k.c.text_muted);
-    let status = match (&s.status, w.active_tab()) {
-        (CoreState::Starting, _) => line("Starting…".into()),
-        (CoreState::Failed(reason), _) => text(reason.clone()).font(k.ty.ui).color(k.c.danger.fg),
-        (CoreState::Ready, Some(tab)) => line(tab.project.clone()),
-        (CoreState::Ready, None) => line("No tabs".into()),
+    let content = match (&s.status, w.active_tab()) {
+        (CoreState::Ready, Some(tab)) => session(s, tab, dark),
+        (status, _) => {
+            let words = match status {
+                CoreState::Starting => line("Starting…".into()),
+                CoreState::Failed(reason) => text(reason.clone()).font(k.ty.ui).color(k.c.danger.fg),
+                CoreState::Ready => line("No tabs".into()),
+            };
+            col().w_full().grow(1.0).center().child(words.key("status"))
+        }
     };
     let body = col()
         .key("body")
         .w_full()
         .grow(1.0)
         .min_h(0.0)
-        .center()
-        .gap(8.0)
         .fill(k.c.bg_base)
         .radius(PANEL_RADIUS)
+        .clip_rounded(PANEL_RADIUS)
         .border(1.0, k.c.border_muted)
-        .child(status.key("status"))
-        .children(s.error.clone().map(|e| text(e).key("error").font(k.ty.ui).color(k.c.danger.fg)));
+        .child(content)
+        .children(s.error.clone().map(|e| text(e).key("error").font(k.ty.ui).color(k.c.danger.fg).px(16.0).pb(8.0)));
     let main = col().key("main").w_full().grow(1.0).min_h(0.0).px(PANEL_INSET).pb(PANEL_INSET).child(body);
     rune_kit::root(col().key("window").w_full().h_full().fill(k.c.bg_deep).child(titlebar).child(main), layer)
+}
+
+/// A tab's session: its header and its thread.
+fn session(s: &Desk, tab: &TabInfo, dark: bool) -> El {
+    let k = theme::kit(dark);
+    let name = format::project_name(&tab.project);
+    let header = row()
+        .key("session-header")
+        .w_full()
+        .h(HEADER_HEIGHT)
+        .items_center()
+        .pl(16.0)
+        .pr(48.0)
+        .gap(7.0)
+        .child(project_mark(name, k))
+        .child(text(name.to_owned()).font(k.ty.ui).color(k.c.text_muted))
+        .child(text("/").font(k.ty.ui).color(k.c.text_faint))
+        .child(text(tab.title.clone()).font(k.ty.ui_medium).color(k.c.text_base).truncate());
+    col().key(format!("session-{}", tab.id)).w_full().grow(1.0).min_h(0.0).child(header).child(thread_view::thread(s, &tab.id, dark))
+}
+
+/// A project's mark: its initial on a small tile. `@opencode/ui`'s avatar draws generated art in its place.
+fn project_mark(name: &str, k: &rune_kit::Kit) -> El {
+    let initial = name.chars().next().unwrap_or(' ').to_uppercase().to_string();
+    row()
+        .size(HEADER_MARK, HEADER_MARK)
+        .radius(4.0)
+        .center()
+        .fill(k.c.layer_03)
+        .border(0.5, Color::WHITE.alpha(0.08))
+        .child(text(initial).font(rune::TextStyle { size: 11.0, weight: 530.0, line_height: 11.0, ..k.ty.small }).color(k.c.text_base))
 }
 
 #[cfg(test)]
@@ -207,7 +285,7 @@ mod tests {
     fn runtime(tabs: Vec<TabInfo>, active: &str) -> Runtime<Desk> {
         let mut rt = Runtime::new(Desk { status: CoreState::Ready, ..Desk::default() }, view, (1280.0, 820.0), Env { system_dark: true, scale: 2.0 });
         let message = CoreMessage::Tabs { tabs, active: Some(active.into()) };
-        rt.update(move |s, tx| s.receive(Event::Message(message), tx));
+        rt.update(move |s, tx| s.receive_in(Event::Message(message), tx));
         rt.frame(0.0);
         rt
     }
@@ -217,10 +295,10 @@ mod tests {
     }
 
     #[test]
-    fn the_tab_bar_shows_each_tab_and_the_panel_its_project() {
+    fn the_tab_bar_shows_each_tab_and_the_header_its_project() {
         let rt = runtime(vec![tab("a", "Fix the login form"), tab("b", "New session")], "b");
         let texts = texts(&rt);
-        for words in ["Fix the login form", "New session", "/code/b"] {
+        for words in ["Fix the login form", "New session", "b"] {
             assert!(texts.iter().any(|t| t == words), "{words:?} shows in {texts:?}");
         }
     }

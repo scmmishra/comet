@@ -2,11 +2,16 @@
 
 mod account;
 mod core;
+mod diff;
+mod format;
 mod ids;
 mod instance;
 mod protocol;
+mod scenes;
 mod shell;
 mod theme;
+mod thread_view;
+mod threads;
 mod workspace;
 
 use rune::{AppSpec, MenuItem, Titlebar, Tx};
@@ -44,6 +49,8 @@ fn main() {
         min_size: Some((720.0, 480.0)),
         fonts: rune_theme_opencode::FONTS,
         families: rune_theme_opencode::FAMILIES,
+        poll: Some(shell::poll),
+        scenes: scenes::SCENES,
         ..AppSpec::new("Desk", (1280.0, 820.0), Desk::default, shell::view)
     })
     .init(move || Desk::new(state.clone()))
@@ -60,7 +67,7 @@ fn main() {
         if let Some(core) = starting.borrow_mut().take() {
             let handle = handle.clone();
             core.send(&protocol::ClientMessage::ModelsGet);
-            core.start(move |event| handle.update(move |s: &mut Desk, tx| s.receive(event, tx)));
+            core.start(move |event| handle.update(move |s: &mut Desk, tx| s.receive_in(event, tx)));
         }
     });
     app.run();
