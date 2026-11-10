@@ -95,6 +95,11 @@ pub struct AppearanceSettings {
     pub theme: ThemeChoice,
     /// The thread's text, in points.
     pub font_size: f32,
+    /// The font for everything but code, and the font for code, by family name. Empty for Geist.
+    #[serde(default)]
+    pub ui_font: String,
+    #[serde(default)]
+    pub code_font: String,
 }
 
 /// The run settings a new tab starts with.

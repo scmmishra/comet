@@ -1,6 +1,6 @@
 //! What the core says about Desk's settings and the Claude account, as `app/src/renderer/account.ts` keeps it.
 
-use crate::protocol::{ClaudeAccount, ClaudeCodeVersion, DeskSettings, ModelOption, PlanUsage, ThemeChoice};
+use crate::protocol::{ClaudeAccount, ClaudeCodeVersion, DeskSettings, ModelOption, PlanUsage, ProjectSettings, ThemeChoice};
 
 /// The thread's text size before the settings arrive, as `DEFAULT_SETTINGS` has it.
 const DEFAULT_TEXT_SIZE: f32 = 14.0;
@@ -20,6 +20,31 @@ pub struct Account {
 }
 
 impl Account {
+    /// The families for Rune's sans and mono slots: the fonts Settings named, falling back to Geist.
+    pub fn font_families(&self) -> (String, String) {
+        let (sans, mono) = crate::theme::FAMILIES;
+        let pick = |named: Option<&str>, bundled: &str| match named.map(str::trim).filter(|n| !n.is_empty()) {
+            Some(named) => format!("{named}, {bundled}"),
+            None => bundled.to_owned(),
+        };
+        let appearance = self.settings.as_ref().map(|s| &s.appearance);
+        (pick(appearance.map(|a| a.ui_font.as_str()), sans), pick(appearance.map(|a| a.code_font.as_str()), mono))
+    }
+
+    /// A project's name as Settings set it, else its folder's name.
+    pub fn project_label(&self, dir: &str) -> String {
+        self.project(dir).and_then(|p| p.name.clone()).unwrap_or_else(|| crate::format::project_name(dir).to_owned())
+    }
+
+    /// The colour Settings gave a project's mark, if any.
+    pub fn project_color(&self, dir: &str) -> Option<&str> {
+        self.project(dir).and_then(|p| p.color.as_deref())
+    }
+
+    fn project(&self, dir: &str) -> Option<&ProjectSettings> {
+        self.settings.as_ref()?.projects.get(dir)
+    }
+
     pub fn theme(&self) -> ThemeChoice {
         self.settings.as_ref().map_or_else(ThemeChoice::default, |s| s.appearance.theme)
     }

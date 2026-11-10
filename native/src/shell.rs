@@ -85,8 +85,14 @@ impl Desk {
 
     /// Takes what the core said, as the event loop runs it, asking for a folder when one is needed.
     pub fn receive_in(&mut self, event: Event, tx: &mut Tx) {
+        let settings = matches!(event, Event::Message(CoreMessage::Settings { .. }));
         if self.receive(event).is_err() {
             open_folder(tx);
+        }
+        // Rune does nothing when the families have not changed.
+        if settings {
+            let (sans, mono) = self.account.font_families();
+            tx.set_font_families(sans, mono);
         }
     }
 
@@ -144,7 +150,11 @@ impl Desk {
             }
             CoreMessage::PanelShow { tab_id, id } => self.panel_shown(&tab_id, &id),
             CoreMessage::Setups { setups } => self.plugins.setups = setups,
-            CoreMessage::Error { message } => self.toasts.show(message, true),
+            CoreMessage::Error { message } => {
+                // A failed update reaches the app only as an error, so the Update button comes back.
+                self.account.updating = false;
+                self.toasts.show(message, true);
+            }
             CoreMessage::Notice { message } => self.toasts.show(message, false),
             CoreMessage::Other => {}
         }
@@ -408,7 +418,7 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
 fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, layer: &mut Vec<El>) -> El {
     let width = size.map(|size| size[0]);
     let k = theme::kit(dark);
-    let name = format::project_name(&tab.project);
+    let name = s.account.project_label(&tab.project);
     let header = row()
         .key("session-header")
         .w_full()
@@ -417,8 +427,8 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, layer: &
         .pl(16.0)
         .pr(10.0)
         .gap(7.0)
-        .child(project_mark(name, k))
-        .child(text(name.to_owned()).font(k.ty.ui).color(k.c.text_muted))
+        .child(project_mark(&s.account, &tab.project, k))
+        .child(text(name).font(k.ty.ui).color(k.c.text_muted))
         .child(text("/").font(k.ty.ui).color(k.c.text_faint))
         .child(text(tab.title.clone()).font(k.ty.ui_medium).color(k.c.text_base).truncate())
         .child(row().grow(1.0))
@@ -452,16 +462,19 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, layer: &
     col().key(format!("session-{}", tab.id)).w_full().grow(1.0).min_h(0.0).child(header).child(body)
 }
 
-/// A project's mark: its initial on a small tile. `@opencode/ui`'s avatar draws generated art in its place.
-pub fn project_mark(name: &str, k: &rune_kit::Kit) -> El {
-    let initial = name.chars().next().unwrap_or(' ').to_uppercase().to_string();
-    row()
-        .size(HEADER_MARK, HEADER_MARK)
-        .radius(4.0)
-        .center()
-        .fill(k.c.layer_03)
-        .border(0.5, Color::WHITE.alpha(0.08))
-        .child(text(initial).font(rune::TextStyle { size: 11.0, weight: 530.0, line_height: 11.0, ..k.ty.small }).color(k.c.text_base))
+/// A project's mark: its initial on a small tile, in the colour Settings gave it. Without a colour,
+/// `@opencode/ui`'s avatar draws generated art, which the native app does not have, so the tile is plain.
+pub fn project_mark(account: &Account, project: &str, k: &rune_kit::Kit) -> El {
+    let initial = account.project_label(project).chars().next().unwrap_or(' ').to_uppercase().to_string();
+    let tile = row().size(HEADER_MARK, HEADER_MARK).radius(4.0).center();
+    let (tile, ink) = match account.project_color(project) {
+        Some(color) => {
+            let theme = rune_theme_opencode::theme(k.dark);
+            (tile.fill(theme.color(&format!("v2-avatar-bg-{color}"))).border(0.5, theme.color(&format!("v2-avatar-border-{color}"))), theme.color("v2-avatar-fg"))
+        }
+        None => (tile.fill(k.c.layer_03).border(0.5, Color::WHITE.alpha(0.08)), k.c.text_base),
+    };
+    tile.child(text(initial).font(rune::TextStyle { size: 11.0, weight: 530.0, line_height: 11.0, ..k.ty.small }).color(ink))
 }
 
 #[cfg(test)]

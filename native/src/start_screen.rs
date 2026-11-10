@@ -68,7 +68,7 @@ pub fn start_screen(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
 
 /// Moves this tab to another project. Its thread has not started, so nothing is lost.
 fn project_switcher(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
-    let name = format::project_name(&tab.project);
+    let name = s.account.project_label(&tab.project);
     let trigger = row()
         .key("project-switcher")
         .h(32.0)
@@ -79,13 +79,13 @@ fn project_switcher(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
         .hover(k.c.hover)
         .role("button")
         .on_press(|s: &mut Desk| s.start.project_menu = !s.start.project_menu)
-        .child(shell::project_mark(name, k))
-        .child(text(name.to_owned()).font(k.ty.ui).color(k.c.text_muted))
+        .child(shell::project_mark(&s.account, &tab.project, k))
+        .child(text(name).font(k.ty.ui).color(k.c.text_muted))
         .child(icon(&ic::CHEVRON_DOWN, 12.0).color(k.c.text_faint));
     let mut menu = Menu::new("project-menu").trigger(trigger).open(s.start.project_menu).placement(Placement::BottomStart).gutter(8.0).min_width(280.0).group_label("Projects").on_close(|s: &mut Desk| s.start.project_menu = false);
     for project in &s.workspace.recent {
         let (id, dir) = (tab.id.clone(), project.clone());
-        menu = menu.item(MenuItem::new(format::project_name(project)).checked(*project == tab.project).on_select(move |s: &mut Desk| {
+        menu = menu.item(MenuItem::new(s.account.project_label(project)).checked(*project == tab.project).on_select(move |s: &mut Desk| {
             let dir = dir.clone();
             s.workspace.change_tab(&id, |t| t.project = dir, &s.core);
             s.start.project_menu = false;

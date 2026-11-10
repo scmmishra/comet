@@ -291,6 +291,32 @@ mod tests {
     }
 
     #[test]
+    fn a_settings_change_comes_back_from_the_core_as_settings() {
+        let home = seeded_home("settings-update");
+        let core = Core { home: Some(home.clone()), ..Core::default() };
+        let (send, receive) = mpsc::channel();
+        core.start(move |event| {
+            let _ = send.send(event);
+        });
+        let project = home.join("project").to_string_lossy().into_owned();
+        core.send(&ClientMessage::SettingsUpdate { change: serde_json::json!({ "project": { "dir": project, "settings": { "name": "Web", "color": "blue" } }, "appearance": { "uiFont": "Inter" } }) });
+        let deadline = Instant::now() + START_TIMEOUT;
+        let settings = loop {
+            match receive.recv_timeout(deadline.saturating_duration_since(Instant::now())).expect("the core sends the new settings in time") {
+                Event::Failed(reason) => panic!("{reason}"),
+                Event::Message(CoreMessage::Settings { settings }) if settings.projects.contains_key(&project) => break settings,
+                Event::Message(CoreMessage::Error { message }) => panic!("{message}"),
+                _ => {}
+            }
+        };
+        core.stop();
+        let _ = std::fs::remove_dir_all(&home);
+        assert_eq!(settings.projects[&project].name.as_deref(), Some("Web"));
+        assert_eq!(settings.projects[&project].color.as_deref(), Some("blue"));
+        assert_eq!(settings.appearance.ui_font, "Inter");
+    }
+
+    #[test]
     fn a_real_core_sends_the_saved_tabs() {
         let home = seeded_home("saved-tabs");
         let core = Core { home: Some(home.clone()), ..Core::default() };

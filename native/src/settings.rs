@@ -2,7 +2,7 @@
 //! pages, and the chosen page beside it, in place of the session. Back, or Escape, returns to it.
 
 use crate::format;
-use crate::models::{effort_label, option_label, permission, permission_for, permission_modes};
+use crate::models::{effort_label, permission, permission_for, permission_modes};
 use crate::protocol::{ClientMessage, ProjectSettings, ThemeChoice};
 use crate::shell::Desk;
 use rune::{El, Key, KeyEvent, ScrollSpec, TextEdit, col, el, icon, row, text};
@@ -23,16 +23,20 @@ const FONT_SIZES: std::ops::RangeInclusive<u32> = 11..=20;
 /// The colours a project's letter can take, Desk's `PROJECT_COLORS`.
 const PROJECT_COLORS: [&str; 9] = ["orange", "yellow", "cyan", "green", "red", "pink", "blue", "purple", "gray"];
 
-/// The select that is open, and project names being typed. The workspace keeps the page on show.
+/// The select that is open, and text settings being typed, by field. The workspace keeps the page on show.
 #[derive(Default)]
 pub struct SettingsUi {
     open_select: Option<String>,
-    names: std::collections::HashMap<String, TextEdit>,
+    fields: std::collections::HashMap<String, TextEdit>,
 }
 
 impl Desk {
     /// Shows a settings page in place of the session, reading what it shows.
     pub fn open_settings(&mut self, page: &str) {
+        // Settings opened afresh drop what was typed and never saved.
+        if self.workspace.settings_page.is_none() {
+            self.settings = SettingsUi::default();
+        }
         self.workspace.settings_page = Some(page.to_owned());
         self.settings.open_select = None;
         match page {
@@ -175,6 +179,23 @@ fn title(k: &Kit, words: &str) -> El {
     text(words.to_owned()).font(k.ty.ui_medium).color(k.c.text_base)
 }
 
+/// A text setting that saves on Enter, so typing does not save each letter. `key` names its draft.
+fn field(s: &Desk, k: &Kit, key: String, saved: String, placeholder: &str, label: &str, save: impl Fn(&mut Desk, String) + 'static) -> El {
+    let edit = s.settings.fields.get(&key).cloned().unwrap_or_else(|| TextEdit::new(saved.clone()));
+    let draft = key.clone();
+    TextInput::new(&edit)
+        .placeholder(placeholder)
+        .label(label)
+        .width(Some(220.0))
+        .spellcheck(false)
+        .on_edit(move |s: &mut Desk| s.settings.fields.entry(draft.clone()).or_insert_with(|| TextEdit::new(saved.clone())))
+        .on_submit(move |s: &mut Desk, _| {
+            let typed = s.settings.fields.get(&key).map(|e| e.text.trim().to_owned()).unwrap_or_default();
+            save(s, typed);
+        })
+        .build(k)
+}
+
 /// A select of `options`, as `(value, label)`, that saves through `pick`.
 fn select(s: &Desk, k: &Kit, layer: &mut Vec<El>, key: &str, options: &[(String, String)], current: &str, pick: impl Fn(&mut Desk, &str) + Clone + 'static) -> El {
     let labels: Vec<&str> = options.iter().map(|o| o.1.as_str()).collect();
@@ -236,7 +257,7 @@ fn providers(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
     });
     let mut rows = vec![setting(k, claude_title, Some(line), connected), setting(k, title(k, "Version"), Some(version), update)];
     if let Some(claude) = claude {
-        let models: Vec<(String, String)> = account.models.iter().map(|m| (m.value.clone(), option_label(m))).collect();
+        let models: Vec<(String, String)> = account.models.iter().map(|m| (m.value.clone(), m.label.clone())).collect();
         rows.push(setting(
             k,
             title(k, "Default model"),
@@ -319,6 +340,18 @@ fn appearance(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
                 }
             })),
         ),
+        setting(
+            k,
+            title(k, "Interface font"),
+            Some("The font for everything but code. Leave it empty for Geist. Enter saves it.".into()),
+            Some(field(s, k, "uiFont".into(), settings.appearance.ui_font.clone(), "Geist", "Interface font", |s, typed| s.update_settings(json!({ "appearance": { "uiFont": typed } })))),
+        ),
+        setting(
+            k,
+            title(k, "Code font"),
+            Some("The font for code, diffs and terminals. Leave it empty for Geist Mono. Enter saves it.".into()),
+            Some(field(s, k, "codeFont".into(), settings.appearance.code_font.clone(), "Geist Mono", "Code font", |s, typed| s.update_settings(json!({ "appearance": { "codeFont": typed } })))),
+        ),
     ];
     col().w_full().child(header(k, "Appearance", "How Desk looks. Changes apply at once.")).child(body(vec![list(k, rows)]))
 }
@@ -332,26 +365,10 @@ fn projects(s: &Desk, k: &Kit, _layer: &mut Vec<El>) -> El {
     }
     let sections = dirs.iter().map(|dir| {
         let settings = s.project_settings(dir);
-        let edit = s.settings.names.get(dir).cloned().unwrap_or_else(|| TextEdit::new(settings.name.clone().unwrap_or_default()));
-        let (name_dir, save_dir) = (dir.clone(), dir.clone());
-        let name = TextInput::new(&edit)
-            .placeholder(format::project_name(dir))
-            .label("Project name")
-            .width(Some(220.0))
-            .on_edit(move |s: &mut Desk| {
-                let saved = s.project_settings(&name_dir).name.unwrap_or_default();
-                s.settings.names.entry(name_dir.clone()).or_insert_with(|| TextEdit::new(saved))
-            })
-            .on_key(move |s: &mut Desk, event: &KeyEvent, _| {
-                // The name saves on Enter, so typing a name does not save each letter.
-                if event.key != Key::Enter {
-                    return false;
-                }
-                let typed = s.settings.names.get(&save_dir).map(|e| e.text.trim().to_owned()).unwrap_or_default();
-                s.save_project(&save_dir, |p| p.name = (!typed.is_empty()).then_some(typed));
-                true
-            })
-            .build(k);
+        let save_dir = dir.clone();
+        let name = field(s, k, format!("name:{dir}"), settings.name.clone().unwrap_or_default(), format::project_name(dir), "Project name", move |s, typed| {
+            s.save_project(&save_dir, |p| p.name = (!typed.is_empty()).then_some(typed));
+        });
         let swatches = row().gap(6.0).children(PROJECT_COLORS.iter().map(|color| {
             let picked = settings.color.as_deref() == Some(*color);
             let dir = dir.clone();
@@ -366,7 +383,7 @@ fn projects(s: &Desk, k: &Kit, _layer: &mut Vec<El>) -> El {
                 .label(*color)
                 .on_press(move |s: &mut Desk| s.save_project(&dir, |p| p.color = Some(color.to_string())))
         }));
-        let heading = format!("{} · {}", settings.name.clone().unwrap_or_else(|| format::project_name(dir).to_owned()), format::short_path(dir));
+        let heading = format!("{} · {}", s.account.project_label(dir), format::short_path(dir));
         section(
             k,
             heading,
@@ -403,7 +420,7 @@ fn mcps(s: &Desk, k: &Kit) -> El {
             };
             let own: Vec<El> = servers.iter().filter(|x| x.own_project).map(row_for).collect();
             let shared: Vec<El> = servers.iter().filter(|x| !x.own_project).map(row_for).collect();
-            let name = format::project_name(&project).to_owned();
+            let name = s.account.project_label(&project);
             vec![
                 section(k, format!("Installed in {name}"), if own.is_empty() { faint("No MCP servers are installed in this project. Add one to its .mcp.json, or with claude mcp add.") } else { list(k, own) }),
                 section(k, "Available in every project".into(), if shared.is_empty() { faint("No MCP servers are available to all projects.") } else { list(k, shared) }),
@@ -460,6 +477,19 @@ mod tests {
         assert!(s.core.sent().iter().any(|m| m["type"] == "project.get" && m["part"] == "mcp"));
         s.workspace.show_tab("t", &s.core);
         assert_eq!(s.workspace.settings_page, None);
+    }
+
+    #[test]
+    fn a_project_shows_its_saved_name_and_fonts_fall_back_to_geist() {
+        let mut s = desk();
+        assert_eq!(s.account.project_label("/code/web"), "web");
+        assert_eq!(s.account.project_color("/code/web"), Some("blue"));
+        assert_eq!(s.account.font_families(), ("Geist".to_owned(), "Geist Mono".to_owned()));
+        let settings = s.account.settings.as_mut().unwrap();
+        settings.projects.get_mut("/code/web").unwrap().name = Some("Web".into());
+        settings.appearance.ui_font = "Inter".into();
+        assert_eq!(s.account.project_label("/code/web"), "Web");
+        assert_eq!(s.account.font_families().0, "Inter, Geist");
     }
 
     #[test]

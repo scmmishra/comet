@@ -41,10 +41,10 @@ pub enum Page {
 }
 
 impl Page {
-    fn title(&self) -> String {
+    fn title(&self, account: &crate::account::Account) -> String {
         match self {
-            Page::Threads(project) => format!("Threads in {}", format::project_name(project)),
-            Page::Files(project) => format!("Search files in {}", format::project_name(project)),
+            Page::Threads(project) => format!("Threads in {}", account.project_label(project)),
+            Page::Files(project) => format!("Search files in {}", account.project_label(project)),
             Page::NewSessionIn => "New session in".into(),
             Page::SearchThreadsIn => "Search threads in".into(),
             Page::Setups => "Open setup".into(),
@@ -159,14 +159,14 @@ impl Desk {
         let threads = |project: &str| -> Vec<Entry> {
             let summaries = self.projects.get(project).and_then(|p| p.threads.as_ref());
             summaries.into_iter().flatten().map(|t| {
-                let mut entry = Entry::new(format::project_name(project), t.title.clone(), Action::Thread(project.to_owned(), t.clone()));
+                let mut entry = Entry::new(&self.account.project_label(project), t.title.clone(), Action::Thread(project.to_owned(), t.clone()));
                 entry.detail = Some(format::ago(t.updated_at, format::now_ms()));
                 entry
             }).collect()
         };
         let projects = |action: fn(String) -> Action| -> Vec<Entry> {
             self.workspace.recent.iter().map(|p| {
-                let mut entry = Entry::new("Projects", format::project_name(p), action(p.clone()));
+                let mut entry = Entry::new("Projects", self.account.project_label(p), action(p.clone()));
                 entry.project = Some(p.clone());
                 entry.detail = Some(format::short_path(p));
                 entry
@@ -197,7 +197,7 @@ impl Desk {
                     .iter()
                     .map(|path| {
                         let (dir, name) = path.rsplit_once('/').map_or(("", path.as_str()), |(d, n)| (d, n));
-                        let mut entry = Entry::new(format::project_name(project), name, Action::File(project.clone(), path.clone()));
+                        let mut entry = Entry::new(&self.account.project_label(project), name, Action::File(project.clone(), path.clone()));
                         entry.detail = (!dir.is_empty()).then(|| format!("{dir}/"));
                         entry
                     })
@@ -220,7 +220,7 @@ impl Desk {
                 .setups
                 .iter()
                 .map(|setup| {
-                    let mut entry = Entry::new(format::project_name(&setup.project), setup.title.clone(), Action::Setup(setup.project.clone(), setup.id.clone(), setup.title.clone()));
+                    let mut entry = Entry::new(&self.account.project_label(&setup.project), setup.title.clone(), Action::Setup(setup.project.clone(), setup.id.clone(), setup.title.clone()));
                     entry.project = Some(setup.project.clone());
                     entry
                 })
@@ -251,7 +251,7 @@ impl Desk {
                 root.push(action("Open setup…", &ic::WORKSPACE, None, Action::Open(Page::Setups)));
                 root.push(action("Open panel…", &crate::icons::PANEL, None, Action::Open(Page::Panels)));
                 root.push(action("Change theme…", &ic::APPEARANCE, None, Action::Open(Page::Themes)));
-                root.push(action("Open settings…", &ic::SETTINGS_GEAR, Some(&["⌘", ","]), Action::Open(Page::Settings)));
+                root.push(action("Open settings…", &ic::SETTINGS_GEAR, None, Action::Open(Page::Settings)));
                 root.extend(self.offered().into_iter().flat_map(|o| o.commands.iter()).map(|c| {
                     let run = match &c.input {
                         Some(prompt) => Action::Open(Page::Input(c.id.clone(), c.title.clone(), prompt.clone())),
@@ -263,7 +263,7 @@ impl Desk {
                 }));
                 root.extend(self.workspace.tabs.iter().map(|t| {
                     let mut entry = Entry::new("Tabs", t.title.clone(), Action::Tab(t.id.clone()));
-                    entry.detail = Some(format::project_name(&t.project).to_owned());
+                    entry.detail = Some(self.account.project_label(&t.project));
                     entry.project = Some(t.project.clone());
                     entry
                 }));
@@ -386,7 +386,7 @@ pub fn palette(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
     if !s.palette.open {
         return;
     }
-    let placeholder = s.palette.pages.last().map_or_else(|| "Search actions, tabs and threads".to_owned(), |p| format!("{}…", p.title()));
+    let placeholder = s.palette.pages.last().map_or_else(|| "Search actions, tabs and threads".to_owned(), |p| format!("{}…", p.title(&s.account)));
     let input = text_input(&s.palette.query, k.ty.ui)
         .key("palette-input")
         .single_line()
@@ -405,12 +405,12 @@ pub fn palette(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
     let mut list = col().w_full().padding(6.0);
     let mut section = None;
     for (i, entry) in matches.iter().enumerate() {
-        let heading = s.palette.pages.last().map_or_else(|| entry.section.clone(), Page::title);
+        let heading = s.palette.pages.last().map_or_else(|| entry.section.clone(), |p| p.title(&s.account));
         if section.as_ref() != Some(&heading) {
             list = list.child(text(heading.clone()).font(k.ty.text_xsmall).color(k.c.text_faint).px(10.0).pt(8.0).pb(4.0));
             section = Some(heading);
         }
-        list = list.child(entry_row(entry, i, i == active, k));
+        list = list.child(entry_row(s, entry, i, i == active, k));
     }
     let empty = matches.is_empty().then(|| {
         let words = if s.palette.query.text.is_empty() { "Nothing to show yet." } else { "Nothing matches." };
@@ -441,9 +441,9 @@ pub fn palette(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
     layer.push(col().key("palette-layer").absolute(0.0, 0.0).w_full().pt(TOP).items_center().child(popover::raised(k, body, 10.0)));
 }
 
-fn entry_row(entry: &Entry, index: usize, active: bool, k: &Kit) -> El {
+fn entry_row(s: &Desk, entry: &Entry, index: usize, active: bool, k: &Kit) -> El {
     let lead = match (&entry.project, entry.icon) {
-        (Some(project), _) => Some(shell::project_mark(format::project_name(project), k)),
+        (Some(project), _) => Some(shell::project_mark(&s.account, project, k)),
         (None, Some(mark)) => Some(icon(mark, 15.0).color(k.c.text_faint)),
         _ => None,
     };

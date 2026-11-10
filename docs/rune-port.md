@@ -87,8 +87,7 @@ Done:
 
 Left out, for now:
 
-- Appearance's interface and code font rows. The native app draws in Geist, which it bundles. It has no way yet to load a font by name.
-- A project's icon in Projects, and the project's colour in its mark. Both wait on the project mark (see Open decisions).
+- A project's icon in Projects. It waits on the project mark (see Open decisions). A project's saved name and colour show already.
 
 ### Phase 5: Switch
 
