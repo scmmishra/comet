@@ -70,6 +70,7 @@ export const CORE_MESSAGES = [
   { type: "session.event", tabId: "tab-1", event: { kind: "text.delta", id: "x2", delta: "Hel" } },
   { type: "session.event", tabId: "tab-1", event: { kind: "status", busy: true } },
   { type: "session.event", tabId: "tab-1", event: { kind: "context", reading: { percent: 20, tokens: 40_000, maxTokens: 200_000 } } },
+  { type: "queue", tabId: "tab-1", messages: [{ id: "m1", text: "Then add a test" }], held: true },
   { type: "error", message: "The folder does not exist." },
 ] satisfies CoreMessage[]
 
@@ -82,4 +83,9 @@ export const CLIENT_MESSAGES = [
   { type: "session.send", tabId: "tab-1", text: "Hi" },
   { type: "session.interrupt", tabId: "tab-1" },
   { type: "permission.answer", tabId: "tab-1", requestId: "r1", answer: "allow-session" },
+  { type: "question.answer", tabId: "tab-1", requestId: "r2", answers: { "Which form?": "Login" } },
+  { type: "question.answer", tabId: "tab-1", requestId: "r2" },
+  { type: "queue.send", tabId: "tab-1", id: "m1" },
+  { type: "queue.remove", tabId: "tab-1", id: "m1" },
+  { type: "queue.resume", tabId: "tab-1" },
 ] satisfies ClientMessage[]

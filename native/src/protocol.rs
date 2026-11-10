@@ -111,6 +111,29 @@ pub struct ChangedFile {
     pub deletions: u32,
 }
 
+/// One question of an AskUserQuestion call.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Question {
+    pub header: String,
+    pub question: String,
+    pub options: Vec<QuestionOption>,
+    pub multi_select: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct QuestionOption {
+    pub label: String,
+    pub description: Option<String>,
+}
+
+/// A message waiting for the running turn to end.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct QueuedMessage {
+    pub id: String,
+    pub text: String,
+}
+
 /// What a step did, which picks its icon. The core names it.
 #[derive(Clone, Copy, Debug, Deserialize, Hash, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -170,6 +193,7 @@ pub enum ThreadItem {
     Question {
         id: String,
         request_id: String,
+        questions: Vec<Question>,
         #[serde(default)]
         answered: bool,
     },
@@ -287,6 +311,14 @@ pub enum CoreMessage {
         tab_id: String,
         rows: Vec<ThreadRow>,
     },
+    /// A tab's queued messages, sent whole on each change. `held` means a stop or an error paused them.
+    #[serde(rename = "queue")]
+    Queue {
+        #[serde(rename = "tabId")]
+        tab_id: String,
+        messages: Vec<QueuedMessage>,
+        held: bool,
+    },
     /// Something the user asked for failed.
     #[serde(rename = "error")]
     Error { message: String },
@@ -315,6 +347,22 @@ pub enum ClientMessage {
     SessionInterrupt { tab_id: String },
     #[serde(rename = "permission.answer", rename_all = "camelCase")]
     PermissionAnswer { tab_id: String, request_id: String, answer: String },
+    /// Answers Claude's questions, by question text. Without `answers`, the user dismissed them.
+    #[serde(rename = "question.answer", rename_all = "camelCase")]
+    QuestionAnswer {
+        tab_id: String,
+        request_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        answers: Option<std::collections::BTreeMap<String, String>>,
+    },
+    /// Sends a queued message now.
+    #[serde(rename = "queue.send", rename_all = "camelCase")]
+    QueueSend { tab_id: String, id: String },
+    #[serde(rename = "queue.remove", rename_all = "camelCase")]
+    QueueRemove { tab_id: String, id: String },
+    /// Sends the queue again after a stop or an error paused it.
+    #[serde(rename = "queue.resume", rename_all = "camelCase")]
+    QueueResume { tab_id: String },
     /// The window's tabs, in order, sent whenever they change.
     #[serde(rename = "tabs.save")]
     TabsSave {
@@ -387,6 +435,11 @@ mod tests {
             ClientMessage::SessionSend { tab_id: "tab-1".into(), text: "Hi".into(), follow_up: None },
             ClientMessage::SessionInterrupt { tab_id: "tab-1".into() },
             ClientMessage::PermissionAnswer { tab_id: "tab-1".into(), request_id: "r1".into(), answer: "allow-session".into() },
+            ClientMessage::QuestionAnswer { tab_id: "tab-1".into(), request_id: "r2".into(), answers: Some([("Which form?".to_owned(), "Login".to_owned())].into()) },
+            ClientMessage::QuestionAnswer { tab_id: "tab-1".into(), request_id: "r2".into(), answers: None },
+            ClientMessage::QueueSend { tab_id: "tab-1".into(), id: "m1".into() },
+            ClientMessage::QueueRemove { tab_id: "tab-1".into(), id: "m1".into() },
+            ClientMessage::QueueResume { tab_id: "tab-1".into() },
         ];
         let encoded: Vec<Value> = ours.iter().map(|m| serde_json::to_value(m).unwrap()).collect();
         assert_eq!(encoded, fixtures("CLIENT_MESSAGES"));

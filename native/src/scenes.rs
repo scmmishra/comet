@@ -34,6 +34,10 @@ fn thread(s: &mut Desk) {
             { "type": "permission", "id": "p1", "requestId": "r1", "tool": "Bash", "kind": "command", "detail": "rm -rf dist && npm run build", "reason": "It deletes the build folder", "allowSession": true }
         ] },
         { "type": "session.event", "tabId": "tab", "event": { "kind": "status", "busy": true } },
+        { "type": "session.event", "tabId": "tab", "event": { "kind": "item", "item": { "type": "question", "id": "q1", "requestId": "rq", "questions": [
+            { "header": "Tests", "question": "Which kind of test should I add?", "options": [{ "label": "Unit test", "description": "Fast, mocks the network" }, { "label": "End-to-end test" }], "multiSelect": false }
+        ] } } },
+        { "type": "queue", "tabId": "tab", "messages": [{ "id": "m1", "text": "Then update the changelog" }], "held": false },
         { "type": "session.rows", "tabId": "tab", "rows": [
             { "type": "item", "id": "u1" },
             { "type": "fold", "id": "fold:u1", "rows": [{ "type": "group", "id": "group:th1", "steps": ["th1", "t1", "t2", "t3"], "live": false, "summary": "Read a file, ran a command, and changed a file" }], "durationMs": 63_000.0, "stopped": false },

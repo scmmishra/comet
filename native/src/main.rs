@@ -8,6 +8,7 @@ mod format;
 mod ids;
 mod instance;
 mod protocol;
+mod questions;
 mod scenes;
 mod shell;
 mod theme;

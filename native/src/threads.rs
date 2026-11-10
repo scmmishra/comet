@@ -1,6 +1,6 @@
 //! Each tab's thread as the core sends it, as `app/src/renderer/threads.ts` keeps it.
 
-use crate::protocol::{ContextReading, ThreadEvent, ThreadItem, ThreadRow};
+use crate::protocol::{ContextReading, Question, QueuedMessage, ThreadEvent, ThreadItem, ThreadRow};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Default)]
@@ -16,6 +16,10 @@ pub struct Thread {
     pub rows_version: u64,
     pub busy: bool,
     pub context: Option<ContextReading>,
+    /// Messages waiting for the running turn to end, as the core keeps them.
+    pub queue: Vec<QueuedMessage>,
+    /// Whether a stop or an error paused the queue.
+    pub queue_held: bool,
     /// The folds, groups and steps the user opened, by row or item id.
     pub open: HashSet<String>,
 }
@@ -23,6 +27,14 @@ pub struct Thread {
 impl Thread {
     pub fn item(&self, id: &str) -> Option<&ThreadItem> {
         self.index.get(id).map(|&i| &self.items[i])
+    }
+
+    /// The questions Claude is waiting on, if any: their request id and the questions.
+    pub fn pending_question(&self) -> Option<(&str, &[Question])> {
+        self.items.iter().rev().find_map(|item| match item {
+            ThreadItem::Question { request_id, questions, answered: false, .. } => Some((request_id.as_str(), questions.as_slice())),
+            _ => None,
+        })
     }
 
     /// The revision of the item with this id, or 0 before it arrives.
@@ -105,6 +117,12 @@ impl Threads {
             ThreadEvent::Context { reading } => thread.context = Some(reading),
             ThreadEvent::Other => {}
         }
+    }
+
+    pub fn queue(&mut self, tab: &str, messages: Vec<QueuedMessage>, held: bool) {
+        let thread = self.get_mut(tab);
+        thread.queue = messages;
+        thread.queue_held = held;
     }
 
     /// Opens a fold, group or step that is closed, and closes one that is open.

@@ -87,6 +87,7 @@ impl Desk {
             CoreMessage::SessionHistory { tab_id, items, context } => self.threads.history(&tab_id, items, context),
             CoreMessage::SessionRows { tab_id, rows } => self.threads.rows(&tab_id, rows),
             CoreMessage::SessionEvent { tab_id, event } => self.threads.apply(&tab_id, event),
+            CoreMessage::Queue { tab_id, messages, held } => self.threads.queue(&tab_id, messages, held),
             CoreMessage::Error { message } => self.error = Some(message),
             CoreMessage::Other => {}
         }
