@@ -58,8 +58,8 @@ export function Thread(props: { tab: TabInfo }) {
 function RowView(props: { row: Row; tab: TabInfo }) {
   return (
     <Switch>
-      {/* A turn Claude Code started itself, after a background task finished, opens with the task's summary, not a bubble. */}
-      <Match when={props.row.type === "user" && (props.row as Extract<Item, { type: "user" }>).fromTask && (props.row as Extract<Item, { type: "user" }>)}>
+      {/* A turn Claude Code started itself opens with a line that says why, not a bubble. */}
+      <Match when={props.row.type === "user" && (props.row as Extract<Item, { type: "user" }>).selfStarted && (props.row as Extract<Item, { type: "user" }>)}>
         {(item) => (
           <div class="flex items-center gap-2 text-[13px] text-fg-3">
             <Icon name="outline-console" class="size-[14px] shrink-0" />

@@ -1,4 +1,4 @@
-import type { SDKAPIRetryMessage, SDKAssistantMessage, SDKMessage, SDKPartialAssistantMessage, SessionMessage } from "@anthropic-ai/claude-agent-sdk"
+import type { SDKAPIRetryMessage, SDKAssistantMessage, SDKMessage, SDKMessageOrigin, SDKPartialAssistantMessage, SessionMessage } from "@anthropic-ai/claude-agent-sdk"
 import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, type ThreadItem } from "@desk/protocol"
 
 /** What Claude Code writes into a transcript when the user stops a turn, with or without "for tool use". */
@@ -55,9 +55,9 @@ export class ThreadMapper {
         return this.mapAssistant(message.message.content, message.uuid, at).map(item)
       case "user": {
         if (message.parent_tool_use_id) return []
-        // A background task that finished starts a turn of Claude's own. The tab works again until it ends.
-        const task = taskSummary(message.message.content)
-        if (task !== undefined) return [item({ type: "user", id: message.uuid ?? `task-${at ?? Date.now()}`, text: task, fromTask: true, ...(at !== undefined ? { at } : {}) }), { kind: "status", busy: true }]
+        // The tab works again until a turn Claude Code started itself ends.
+        const opener = selfStartedText(message.message.content, message.origin)
+        if (opener !== undefined) return [item({ type: "user", id: message.uuid ?? `opener-${at ?? Date.now()}`, text: opener, selfStarted: true, ...(at !== undefined ? { at } : {}) }), { kind: "status", busy: true }]
         return this.mapToolResults(message.message.content).map(item)
       }
       case "result":
@@ -130,7 +130,7 @@ export class ThreadMapper {
    * ends with a result, timed from the user's message to the last reply, so restored turns fold the
    * way live ones do.
    */
-  history(messages: readonly (SessionMessage & { readonly timestamp?: string })[]): ThreadItem[] {
+  history(messages: readonly (SessionMessage & { readonly timestamp?: string; readonly origin?: SDKMessageOrigin })[]): ThreadItem[] {
     // A tool's result replaces its call in place, so the items keep their order.
     const items = new Map<string, ThreadItem>()
     const add = (found: ThreadItem) => items.set(found.id, found)
@@ -153,11 +153,11 @@ export class ThreadMapper {
         this.mapAssistant((stored.message as SDKAssistantMessage["message"]).content, stored.uuid, at).forEach(add)
       } else if (stored.type === "user") {
         const content = (stored.message as { content?: unknown }).content
-        const task = taskSummary(content)
-        if (task !== undefined) {
+        const opener = selfStartedText(content, stored.origin)
+        if (opener !== undefined) {
           closeTurn()
           if (at !== undefined) turn = { id: stored.uuid, start: at }
-          add({ type: "user", id: stored.uuid, text: task, fromTask: true, ...(at !== undefined ? { at } : {}) })
+          add({ type: "user", id: stored.uuid, text: opener, selfStarted: true, ...(at !== undefined ? { at } : {}) })
           continue
         }
         const text = userText(content)
@@ -233,9 +233,16 @@ function userImages(content: unknown): ImageAttachment[] {
 }
 
 /**
- * The summary of a background task that finished, when Claude Code adds its notice to the conversation.
- * Claude Code then starts a turn on its own, so the notice opens that turn.
+ * The opening line of a turn Claude Code starts itself, or undefined for any other message. Claude Code
+ * starts one when a background task finishes, and when a subagent or another session sends it a message,
+ * after T3 Code. A sent message holds the sender's whole report, so the opener names the sender instead.
  */
+function selfStartedText(content: unknown, origin: SDKMessageOrigin | undefined): string | undefined {
+  if (origin?.kind === "peer") return origin.senderTaskId ? "A subagent reported back." : "Another Claude session sent a message."
+  return taskSummary(content)
+}
+
+/** The summary of a background task that finished, from the notice Claude Code adds to the conversation. */
 function taskSummary(content: unknown): string | undefined {
   const text = typeof content === "string" ? content : Array.isArray(content) ? content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n") : ""
   if (!text.trimStart().startsWith("<task-notification>")) return undefined

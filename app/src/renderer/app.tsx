@@ -373,8 +373,8 @@ function ThreadScroll(props: { tab: TabInfo }) {
     onCleanup(() => follow.disconnect())
     setMounted(box)
   })
-  // The user's own messages, not those a finished background task adds. A new one means they just sent it.
-  const lastSent = () => threadOf(props.tab.id).items.findLast((item) => item.type === "user" && !item.fromTask)?.id
+  // The user's own messages, not those that open a turn Claude Code started itself. A new one means they just sent it.
+  const lastSent = () => threadOf(props.tab.id).items.findLast((item) => item.type === "user" && !item.selfStarted)?.id
   createEffect(
     on(
       lastSent,

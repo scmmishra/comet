@@ -92,7 +92,7 @@ const NOTICE = "<task-notification>\n<task-id>b1</task-id>\n<status>completed</s
 test("opens a turn of Claude's own when a background task's notice arrives, live and restored", () => {
   const live = new ThreadMapper(DIR).map({ type: "user", uuid: "n1", session_id: "s", parent_tool_use_id: null, message: { role: "user", content: NOTICE } } as never, 7)
   expect(live).toEqual([
-    { kind: "item", item: { type: "user", id: "n1", text: 'Background command "Run the review" completed (exit code 0)', fromTask: true, at: 7 } },
+    { kind: "item", item: { type: "user", id: "n1", text: 'Background command "Run the review" completed (exit code 0)', selfStarted: true, at: 7 } },
     { kind: "status", busy: true },
   ])
   const restored = new ThreadMapper(DIR).history([
@@ -102,6 +102,24 @@ test("opens a turn of Claude's own when a background task's notice arrives, live
     { type: "assistant", uuid: "a2", session_id: "s", parent_tool_use_id: null, timestamp: "2026-11-09T10:01:05.000Z", message: { content: [{ type: "text", text: "It finished." }] } },
   ] as never)
   expect(restored.map((found) => `${found.type}:${found.id}`)).toEqual(["user:u1", "text:a1:0", "result:result:u1", "user:n1", "text:a2:0", "result:result:n1"])
+})
+
+const HANDBACK = "Another Claude session sent a message:\n<agent-message from=\"t1\">The report is ready.</agent-message>"
+
+test("opens a turn of Claude's own when a subagent or another session sends it a message, live and restored", () => {
+  const live = new ThreadMapper(DIR).map({ type: "user", uuid: "p1", session_id: "s", parent_tool_use_id: null, origin: { kind: "peer", from: "t1", senderTaskId: "t1" }, message: { role: "user", content: HANDBACK } } as never, 7)
+  expect(live).toEqual([
+    { kind: "item", item: { type: "user", id: "p1", text: "A subagent reported back.", selfStarted: true, at: 7 } },
+    { kind: "status", busy: true },
+  ])
+  const restored = new ThreadMapper(DIR).history([
+    { type: "user", uuid: "u1", session_id: "s", parent_tool_use_id: null, timestamp: "2026-11-09T10:00:00.000Z", message: { role: "user", content: "Progress?" } },
+    { type: "assistant", uuid: "a1", session_id: "s", parent_tool_use_id: null, timestamp: "2026-11-09T10:00:02.000Z", message: { content: [{ type: "text", text: "Still running." }] } },
+    { type: "user", uuid: "p1", session_id: "s", parent_tool_use_id: null, timestamp: "2026-11-09T10:01:00.000Z", origin: { kind: "peer", from: "s2" }, message: { role: "user", content: HANDBACK } },
+    { type: "assistant", uuid: "a2", session_id: "s", parent_tool_use_id: null, timestamp: "2026-11-09T10:01:05.000Z", message: { content: [{ type: "text", text: "It finished." }] } },
+  ] as never)
+  expect(restored.map((found) => `${found.type}:${found.id}`)).toEqual(["user:u1", "text:a1:0", "result:result:u1", "user:p1", "text:a2:0", "result:result:p1"])
+  expect(restored.find((found) => found.id === "p1")).toMatchObject({ text: "Another Claude session sent a message.", selfStarted: true })
 })
 
 test("shows a compaction while it runs, then with its token counts once Claude Code reaches the boundary", () => {

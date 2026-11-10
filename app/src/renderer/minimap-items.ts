@@ -26,13 +26,13 @@ export const NAVIGATION_REACH_PX = 14
 
 /**
  * The minimap's marks, after T3 Code: one per message the user sent, with the last text Claude wrote
- * before the next one. A turn Claude started itself, after a background task, gets no mark.
+ * before the next one. A turn Claude Code started itself gets no mark.
  */
 export function minimapItems(items: readonly ThreadItem[]): MinimapItem[] {
   const out: MinimapItem[] = []
   let current: { id: string; text: string; answer?: string } | undefined
   for (const item of items) {
-    if (item.type === "user" && !item.fromTask) {
+    if (item.type === "user" && !item.selfStarted) {
       if (current) out.push(current)
       current = { id: item.id, text: oneLine(item.text) || "User message" }
     } else if (item.type === "text" && current) current.answer = oneLine(item.text)

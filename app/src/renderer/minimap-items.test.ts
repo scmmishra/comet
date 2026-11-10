@@ -8,7 +8,7 @@ test("marks each message the user sent, with the last thing Claude wrote before 
     { type: "text", id: "t1", text: "Looking.", done: true },
     { type: "tool", id: "x", name: "Bash", summary: "ls" },
     { type: "text", id: "t2", text: "Fixed it.", done: true },
-    { type: "user", id: "n1", text: "Background command finished", fromTask: true },
+    { type: "user", id: "n1", text: "Background command finished", selfStarted: true },
     { type: "text", id: "t3", text: "The review is in.", done: true },
     { type: "user", id: "u2", text: "", images: [{ mediaType: "image/png", data: "x" }] },
   ]
