@@ -403,8 +403,11 @@ export type ClientMessage =
   | { readonly type: "session.send"; readonly tabId: string; readonly text: string }
   | { readonly type: "session.interrupt"; readonly tabId: string }
   | { readonly type: "permission.answer"; readonly tabId: string; readonly requestId: string; readonly allow: boolean }
-  /** Draws a plugin panel for a tab, or names the one already drawn. The core answers with `panel`. */
-  | { readonly type: "panel.open"; readonly tabId: string; readonly panel: string }
+  /**
+   * Draws a plugin panel for a tab, in the tab's project, or names the one already drawn. The core
+   * answers with `panel`. It names the project, because a new tab's panels open before its first save.
+   */
+  | { readonly type: "panel.open"; readonly tabId: string; readonly project: string; readonly panel: string }
   /** Runs a handler a plugin's node holds, such as a button's onClick. */
   | { readonly type: "plugin.event"; readonly plugin: string; readonly handler: number; readonly args: readonly UiValue[] }
 

@@ -11,9 +11,10 @@ import { formatAgo, otherBranch, shortPath } from "./format"
 import { Icon, type IconName } from "./icons"
 import { ProjectMark } from "./project-mark"
 import { projectData, projectLabel, readProject } from "./projects"
+import { plugins } from "./plugins"
 import { SETTINGS_PAGES } from "./settings/pages"
 import { openThread } from "./threads"
-import { activeProject, newTab, openSettings, showTab, workspace } from "./workspace"
+import { activeProject, newTab, openSettings, openSetup, showTab, workspace } from "./workspace"
 
 const DIALOG_ID = "palette"
 /** Threads the palette lists before a search. A search looks through all of them. */
@@ -111,6 +112,11 @@ function Palette(props: { start?: "threads"; run: (command: DeskCommand) => void
   })
   const newSessionPage = projectPage("New session in", (project) => ({ run: () => newTab("end", project) }))
   const searchThreadsPage = projectPage("Search threads in", (project) => ({ page: threadsPage(project) }))
+  const setupsPage: Page = {
+    title: "Open setup",
+    entries: () =>
+      plugins.setups.map((setup) => ({ id: `setup:${setup.id}`, section: "Setups", title: setup.name, detail: projectLabel(setup.project), project: setup.project, run: () => openSetup(setup) })),
+  }
 
   const root = (): Entry[] => [
     { id: "new-session", section: "Actions", title: "New session", icon: "plus", command: "tab.new" },
@@ -120,6 +126,7 @@ function Palette(props: { start?: "threads"; run: (command: DeskCommand) => void
     { id: "new-terminal", section: "Actions", title: "New terminal", icon: "terminal", command: "terminal.new" },
     { id: "toggle-panel", section: "Actions", title: workspace.panelOpen ? "Hide panel" : "Show panel", icon: "layout-right", command: "panel.toggle" },
     { id: "open-folder", section: "Actions", title: "Open folder…", icon: "folder", command: "folder.open" },
+    { id: "open-setup", section: "Actions", title: "Open setup…", icon: "workspace", page: setupsPage },
     { id: "change-theme", section: "Actions", title: "Change theme…", icon: "appearance", page: themePage },
     { id: "open-settings", section: "Actions", title: "Open settings…", icon: "settings-gear", page: settingsPage },
     ...workspace.tabs.map((tab): Entry => ({ id: `tab:${tab.id}`, section: "Tabs", title: tab.title, detail: projectLabel(tab.project), project: tab.project, run: () => showTab(tab.id) })),
@@ -136,7 +143,7 @@ function Palette(props: { start?: "threads"; run: (command: DeskCommand) => void
     if (current) return current.entries()
     // A search from the root also finds what the nested lists hold.
     if (!query().trim()) return [...root(), ...threads().slice(0, RECENT_THREADS)]
-    return [...root(), ...themePage.entries(), ...settingsPage.entries(), ...newSessionPage.entries(), ...threads()]
+    return [...root(), ...themePage.entries(), ...settingsPage.entries(), ...newSessionPage.entries(), ...setupsPage.entries(), ...threads()]
   })
 
   // Every word must appear in the entry's title, its detail or its section.

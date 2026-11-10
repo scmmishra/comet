@@ -7,3 +7,15 @@ export function loginShell(command?: string): string[] {
   const shell = process.env.SHELL || "/bin/zsh"
   return command === undefined ? [shell, "-l"] : [shell, "-l", "-c", command]
 }
+
+let loginPath: Promise<string> | undefined
+
+/** The login shell's PATH, read once. Code that runs commands directly, such as plugins, needs it to find the user's tools. */
+export function loginShellPath(): Promise<string> {
+  loginPath ??= (async () => {
+    const child = Bun.spawn(loginShell('printf %s "$PATH"'), { stdout: "pipe", stderr: "ignore" })
+    const path = (await new Response(child.stdout).text()).trim()
+    return path || process.env.PATH || ""
+  })()
+  return loginPath
+}

@@ -3,6 +3,7 @@ import type { CoreMessage, UiValue } from "@desk/protocol"
 import { existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { deskHome } from "../data-files"
+import { loginShellPath } from "../shell"
 import { bundlePlugin } from "./bundle"
 
 type Send = (message: CoreMessage) => void
@@ -87,7 +88,7 @@ export class Plugins {
     const hostEntry = join(deskHome(), "cache", "plugins", `${plugin}.entry.ts`)
     mkdirSync(join(hostEntry, ".."), { recursive: true })
     await Bun.write(hostEntry, `import { startHost } from "@desk/plugin/host"\nimport plugin from ${JSON.stringify(entry)}\nstartHost(plugin)\n`)
-    const worker = new Worker(await bundlePlugin(plugin, hostEntry))
+    const worker = new Worker(await bundlePlugin(plugin, hostEntry), { env: { ...process.env, PATH: await loginShellPath() } })
     const running: Running = { worker, opening: new Map() }
     worker.onmessage = (event: MessageEvent<FromPlugin>) => this.receive(plugin, running, event.data)
     worker.onerror = (event) => {

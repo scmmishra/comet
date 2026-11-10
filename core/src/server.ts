@@ -110,7 +110,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       case "review.get":
         return reply({ type: "review", tabId: message.tabId, files: await window.review(message.tabId) })
       case "panel.open": {
-        const { plugin, root } = await plugins.open(message.tabId, window.projectOf(message.tabId), message.panel)
+        const { plugin, root } = await plugins.open(message.tabId, message.project, message.panel)
         return reply({ type: "panel", tabId: message.tabId, panel: message.panel, plugin, root })
       }
       case "plugin.event":

@@ -10,6 +10,8 @@ import { useCommands } from "./actions"
 import { Composer } from "./composer"
 import { Icon } from "./icons"
 import { ContextRing, UsageButton } from "./meters"
+import { PluginPanel } from "./plugin-view"
+import { setupOf } from "./plugins"
 import { ProjectMark } from "./project-mark"
 import { projectData, projectLabel, readProject } from "./projects"
 import { ReviewView } from "./review"
@@ -68,8 +70,14 @@ export function App() {
 function TabView(props: { tab: TabInfo }) {
   const thread = () => threadOf(props.tab.id)
   const space = () => projectData(props.tab.project).space
+  const setup = () => setupOf(props.tab.setup)
+  // The project's cards fold into the header chip when something else takes the room beside the thread: the panel, or a setup's columns.
+  const folded = () => workspace.panelOpen || !!props.tab.setup
   return (
-    <main class="flex min-h-0 flex-1 px-2 pb-2">
+    <main class="flex min-h-0 flex-1 gap-2 px-2 pb-2">
+      <Show when={setup()?.layout.left.length}>
+        <SetupColumn tab={props.tab} panels={setup()!.layout.left} />
+      </Show>
       {/* The session's width and the panel's slide run on the same curve, so the gap between them stays put while the panel opens. */}
       <div class="desk-split relative min-h-0 flex-1 overflow-hidden" data-panel={workspace.panelOpen ? "open" : "closed"}>
         <section class="desk-session flex h-full min-w-0 flex-col rounded-3xl border border-outline bg-panel">
@@ -82,23 +90,23 @@ function TabView(props: { tab: TabInfo }) {
               <b class="truncate font-medium text-fg">{props.tab.title}</b>
             </span>
             <span class="ml-auto flex items-center gap-1">
-              <Show when={workspace.panelOpen}>
+              <Show when={folded()}>
                 <SpaceChip project={props.tab.project} space={space()} />
               </Show>
               <Show when={thread().context}>{(context) => <ContextRing {...context()} />}</Show>
             </span>
           </header>
-          {/* The project's cards float over the session's corner, so the thread stays centred. With the panel open, they fold into the header chip. */}
+          {/* The project's cards float over the session's corner, so the thread stays centred, unless they are folded. */}
           <div class="relative flex min-h-0 flex-1">
             <div class="flex min-w-0 flex-1 flex-col">
-              <Show when={thread().items.length > 0} fallback={<StartScreen tab={props.tab} />}>
+              <Show when={thread().items.length > 0} fallback={props.tab.setup ? <SetupStart tab={props.tab} /> : <StartScreen tab={props.tab} />}>
                 <ThreadScroll tab={props.tab} />
                 <div class="shrink-0 px-4 pb-4 pt-1.5">
                   <Composer tab={props.tab} />
                 </div>
               </Show>
             </div>
-            <Show when={!workspace.panelOpen}>
+            <Show when={!folded()}>
               <aside class="desk-rail desk-no-scrollbar absolute right-2 top-0 flex max-h-full w-[264px] flex-col gap-2 overflow-y-auto pb-2">
                 <ProjectCards project={props.tab.project} />
               </aside>
@@ -149,7 +157,31 @@ function TabView(props: { tab: TabInfo }) {
         </section>
         <PanelToggle />
       </div>
+      <Show when={setup()?.layout.right.length}>
+        <SetupColumn tab={props.tab} panels={setup()!.layout.right} />
+      </Show>
     </main>
+  )
+}
+
+/** A column of a setup's plugin panels beside the thread. */
+function SetupColumn(props: { tab: TabInfo; panels: readonly string[] }) {
+  return (
+    <aside class="flex w-[320px] shrink-0 flex-col gap-2">
+      <For each={props.panels}>{(panel) => <PluginPanel tabId={props.tab.id} project={props.tab.project} panel={panel} />}</For>
+    </aside>
+  )
+}
+
+/** A setup tab before its plugins open a thread: the composer, under a line on how to start. */
+function SetupStart(props: { tab: TabInfo }) {
+  return (
+    <div class="flex min-h-0 flex-1 flex-col">
+      <p class="m-auto px-6 text-center text-fg-3">Pick something in a panel to open its thread.</p>
+      <div class="shrink-0 px-4 pb-4 pt-1.5">
+        <Composer tab={props.tab} />
+      </div>
+    </div>
   )
 }
 

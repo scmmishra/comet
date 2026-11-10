@@ -1,0 +1,5 @@
+{
+  "name": "Support",
+  "project": "~/Chatwoot/chatwoot",
+  "layout": { "left": ["chatwoot.inbox"], "right": ["chatwoot.conversation"] }
+}

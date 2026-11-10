@@ -1,4 +1,4 @@
-import type { RunSettings, TabInfo, TerminalInfo } from "@desk/protocol"
+import type { RunSettings, SetupInfo, TabInfo, TerminalInfo } from "@desk/protocol"
 import { createStore, produce } from "solid-js/store"
 import { account } from "./account"
 import { core } from "./core"
@@ -50,10 +50,22 @@ export function whenRestored(action: () => void) {
  */
 export function newTab(place: "end" | "next" = "end", project = activeProject()): string | undefined {
   if (!project) return void openFolder()
-  // A new thread starts on the default model and effort, and on the speed and permission mode of the one in front of you.
+  return addTab(tabIn(project), place)
+}
+
+/** Opens a setup in a tab of its own. Its plugins choose the tab's thread. */
+export function openSetup(setup: SetupInfo) {
+  return addTab({ ...tabIn(setup.project), title: setup.name, setup: setup.id }, "end")
+}
+
+/** A new tab in `project`. Its thread starts on the default model and effort, and on the speed and permission mode of the tab in front. */
+function tabIn(project: string): TabInfo {
   const from = activeTab()
   const { model, effort } = account.settings.claude
-  const tab: TabInfo = { id: crypto.randomUUID(), title: NEW_TAB_TITLE, project, terminals: [], model, effort, fast: from?.fast, permissionMode: from?.permissionMode ?? "default" }
+  return { id: crypto.randomUUID(), title: NEW_TAB_TITLE, project, terminals: [], model, effort, fast: from?.fast, permissionMode: from?.permissionMode ?? "default" }
+}
+
+function addTab(tab: TabInfo, place: "end" | "next") {
   setWorkspace(
     produce((draft) => {
       const index = place === "next" ? draft.tabs.findIndex((found) => found.id === draft.active) + 1 : draft.tabs.length
@@ -160,6 +172,7 @@ function save() {
 
 core.listen((message) => {
   if (message.type === "recent") setWorkspace("recent", message.projects)
+  else if (message.type === "tab.title") nameTab(message.tabId, message.title)
   else if (message.type === "tabs") {
     setWorkspace({ tabs: [...message.tabs], active: message.active ?? message.tabs[0]?.id ?? "", restored: true })
     for (const action of waiting) action()

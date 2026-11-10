@@ -124,11 +124,6 @@ export class Window {
     else if (thread.prompt) await this.send(tabId, thread.prompt)
   }
 
-  /** The folder a tab works in. */
-  projectOf(tabId: string) {
-    return this.tab(tabId).project
-  }
-
   interrupt(tabId: string) {
     return this.sessions.get(tabId)?.interrupt()
   }
