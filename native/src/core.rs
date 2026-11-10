@@ -192,6 +192,40 @@ mod tests {
         home
     }
 
+    /// Runs one short turn with the Claude Code on this Mac, on the user's account. Run it by hand:
+    /// `cargo test real_turn -- --ignored`.
+    #[test]
+    #[ignore]
+    fn a_real_turn_streams_its_answer_and_ends() {
+        let home = seeded_home();
+        let core = Core { home: Some(home.clone()), ..Core::default() };
+        let (send, receive) = mpsc::channel();
+        core.start(move |event| {
+            let _ = send.send(event);
+        });
+        core.send(&ClientMessage::SessionSend { tab_id: "a".into(), text: "Reply with the single word: pong".into(), follow_up: None });
+        let deadline = Instant::now() + Duration::from_secs(120);
+        let (mut busy_seen, mut text, mut rows) = (false, String::new(), 0);
+        loop {
+            match receive.recv_timeout(deadline.saturating_duration_since(Instant::now())).expect("the turn ends in time") {
+                Event::Failed(reason) => panic!("{reason}"),
+                Event::Message(CoreMessage::SessionRows { tab_id, .. }) if tab_id == "a" => rows += 1,
+                Event::Message(CoreMessage::SessionEvent { tab_id, event }) if tab_id == "a" => match event {
+                    crate::protocol::ThreadEvent::Status { busy: true } => busy_seen = true,
+                    crate::protocol::ThreadEvent::Status { busy: false } if busy_seen => break,
+                    crate::protocol::ThreadEvent::Item { item: crate::protocol::ThreadItem::Text { text: t, .. } } => text = t,
+                    crate::protocol::ThreadEvent::TextDelta { delta, .. } => text.push_str(&delta),
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
+        core.stop();
+        let _ = std::fs::remove_dir_all(&home);
+        assert!(text.to_lowercase().contains("pong"), "the answer: {text:?}");
+        assert!(rows > 0, "rows follow the turn");
+    }
+
     #[test]
     fn a_real_core_sends_the_saved_tabs() {
         let home = seeded_home();
