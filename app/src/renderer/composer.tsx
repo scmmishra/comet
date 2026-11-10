@@ -50,8 +50,11 @@ const FOLLOW_UP: Record<FollowUp, { label: string; icon: "arrow-up-right" | "out
  * the turn or waits in the queue, as the Follow-ups setting says, and ⌘Enter does the other. While
  * Claude asks questions, they show at the top, and the text area answers the current one in the user's
  * own words, after T3 Code.
+ *
+ * The file and command list opens above the box. The start screen sets `listBelow`, because its
+ * box sits near the top of the page, where a list above would be cut off.
  */
-export function Composer(props: { tab: TabInfo }) {
+export function Composer(props: { tab: TabInfo; listBelow?: boolean }) {
   // The message being written is the tab's draft, so it survives a tab switch and a restart.
   const text = () => draftOf(props.tab.id).text
   const setText = (value: string | ((current: string) => string)) => setDraft(props.tab.id, { text: typeof value === "function" ? value(text()) : value })
@@ -217,7 +220,8 @@ export function Composer(props: { tab: TabInfo }) {
         <div
           role="listbox"
           aria-label={trigger()?.kind === "command" ? "Commands" : "Files"}
-          class="absolute inset-x-0 bottom-full mb-2 max-h-[280px] overflow-y-auto rounded-2xl bg-card p-1.5 shadow-[0_0_0_1px_var(--color-line),0_8px_24px_rgb(0_0_0/25%)]"
+          classList={{ "bottom-full mb-2": !props.listBelow, "top-full mt-2": props.listBelow }}
+          class="absolute inset-x-0 z-10 max-h-[280px] overflow-y-auto rounded-2xl bg-card p-1.5 shadow-[0_0_0_1px_var(--color-line),0_8px_24px_rgb(0_0_0/25%)]"
         >
           <For each={suggestions()}>
             {(suggestion, index) => (

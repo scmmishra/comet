@@ -19,7 +19,7 @@ export function StartScreen(props: { tab: TabInfo }) {
     <div class="flex min-h-0 flex-1 flex-col overflow-y-auto pb-6 pt-[6vh]">
       <div class="desk-lane relative flex flex-col gap-[18px]">
         <div class="desk-wordmark self-center" aria-hidden="true">desk</div>
-        <Composer tab={props.tab} />
+        <Composer tab={props.tab} listBelow />
         <div class="flex items-center gap-1 px-0.5 text-fg-2">
           <ProjectSwitcher tab={props.tab} />
           <Show when={projectData(props.tab.project).space}>

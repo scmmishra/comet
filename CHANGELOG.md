@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- On a new tab's start screen, the list that / and @ open shows below the message box. It was cut off above it.
 - Scrolled up in a thread, a "Scroll to end" button shows above the message box, after T3 Code.
 - A thread with two or more of your messages gets T3 Code's minimap in its left margin: a mark per message, 8px apart, darker while its turn is on screen. Hovering grows the nearby marks and shows your message with the start of Claude's answer. A click jumps to it, and the previous and next buttons, or the arrow keys, step between turns. In a narrow window it shows on hover.
 - Settings › Providers shows the Claude Code version and whether a newer one is out on your update channel, after T3 Code. Claude Code updates itself only while it runs, so the page checks when it opens. Update runs Claude Code's own updater, for its native install.
