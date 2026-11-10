@@ -55,14 +55,16 @@ T3 Code and OpenCode are cloned in `~/scmmishra/reference`. T3 Code's server sho
 - **Tab.** One top tab of the window. A tab is a session in one project, and later also a setup. Tabs from several projects share the window.
 - **Session.** One Claude conversation in a tab.
 - **Thread.** The messages of a session, as Desk draws them.
-- **Setup.** A named space with its own cards and bindings. Not built yet.
-- **Card.** One unit of space information, such as the Space card.
-- **View pane.** The pane beside the thread that holds Review, Terminal and other views. Not built yet.
+- **Plugin.** A TSX module in `~/.desk/plugins` that adds sidebars, panels, cards, setups and commands. `docs/plugins.md` describes it.
+- **Setup.** A starting layout for a tab, registered by a plugin: a sidebar, panels and cards to leave out.
+- **Card.** One unit of information in the card stack beside the thread, such as the Space card.
+- **View pane.** The pane beside the thread that holds Review, terminals and plugin panels.
 
 ## Known quirks
 
 - A Desk started from inside Claude Code inherits that session's `CLAUDECODE` and `CLAUDE_CODE_*` variables. Claude sessions that Desk starts would then take themselves for children of that session. The core removes those variables at start, by prefix.
-- `@opencode/ui`'s Tabs select their first tab when the chosen one has no trigger yet, and report it as a change. Add a tab before you select it.
+- `@opencode/ui`'s Tabs select their first tab when the chosen one has no trigger yet, and report it as a change. A tab must exist before it is selected. The view pane gives its Tabs a new choice one update late for this.
 - `@opencode/ui`'s `menu.css` sits outside Tailwind's layers. Its rules beat utility classes, so an override needs `!`.
 - An `@opencode/ui` popover closes when focus leaves its content. A menu inside a popover must render without `Menu.Portal`.
+- `@opencode/ui`'s Tabs put each tab's value in a CSS selector without escaping it. A value must not hold quotes, so panel instance ids are URI-encoded.
 - `@opencode/ui` names its source before its types, so TypeScript checks its `.tsx` files under the app's tsconfig. The app's tsconfig turns off `verbatimModuleSyntax` and uses the ES2025 lib for that.
