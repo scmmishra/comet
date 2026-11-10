@@ -19,6 +19,7 @@ mod model_picker;
 mod models;
 mod palette;
 mod panel;
+mod plugins;
 mod projects;
 mod protocol;
 mod questions;

@@ -28,6 +28,12 @@ pub enum Page {
     NewSessionIn,
     /// Projects, to search one's threads.
     SearchThreadsIn,
+    /// Setups plugins offer, across projects.
+    Setups,
+    /// Panels the active project's plugins offer.
+    Panels,
+    /// Text for a plugin command that runs on it: the command's id, title and prompt.
+    Input(String, String, String),
 }
 
 impl Page {
@@ -37,6 +43,9 @@ impl Page {
             Page::Files(project) => format!("Search files in {}", format::project_name(project)),
             Page::NewSessionIn => "New session in".into(),
             Page::SearchThreadsIn => "Search threads in".into(),
+            Page::Setups => "Open setup".into(),
+            Page::Panels => "Open panel".into(),
+            Page::Input(_, _, prompt) => prompt.clone(),
         }
     }
 }
@@ -49,6 +58,9 @@ enum Action {
     Thread(String, ThreadSummary),
     File(String, String),
     NewSessionIn(String),
+    Setup(String, String, String),
+    Panel(String),
+    Command(String, Option<String>),
 }
 
 #[derive(Clone)]
@@ -98,6 +110,10 @@ impl Desk {
         for page in &pages {
             self.load_page(page);
         }
+        // Reading what the plugins offer starts them, so it waits for the palette.
+        if let Some(project) = self.active_project() {
+            self.core.send(&ClientMessage::ProjectGet { project, part: "plugins".into() });
+        }
         self.palette = Palette { open: true, start: pages.len(), pages, ..Palette::default() };
     }
 
@@ -106,9 +122,20 @@ impl Desk {
     }
 
     fn load_page(&mut self, page: &Page) {
-        if let Page::Threads(project) = page {
-            self.core.send(&ClientMessage::ProjectGet { project: project.clone(), part: "threads".into() });
+        match page {
+            Page::Threads(project) => self.core.send(&ClientMessage::ProjectGet { project: project.clone(), part: "threads".into() }),
+            Page::Setups => {
+                if let Some(project) = self.active_project() {
+                    self.core.send(&ClientMessage::SetupsGet { project });
+                }
+            }
+            _ => {}
         }
+    }
+
+    /// What the active project's plugins offer.
+    fn offered(&self) -> Option<&crate::protocol::PluginContributions> {
+        self.projects.get(&self.active_project()?)?.plugins.as_ref()
     }
 
     /// Takes the paths the core found, for the query the palette asked about.
@@ -151,6 +178,25 @@ impl Desk {
             },
             Some(Page::NewSessionIn) => projects(Action::NewSessionIn),
             Some(Page::SearchThreadsIn) => projects(|p| Action::Open(Page::Threads(p))),
+            Some(Page::Panels) => self.offered().map(|o| o.panels.iter().map(|p| {
+                let mut entry = Entry::new("Panels", p.title.clone(), Action::Panel(p.id.clone()));
+                entry.icon = Some(&crate::icons::PANEL);
+                entry
+            }).collect()).unwrap_or_default(),
+            Some(Page::Input(id, title, _)) => {
+                let query = self.palette.query.text.trim().to_owned();
+                if query.is_empty() { Vec::new() } else { vec![Entry::new(title, query.clone(), Action::Command(id.clone(), Some(query)))] }
+            }
+            Some(Page::Setups) => self
+                .plugins
+                .setups
+                .iter()
+                .map(|setup| {
+                    let mut entry = Entry::new(format::project_name(&setup.project), setup.title.clone(), Action::Setup(setup.project.clone(), setup.id.clone(), setup.title.clone()));
+                    entry.project = Some(setup.project.clone());
+                    entry
+                })
+                .collect(),
             None => {
                 let project = self.active_project();
                 let action = |title: &str, icon: &'static rune::Icon, shortcut: Option<&'static [&'static str]>, action: Action| {
@@ -174,6 +220,17 @@ impl Desk {
                 root.push(action("New terminal", &ic::TERMINAL, Some(&["⌃", "`"]), Action::Run(shell::commands::new_terminal)));
                 root.push(action(if panel_open { "Hide panel" } else { "Show panel" }, &crate::icons::PANEL, Some(&["⌘", "\\"]), Action::Run(shell::commands::toggle_panel)));
                 root.push(action("Open folder…", &ic::FOLDER, Some(&["⌘", "O"]), Action::Run(shell::commands::open_folder)));
+                root.push(action("Open setup…", &ic::WORKSPACE, None, Action::Open(Page::Setups)));
+                root.push(action("Open panel…", &crate::icons::PANEL, None, Action::Open(Page::Panels)));
+                root.extend(self.offered().into_iter().flat_map(|o| o.commands.iter()).map(|c| {
+                    let run = match &c.input {
+                        Some(prompt) => Action::Open(Page::Input(c.id.clone(), c.title.clone(), prompt.clone())),
+                        None => Action::Command(c.id.clone(), None),
+                    };
+                    let mut entry = Entry::new("Plugins", c.title.clone(), run);
+                    entry.icon = Some(&ic::CODE_SLASH);
+                    entry
+                }));
                 root.extend(self.workspace.tabs.iter().map(|t| {
                     let mut entry = Entry::new("Tabs", t.title.clone(), Action::Tab(t.id.clone()));
                     entry.detail = Some(format::project_name(&t.project).to_owned());
@@ -237,6 +294,17 @@ impl Desk {
             Action::NewSessionIn(project) => {
                 if self.workspace.new_tab(Place::End, Some(project), &self.account, &self.core).is_ok() {
                     self.sync_start();
+                }
+            }
+            Action::Setup(project, id, title) => self.open_setup(&project, &id, &title),
+            Action::Panel(panel) => {
+                if let Some(tab) = self.workspace.active.clone() {
+                    self.core.send(&ClientMessage::PanelOpen { tab_id: tab, panel });
+                }
+            }
+            Action::Command(command, input) => {
+                if let Some(tab) = self.workspace.active.clone() {
+                    self.core.send(&ClientMessage::PluginCommand { tab_id: tab, command, input });
                 }
             }
             Action::Open(_) => {}

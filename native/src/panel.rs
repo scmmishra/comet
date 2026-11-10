@@ -86,13 +86,15 @@ impl Desk {
 
     /// Asks the core for what the active tab's panel shows, when it changed: Review's changes, or the file in front.
     pub fn sync_panel(&mut self) {
+        self.load_layout();
         let Some(tab) = self.workspace.active_tab().cloned() else { return };
         if tab.panel_open != Some(true) {
             self.panel.file_shown = None;
             return;
         }
         self.open_terminals();
-        if tab.terminals.iter().any(|t| Some(&t.id) == tab.panel_active.as_ref()) {
+        let plugin_panel = self.plugins.layouts.get(&tab.id).is_some_and(|l| l.panels.iter().any(|p| Some(&p.id) == tab.panel_active.as_ref()));
+        if plugin_panel || tab.terminals.iter().any(|t| Some(&t.id) == tab.panel_active.as_ref()) {
             self.panel.file_shown = None;
             return;
         }
@@ -174,6 +176,8 @@ pub fn toggle(open: bool, k: &Kit) -> El {
 pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let shown = tab.files.iter().find(|f| Some(&f.id) == tab.panel_active.as_ref());
     let terminal = tab.terminals.iter().find(|t| Some(&t.id) == tab.panel_active.as_ref());
+    let plugin_panels: &[crate::protocol::DrawnView] = s.plugins.layouts.get(&tab.id).map_or(&[], |l| l.panels.as_slice());
+    let plugin_panel = plugin_panels.iter().find(|p| Some(&p.id) == tab.panel_active.as_ref());
     let tab_button = |key: String, label: El, active: bool, on: El| {
         row()
             .key(key)
@@ -188,7 +192,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .child(on)
     };
     let review_id = tab.id.clone();
-    let on_review = shown.is_none() && terminal.is_none();
+    let on_review = shown.is_none() && terminal.is_none() && plugin_panel.is_none();
     let review = tab_button(
         "panel-review".into(),
         row().gap(7.0).items_center().child(icon(&ic::REVIEW, 15.0).color(k.c.text_muted)).child(text("Review").font(k.ty.ui).color(if on_review { k.c.text_base } else { k.c.text_muted })),
@@ -240,6 +244,20 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
         .role("tab")
         .on_press(move |s: &mut Desk| s.show_panel_tab(&show_tab, Some(show_id.clone())))
     });
+    // Plugin panels sit at the front, in the order they opened.
+    let plugin_tabs = plugin_panels.iter().map(|p| {
+        let active = plugin_panel.is_some_and(|x| x.id == p.id);
+        let (show_tab, show_id, close_tab, close_id) = (tab.id.clone(), p.id.clone(), tab.id.clone(), p.id.clone());
+        let close = IconButton::new(&ic::XMARK_SMALL)
+            .variant(IconButtonVariant::GhostMuted)
+            .control_size(ControlSize::Small)
+            .label("Close panel")
+            .on_press(move |s: &mut Desk| s.core.send(&ClientMessage::PanelClose { tab_id: close_tab.clone(), id: close_id.clone() }))
+            .build(k);
+        tab_button(format!("panel-{}", p.id), text(p.title.clone()).font(k.ty.ui).color(if active { k.c.text_base } else { k.c.text_muted }), active, close)
+            .role("tab")
+            .on_press(move |s: &mut Desk| s.show_panel_tab(&show_tab, Some(show_id.clone())))
+    });
     let new_terminal = IconButton::new(&ic::PLUS).variant(IconButtonVariant::GhostMuted).control_size(ControlSize::Large).label("New terminal").help("New terminal").on_press(|s: &mut Desk| s.new_terminal()).build(k);
     let header = row()
         .key("panel-header")
@@ -249,6 +267,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
         .gap(4.0)
         .pl(8.0)
         .pr(10.0)
+        .children(plugin_tabs.collect::<Vec<_>>())
         .child(review)
         .children(terminals)
         .children(files)
@@ -256,6 +275,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
         .child(row().grow(1.0))
         .child(toggle(true, k));
     let body = match (terminal, shown) {
+        _ if plugin_panel.is_some() => col().w_full().grow(1.0).min_h(0.0).px(12.0).pb(12.0).child(crate::plugins::view(s, plugin_panel.expect("checked"), &tab.project, k)),
         (Some(t), _) => crate::terminal_view::terminal(s, &t.id, k),
         (None, Some(file)) => file_view(s, tab, &file.path, file.line, k),
         (None, None) => review_view(s, tab, k, layer),

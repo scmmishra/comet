@@ -102,6 +102,12 @@ export const CORE_MESSAGES = [
   {
     type: "project",
     project: "/Users/me/code/web",
+    part: "plugins",
+    value: { panels: [{ id: "support.inbox", title: "Inbox" }], setups: [], commands: [{ id: "support.search", title: "Search conversations", input: "Search for" }] },
+  },
+  {
+    type: "project",
+    project: "/Users/me/code/web",
     part: "skills",
     value: [
       { name: "compact", description: "Compact the context", builtin: true, ownProject: false, group: "Claude Code" },
@@ -130,6 +136,28 @@ export const CORE_MESSAGES = [
   { type: "queue", tabId: "tab-1", messages: [{ id: "m1", text: "Then add a test" }], held: true },
   { type: "error", message: "The folder does not exist." },
   { type: "notice", message: "Copied the link." },
+  {
+    type: "plugin.ops",
+    plugin: "support",
+    reset: true,
+    ops: [
+      { op: "create", id: 1, type: "root" },
+      { op: "create", id: 2, type: "button" },
+      { op: "set", id: 2, key: "label", value: "Reply" },
+      { op: "set", id: 2, key: "onClick", value: { handler: 3 } },
+      { op: "insert", parent: 1, id: 2 },
+      { op: "text", id: 4, text: "hi" },
+      { op: "insert", parent: 1, id: 4, before: 2 },
+      { op: "remove", parent: 1, id: 4 },
+    ],
+  },
+  {
+    type: "layout",
+    tabId: "tab-1",
+    layout: { sidebar: { id: "support.inbox", title: "Inbox", plugin: "support", root: 1 }, panels: [], cards: [{ id: "support.summary", title: "Summary", plugin: "support", root: 9 }] },
+  },
+  { type: "panel.show", tabId: "tab-1", id: "support.conversation?id=1001" },
+  { type: "setups", setups: [{ project: "/Users/me/code/web", id: "support.triage", title: "Triage" }] },
   {
     type: "usage",
     usage: {
@@ -173,6 +201,13 @@ export const CLIENT_MESSAGES = [
   { type: "commands.stop", project: "/Users/me/code/web", ids: ["c1"] },
   { type: "files.search", project: "/Users/me/code/web", query: "login" },
   { type: "thread.clear", tabId: "tab-1" },
+  { type: "layout.get", tabId: "tab-1" },
+  { type: "panel.open", tabId: "tab-1", panel: "support.inbox" },
+  { type: "panel.close", tabId: "tab-1", id: "support.conversation?id=1001" },
+  { type: "setup.open", tabId: "tab-1", setup: "support.triage" },
+  { type: "setups.get", project: "/Users/me/code/web" },
+  { type: "plugin.command", tabId: "tab-1", command: "support.search", input: "refund" },
+  { type: "plugin.event", plugin: "support", handler: 3, args: ["hi"] },
   { type: "terminal.open", id: "term-1", cols: 80, rows: 24 },
   { type: "terminal.input", id: "term-1", data: "ls\r" },
   { type: "terminal.resize", id: "term-1", cols: 100, rows: 30 },

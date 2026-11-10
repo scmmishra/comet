@@ -260,6 +260,36 @@ mod tests {
         assert!(shown, "the shell's answer shows: {:?}", screen.rows.iter().map(|r| r.text.trim_end()).collect::<Vec<_>>());
     }
 
+    /// Runs the example support plugin, which shows made-up conversations and calls no service.
+    #[test]
+    fn a_plugin_s_setup_lays_out_its_sidebar_and_sends_its_nodes() {
+        let home = seeded_home("plugin");
+        let plugins = home.join("plugins").join("support");
+        std::fs::create_dir_all(&plugins).unwrap();
+        std::fs::copy(repo().join("examples/plugins/support/index.tsx"), plugins.join("index.tsx")).unwrap();
+        std::fs::write(home.join("plugins.json"), r#"{ "everywhere": ["support"] }"#).unwrap();
+        let core = Core { home: Some(home.clone()), ..Core::default() };
+        let (send, receive) = mpsc::channel();
+        core.start(move |event| {
+            let _ = send.send(event);
+        });
+        core.send(&ClientMessage::SetupOpen { tab_id: "a".into(), setup: "support.support".into() });
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let (mut sidebar, mut nodes) = (None, 0);
+        while (sidebar.is_none() || nodes == 0) && Instant::now() < deadline {
+            match receive.recv_timeout(Duration::from_millis(200)) {
+                Ok(Event::Message(CoreMessage::Layout { tab_id, layout })) if tab_id == "a" => sidebar = layout.sidebar,
+                Ok(Event::Message(CoreMessage::PluginOps { plugin, ops, .. })) if plugin == "support" => nodes += ops.len(),
+                Ok(Event::Failed(reason)) => panic!("{reason}"),
+                _ => {}
+            }
+        }
+        core.stop();
+        let _ = std::fs::remove_dir_all(&home);
+        assert_eq!(sidebar.map(|s| s.id).as_deref(), Some("support.inbox"));
+        assert!(nodes > 0, "the sidebar's nodes arrive");
+    }
+
     #[test]
     fn a_real_core_sends_the_saved_tabs() {
         let home = seeded_home("saved-tabs");

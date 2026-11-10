@@ -68,6 +68,18 @@ pub fn rail(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
         .children(subagents)
         .children(space)
         .children(crate::commands_card::card(s, &tab.project, k, layer))
+        .children(plugin_cards(s, tab, k))
+}
+
+/// Plugin cards, after the project's own. A card that draws nothing is left out.
+fn plugin_cards(s: &Desk, tab: &TabInfo, k: &Kit) -> Vec<El> {
+    let Some(layout) = s.plugins.layouts.get(&tab.id) else { return Vec::new() };
+    layout
+        .cards
+        .iter()
+        .filter(|view| !s.plugins.is_empty(view))
+        .map(|view| card(k).key(format!("card-{}", view.id)).padding(12.0).gap(4.0).child(text(view.title.clone()).font(k.ty.text_xsmall).color(k.c.text_faint)).child(crate::plugins::view(s, view, &tab.project, k)))
+        .collect()
 }
 
 fn card(k: &Kit) -> El {

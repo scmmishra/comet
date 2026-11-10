@@ -21,6 +21,8 @@ pub const TITLEBAR_HEIGHT: f32 = 44.0;
 const PANEL_INSET: f32 = 8.0;
 /// The main panel's corners, Desk's `rounded-3xl`.
 const PANEL_RADIUS: f32 = 12.0;
+/// A plugin's sidebar, `w-[320px]`.
+const SIDEBAR_WIDTH: f32 = 320.0;
 /// The session's header, `h-[46px]`.
 const HEADER_HEIGHT: f32 = 46.0;
 /// The project mark in the session's header, `size-[18px]`.
@@ -59,6 +61,7 @@ pub struct Desk {
     pub commands_card: crate::commands_card::CommandsCard,
     pub meters: crate::meters::Meters,
     pub minimap: crate::minimap::Minimap,
+    pub plugins: crate::plugins::Plugins,
     /// Whether ⌘ is held, so the new tab button opens its tab next to the active one.
     cmd_held: bool,
     strip: TabDragState,
@@ -93,7 +96,10 @@ impl Desk {
             CoreMessage::Settings { settings } => self.account.settings = Some(settings),
             CoreMessage::Models { models } => self.account.models = models,
             CoreMessage::Recent { projects } => w.recent = projects,
-            CoreMessage::Tabs { tabs, active } => result = w.restore(tabs, active, account, core),
+            CoreMessage::Tabs { tabs, active } => {
+                result = w.restore(tabs, active, account, core);
+                self.reload_layouts();
+            }
             CoreMessage::TabReopened { tab, index } => w.reopened(tab, index, core),
             CoreMessage::TabTitle { tab_id, title } => w.name_tab(&tab_id, &title, core),
             CoreMessage::SessionHistory { tab_id, items, context } => {
@@ -126,6 +132,12 @@ impl Desk {
             CoreMessage::TerminalExit { id } => self.terminal_exit(&id),
             CoreMessage::File { project, path, file } => self.take_file(project, path, file),
             CoreMessage::Usage { usage } => self.account.usage = usage,
+            CoreMessage::PluginOps { plugin, ops, reset } => self.plugins.apply(&plugin, &ops, reset),
+            CoreMessage::Layout { tab_id, layout } => {
+                self.plugins.layouts.insert(tab_id, layout);
+            }
+            CoreMessage::PanelShow { tab_id, id } => self.panel_shown(&tab_id, &id),
+            CoreMessage::Setups { setups } => self.plugins.setups = setups,
             CoreMessage::Error { message } => self.toasts.show(message, true),
             CoreMessage::Notice { message } => self.toasts.show(message, false),
             CoreMessage::Other => {}
@@ -250,6 +262,7 @@ pub mod commands {
 /// Ticks the clock each second while a turn runs. A still window does no work.
 pub fn poll(s: &mut Desk, _: f64, tx: &mut Tx) -> bool {
     s.sync_palette();
+    s.sync_plugin_inputs();
     let composed = composer::poll(s, tx) | copied_poll(s, tx) | toasts_poll(s, tx);
     if s.status == CoreState::Ready {
         let next = s.refresh_usage();
@@ -346,7 +359,11 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
             let size = cx.layout_size("session-card");
             let session = col().w_full().h_full().min_h(0.0).child(session(s, tab, dark, size, &mut layer));
             let pane = (tab.panel_open == Some(true)).then(|| card("panel-card", crate::panel::panel(s, tab, k, &mut layer)));
-            row().w_full().grow(1.0).min_h(0.0).gap(PANEL_INSET).child(card("session-card", session)).children(pane)
+            // A plugin's sidebar sits before the session, as a card of its own.
+            let sidebar = s.plugins.layouts.get(&tab.id).and_then(|l| l.sidebar.as_ref()).map(|view| {
+                col().key("sidebar").w(SIDEBAR_WIDTH).h_full().min_h(0.0).padding(8.0).radius(PANEL_RADIUS).clip_rounded(PANEL_RADIUS).fill(k.c.layer_01).border(1.0, k.c.border_muted).child(crate::plugins::view(s, view, &tab.project, k))
+            });
+            row().w_full().grow(1.0).min_h(0.0).gap(PANEL_INSET).children(sidebar).child(card("session-card", session)).children(pane)
         }
         (status, _) => {
             let words = match status {
@@ -392,8 +409,17 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, layer: &
         .children((tab.panel_open != Some(true)).then(|| crate::panel::toggle(false, k)));
     let started = s.threads.get(&tab.id).is_some_and(|t| !t.items.is_empty());
     let lane = width.map(|w| crate::cards::Lane::for_session(w, thread_view::COLUMN));
+    let sidebar = s.plugins.layouts.get(&tab.id).is_some_and(|l| l.sidebar.is_some());
     let body = if started {
         col().w_full().grow(1.0).min_h(0.0).child(thread_view::thread(s, &tab.id, dark, lane)).child(composer::composer(s, tab, composer::ListAt::Above, lane, k, layer))
+    } else if sidebar {
+        // A tab with a plugin sidebar, before the sidebar opens a thread: the composer, under a line on how to start.
+        col()
+            .w_full()
+            .grow(1.0)
+            .min_h(0.0)
+            .child(col().w_full().grow(1.0).center().px(24.0).child(text("Pick something in the sidebar to open its thread.").font(k.ty.ui).color(k.c.text_faint)))
+            .child(composer::composer(s, tab, composer::ListAt::Above, lane, k, layer))
     } else {
         crate::start_screen::start_screen(s, tab, k, layer)
     };

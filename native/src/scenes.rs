@@ -8,7 +8,47 @@ use crate::shell::{CoreState, Desk};
 /// A scene: its name, and what it sets in a fresh window.
 type Scene = (&'static str, fn(&mut Desk));
 
-pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette)];
+pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin)];
+
+/// A tab laid out by a plugin's setup: a sidebar listing made-up conversations, and a card.
+fn plugin(s: &mut Desk) {
+    start(s);
+    let item = |id: u64, title: &str, subtitle: &str, badge: Option<(&str, &str)>, selected: bool| {
+        let mut ops = vec![
+            serde_json::json!({ "op": "create", "id": id, "type": "item" }),
+            serde_json::json!({ "op": "set", "id": id, "key": "title", "value": title }),
+            serde_json::json!({ "op": "set", "id": id, "key": "subtitle", "value": subtitle }),
+            serde_json::json!({ "op": "set", "id": id, "key": "selected", "value": selected }),
+            serde_json::json!({ "op": "set", "id": id, "key": "onSelect", "value": { "handler": id } }),
+            serde_json::json!({ "op": "insert", "parent": 2, "id": id }),
+        ];
+        if let Some((text, tint)) = badge {
+            ops.push(serde_json::json!({ "op": "set", "id": id, "key": "badge", "value": { "text": text, "tint": tint } }));
+        }
+        ops
+    };
+    let mut ops = vec![
+        serde_json::json!({ "op": "create", "id": 1, "type": "root" }),
+        serde_json::json!({ "op": "create", "id": 2, "type": "list" }),
+        serde_json::json!({ "op": "insert", "parent": 1, "id": 2 }),
+        serde_json::json!({ "op": "create", "id": 20, "type": "root" }),
+        serde_json::json!({ "op": "create", "id": 21, "type": "text" }),
+        serde_json::json!({ "op": "set", "id": 21, "key": "tone", "value": "muted" }),
+        serde_json::json!({ "op": "text", "id": 22, "text": "3 open, 1 urgent" }),
+        serde_json::json!({ "op": "insert", "parent": 21, "id": 22 }),
+        serde_json::json!({ "op": "insert", "parent": 20, "id": 21 }),
+    ];
+    ops.extend(item(10, "Priya Raman", "Refund for a double charge", Some(("Urgent", "red")), true));
+    ops.extend(item(11, "Tom Becker", "Can't reset my password", Some(("2", "blue")), false));
+    ops.extend(item(12, "Ana Souza", "Export to CSV is empty", None, false));
+    let messages = serde_json::json!([
+        { "type": "plugin.ops", "plugin": "support", "reset": true, "ops": ops },
+        { "type": "layout", "tabId": "tab", "layout": { "sidebar": { "id": "support.inbox", "title": "Inbox", "plugin": "support", "root": 1 }, "panels": [], "cards": [{ "id": "support.summary", "title": "Inbox", "plugin": "support", "root": 20 }] } }
+    ]);
+    for message in serde_json::from_value::<Vec<CoreMessage>>(messages).expect("the scene's messages decode") {
+        s.receive(Event::Message(message)).expect("plugin messages need no folder");
+    }
+}
 
 /// A new tab with the command palette open.
 fn palette(s: &mut Desk) {

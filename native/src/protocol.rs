@@ -174,6 +174,59 @@ pub struct PlanUsage {
     pub windows: Vec<UsageWindow>,
 }
 
+/// One change to a plugin's UI tree. The plugin's code builds the tree in the core, and the app draws
+/// each node with Desk's own component of that name.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(tag = "op", rename_all = "lowercase")]
+pub enum UiOp {
+    Create { id: u64, #[serde(rename = "type")] kind: String },
+    Text { id: u64, text: String },
+    Set { id: u64, key: String, #[serde(default)] value: Value },
+    Insert { parent: u64, id: u64, before: Option<u64> },
+    Remove { parent: u64, id: u64 },
+}
+
+/// A view a plugin drew for a tab: a sidebar, a panel instance or a card, by its root node.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct DrawnView {
+    pub id: String,
+    pub title: String,
+    pub plugin: String,
+    pub root: u64,
+}
+
+/// What plugins show in a tab. The core keeps it and sends it whole on every change.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+pub struct TabLayout {
+    pub sidebar: Option<DrawnView>,
+    pub panels: Vec<DrawnView>,
+    pub cards: Vec<DrawnView>,
+}
+
+/// One thing a plugin offers in the palette.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct Contribution {
+    pub id: String,
+    pub title: String,
+    /// For a command that runs on text, what to ask for.
+    pub input: Option<String>,
+}
+
+/// What the plugins on in a project let the user start.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+pub struct PluginContributions {
+    pub panels: Vec<Contribution>,
+    pub commands: Vec<Contribution>,
+}
+
+/// A setup a plugin offers, and the project it opens in.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct ProjectSetup {
+    pub project: String,
+    pub id: String,
+    pub title: String,
+}
+
 /// A past thread of a project, which a tab can continue.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -540,6 +593,31 @@ pub enum CoreMessage {
     /// The answer to `files.search`, with the query it answers: paths relative to the project, best match first.
     #[serde(rename = "files.found")]
     FilesFound { project: String, query: String, paths: Vec<String> },
+    /// Changes to a plugin's UI. With `reset`, they replace every node the app holds for the plugin.
+    #[serde(rename = "plugin.ops")]
+    PluginOps {
+        plugin: String,
+        ops: Vec<UiOp>,
+        #[serde(default)]
+        reset: bool,
+    },
+    /// What plugins show in a tab, sent whole on every change.
+    #[serde(rename = "layout")]
+    Layout {
+        #[serde(rename = "tabId")]
+        tab_id: String,
+        layout: TabLayout,
+    },
+    /// A panel instance opened, so the app brings it to the front and opens the view pane.
+    #[serde(rename = "panel.show")]
+    PanelShow {
+        #[serde(rename = "tabId")]
+        tab_id: String,
+        id: String,
+    },
+    /// Setups across projects, each with the project it opens in.
+    #[serde(rename = "setups")]
+    Setups { setups: Vec<ProjectSetup> },
     /// Plan usage. Absent when Claude has no plan limits, such as with an API key.
     #[serde(rename = "usage")]
     Usage { usage: Option<PlanUsage> },
@@ -598,6 +676,31 @@ pub enum ClientMessage {
     /// Finds files in the project whose path matches `query`, for an @ mention. The core answers with `files.found`.
     #[serde(rename = "files.search")]
     FilesSearch { project: String, query: String },
+    /// Asks for what plugins show in a saved tab. The core answers with `layout`.
+    #[serde(rename = "layout.get", rename_all = "camelCase")]
+    LayoutGet { tab_id: String },
+    /// Opens a panel instance in a saved tab, or brings the open one to the front.
+    #[serde(rename = "panel.open", rename_all = "camelCase")]
+    PanelOpen { tab_id: String, panel: String },
+    #[serde(rename = "panel.close", rename_all = "camelCase")]
+    PanelClose { tab_id: String, id: String },
+    /// Lays a saved tab out as a setup says: its sidebar and panels.
+    #[serde(rename = "setup.open", rename_all = "camelCase")]
+    SetupOpen { tab_id: String, setup: String },
+    /// Lists the setups of every project with plugins on, `project`'s first. The core answers with `setups`.
+    #[serde(rename = "setups.get")]
+    SetupsGet { project: String },
+    /// Runs a plugin command for a saved tab.
+    #[serde(rename = "plugin.command", rename_all = "camelCase")]
+    PluginCommand {
+        tab_id: String,
+        command: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        input: Option<String>,
+    },
+    /// Runs a handler a plugin's node holds, such as a button's onClick.
+    #[serde(rename = "plugin.event")]
+    PluginEvent { plugin: String, handler: u64, args: Vec<Value> },
     /// Starts a terminal, or reattaches to one already running under this id, which replays its output.
     #[serde(rename = "terminal.open")]
     TerminalOpen { id: String, cols: usize, rows: usize },
@@ -736,6 +839,13 @@ mod tests {
             ClientMessage::CommandsStop { project: "/Users/me/code/web".into(), ids: vec!["c1".into()] },
             ClientMessage::FilesSearch { project: "/Users/me/code/web".into(), query: "login".into() },
             ClientMessage::ThreadClear { tab_id: "tab-1".into() },
+            ClientMessage::LayoutGet { tab_id: "tab-1".into() },
+            ClientMessage::PanelOpen { tab_id: "tab-1".into(), panel: "support.inbox".into() },
+            ClientMessage::PanelClose { tab_id: "tab-1".into(), id: "support.conversation?id=1001".into() },
+            ClientMessage::SetupOpen { tab_id: "tab-1".into(), setup: "support.triage".into() },
+            ClientMessage::SetupsGet { project: "/Users/me/code/web".into() },
+            ClientMessage::PluginCommand { tab_id: "tab-1".into(), command: "support.search".into(), input: Some("refund".into()) },
+            ClientMessage::PluginEvent { plugin: "support".into(), handler: 3, args: vec![serde_json::json!("hi")] },
             ClientMessage::TerminalOpen { id: "term-1".into(), cols: 80, rows: 24 },
             ClientMessage::TerminalInput { id: "term-1".into(), data: "ls\r".into() },
             ClientMessage::TerminalResize { id: "term-1".into(), cols: 100, rows: 30 },
@@ -771,7 +881,7 @@ mod tests {
 
     #[test]
     fn skips_messages_it_does_not_read() {
-        let message: CoreMessage = serde_json::from_str(r#"{"type":"plugin.ops","plugin":"x","ops":[]}"#).unwrap();
+        let message: CoreMessage = serde_json::from_str(r#"{"type":"claude.version","version":{}}"#).unwrap();
         assert!(matches!(message, CoreMessage::Other));
     }
 }

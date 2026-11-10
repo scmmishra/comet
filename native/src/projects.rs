@@ -1,6 +1,6 @@
 //! What the core reads about each project, as `app/src/renderer/projects.ts` keeps it.
 
-use crate::protocol::{CommandInfo, Skill, Space, ThreadSummary};
+use crate::protocol::{CommandInfo, PluginContributions, Skill, Space, ThreadSummary};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -14,6 +14,8 @@ pub struct Project {
     pub skills: Option<Vec<Skill>>,
     /// The project's own commands, which the Commands card runs. None until read.
     pub commands: Option<Vec<CommandInfo>>,
+    /// What the project's plugins offer in the palette.
+    pub plugins: Option<PluginContributions>,
 }
 
 #[derive(Default)]
@@ -34,6 +36,7 @@ impl Projects {
             "space" => project.space = serde_json::from_value(value).ok(),
             "skills" => project.skills = serde_json::from_value(value).ok(),
             "commands" => project.commands = serde_json::from_value(value).ok(),
+            "plugins" => project.plugins = serde_json::from_value(value).ok(),
             _ => {}
         }
     }
