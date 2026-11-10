@@ -602,9 +602,23 @@ pub enum ThreadEvent {
     Init { model: String },
     #[serde(rename = "subagent")]
     Subagent { subagent: Subagent },
+    /// The commands running in the background now, sent whole each time the set changes.
+    #[serde(rename = "background")]
+    Background { tasks: Vec<BackgroundTask> },
     /// An event the app does not read yet.
     #[serde(other)]
     Other,
+}
+
+/// A command Claude left running in the background, such as a long review or a dev server.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BackgroundTask {
+    pub id: String,
+    /// What it runs, as Claude Code describes it.
+    pub label: String,
+    /// When Desk first saw it, in milliseconds since the epoch.
+    pub started_at: f64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -844,6 +858,9 @@ pub enum ClientMessage {
     /// Sends the queue again after a stop or an error paused it.
     #[serde(rename = "queue.resume", rename_all = "camelCase")]
     QueueResume { tab_id: String },
+    /// Stops commands Claude left running in the background in a tab.
+    #[serde(rename = "tasks.stop", rename_all = "camelCase")]
+    TasksStop { tab_id: String, ids: Vec<String> },
     /// The window's tabs, in order, sent whenever they change.
     #[serde(rename = "tabs.save")]
     TabsSave {
@@ -926,6 +943,7 @@ mod tests {
             ClientMessage::QueueSend { tab_id: "tab-1".into(), id: "m1".into() },
             ClientMessage::QueueRemove { tab_id: "tab-1".into(), id: "m1".into() },
             ClientMessage::QueueResume { tab_id: "tab-1".into() },
+            ClientMessage::TasksStop { tab_id: "tab-1".into(), ids: vec!["b1".into()] },
             ClientMessage::ProjectGet { project: "/Users/me/code/web".into(), part: "threads".into() },
             ClientMessage::ThreadResume { tab_id: "tab-2".into(), thread_id: "s1".into() },
             ClientMessage::CommandsSave {

@@ -197,10 +197,10 @@ impl Desk {
         self.core.send(&ClientMessage::PermissionAnswer { tab_id: tab.to_owned(), request_id: request_id.to_owned(), answer: answer.to_owned() });
     }
 
-    /// Whether the active tab's turn is running, so its head counts seconds.
+    /// Whether the active tab's turn or a background command runs, so the times they show count seconds.
     fn working(&self) -> bool {
         let thread = self.workspace.active.as_deref().and_then(|tab| self.threads.get(tab));
-        thread.is_some_and(|t| t.rows.iter().any(|r| matches!(r, ThreadRow::Working { .. })))
+        thread.is_some_and(|t| !t.background.is_empty() || t.rows.iter().any(|r| matches!(r, ThreadRow::Working { .. })))
     }
 
     fn dark(&self, cx: &Cx<Desk>) -> bool {

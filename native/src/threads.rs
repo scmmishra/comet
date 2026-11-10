@@ -24,6 +24,8 @@ pub struct Thread {
     pub queue_held: bool,
     /// The subagents of the latest turn, and any still running from an earlier one, by id.
     pub subagents: Vec<Subagent>,
+    /// The commands Claude left running in the background.
+    pub background: Vec<crate::protocol::BackgroundTask>,
     /// The folds, groups and steps the user opened, by row or item id.
     pub open: HashSet<String>,
 }
@@ -124,6 +126,7 @@ impl Threads {
                 Some(known) => *known = subagent,
                 None => thread.subagents.push(subagent),
             },
+            ThreadEvent::Background { tasks } => thread.background = tasks,
             ThreadEvent::Other => {}
         }
     }

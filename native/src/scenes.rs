@@ -195,6 +195,8 @@ fn thread(s: &mut Desk) {
     for message in serde_json::from_value::<Vec<CoreMessage>>(messages).expect("the scene's messages decode") {
         s.receive(Event::Message(message)).expect("the scene has a tab");
     }
+    let background = serde_json::json!({ "type": "session.event", "tabId": "tab", "event": { "kind": "background", "tasks": [{ "id": "b1", "label": "npm run dev", "startedAt": now - 95_000.0 }] } });
+    s.receive(Event::Message(serde_json::from_value(background).expect("the tasks decode"))).expect("tasks need no folder");
     s.threads.toggle("tab", "fold:u1");
     s.threads.toggle("tab", "group:th1");
     s.threads.toggle("tab", "t3");

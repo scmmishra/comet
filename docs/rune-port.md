@@ -80,6 +80,7 @@ Done:
 - Toasts for the core's errors and notices, refused attachments and the first Escape's hint.
 - The command palette (⌘K), opened on threads by ⌘⇧O and on files by ⌘P. It lists themes and settings pages too.
 - Cards beside the thread: the Space card, the Commands card and subagents.
+- The background commands row above the composer, with its Stop.
 - The minimap rail.
 - Plugin views: sidebars, panels, cards and setups, drawn from the core's primitives.
 - Meters: the context ring and the usage button.

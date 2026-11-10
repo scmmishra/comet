@@ -70,6 +70,7 @@ export const CORE_MESSAGES = [
   { type: "session.event", tabId: "tab-1", event: { kind: "text.delta", id: "x2", delta: "Hel" } },
   { type: "session.event", tabId: "tab-1", event: { kind: "status", busy: true } },
   { type: "session.event", tabId: "tab-1", event: { kind: "init", model: "claude-opus-5-5" } },
+  { type: "session.event", tabId: "tab-1", event: { kind: "background", tasks: [{ id: "b1", label: "npm run dev", startedAt: 1_700_000_000_000 }] } },
   {
     type: "session.event",
     tabId: "tab-1",
@@ -196,6 +197,7 @@ export const CLIENT_MESSAGES = [
   { type: "queue.send", tabId: "tab-1", id: "m1" },
   { type: "queue.remove", tabId: "tab-1", id: "m1" },
   { type: "queue.resume", tabId: "tab-1" },
+  { type: "tasks.stop", tabId: "tab-1", ids: ["b1"] },
   { type: "project.get", project: "/Users/me/code/web", part: "threads" },
   { type: "thread.resume", tabId: "tab-2", threadId: "s1" },
   {
