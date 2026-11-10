@@ -38,6 +38,8 @@
   /* The window's top tabs: the active one, and an inactive one under the pointer. */
   --color-tab: #1c1d1f;
   --color-tab-hover: #0f1011;
+  /* A quiet box inside the thread, such as a turn's changed files. */
+  --color-well: #1c1d1f;
 
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -89,6 +91,7 @@
   /* The tab bar sits on the light grey ground, so the active tab is white and a hovered one only darkens it. */
   --color-tab: #ffffff;
   --color-tab-hover: rgb(0 0 0 / 4%);
+  --color-well: #f5f6f8;
 }
 
 /*

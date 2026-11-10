@@ -10,16 +10,19 @@ import type { TabInfo, ThreadItem } from "@desk/protocol"
 import { imageUrl } from "./attachments"
 import { now } from "./clock"
 import { lineDiff } from "./diff"
-import { COPIED_MS, formatDuration, formatMessageTime } from "./format"
+import { fileIcon } from "./file-icons"
+import { COPIED_MS, formatDuration, formatMessageTime, plural } from "./format"
 import { Chevron, Icon } from "./icons"
 import { Markdown } from "./markdown"
 import { openFile } from "./projects"
 import { threadRows, type Fold, type Group, type Row as ThreadRow, type Working } from "./thread-rows"
 import { answerPermission, threadOf, type Item } from "./threads"
+import { openReview } from "./workspace"
 import { groupSummary, ICON_BY_KIND, isStep, stepKind, stepLabel, type Step } from "./work"
 
 type ToolItem = Extract<Item, { type: "tool" }>
 type PermissionItem = Extract<Item, { type: "permission" }>
+type ChangesItem = Extract<Item, { type: "changes" }>
 type Row = ThreadRow<Exclude<Item, Step>>
 
 /** The first item a row draws, which says when the row arrived. */
@@ -87,6 +90,7 @@ function RowView(props: { row: Row; tab: TabInfo }) {
       <Match when={props.row.type === "working" && (props.row as Working)}>{(working) => <WorkingRow since={working().since} />}</Match>
       <Match when={props.row.type === "fold" && (props.row as Fold<Exclude<Item, Step>>)}>{(fold) => <FoldView fold={fold()} tab={props.tab} />}</Match>
       <Match when={props.row.type === "group" && (props.row as Group)}>{(group) => <GroupView group={group()} tab={props.tab} />}</Match>
+      <Match when={props.row.type === "changes" && (props.row as ChangesItem)}>{(item) => <TurnChanges item={item()} tab={props.tab} />}</Match>
       <Match when={props.row.type === "permission" && (props.row as PermissionItem)}>{(item) => <PermissionCard item={item()} tabId={props.tab.id} />}</Match>
       <Match when={props.row.type === "error" && (props.row as Extract<Item, { type: "error" }>)}>
         {(item) => <div class="rounded-2xl bg-del-soft px-3 py-2 text-del">{item().message}</div>}
@@ -290,6 +294,49 @@ function StepRow(props: { step: Step; tab: TabInfo }) {
           </Switch>
         </div>
       </Show>
+    </div>
+  )
+}
+
+/**
+ * The files a turn changed, under its answer, after T3 Code: one quiet box with a count, the line totals
+ * and the files. Each file opens in the editor. The latest turn's box also opens Review on its changes.
+ */
+function TurnChanges(props: { item: ChangesItem; tab: TabInfo }) {
+  const totals = () => props.item.files.reduce((sum, file) => ({ additions: sum.additions + file.additions, deletions: sum.deletions + file.deletions }), { additions: 0, deletions: 0 })
+  const latest = () => threadOf(props.tab.id).items.findLast((item) => item.type === "changes")?.id === props.item.id
+  return (
+    <div class="rounded-2xl bg-well">
+      <div class="flex min-w-0 items-center gap-3 px-3 pb-1 pt-2 text-[12px] font-medium text-fg">
+        {plural(props.item.files.length, "changed file")}
+        <DiffChanges changes={totals()} />
+        <Show when={latest()}>
+          <Button size="small" variant="ghost-muted" icon="review" class="ml-auto" onClick={() => openReview("turn")}>
+            Open diff
+          </Button>
+        </Show>
+      </div>
+      <div class="max-h-60 overflow-y-auto px-1.5 pb-1.5">
+        <For each={props.item.files}>
+          {(file) => {
+            const slash = file.path.lastIndexOf("/")
+            return (
+              <button class="flex w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-left text-[12px] hover:bg-hover" title={file.path} onClick={() => openFile(props.tab.project, file.path)}>
+                <svg class="size-[13px] shrink-0" aria-hidden="true">
+                  <use href={`#${fileIcon(file.path)}`} />
+                </svg>
+                <span class="min-w-0 flex-1 truncate">
+                  <span class="text-fg">{file.path.slice(slash + 1)}</span>
+                  <Show when={slash > 0}>
+                    <span class="ml-1.5 text-fg-3">{file.path.slice(0, slash)}</span>
+                  </Show>
+                </span>
+                <DiffChanges class="shrink-0" changes={file} />
+              </button>
+            )
+          }}
+        </For>
+      </div>
     </div>
   )
 }

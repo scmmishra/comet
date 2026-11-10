@@ -1,4 +1,4 @@
-import type { ContextReading, PluginLayout, QueuedMessage, TabInfo } from "@desk/protocol"
+import type { ChangedFile, ContextReading, PluginLayout, QueuedMessage, TabInfo } from "@desk/protocol"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { instanceHome, writeJsonFile } from "./data-files"
@@ -14,6 +14,11 @@ export interface TabThread {
   readonly baseline?: string
   /** A snapshot taken before the last turn, for Review's last-turn changes. */
   readonly turnBaseline?: string
+  /**
+   * The files each turn changed, by the id of the message that started it. Claude's transcript does not
+   * record them, so a restored thread reads its turns' summaries from here.
+   */
+  readonly turnChanges?: Readonly<Record<string, readonly ChangedFile[]>>
   /** The last context reading. A restored session is not live until its next message, so it cannot be asked. */
   readonly context?: ContextReading
   /** The key a plugin opened the thread under, such as a conversation's id. */

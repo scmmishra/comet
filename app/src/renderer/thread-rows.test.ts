@@ -40,3 +40,9 @@ test("a finished turn folds everything before its answer, text included, and kee
 test("a turn of text alone has nothing to fold", () => {
   expect(kinds(threadRows([user("u1"), text("hi")], false))).toEqual(["user", "text"])
 })
+
+test("keeps a turn's file summary under its answer, out of the fold", () => {
+  const changes: ThreadItem = { type: "changes", id: "c", files: [{ path: "a.ts", status: "modified", additions: 1, deletions: 0 }] }
+  const rows = threadRows([user("u1"), tool("a"), text("answer"), { type: "result", id: "r", durationMs: 1000, isError: false }, changes], false)
+  expect(kinds(rows)).toEqual(["user", "fold", "text", "changes"])
+})

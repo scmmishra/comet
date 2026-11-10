@@ -58,7 +58,6 @@ export class Session {
   private subagents: Subagents
   /** Open permission requests: how to answer each, and the item that shows it. */
   private permissions = new Map<string, { readonly resolve: (result: PermissionResult) => void; readonly item: Extract<ThreadItem, { type: "permission" }> }>()
-  private sent = 0
   private sessionId?: string
   /** Set while a turn the user stopped winds down, until its result arrives. */
   private stopping = false
@@ -95,11 +94,13 @@ export class Session {
 
   /** Starts a turn with a message. */
   send(text: string, images: readonly ImageAttachment[] = []) {
-    this.emit({ kind: "item", item: { type: "user", id: `user-${++this.sent}`, text, ...(images.length ? { images } : {}), at: Date.now() } })
+    // Claude Code keeps the message's uuid in the transcript, so the item has the same id live and restored.
+    const uuid = crypto.randomUUID()
+    this.emit({ kind: "item", item: { type: "user", id: uuid, text, ...(images.length ? { images } : {}), at: Date.now() } })
     this.running = true
     this.emit({ kind: "status", busy: true })
     if (!this.query) this.inbox = new Inbox()
-    this.inbox.push({ type: "user", message: { role: "user", content: userContent(text, images) }, parent_tool_use_id: null })
+    this.inbox.push({ type: "user", message: { role: "user", content: userContent(text, images) }, parent_tool_use_id: null, uuid })
     if (!this.query) this.start()
   }
 
@@ -110,9 +111,10 @@ export class Session {
    */
   steer(text: string, images: readonly ImageAttachment[] = []) {
     if (!this.running) return this.send(text, images)
-    this.emit({ kind: "item", item: { type: "user", id: `user-${++this.sent}`, text, ...(images.length ? { images } : {}), at: Date.now(), steered: true } })
+    const uuid = crypto.randomUUID()
+    this.emit({ kind: "item", item: { type: "user", id: uuid, text, ...(images.length ? { images } : {}), at: Date.now(), steered: true } })
     this.steering = true
-    this.inbox.push({ type: "user", message: { role: "user", content: userContent(text, images) }, parent_tool_use_id: null, priority: "now" })
+    this.inbox.push({ type: "user", message: { role: "user", content: userContent(text, images) }, parent_tool_use_id: null, priority: "now", uuid })
   }
 
   async interrupt() {

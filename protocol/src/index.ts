@@ -73,6 +73,8 @@ export type ThreadItem =
   /** The end of a turn. `stopped` means the user stopped it. */
   | { readonly type: "result"; readonly id: string; readonly durationMs: number; readonly isError: boolean; readonly stopped?: boolean }
   | { readonly type: "error"; readonly id: string; readonly message: string }
+  /** The files a turn changed, without their diffs, added once the turn ends. */
+  | { readonly type: "changes"; readonly id: string; readonly files: readonly ChangedFile[] }
 
 /** A change to a thread. An item replaces the item with the same id, or joins the thread after the others. */
 export type ThreadEvent =
@@ -136,6 +138,9 @@ export interface Space {
  */
 export const REVIEW_SCOPES = ["thread", "git", "branch", "turn"] as const
 export type ReviewScope = (typeof REVIEW_SCOPES)[number]
+
+/** A file a turn changed, as the turn's summary lists it. */
+export type ChangedFile = Omit<FileChange, "patch">
 
 export interface FileChange {
   readonly path: string

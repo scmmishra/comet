@@ -40,18 +40,20 @@ export function threadRows<T extends ThreadItem>(items: readonly T[], busy: bool
   let turn: T[] = []
   const close = (finished: boolean) => {
     const result = turn.find((item): item is Extract<T, { type: "result" }> => item.type === "result")
-    const body = turn.filter((item) => item.type !== "result")
+    // The turn's file summary arrives after its result, and shows under the answer.
+    const summary = turn.filter((item) => item.type === "changes") as NotStep<T>[]
+    const body = turn.filter((item) => item.type !== "result" && item.type !== "changes")
     const id = opener?.id ?? body[0]?.id ?? "start"
     turn = []
     if (!finished) {
-      out.push({ type: "working", id: `working:${id}`, since: opener?.at }, ...grouped(body, true))
+      out.push({ type: "working", id: `working:${id}`, since: opener?.at }, ...grouped(body, true), ...summary)
       return
     }
     let end = body.length
     while (end > 0 && body[end - 1]!.type === "text") end--
     const work = body.slice(0, end).filter((item) => !staysOut(item))
     if (work.length) out.push({ type: "fold", id: `fold:${id}`, rows: grouped(work, false), durationMs: result?.durationMs, stopped: !!result?.stopped })
-    out.push(...(body.slice(0, end).filter(staysOut) as NotStep<T>[]), ...(body.slice(end) as NotStep<T>[]))
+    out.push(...(body.slice(0, end).filter(staysOut) as NotStep<T>[]), ...(body.slice(end) as NotStep<T>[]), ...summary)
   }
   for (const item of items) {
     if (item.type === "user") {

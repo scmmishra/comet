@@ -1,5 +1,5 @@
 import type { SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
-import type { CoreMessage, FileChange, FollowUp, ImageAttachment, PluginLayout, QueuedMessage, ReviewScope, TabInfo, ThreadEvent } from "@desk/protocol"
+import type { ChangedFile, CoreMessage, FileChange, FollowUp, ImageAttachment, PluginLayout, QueuedMessage, ReviewScope, TabInfo, ThreadEvent, ThreadItem } from "@desk/protocol"
 import { branchBase, changesSince, headTree, snapshot } from "./checkpoints"
 import { threadContext, threadHistory } from "./past-threads"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
@@ -177,7 +177,6 @@ export class Window {
     this.sessions.delete(tabId)
   }
 
-  /** What a tab's thread changed since its first message. A baseline that `git gc` pruned shows nothing. */
   /** What changed in a tab's project since the point `scope` names. A thread that has not started has no thread or turn changes. */
   async review(tabId: string, scope: ReviewScope): Promise<FileChange[]> {
     const project = this.tab(tabId).project
@@ -249,16 +248,28 @@ export class Window {
       const current = () => this.sessions.get(tab.id) === created
       // A turn the user stopped, or one that failed, pauses the queue. Any other end sends the next queued message.
       let pause = false
+      // The message the running turn answers, which names the turn's summary, and the summary being made.
+      let lastMessage: string | undefined
+      let summary: Promise<void> = Promise.resolve()
       const emit = (event: ThreadEvent) => {
         if (!current()) return
         if (event.kind === "context") this.updateThread(tab.id, { context: event.reading })
         this.hooks.broadcast({ type: "session.event", tabId: tab.id, event })
-        if (event.kind === "item" && event.item.type === "result") pause = !!event.item.stopped || event.item.isError
+        if (event.kind === "item" && event.item.type === "user") lastMessage = event.item.id
+        if (event.kind === "item" && event.item.type === "result") {
+          pause = !!event.item.stopped || event.item.isError
+          if (lastMessage) summary = this.summarizeTurn(tab.id, lastMessage, current)
+        }
         if (event.kind === "item" && event.item.type === "error") pause = true
         if (event.kind === "status" && !event.busy) {
-          if (pause && this.thread(tab.id).queue?.length) this.setQueue(tab.id, this.thread(tab.id).queue!, true)
-          else this.sendNextQueued(tab.id)
+          const paused = pause
           pause = false
+          // The next queued turn waits for this one's summary, which reads the snapshot the next turn replaces.
+          void summary.then(() => {
+            if (!current()) return
+            if (paused && this.thread(tab.id).queue?.length) this.setQueue(tab.id, this.thread(tab.id).queue!, true)
+            else this.sendNextQueued(tab.id)
+          })
         }
       }
       found = new Session(tab.project, emit, {
@@ -278,11 +289,31 @@ export class Window {
     return found
   }
 
-  /** A thread that cannot be read shows empty, and the user is told. */
-  private history(tab: TabInfo, sessionId: string) {
-    return threadHistory(tab.project, sessionId).catch((error) => {
+  /**
+   * Lists the files a turn changed under its answer, and saves the list for when the thread is restored.
+   * It compares the snapshot taken before the turn with the working tree, so edits the user made during
+   * the turn count too. A turn that changed nothing gets no summary.
+   */
+  private async summarizeTurn(tabId: string, lastMessage: string, current: () => boolean) {
+    const tab = this.state.tabs.find((found) => found.id === tabId)
+    const baseline = this.thread(tabId).turnBaseline
+    if (!tab || !baseline) return
+    const files = (await changesSince(tab.project, baseline).catch(() => [])).map(({ patch: _patch, ...file }) => file)
+    if (!files.length || !current()) return
+    this.updateThread(tabId, { turnChanges: { ...this.thread(tabId).turnChanges, [lastMessage]: files } })
+    this.hooks.broadcast({ type: "session.event", tabId, event: { kind: "item", item: changesItem(lastMessage, files) } })
+  }
+
+  /** A restored thread, with each turn's saved summary after its result. A thread that cannot be read shows empty, and the user is told. */
+  private async history(tab: TabInfo, sessionId: string): Promise<ThreadItem[]> {
+    const items = await threadHistory(tab.project, sessionId).catch((error) => {
       this.hooks.broadcast({ type: "error", message: `Desk could not read the thread in “${tab.title}”: ${message(error)}` })
       return []
+    })
+    const saved = this.thread(tab.id).turnChanges ?? {}
+    return items.flatMap((item) => {
+      const files = item.type === "result" ? saved[item.id.slice(RESULT_PREFIX.length)] : undefined
+      return files ? [item, changesItem(item.id.slice(RESULT_PREFIX.length), files)] : [item]
     })
   }
 
@@ -326,3 +357,8 @@ const MOVED = "The tab moved to another thread before the message was sent."
 const threadKey = (project: string, key: string) => `${project}\n${key}`
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
+/** A restored turn's result is named after the message it answers: `result:<message id>`. */
+const RESULT_PREFIX = "result:"
+
+const changesItem = (lastMessage: string, files: readonly ChangedFile[]): ThreadItem => ({ type: "changes", id: `changes:${lastMessage}`, files })
