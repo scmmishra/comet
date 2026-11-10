@@ -1,6 +1,9 @@
 import type { SDKAssistantMessage, SDKMessage, SDKPartialAssistantMessage, SessionMessage } from "@anthropic-ai/claude-agent-sdk"
 import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, type ThreadItem } from "@desk/protocol"
 
+/** What Claude Code writes into a transcript when the user stops a turn, with or without "for tool use". */
+const INTERRUPTED = /^\[Request interrupted by user/
+
 /** Tool output beyond this many characters is cut. The thread shows a summary, not a log. */
 const MAX_TOOL_OUTPUT = 4000
 /** Inputs that say in short what a tool call does, in the order a summary prefers them. */
@@ -90,9 +93,9 @@ export class ThreadMapper {
     // A tool's result replaces its call in place, so the items keep their order.
     const items = new Map<string, ThreadItem>()
     const add = (found: ThreadItem) => items.set(found.id, found)
-    let turn: { id: string; start: number; end?: number } | undefined
+    let turn: { id: string; start: number; end?: number; stopped?: boolean } | undefined
     const closeTurn = () => {
-      if (turn?.end !== undefined) add({ type: "result", id: `result:${turn.id}`, durationMs: turn.end - turn.start, isError: false })
+      if (turn?.end !== undefined) add({ type: "result", id: `result:${turn.id}`, durationMs: turn.end - turn.start, isError: false, ...(turn.stopped ? { stopped: true } : {}) })
       turn = undefined
     }
     for (const stored of messages) {
@@ -106,6 +109,11 @@ export class ThreadMapper {
         const text = userText(content)
         if (text === undefined) {
           this.mapToolResults(content).forEach(add)
+          continue
+        }
+        // Claude Code records a stopped turn as a message of its own. The turn shows as stopped instead.
+        if (INTERRUPTED.test(text)) {
+          if (turn) turn.stopped = true
           continue
         }
         closeTurn()

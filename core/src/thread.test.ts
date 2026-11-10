@@ -76,3 +76,13 @@ test("rebuilds a message's images from the transcript, with its text", () => {
   ] as never)
   expect(items).toEqual([{ type: "user", id: "u1", text: "What is this?", images: [{ mediaType: "image/png", data: "iVBOR" }] }])
 })
+
+test("shows a turn Claude Code recorded as interrupted as stopped, without its marker message", () => {
+  const items = new ThreadMapper(DIR).history([
+    { type: "user", uuid: "u1", session_id: "s", parent_tool_use_id: null, timestamp: "2026-11-09T10:00:00.000Z", message: { role: "user", content: "Do it" } },
+    { type: "assistant", uuid: "a1", session_id: "s", parent_tool_use_id: null, timestamp: "2026-11-09T10:00:04.000Z", message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "ls" } }] } },
+    { type: "user", uuid: "u2", session_id: "s", parent_tool_use_id: null, message: { role: "user", content: [{ type: "text", text: "[Request interrupted by user]" }] } },
+  ] as never)
+  expect(items.map((item) => item.type)).toEqual(["user", "tool", "result"])
+  expect(items.at(-1)).toMatchObject({ id: "result:u1", stopped: true })
+})
