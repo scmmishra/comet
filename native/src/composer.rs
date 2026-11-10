@@ -29,6 +29,8 @@ const NUMBERED_OPTIONS: usize = 9;
 const QUEUE_SHOWN: usize = 3;
 /// A question scrolls past this height, Desk's `max-h-[40vh]` on a typical window.
 const QUESTION_MAX: f32 = 320.0;
+/// An attached image's thumbnail, `size-14`.
+const THUMB: f32 = 56.0;
 /// The file and command list scrolls past this height, `max-h-[280px]`.
 const LIST_MAX: f32 = 280.0;
 /// Typing writes the drafts to disk after this pause, not on every key.
@@ -115,6 +117,8 @@ pub struct Drafts {
     found: Option<(String, String, Vec<String>)>,
     /// Projects whose commands were asked for.
     skills_asked: HashSet<String>,
+    /// Each tab's attached images. They stay in memory only, since one can run to megabytes.
+    images: HashMap<String, Vec<crate::protocol::ImageAttachment>>,
 }
 
 impl Drafts {
@@ -200,15 +204,30 @@ impl Desk {
             return self.advance_question(&tab, &request, &questions);
         }
         let text = self.drafts.text(&tab).trim().to_owned();
-        if text.is_empty() {
+        let images = self.drafts.images.remove(&tab).unwrap_or_default();
+        if text.is_empty() && images.is_empty() {
             return;
         }
-        if self.workspace.active_tab().is_some_and(crate::workspace::is_untitled) {
+        if !text.is_empty() && self.workspace.active_tab().is_some_and(crate::workspace::is_untitled) {
             self.workspace.name_tab(&tab, &text, &self.core);
         }
         let follow_up = self.busy(&tab).then(|| self.follow_up(alternate).for_text(&text).name().to_owned());
-        self.core.send(&ClientMessage::SessionSend { tab_id: tab.clone(), text, follow_up });
+        self.core.send(&ClientMessage::SessionSend { tab_id: tab.clone(), text, images, follow_up });
         self.drafts.edit(&tab).clear();
+    }
+
+    /// Adds image files to the active tab's message. A file that is not an image Claude reads says why.
+    fn attach(&mut self, paths: &[std::path::PathBuf]) {
+        let Some(tab) = self.workspace.active.clone() else { return };
+        for path in paths {
+            match crate::attachments::read(path) {
+                Ok(image) => {
+                    self.images.remember(&image);
+                    self.drafts.images.entry(tab.clone()).or_default().push(image);
+                }
+                Err(reason) => self.error = Some(reason),
+            }
+        }
     }
 
     /// The trigger the active tab's caret is in, unless the user closed its list.
@@ -307,7 +326,8 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &
         layer.push(popover::anchored(k, list, "composer", placement, 8.0));
     }
     let edit = s.drafts.by_tab.get(tab).cloned().unwrap_or_else(|| TextEdit::new(""));
-    let empty = edit.text.trim().is_empty();
+    let attached = s.drafts.images.get(tab).map_or(&[][..], Vec::as_slice);
+    let empty = edit.text.trim().is_empty() && attached.is_empty();
     let question = s.question(tab);
     let field = text_input(&edit, theme::thread_text(k, s.account.text_size()))
         .key("composer-input")
@@ -342,7 +362,22 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &
         Some((request, questions)) => answer_button(s, tab, request, questions, empty, k),
         None => send_button(s, tab, empty, k),
     };
-    let actions = row().w_full().items_center().gap(4.0).px(10.0).pb(10.0).pt(4.0).child(row().grow(1.0)).child(crate::model_picker::model_picker(s, info, k, layer)).child(button);
+    let attach = IconButton::new(&ic::PLUS)
+        .variant(IconButtonVariant::Ghost)
+        .control_size(ControlSize::Large)
+        .label("Add images")
+        .on_press_tx(|_: &mut Desk, tx| {
+            let options = rune::FileDialogOptions { title: "Add images".into(), ..Default::default() }.filter("Images", &crate::attachments::EXTENSIONS);
+            tx.open_file(options, |s: &mut Desk, result, _| match result {
+                Ok(Some(path)) => s.attach(&[path]),
+                Ok(None) => {}
+                Err(e) => s.error = Some(e.to_string()),
+            });
+        })
+        .build(k)
+        .radius(16.0);
+    let actions = row().w_full().items_center().gap(4.0).px(10.0).pb(10.0).pt(4.0).child(attach).child(row().grow(1.0)).child(crate::model_picker::model_picker(s, info, k, layer)).child(button);
+    let thumbs = (!attached.is_empty()).then(|| row().w_full().gap(8.0).wrap().px(14.0).pt(12.0).children(attached.iter().enumerate().map(|(i, image)| thumbnail(s, tab, i, image, k))));
     let border = if edit.focused { k.c.layer_03 } else { k.c.border_base };
     let card = col()
         .key("composer")
@@ -352,8 +387,10 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &
         .fill(k.c.layer_01)
         .border(1.0, border)
         .children(question.as_ref().map(|(request, questions)| question_panel(s, tab, request, questions, k)))
+        .children(thumbs)
         .child(input)
-        .child(actions);
+        .child(actions)
+        .on_drop_files(|s: &mut Desk, paths: &[std::path::PathBuf], _| s.attach(paths));
     col().w_full().items_center().child(col().w_full().max_w(COLUMN).pt(6.0).pb(16.0).children(queue_view(s, tab, k)).child(card))
 }
 
@@ -471,6 +508,31 @@ impl Desk {
             self.drafts.found = Some((project, query, paths));
         }
     }
+}
+
+/// An attached image, with a button to take it off the message.
+fn thumbnail(s: &Desk, tab: &str, index: usize, image: &crate::protocol::ImageAttachment, k: &Kit) -> El {
+    let picture = match s.images.get(image) {
+        Some(decoded) => el().size(THUMB, THUMB).radius(10.0).clip_rounded(10.0).border(1.0, k.c.border_base).pixels_fit(decoded.pixels(), rune::SurfaceFit::Fill),
+        None => el().size(THUMB, THUMB).radius(10.0).fill(k.c.layer_02),
+    };
+    let tab = tab.to_owned();
+    let remove = IconButton::new(&ic::XMARK_SMALL)
+        .variant(IconButtonVariant::Contrast)
+        .control_size(ControlSize::Small)
+        .label("Remove image")
+        .on_press(move |s: &mut Desk| {
+            if let Some(images) = s.drafts.images.get_mut(&tab)
+                && index < images.len()
+            {
+                images.remove(index);
+            }
+        })
+        .build(k)
+        .radius(10.0)
+        .absolute(THUMB - 14.0, -6.0)
+        .group_opacity(0.0, 1.0);
+    el().key(format!("image-{index}")).size(THUMB, THUMB).hover_group().child(picture).child(remove)
 }
 
 /// "Next question", or "Submit answer(s)" on the last one. It waits for the question to have an answer.
@@ -799,6 +861,24 @@ mod tests {
         assert!(!s.suggestions("t").is_empty());
         assert!(s.list_key("t", &Key::Escape));
         assert!(s.suggestions("t").is_empty());
+    }
+
+    #[test]
+    fn images_go_with_the_message_and_alone_are_enough_to_send() {
+        let mut s = desk();
+        let dir = std::env::temp_dir().join(format!("desk-composer-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (png, text) = (dir.join("a.png"), dir.join("a.txt"));
+        std::fs::write(&png, [137, 80, 78, 71]).unwrap();
+        std::fs::write(&text, "x").unwrap();
+        s.attach(&[png, text]);
+        assert_eq!(s.error.as_deref(), Some("a.txt is not a PNG, JPEG, GIF or WebP image."));
+        s.submit(false);
+        let sent = s.core.sent();
+        let send = sent.iter().find(|m| m["type"] == "session.send").expect("an image alone sends");
+        assert_eq!(send["images"], serde_json::json!([{ "mediaType": "image/png", "data": "iVBORw==" }]));
+        assert!(s.drafts.images.get("t").is_none_or(Vec::is_empty));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

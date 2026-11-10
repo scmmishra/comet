@@ -39,6 +39,8 @@ const STEP_LIST_MAX: f32 = 288.0;
 const OUTPUT_MAX: f32 = 256.0;
 /// An edit's lines scroll past this height, `max-h-80`.
 const EDIT_MAX: f32 = 320.0;
+/// An image in a message fits this box, `max-w-[240px] max-h-48`.
+const MESSAGE_IMAGE: [f32; 2] = [240.0, 192.0];
 /// Boxes in the thread, `rounded-2xl`.
 const BOX_RADIUS: f32 = 10.0;
 /// A message's bubble, `rounded-3xl`.
@@ -183,7 +185,7 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
             .items_center()
             .child(icon(&ic::OUTLINE_CONSOLE, STEP_ICON).color(k.c.text_faint))
             .child(c.small(words.clone()).color(k.c.text_faint).truncate()),
-        ThreadItem::User { text: words, steered, .. } => {
+        ThreadItem::User { text: words, steered, images, .. } => {
             let steered = steered.then(|| {
                 row().gap(4.0).items_center().child(icon(&ic::ARROW_UP_RIGHT, 12.0).color(k.c.text_faint)).child(text("Steered").font(k.ty.text_xsmall).color(k.c.text_faint))
             });
@@ -198,7 +200,8 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
                     .selectable(true)
                     .selection_color(k.selection()),
             );
-            col().w_full().items_end().gap(4.0).children(steered).children((!words.is_empty()).then_some(bubble))
+            let pictures = (!images.is_empty()).then(|| row().gap(8.0).wrap().justify_end().max_w(BUBBLE_MAX).children(images.iter().map(|image| message_image(c, image))));
+            col().w_full().items_end().gap(4.0).children(steered).children(pictures).children((!words.is_empty()).then_some(bubble))
         }
         // Markdown makes its own selection group. Leaving it joins its texts to the thread's, so a drag crosses messages.
         ThreadItem::Text { text: words, done, .. } => {
@@ -218,6 +221,17 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
         // Results end turns and questions show in the composer. Neither draws in the thread.
         ThreadItem::Result { .. } | ThreadItem::Question { .. } => el(),
     }
+}
+
+/// An image sent with a message, at most `MESSAGE_IMAGE` wide and tall, in its own proportions.
+fn message_image(c: &Ctx, image: &crate::protocol::ImageAttachment) -> El {
+    let k = c.k;
+    let Some(decoded) = c.s.images.get(image) else { return el().size(MESSAGE_IMAGE[0], MESSAGE_IMAGE[1]).radius(BOX_RADIUS).fill(k.c.layer_02) };
+    let [w, h] = decoded.size().map_or(MESSAGE_IMAGE, |[w, h]| {
+        let scale = (MESSAGE_IMAGE[0] / w as f32).min(MESSAGE_IMAGE[1] / h as f32).min(1.0);
+        [w as f32 * scale, h as f32 * scale]
+    });
+    el().size(w, h).radius(BOX_RADIUS).clip_rounded(BOX_RADIUS).border(1.0, k.c.border_base).pixels(decoded.pixels())
 }
 
 /// The head of a running turn: how long Claude has worked on it, counted each second.

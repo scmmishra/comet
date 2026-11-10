@@ -43,7 +43,7 @@ export const CORE_MESSAGES = [
     tabId: "tab-1",
     context: { percent: 12, tokens: 24_000, maxTokens: 200_000 },
     items: [
-      { type: "user", id: "u1", text: "Fix the login form", at: 1_700_000_000_000, steered: true },
+      { type: "user", id: "u1", text: "Fix the login form", images: [{ mediaType: "image/png", data: "iVBORw==" }], at: 1_700_000_000_000, steered: true },
       { type: "thinking", id: "th1", text: "**Reading the form**", kind: "thought", label: "Reading the form" },
       { type: "tool", id: "t1", name: "Bash", summary: "npm test", result: { output: "1 failed", isError: true }, kind: "command", label: "Failed npm" },
       { type: "tool", id: "t2", name: "Edit", summary: "src/login.ts", file: "src/login.ts", edits: [{ before: "a", after: "b" }], kind: "edit", label: "Edited src/login.ts" },
@@ -104,7 +104,7 @@ export const CLIENT_MESSAGES = [
   { type: "tab.reopen" },
   { type: "tabs.save", tabs: TABS, active: "tab-2" },
   { type: "session.send", tabId: "tab-1", text: "Add a test", followUp: "queue" },
-  { type: "session.send", tabId: "tab-1", text: "Hi" },
+  { type: "session.send", tabId: "tab-1", text: "Hi", images: [{ mediaType: "image/png", data: "iVBORw==" }] },
   { type: "session.interrupt", tabId: "tab-1" },
   { type: "permission.answer", tabId: "tab-1", requestId: "r1", answer: "allow-session" },
   { type: "question.answer", tabId: "tab-1", requestId: "r2", answers: { "Which form?": "Login" } },

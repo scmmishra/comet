@@ -172,11 +172,21 @@ pub struct Skill {
     pub builtin: bool,
 }
 
+/// An image sent with a message, as base64.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageAttachment {
+    pub media_type: String,
+    pub data: String,
+}
+
 /// A message waiting for the running turn to end.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct QueuedMessage {
     pub id: String,
     pub text: String,
+    #[serde(default)]
+    pub images: Vec<ImageAttachment>,
 }
 
 /// What a step did, which picks its icon. The core names it.
@@ -200,6 +210,8 @@ pub enum ThreadItem {
     User {
         id: String,
         text: String,
+        #[serde(default)]
+        images: Vec<ImageAttachment>,
         at: Option<f64>,
         /// Sent into a turn that was still running.
         #[serde(default)]
@@ -394,6 +406,8 @@ pub enum ClientMessage {
     SessionSend {
         tab_id: String,
         text: String,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        images: Vec<ImageAttachment>,
         #[serde(skip_serializing_if = "Option::is_none")]
         follow_up: Option<String>,
     },
@@ -497,8 +511,8 @@ mod tests {
             ClientMessage::ModelsGet,
             ClientMessage::TabReopen,
             ClientMessage::TabsSave { tabs, active },
-            ClientMessage::SessionSend { tab_id: "tab-1".into(), text: "Add a test".into(), follow_up: Some("queue".into()) },
-            ClientMessage::SessionSend { tab_id: "tab-1".into(), text: "Hi".into(), follow_up: None },
+            ClientMessage::SessionSend { tab_id: "tab-1".into(), text: "Add a test".into(), images: vec![], follow_up: Some("queue".into()) },
+            ClientMessage::SessionSend { tab_id: "tab-1".into(), text: "Hi".into(), images: vec![ImageAttachment { media_type: "image/png".into(), data: "iVBORw==".into() }], follow_up: None },
             ClientMessage::SessionInterrupt { tab_id: "tab-1".into() },
             ClientMessage::PermissionAnswer { tab_id: "tab-1".into(), request_id: "r1".into(), answer: "allow-session".into() },
             ClientMessage::QuestionAnswer { tab_id: "tab-1".into(), request_id: "r2".into(), answers: Some([("Which form?".to_owned(), "Login".to_owned())].into()) },

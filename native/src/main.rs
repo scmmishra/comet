@@ -1,12 +1,15 @@
 //! Desk, drawn with Rune. The Bun core does the work. This app draws what it sends.
 
 mod account;
+mod attachments;
+mod base64;
 mod composer;
 mod core;
 mod diff;
 mod format;
 mod icons;
 mod ids;
+mod images;
 mod instance;
 mod model_picker;
 mod models;
@@ -72,6 +75,7 @@ fn main() {
         fonts: theme::FONTS,
         families: theme::FAMILIES,
         poll: Some(shell::poll),
+        setup: Some(|s: &mut Desk, waker| s.images.setup(waker)),
         scenes: scenes::SCENES,
         ..AppSpec::new("Desk", (1280.0, 820.0), Desk::default, shell::view)
     })

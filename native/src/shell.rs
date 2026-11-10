@@ -45,6 +45,7 @@ pub struct Desk {
     pub picker: crate::model_picker::Picker,
     pub projects: crate::projects::Projects,
     pub start: crate::start_screen::Start,
+    pub images: crate::images::Images,
     /// The wall clock, in milliseconds since the epoch, as of the last tick. It ticks each second
     /// while a turn runs, for the working head.
     pub now_ms: f64,
@@ -87,10 +88,25 @@ impl Desk {
             CoreMessage::Tabs { tabs, active } => result = w.restore(tabs, active, account, core),
             CoreMessage::TabReopened { tab, index } => w.reopened(tab, index, core),
             CoreMessage::TabTitle { tab_id, title } => w.name_tab(&tab_id, &title, core),
-            CoreMessage::SessionHistory { tab_id, items, context } => self.threads.history(&tab_id, items, context),
+            CoreMessage::SessionHistory { tab_id, items, context } => {
+                for item in &items {
+                    self.remember_images(item);
+                }
+                self.threads.history(&tab_id, items, context);
+            }
             CoreMessage::SessionRows { tab_id, rows } => self.threads.rows(&tab_id, rows),
-            CoreMessage::SessionEvent { tab_id, event } => self.threads.apply(&tab_id, event),
-            CoreMessage::Queue { tab_id, messages, held } => self.threads.queue(&tab_id, messages, held),
+            CoreMessage::SessionEvent { tab_id, event } => {
+                if let crate::protocol::ThreadEvent::Item { item } = &event {
+                    self.remember_images(item);
+                }
+                self.threads.apply(&tab_id, event);
+            }
+            CoreMessage::Queue { tab_id, messages, held } => {
+                for image in messages.iter().flat_map(|m| &m.images) {
+                    self.images.remember(image);
+                }
+                self.threads.queue(&tab_id, messages, held);
+            }
             CoreMessage::Project { project, part, value } => self.projects.read(project, &part, value),
             CoreMessage::FilesFound { project, query, paths } => self.found_files(project, query, paths),
             CoreMessage::Error { message } => self.error = Some(message),
@@ -115,6 +131,14 @@ impl Desk {
             open_folder(tx);
         }
         self.sync_start();
+    }
+
+    fn remember_images(&mut self, item: &crate::protocol::ThreadItem) {
+        if let crate::protocol::ThreadItem::User { images, .. } = item {
+            for image in images {
+                self.images.remember(image);
+            }
+        }
     }
 
     pub fn cmd_held(&self) -> bool {
