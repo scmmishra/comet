@@ -178,6 +178,8 @@ export class Session {
         if (message.type === "result" && this.steered(message)) continue
         for (const event of this.mapper.map(message, Date.now())) {
           // The result of a turn the user stopped says so, so the thread can tell it from one that finished.
+          // A turn Claude Code starts itself, after a background task, makes the tab busy again.
+          if (event.kind === "status" && event.busy) this.running = true
           const stopped = this.stopping && event.kind === "item" && event.item.type === "result"
           this.emit(stopped ? { ...event, item: { ...event.item, stopped: true } } : event)
         }

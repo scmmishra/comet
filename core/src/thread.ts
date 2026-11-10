@@ -36,9 +36,13 @@ export class ThreadMapper {
         // A subagent's own steps stay inside its tool call.
         if (message.parent_tool_use_id) return []
         return this.mapAssistant(message.message.content, message.uuid, at).map(item)
-      case "user":
+      case "user": {
         if (message.parent_tool_use_id) return []
+        // A background task that finished starts a turn of Claude's own. The tab works again until it ends.
+        const task = taskSummary(message.message.content)
+        if (task !== undefined) return [item({ type: "user", id: message.uuid ?? `task-${at ?? Date.now()}`, text: task, fromTask: true, ...(at !== undefined ? { at } : {}) }), { kind: "status", busy: true }]
         return this.mapToolResults(message.message.content).map(item)
+      }
       case "result":
         return [item({ type: "result", id: message.uuid, durationMs: message.duration_ms, isError: message.is_error })]
       default:
@@ -109,6 +113,13 @@ export class ThreadMapper {
         this.mapAssistant((stored.message as SDKAssistantMessage["message"]).content, stored.uuid, at).forEach(add)
       } else if (stored.type === "user") {
         const content = (stored.message as { content?: unknown }).content
+        const task = taskSummary(content)
+        if (task !== undefined) {
+          closeTurn()
+          if (at !== undefined) turn = { id: stored.uuid, start: at }
+          add({ type: "user", id: stored.uuid, text: task, fromTask: true, ...(at !== undefined ? { at } : {}) })
+          continue
+        }
         const text = userText(content)
         if (text === undefined) {
           this.mapToolResults(content).forEach(add)
@@ -179,6 +190,16 @@ function userImages(content: unknown): ImageAttachment[] {
   return content.flatMap((block) =>
     block.type === "image" && block.source?.type === "base64" && IMAGE_TYPES.includes(block.source.media_type) ? [{ mediaType: block.source.media_type, data: block.source.data }] : [],
   )
+}
+
+/**
+ * The summary of a background task that finished, when Claude Code adds its notice to the conversation.
+ * Claude Code then starts a turn on its own, so the notice opens that turn.
+ */
+function taskSummary(content: unknown): string | undefined {
+  const text = typeof content === "string" ? content : Array.isArray(content) ? content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n") : ""
+  if (!text.trimStart().startsWith("<task-notification>")) return undefined
+  return /<summary>([\s\S]*?)<\/summary>/.exec(text)?.[1]?.trim() || "A background task finished."
 }
 
 /**

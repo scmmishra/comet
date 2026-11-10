@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- When a background task Claude started finishes, Claude Code starts a turn on its own. Desk now shows that turn under a quiet line with the task's summary, and marks the tab as working. Before, its steps joined the turn before it, which folded that turn's answer out of sight.
 - A slash command sent while Claude works, such as /rename, waits in the queue instead of steering. Steering it cut the running turn short. Send now still sends it at once.
 - The Subagents card and a newly queued message rise in, and an image added to the message box pops in, so each one shows it arrived. Switching tabs shows them at once, without motion.
 - A toast with one line of text, such as the ⌘Q warning, lines its text up with its close button. The text sat a line lower.

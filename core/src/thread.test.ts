@@ -91,3 +91,20 @@ test("shows a command's own output as a reply", () => {
   const events = new ThreadMapper(DIR).map({ type: "system", subtype: "local_command_output", content: "Context: 12k of 200k", uuid: "c1", session_id: "s" } as never, 5)
   expect(events).toEqual([{ kind: "item", item: { type: "text", id: "c1", text: "Context: 12k of 200k", done: true, at: 5 } }])
 })
+
+const NOTICE = "<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n<summary>Background command \"Run the review\" completed (exit code 0)</summary>\n</task-notification>"
+
+test("opens a turn of Claude's own when a background task's notice arrives, live and restored", () => {
+  const live = new ThreadMapper(DIR).map({ type: "user", uuid: "n1", session_id: "s", parent_tool_use_id: null, message: { role: "user", content: NOTICE } } as never, 7)
+  expect(live).toEqual([
+    { kind: "item", item: { type: "user", id: "n1", text: 'Background command "Run the review" completed (exit code 0)', fromTask: true, at: 7 } },
+    { kind: "status", busy: true },
+  ])
+  const restored = new ThreadMapper(DIR).history([
+    { type: "user", uuid: "u1", session_id: "s", parent_tool_use_id: null, timestamp: "2026-11-09T10:00:00.000Z", message: { role: "user", content: "Progress?" } },
+    { type: "assistant", uuid: "a1", session_id: "s", parent_tool_use_id: null, timestamp: "2026-11-09T10:00:02.000Z", message: { content: [{ type: "text", text: "Still running." }] } },
+    { type: "user", uuid: "n1", session_id: "s", parent_tool_use_id: null, timestamp: "2026-11-09T10:01:00.000Z", message: { role: "user", content: NOTICE } },
+    { type: "assistant", uuid: "a2", session_id: "s", parent_tool_use_id: null, timestamp: "2026-11-09T10:01:05.000Z", message: { content: [{ type: "text", text: "It finished." }] } },
+  ] as never)
+  expect(restored.map((found) => `${found.type}:${found.id}`)).toEqual(["user:u1", "text:a1:0", "result:result:u1", "user:n1", "text:a2:0", "result:result:n1"])
+})

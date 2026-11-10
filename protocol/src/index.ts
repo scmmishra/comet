@@ -55,8 +55,11 @@ export interface ImageAttachment {
  */
 export type ThreadItem =
   /** `at` is when it was sent, in milliseconds since the epoch, when that is known. */
-  /** `steered` marks a message sent into a turn that was still running. */
-  | { readonly type: "user"; readonly id: string; readonly text: string; readonly images?: readonly ImageAttachment[]; readonly at?: number; readonly steered?: boolean }
+  /**
+   * A message that starts a turn. `steered` marks one sent into a turn that was still running. `fromTask`
+   * marks one Claude Code sent itself when a background task it ran finished. Its text is the task's summary.
+   */
+  | { readonly type: "user"; readonly id: string; readonly text: string; readonly images?: readonly ImageAttachment[]; readonly at?: number; readonly steered?: boolean; readonly fromTask?: boolean }
   /** Assistant text. `at` is when it finished. Text still streaming is not done and has none. */
   | { readonly type: "text"; readonly id: string; readonly text: string; readonly done: boolean; readonly at?: number }
   /** Claude's thinking. `text` is what it thought, when Claude Code shares it. */
