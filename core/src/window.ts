@@ -30,6 +30,11 @@ interface WindowHooks {
 export class Window {
   private state: WindowState = loadWindowState()
   private sessions = new Map<string, Session>()
+  /**
+   * Sessions whose turn still runs in a thread a plugin switched the tab away from, by project and key.
+   * One rejoins its tab when the thread comes back, and closes once its turn ends while away.
+   */
+  private readonly parked = new Map<string, { readonly tabId: string; readonly session: Session }>()
   private terminals: Terminals
 
   constructor(private readonly hooks: WindowHooks) {
@@ -120,13 +125,23 @@ export class Window {
     if (this.thread(tabId).key === thread.key) return
     const tab = this.tab(tabId)
     const sessionId = this.state.keys[threadKey(tab.project, thread.key)]
-    this.closeSession(tabId)
+    this.parkSession(tabId)
     this.setThread(tabId, { key: thread.key, ...(sessionId ? { sessionId } : {}) })
     if (thread.title) this.hooks.broadcast({ type: "tab.title", tabId, title: thread.title })
     const items = sessionId ? await this.history(tab, sessionId) : []
     // Another key may have taken the tab while the transcript was read.
     if (this.thread(tabId).key !== thread.key) return
-    this.hooks.broadcast({ type: "session.history", tabId, items })
+    // A thread whose turn kept running while away rejoins the tab, and its turn shows from where it is.
+    const back = this.parked.get(threadKey(tab.project, thread.key))
+    if (back?.tabId === tabId) {
+      this.parked.delete(threadKey(tab.project, thread.key))
+      this.sessions.set(tabId, back.session)
+    }
+    // A transcript read mid-turn closes that turn with a result timed to its last reply. The turn is still running, so its result is left for the live one.
+    const running = back?.session.busy ?? false
+    const shown = running && items.at(-1)?.type === "result" ? items.slice(0, -1) : items
+    this.hooks.broadcast({ type: "session.history", tabId, items: shown })
+    if (running) this.hooks.broadcast({ type: "session.event", tabId, event: { kind: "status", busy: true } })
     if (sessionId) this.fillContext(tabId, sessionId)
     // A newer key that took the tab during the send has its own prompt, so this one goes unsaid.
     else if (thread.prompt) await this.send(tabId, thread.prompt).catch((error: Error) => { if (error.message !== MOVED) throw error })
@@ -170,6 +185,19 @@ export class Window {
 
   answerPermission(tabId: string, requestId: string, allow: boolean) {
     this.sessions.get(tabId)?.answerPermission(requestId, allow)
+  }
+
+  /**
+   * Moves a tab's session aside when a plugin switches the tab to another thread. A turn still running goes
+   * on, out of sight, so switching conversations never stops Claude. An idle session closes.
+   */
+  private parkSession(tabId: string) {
+    const running = this.sessions.get(tabId)
+    const key = this.thread(tabId).key
+    if (!running) return
+    this.sessions.delete(tabId)
+    if (running.busy && key) this.parked.set(threadKey(this.tab(tabId).project, key), { tabId, session: running })
+    else running.close()
   }
 
   closeSession(tabId: string) {
@@ -260,7 +288,11 @@ export class Window {
       let lastMessage: string | undefined
       let summary: Promise<void> = Promise.resolve()
       const emit = (event: ThreadEvent) => {
-        if (!current()) return
+        if (!current()) {
+          // A parked session's turn ended while its thread was away. Nothing shows it, so it closes. Its transcript keeps the turn.
+          if (event.kind === "status" && !event.busy) this.closeParked(created)
+          return
+        }
         if (event.kind === "context") this.updateThread(tab.id, { context: event.reading })
         this.hooks.broadcast({ type: "session.event", tabId: tab.id, event })
         if (event.kind === "item" && event.item.type === "user") lastMessage = event.item.id
@@ -285,9 +317,9 @@ export class Window {
         settings: tab,
         compactIdle: this.hooks.compactIdle,
         onSessionId: (sessionId) => {
-          if (!current()) return
-          this.updateThread(tab.id, { sessionId })
+          // A parked thread still saves its session under its key, so coming back resumes it.
           if (key) this.persist({ keys: { ...this.state.keys, [threadKey(tab.project, key)]: sessionId } })
+          if (current()) this.updateThread(tab.id, { sessionId })
         },
         onRateLimit: this.hooks.rateLimit,
       })
@@ -295,6 +327,14 @@ export class Window {
       this.sessions.set(tab.id, created)
     }
     return found
+  }
+
+  private closeParked(session: Session) {
+    for (const [key, parked] of this.parked) {
+      if (parked.session !== session) continue
+      this.parked.delete(key)
+      session.close()
+    }
   }
 
   /**
