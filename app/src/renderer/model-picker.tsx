@@ -7,18 +7,10 @@ import { keyLabels, TAB_SHORTCUTS, tabShortcut } from "../shared/commands"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { account } from "./account"
 import { ClaudeMark, Icon, type IconName } from "./icons"
-import { EFFORT_LABEL, effortFor, isAlias, modelLabel } from "./models"
+import { EFFORT_LABEL, effortFor, isAlias, modelLabel, PERMISSION, permissionFor, permissionModes } from "./models"
 import { threadOf } from "./threads"
 import { changeTab } from "./workspace"
 
-/** Permission modes, in T3 Code's words and order. */
-const PERMISSION: Record<PermissionMode, { label: string; description: string; icon: IconName }> = {
-  default: { label: "Supervised", description: "Asks before commands and file changes.", icon: "lock" },
-  acceptEdits: { label: "Auto-accept edits", description: "Makes edits, and asks before anything else.", icon: "edit" },
-  auto: { label: "Auto", description: "Approves routine actions, asks about the rest.", icon: "sparkle" },
-  bypassPermissions: { label: "Full access", description: "Edits and runs commands without asking.", icon: "shield-off" },
-}
-const PERMISSION_MODES = Object.keys(PERMISSION) as PermissionMode[]
 
 /**
  * ⌘1–⌘9 belong to the app menu, which switches tabs, and macOS hands menu shortcuts the key before
@@ -55,9 +47,9 @@ export function ModelPicker(props: { tab: TabInfo }) {
       model: option.value,
       effort: effortFor(option, props.tab.effort),
       fast: option.fast && props.tab.fast,
-      permissionMode: props.tab.permissionMode === "auto" && !option.autoMode ? "default" : props.tab.permissionMode,
+      permissionMode: permissionFor(option, props.tab.permissionMode),
     })
-  const modes = () => PERMISSION_MODES.filter((mode) => mode !== "auto" || selected()?.autoMode)
+  const modes = () => [...permissionModes(selected())]
 
   // ⌘1–⌘9 pick an alias while the popover is open.
   const pickNumber = (index: number) => {

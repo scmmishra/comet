@@ -1,4 +1,5 @@
 import type { RunSettings, TabInfo, TerminalInfo } from "@desk/protocol"
+import { permissionFor } from "./models"
 import { createStore, produce } from "solid-js/store"
 import { account } from "./account"
 import { core } from "./core"
@@ -70,11 +71,12 @@ export function openSetup(project: string, setup: { readonly id: string; readonl
   applySetup(tabId, setup.id)
 }
 
-/** A new tab in `project`. Its thread starts on the default model and effort, and on the speed and permission mode of the tab in front. */
+/** A new tab in `project`. Its thread starts on the default model, effort and permission mode, and on the speed of the tab in front. */
 function tabIn(project: string): TabInfo {
   const from = activeTab()
-  const { model, effort } = account.settings.claude
-  return { id: crypto.randomUUID(), title: NEW_TAB_TITLE, project, terminals: [], model, effort, fast: from?.fast, permissionMode: from?.permissionMode ?? "default" }
+  const { model, effort, permissionMode } = account.settings.claude
+  const option = account.models.find((found) => found.value === model)
+  return { id: crypto.randomUUID(), title: NEW_TAB_TITLE, project, terminals: [], model, effort, fast: from?.fast, permissionMode: permissionFor(option, permissionMode) }
 }
 
 function addTab(tab: TabInfo, place: "end" | "next") {

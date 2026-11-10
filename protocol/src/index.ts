@@ -113,7 +113,8 @@ export type Effort = (typeof EFFORTS)[number]
  * How Claude Code handles tool calls, as T3 Code names them: Supervised asks first, Auto-accept edits
  * lets edits through, Auto lets a classifier decide, and Full access never asks.
  */
-export type PermissionMode = "default" | "acceptEdits" | "auto" | "bypassPermissions"
+export const PERMISSION_MODES = ["default", "acceptEdits", "auto", "bypassPermissions"] as const
+export type PermissionMode = (typeof PERMISSION_MODES)[number]
 
 /** How a tab's thread runs. A change applies to a running thread from its next reply. */
 export interface RunSettings {
@@ -179,6 +180,8 @@ export interface ClaudeSettings {
   readonly model: string
   /** Absent means the model's default effort. */
   readonly effort?: Effort
+  /** A model without Auto mode starts Supervised instead. */
+  readonly permissionMode: PermissionMode
   /** Compacts a thread's context once it has sat idle, so picking it up again starts small. */
   readonly compactIdle: boolean
 }
@@ -244,7 +247,7 @@ export interface DeskSettings {
 /** Desk's settings before anyone changes them. The app uses them until the core sends the saved ones. */
 export const DEFAULT_SETTINGS: DeskSettings = {
   appearance: { theme: "dark", fontSize: 14, uiFont: "", codeFont: "" },
-  claude: { model: DEFAULT_MODEL, compactIdle: false },
+  claude: { model: DEFAULT_MODEL, permissionMode: "auto", compactIdle: false },
   projects: {},
 }
 

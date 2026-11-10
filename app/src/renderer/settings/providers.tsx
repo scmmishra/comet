@@ -6,7 +6,7 @@ import { For, Show } from "solid-js"
 import { account, updateSettings } from "../account"
 import { ClaudeMark } from "../icons"
 import { UsageRow } from "../meters"
-import { EFFORT_LABEL, effortFor } from "../models"
+import { EFFORT_LABEL, effortFor, PERMISSION, permissionFor, permissionModes } from "../models"
 import { SettingsHeader, SettingsList, SettingsRow, SettingsSection } from "./layout"
 
 /** Agents Desk will run next. They show so the page says what is coming, and do nothing yet. */
@@ -61,6 +61,17 @@ export function ProvidersPage() {
                 />
               </SettingsRow>
             </Show>
+            <SettingsRow title="Default permissions" description="How a new tab's Claude handles tool calls. A tab can change it in the model picker. Auto needs a model that supports it.">
+              <Select
+                options={[...permissionModes(model())]}
+                current={permissionFor(model(), claude().permissionMode)}
+                value={(mode) => mode}
+                label={(mode) => PERMISSION[mode].label}
+                placement="bottom-end"
+                gutter={6}
+                onSelect={(permissionMode) => permissionMode && updateSettings({ claude: { permissionMode } })}
+              />
+            </SettingsRow>
             <SettingsRow title="Compact idle threads" description="When you return to a large thread that sat idle, Claude Code compacts it first, so its next reply reads a summary, not the whole history.">
               <Switch checked={claude().compactIdle} onChange={(compactIdle) => updateSettings({ claude: { compactIdle } })} hideLabel>
                 Compact idle threads
