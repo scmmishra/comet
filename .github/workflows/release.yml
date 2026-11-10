@@ -1,0 +1,61 @@
+name: Release
+
+# Builds Desk.app and publishes it as the GitHub release v<version>, with the version's CHANGELOG.md
+# section as its notes. It runs only when started by hand. Desk installs from source with
+# `mise run install` until releases are wanted.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: release
+
+jobs:
+  release:
+    runs-on: macos-26
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read the version
+        run: echo "TAG=v$(jq -r .version app/package.json)" >> "$GITHUB_ENV"
+
+      - name: Stop if the version is already released
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "$TAG is already released. Bump the version in app/package.json first."
+            exit 1
+          fi
+
+      - run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      # Before the build, so a version without notes fails in seconds.
+      - name: Read the release notes from CHANGELOG.md
+        run: bun scripts/release-notes.ts > "$RUNNER_TEMP/notes.md"
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run typecheck
+
+      - run: bun test core app/src
+
+      - run: scripts/package.sh
+
+      # ditto keeps the app's symlinks and signature, which zip does not.
+      - name: Zip the app and write its checksum
+        run: |
+          cd dist/mac-arm64
+          ditto -c -k --keepParent Desk.app Desk-arm64.zip
+          shasum -a 256 Desk-arm64.zip > Desk-arm64.zip.sha256
+          cat Desk-arm64.zip.sha256
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$TAG" dist/mac-arm64/Desk-arm64.zip dist/mac-arm64/Desk-arm64.zip.sha256 \
+            --target "$GITHUB_SHA" --title "Desk $TAG" --notes-file "$RUNNER_TEMP/notes.md"

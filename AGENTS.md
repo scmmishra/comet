@@ -42,6 +42,13 @@ Build the UI from `@opencode/ui`. Anomaly's Rust framework ships `rune-kit`, who
 - `assets/logo.svg` and `assets/logo-dark.svg` are the logo in light and dark. `mise run icons` renders them into `app/build`. Commit what it writes.
 - `mise run check` typechecks, runs the core and app tests, and builds the app.
 
+## Release
+
+- The version in `app/package.json` is Desk's version. Desk.app shows it.
+- Changes go in `CHANGELOG.md` under `## Unreleased` until they ship. CI fails when the version has no section.
+- To release, rename `## Unreleased` to the new version, set the version in `app/package.json` to match, and push to `main`. Then start the Release workflow by hand. It publishes `Desk-arm64.zip` as the GitHub release `v<version>`, with the version's section as its notes.
+- Desk has no auto-update yet. `mise run install` updates the installed Desk from the checkout.
+
 ## Check the UI
 
 Do not take screen captures. Start the app with `DESK_DEBUG_PORT=9333`, then drive the page with agent-browser: `agent-browser connect 9333`, `snapshot -i`, `fill`, `press`, `get text`, and `screenshot` of the page.

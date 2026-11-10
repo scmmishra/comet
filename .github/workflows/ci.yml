@@ -1,0 +1,45 @@
+name: CI
+
+# Checks the release notes, typechecks, tests and packages Desk.app on the macOS 26 runner that
+# releases use, so a change that breaks the app's build fails here first.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v6
+
+      # Desk.icon compiles with actool from Xcode 26.
+      - run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - run: bun install --frozen-lockfile
+
+      - name: Check CHANGELOG.md has a section for the app's version
+        run: bun scripts/release-notes.ts > /dev/null
+
+      - run: bun run typecheck
+
+      - run: bun test core app/src
+
+      - run: scripts/package.sh
+
+      - name: Check the app's version and signature
+        run: |
+          plist=dist/mac-arm64/Desk.app/Contents/Info.plist
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$(jq -r .version app/package.json)"
+          codesign --verify --deep --strict dist/mac-arm64/Desk.app
