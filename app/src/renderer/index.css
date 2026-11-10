@@ -35,6 +35,9 @@
   --color-claude: #d97757;
   /* Fast mode's bolt. */
   --color-fast: #f5c542;
+  /* The window's top tabs: the active one, and an inactive one under the pointer. */
+  --color-tab: #1c1d1f;
+  --color-tab-hover: #0f1011;
 
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -83,6 +86,9 @@
   --color-del: #cf3b45;
   --color-del-soft: rgb(207 59 69 / 8%);
   --color-fast: #c98a00;
+  /* The tab bar sits on the light grey ground, so the active tab is white and a hovered one only darkens it. */
+  --color-tab: #ffffff;
+  --color-tab-hover: rgb(0 0 0 / 4%);
 }
 
 /*
