@@ -58,6 +58,8 @@ export class Session {
   private permissions = new Map<string, { readonly resolve: (result: PermissionResult) => void; readonly item: Extract<ThreadItem, { type: "permission" }> }>()
   private sent = 0
   private sessionId?: string
+  /** Set while a turn the user stopped winds down, until its result arrives. */
+  private stopping = false
   private settings: RunSettings
 
   constructor(
@@ -93,7 +95,9 @@ export class Session {
   }
 
   async interrupt() {
-    await this.query?.interrupt()
+    if (!this.query) return
+    this.stopping = true
+    await this.query.interrupt()
   }
 
   close() {
@@ -144,8 +148,13 @@ export class Session {
           this.options.onSessionId(message.session_id)
         }
         if (message.type === "rate_limit_event") this.options.onRateLimit(message.rate_limit_info)
-        for (const event of this.mapper.map(message, Date.now())) this.emit(event)
+        for (const event of this.mapper.map(message, Date.now())) {
+          // The result of a turn the user stopped says so, so the thread can tell it from one that finished.
+          const stopped = this.stopping && event.kind === "item" && event.item.type === "result"
+          this.emit(stopped ? { ...event, item: { ...event.item, stopped: true } } : event)
+        }
         if (message.type === "result") {
+          this.stopping = false
           this.emit({ kind: "status", busy: false })
           void this.reportContext(running)
         }

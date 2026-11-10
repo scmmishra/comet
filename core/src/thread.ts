@@ -59,7 +59,10 @@ export class ThreadMapper {
         this.streaming = undefined
         return [{ type: "text", id, text: block.text, done: true, ...(at !== undefined ? { at } : {}) }]
       }
-      if (block.type === "thinking") return [{ type: "thinking", id: `${uuid}:${index}` }]
+      if (block.type === "thinking") {
+        const text = block.thinking.trim()
+        return [{ type: "thinking", id: `${uuid}:${index}`, ...(text ? { text } : {}) }]
+      }
       if (block.type === "tool_use") {
         const tool = toolItem(this.dir, block.id, block.name, block.input as Record<string, unknown>)
         this.tools.set(tool.id, tool)

@@ -5,67 +5,25 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Spinner } from "@opencode/ui/spinner"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createMemo, createSignal, For, Index, Match, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Index, Match, on, onCleanup, Show, Switch } from "solid-js"
 import type { TabInfo } from "@desk/protocol"
 import { imageUrl } from "./attachments"
 import { lineDiff } from "./diff"
-import { COPIED_MS, formatDuration, formatMessageTime, plural } from "./format"
+import { COPIED_MS, formatDuration, formatMessageTime } from "./format"
 import { Chevron, Icon } from "./icons"
 import { Markdown } from "./markdown"
 import { openFile } from "./projects"
+import { threadRows, type Fold, type Group, type Row as ThreadRow, type Working } from "./thread-rows"
 import { answerPermission, threadOf, type Item } from "./threads"
+import { groupSummary, ICON_BY_KIND, stepKind, stepLabel, type Step } from "./work"
 
 type ToolItem = Extract<Item, { type: "tool" }>
 type PermissionItem = Extract<Item, { type: "permission" }>
-type ToolsRow = { readonly type: "tools"; readonly id: string; readonly tools: ToolItem[] }
-type WorkRow = { readonly type: "work"; readonly id: string; readonly items: Item[]; readonly durationMs?: number }
-type Row = ToolsRow | WorkRow | Item
+type Row = ThreadRow<Exclude<Item, Step>>
 
-/** Edits show as diffs on their own. Other tool calls in a row fold into one "Used N" line. */
-function groupTools(items: readonly Item[]): Row[] {
-  const out: Row[] = []
-  for (const item of items) {
-    if (item.type === "tool" && !item.edits) {
-      const last = out[out.length - 1]
-      if (last?.type === "tools") last.tools.push(item)
-      else out.push({ type: "tools", id: `tools:${item.id}`, tools: [item] })
-    } else out.push(item)
-  }
-  return out
-}
-
-/** What a folded turn keeps in view: errors, and requests still waiting for the user. */
-const staysOut = (item: Item) => item.type === "error" || (item.type === "permission" && item.answer === undefined)
-
-/**
- * The thread as rows. A finished turn folds its work, everything before its closing text, into one
- * "Worked for" row, after T3 Code. Errors and open requests stay out of the fold. The turn in progress shows each step.
- * A turn is finished once another message follows it, or once the tab stops working, so restored
- * threads, which carry no result events, fold the same way.
- */
-function threadRows(items: readonly Item[], busy: boolean): Row[] {
-  const out: Row[] = []
-  let turn: Item[] = []
-  const close = (finished: boolean) => {
-    const result = turn.find((item) => item.type === "result")
-    const body = turn.filter((item) => item.type !== "result")
-    turn = []
-    if (!finished) return void out.push(...groupTools(body))
-    let end = body.length
-    while (end > 0 && body[end - 1]!.type === "text") end--
-    const work = body.slice(0, end).filter((item) => !staysOut(item))
-    if (work.length) out.push({ type: "work", id: `work:${work[0]!.id}`, items: work, durationMs: result?.type === "result" ? result.durationMs : undefined })
-    out.push(...body.slice(0, end).filter(staysOut), ...body.slice(end))
-  }
-  for (const item of items) {
-    if (item.type === "user") {
-      close(true)
-      out.push(item)
-    } else turn.push(item)
-  }
-  close(!busy)
-  return out
-}
+/** The first item a row draws, which says when the row arrived. */
+const firstItem = (row: Row): Item | undefined =>
+  row.type === "group" ? row.steps[0] : row.type === "fold" ? (row.rows[0]?.type === "group" ? row.rows[0].steps[0] : (row.rows[0] as Item | undefined)) : row.type === "working" ? undefined : row
 
 export function Thread(props: { tab: TabInfo }) {
   const thread = () => threadOf(props.tab.id)
@@ -73,10 +31,7 @@ export function Thread(props: { tab: TabInfo }) {
   // Only what arrives while the thread is on screen rises in. A tab switch, a reload or a restored
   // transcript shows the thread at once, so switching tabs never replays motion.
   const mountedAt = performance.now()
-  const rise = (row: Row) => {
-    const item = row.type === "tools" ? row.tools[0] : row.type === "work" ? row.items[0] : row
-    return (item?.arrivedAt ?? 0) > mountedAt ? "desk-rise" : ""
-  }
+  const rise = (row: Row) => ((firstItem(row)?.arrivedAt ?? 0) > mountedAt ? "desk-rise" : "")
   return (
     <div class="desk-lane flex flex-col gap-3.5 px-6 pb-4 pt-2.5">
       {/* Rows mostly append, and groups are rebuilt each time an item arrives. Index keys rows by position, so a growing group keeps its element and its open state. */}
@@ -87,17 +42,11 @@ export function Thread(props: { tab: TabInfo }) {
           </div>
         )}
       </Index>
-      <Show when={thread().busy}>
-        <div class="flex items-center gap-2 text-fg-3">
-          <Spinner class="size-3.5" />
-          <TextShimmer text="Working…" />
-        </div>
-      </Show>
     </div>
   )
 }
 
-/** A row of the thread. Edits are the only tool calls left on their own once groupTools has run. */
+/** A row of the thread, or of a folded turn. */
 function RowView(props: { row: Row; tab: TabInfo }) {
   return (
     <Switch>
@@ -128,12 +77,9 @@ function RowView(props: { row: Row; tab: TabInfo }) {
           </div>
         )}
       </Match>
-      <Match when={props.row.type === "thinking"}>
-        <div class="text-[12px] text-fg-3">Thought</div>
-      </Match>
-      <Match when={props.row.type === "work" && (props.row as WorkRow)}>{(work) => <WorkView work={work()} tab={props.tab} />}</Match>
-      <Match when={props.row.type === "tools" && (props.row as ToolsRow)}>{(group) => <ToolGroup tools={group().tools} />}</Match>
-      <Match when={props.row.type === "tool" && (props.row as ToolItem)}>{(item) => <EditBlock tool={item()} />}</Match>
+      <Match when={props.row.type === "working" && (props.row as Working)}>{(working) => <WorkingRow since={working().since} />}</Match>
+      <Match when={props.row.type === "fold" && (props.row as Fold<Exclude<Item, Step>>)}>{(fold) => <FoldView fold={fold()} tab={props.tab} />}</Match>
+      <Match when={props.row.type === "group" && (props.row as Group)}>{(group) => <GroupView group={group()} tab={props.tab} />}</Match>
       <Match when={props.row.type === "permission" && (props.row as PermissionItem)}>{(item) => <PermissionCard item={item()} tabId={props.tab.id} />}</Match>
       <Match when={props.row.type === "error" && (props.row as Extract<Item, { type: "error" }>)}>
         {(item) => <div class="rounded-2xl bg-del-soft px-3 py-2 text-del">{item().message}</div>}
@@ -163,12 +109,28 @@ function MessageMeta(props: { text: string; at?: number }) {
   )
 }
 
-/** A finished turn's work, folded. A restored turn has no timing, so it counts its steps instead. */
-function WorkView(props: { work: WorkRow; tab: TabInfo }) {
+/** The head of a running turn: how long Claude has worked on it, counted each second. */
+function WorkingRow(props: { since?: number }) {
+  const [now, setNow] = createSignal(Date.now())
+  const timer = setInterval(() => setNow(Date.now()), 1000)
+  onCleanup(() => clearInterval(timer))
+  const label = () => (props.since ? `Working for ${formatDuration(Math.max(0, now() - props.since))}` : "Working…")
+  return (
+    <div class="flex items-center gap-2 text-[13px] text-fg-3">
+      <Spinner class="size-3.5" />
+      <TextShimmer text={label()} />
+    </div>
+  )
+}
+
+/** A finished turn's work, folded into one row after T3 Code. It opens to the turn's groups and the text between them. */
+function FoldView(props: { fold: Fold<Exclude<Item, Step>>; tab: TabInfo }) {
   const [open, setOpen] = createSignal(false)
-  const steps = () => props.work.items.filter((item) => item.type === "tool" || item.type === "thinking").length
-  const label = () =>
-    props.work.durationMs !== undefined ? `Worked for ${formatDuration(props.work.durationMs)}` : `Worked through ${plural(steps(), "step")}`
+  const label = () => {
+    const duration = props.fold.durationMs === undefined ? undefined : formatDuration(props.fold.durationMs)
+    if (props.fold.stopped) return duration ? `You stopped after ${duration}` : "You stopped this response"
+    return duration ? `Worked for ${duration}` : "Worked"
+  }
   return (
     <Collapsible variant="ghost" open={open()} onOpenChange={setOpen} class="gap-3.5">
       <Collapsible.Trigger class="inline-flex h-auto w-fit items-center gap-1 text-[13px] font-normal text-fg-3 hover:text-fg-2">
@@ -176,43 +138,127 @@ function WorkView(props: { work: WorkRow; tab: TabInfo }) {
         <Chevron open={open()} class="size-[15px]" />
       </Collapsible.Trigger>
       <Collapsible.Content class="grid gap-3.5">
-        <For each={groupTools(props.work.items)}>{(row) => <RowView row={row} tab={props.tab} />}</For>
+        <For each={props.fold.rows}>{(row) => <RowView row={row} tab={props.tab} />}</For>
       </Collapsible.Content>
     </Collapsible>
   )
 }
 
-function ToolGroup(props: { tools: ToolItem[] }) {
+/** The icon for a group: its kind's, or a general one when it mixes kinds. */
+const groupIcon = (steps: readonly Step[]) => {
+  const kinds = new Set(steps.filter((step) => step.type === "tool").map(stepKind))
+  return kinds.size === 1 ? ICON_BY_KIND[[...kinds][0]!] : kinds.size ? "code-slash" : ICON_BY_KIND.thought
+}
+
+/**
+ * Steps in a row, after T3 Code. A live group shows only its latest step, with the latest thought above
+ * a tool call, and opens to every step. A finished group shows a summary, such as "Read 3 files and ran
+ * 2 commands". A group of one finished step is that step.
+ */
+function GroupView(props: { group: Group; tab: TabInfo }) {
   const [open, setOpen] = createSignal(false)
-  const names = () => [...new Set(props.tools.map((tool) => tool.name))].join(", ")
+  const latest = () => props.group.steps.at(-1)!
+  const thought = () => (latest().type === "tool" ? props.group.steps.findLast((step) => step.type === "thinking" && step.text) : undefined)
   return (
-    <Collapsible variant="ghost" open={open()} onOpenChange={setOpen} class="gap-1.5">
-      <Collapsible.Trigger class="inline-flex h-auto w-fit items-center gap-1.5 text-[13px] font-normal text-fg-3 hover:[&_b]:text-fg">
-        <Chevron open={open()} class="size-[15px]" />
-        Used <b class="font-medium text-fg-2">{props.tools.length}</b> · {names()}
-      </Collapsible.Trigger>
-      <Collapsible.Content class="ml-[7px] grid gap-0.5 pl-[13px] shadow-[inset_1px_0_0_var(--color-line)]">
-        <For each={props.tools}>{(tool) => <ToolRow tool={tool} />}</For>
-      </Collapsible.Content>
-    </Collapsible>
+    <Switch>
+      <Match when={!props.group.live && props.group.steps.length === 1}>
+        <StepRow step={latest()} tab={props.tab} />
+      </Match>
+      <Match when={props.group.live}>
+        <div class="grid gap-1.5">
+          <Show when={!open() && thought()}>
+            {(step) => (
+              <div class="flex gap-2 text-[13px] text-fg-3">
+                <Icon name={ICON_BY_KIND.thought} class="mt-[3px] size-[14px] shrink-0" />
+                <span class="line-clamp-4">{stepLabel(step())}</span>
+              </div>
+            )}
+          </Show>
+          <button class="flex h-6 w-fit max-w-full min-w-0 items-center gap-2 text-left text-[13px] text-fg-2" aria-expanded={open()} onClick={() => setOpen(!open())}>
+            <Icon name={ICON_BY_KIND[stepKind(latest())]} class="size-[14px] shrink-0 text-fg-3" />
+            <TextShimmer class="min-w-0 truncate" text={stepLabel(latest())} />
+            <Chevron open={open()} class="size-[13px] shrink-0 text-fg-3" />
+          </button>
+          <Show when={open()}>
+            <StepList steps={props.group.steps} tab={props.tab} />
+          </Show>
+        </div>
+      </Match>
+      <Match when={true}>
+        <Collapsible variant="ghost" open={open()} onOpenChange={setOpen} class="gap-1.5">
+          <Collapsible.Trigger class="inline-flex h-6 w-fit max-w-full items-center gap-2 text-[13px] font-normal text-fg-2 hover:text-fg">
+            <Icon name={groupIcon(props.group.steps)} class="size-[14px] shrink-0 text-fg-3" />
+            <span class="min-w-0 truncate">{groupSummary(props.group.steps)}</span>
+            <Chevron open={open()} class="size-[13px] shrink-0 text-fg-3" />
+          </Collapsible.Trigger>
+          <Collapsible.Content>
+            <StepList steps={props.group.steps} tab={props.tab} />
+          </Collapsible.Content>
+        </Collapsible>
+      </Match>
+    </Switch>
   )
 }
 
-function ToolRow(props: { tool: ToolItem }) {
-  const [open, setOpen] = createSignal(false)
+/** A group's steps, one per row. A long list scrolls in place, and follows new steps while it is scrolled to the end. */
+function StepList(props: { steps: Step[]; tab: TabInfo }) {
+  let list!: HTMLDivElement
+  let atEnd = true
+  createEffect(on(() => props.steps.length, () => atEnd && list.scrollTo({ top: list.scrollHeight })))
   return (
-    <Collapsible variant="ghost" open={open()} onOpenChange={setOpen} disabled={!props.tool.result} class="py-[3px] text-[12.5px]">
-      <Collapsible.Trigger class="grid h-auto w-full min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-2 text-left text-[12.5px] font-normal">
-        <span class="font-medium text-fg-2">{props.tool.name}</span>
-        <span class="min-w-0 truncate font-mono text-[12px] text-fg-2">{props.tool.summary}</span>
-        <span class="col-start-2 text-[12px] text-fg-3">{outcome(props.tool)}</span>
-      </Collapsible.Trigger>
-      <Collapsible.Content>
-        <pre class="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap rounded-2xl bg-ground px-3 py-2.5 font-mono text-[12px] text-fg-2 shadow-[0_0_0_1px_var(--color-line)]">
-          {props.tool.result?.output || "(no output)"}
-        </pre>
-      </Collapsible.Content>
-    </Collapsible>
+    <div
+      ref={list}
+      class="ml-[7px] grid max-h-[min(18rem,50dvh)] content-start overflow-y-auto pl-[13px] shadow-[inset_1px_0_0_var(--color-line)]"
+      onScroll={() => (atEnd = list.scrollTop + list.clientHeight >= list.scrollHeight - 4)}
+    >
+      <For each={props.steps}>{(step) => <StepRow step={step} tab={props.tab} />}</For>
+    </div>
+  )
+}
+
+/** One step: its icon and label. It opens to the thought in full, the edit's diff or the call's output. */
+function StepRow(props: { step: Step; tab: TabInfo }) {
+  const [open, setOpen] = createSignal(false)
+  const failed = () => props.step.type === "tool" && !!props.step.result?.isError
+  const hasDetail = () => (props.step.type === "thinking" ? !!props.step.text : !!props.step.edits?.length || !!props.step.result)
+  return (
+    <div class="min-w-0">
+      <button
+        class="flex h-6 w-full min-w-0 items-center gap-2 text-left text-[13px] text-fg-2 enabled:hover:text-fg"
+        disabled={!hasDetail()}
+        aria-expanded={open()}
+        onClick={() => setOpen(!open())}
+      >
+        <Icon name={ICON_BY_KIND[stepKind(props.step)]} class="size-[14px] shrink-0 text-fg-3" />
+        <span class="min-w-0 truncate" classList={{ "text-del": failed() }}>
+          {stepLabel(props.step)}
+        </span>
+        <Show when={hasDetail()}>
+          <Chevron open={open()} class="size-[13px] shrink-0 text-fg-3" />
+        </Show>
+      </button>
+      <Show when={open()}>
+        <div class="mb-2 mt-1 pl-[22px]">
+          <Switch>
+            <Match when={props.step.type === "thinking" && props.step.text}>
+              {(text) => (
+                <div class="text-[13px] text-fg-2">
+                  <Markdown text={text()} done onOpenFile={(path, line) => openFile(props.tab.project, path, line)} />
+                </div>
+              )}
+            </Match>
+            <Match when={props.step.type === "tool" && !!props.step.edits?.length && (props.step as ToolItem)}>{(tool) => <EditBlock tool={tool()} />}</Match>
+            <Match when={props.step.type === "tool" && (props.step as ToolItem)}>
+              {(tool) => (
+                <pre class="max-h-64 overflow-auto whitespace-pre-wrap rounded-2xl bg-ground px-3 py-2.5 font-mono text-[12px] text-fg-2 shadow-[0_0_0_1px_var(--color-line)]">
+                  {tool().result?.output || "(no output)"}
+                </pre>
+              )}
+            </Match>
+          </Switch>
+        </div>
+      </Show>
+    </div>
   )
 }
 
@@ -269,11 +315,4 @@ function PermissionCard(props: { item: PermissionItem; tabId: string }) {
       </Show>
     </div>
   )
-}
-
-function outcome(tool: ToolItem) {
-  if (!tool.result) return "Running…"
-  if (tool.result.isError) return "Failed"
-  const first = tool.result.output.split("\n").find((line) => line.trim())
-  return first ? first.slice(0, 120) : "Done"
 }

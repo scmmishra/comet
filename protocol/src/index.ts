@@ -38,7 +38,8 @@ export type ThreadItem =
   | { readonly type: "user"; readonly id: string; readonly text: string; readonly images?: readonly ImageAttachment[]; readonly at?: number }
   /** Assistant text. `at` is when it finished. Text still streaming is not done and has none. */
   | { readonly type: "text"; readonly id: string; readonly text: string; readonly done: boolean; readonly at?: number }
-  | { readonly type: "thinking"; readonly id: string }
+  /** Claude's thinking. `text` is what it thought, when Claude Code shares it. */
+  | { readonly type: "thinking"; readonly id: string; readonly text?: string }
   /**
    * A tool call. `summary` is what it was given in short, such as its command or path, relative to the
    * project. A call that edits a file carries the file's path and its edits.
@@ -54,8 +55,8 @@ export type ThreadItem =
     }
   /** A tool call waiting for the user. `detail` is its input in full. `requestId` answers it. */
   | { readonly type: "permission"; readonly id: string; readonly requestId: string; readonly tool: string; readonly detail: string; readonly answer?: boolean }
-  /** The end of a turn. */
-  | { readonly type: "result"; readonly id: string; readonly durationMs: number; readonly isError: boolean }
+  /** The end of a turn. `stopped` means the user stopped it. */
+  | { readonly type: "result"; readonly id: string; readonly durationMs: number; readonly isError: boolean; readonly stopped?: boolean }
   | { readonly type: "error"; readonly id: string; readonly message: string }
 
 /** A change to a thread. An item replaces the item with the same id, or joins the thread after the others. */
