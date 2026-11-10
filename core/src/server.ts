@@ -132,7 +132,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       case "thread.resume":
         return window.resume(message.tabId, message.threadId, reply)
       case "review.get":
-        return reply({ type: "review", tabId: message.tabId, files: await window.review(message.tabId) })
+        return reply({ type: "review", tabId: message.tabId, scope: message.scope, files: await window.review(message.tabId, message.scope) })
       case "layout.get":
         return layouts.send(message.tabId)
       case "panel.open":

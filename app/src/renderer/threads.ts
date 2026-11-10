@@ -1,4 +1,4 @@
-import type { ContextReading, FileChange, FollowUp, ImageAttachment, QueuedMessage, Subagent, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
+import type { ContextReading, FileChange, FollowUp, ImageAttachment, QueuedMessage, ReviewScope, Subagent, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
 import { createEffect, createMemo, createRoot, on } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
@@ -74,9 +74,12 @@ export function openThread(thread: ThreadSummary, project: string) {
   readProject(project, "threads")
 }
 
-/** Asks for a tab's changes when the panel shows Review. */
+/** What a tab's Review compares with: its own choice, else the thread's changes. */
+export const reviewScope = (tabId: string): ReviewScope => workspace.tabs.find((tab) => tab.id === tabId)?.reviewScope ?? "thread"
+
+/** Asks for a tab's changes in its Review's scope. */
 function readReview(tabId: string) {
-  core.send({ type: "review.get", tabId })
+  core.send({ type: "review.get", tabId, scope: reviewScope(tabId) })
 }
 
 /** Applies a change to a tab's thread. An item replaces the one with its id, or joins after the others. */
@@ -116,6 +119,8 @@ core.listen((message) => {
       thread.queueHeld = message.held
     }))
   } else if (message.type === "review") {
+    // An answer for a scope the tab has since left is stale.
+    if (message.scope !== reviewScope(message.tabId)) return
     ensure(message.tabId)
     setThreads(message.tabId, "review", message.files)
   }
@@ -127,7 +132,14 @@ const reviewShown = createRoot(() => {
     const tab = shownTab()
     return tab && tab.panelOpen && shownPanelTab(tab) === undefined ? tab.id : undefined
   })
-  createEffect(on(shown, (tabId) => tabId && readReview(tabId)))
+  createEffect(
+    on([shown, () => (shown() ? reviewScope(shown()!) : undefined)], ([tabId, scope], previous) => {
+      if (!tabId) return
+      // A new scope shows nothing until its changes arrive, so the old scope's changes never show under its name.
+      if (previous?.[0] === tabId && previous[1] !== scope && threads[tabId]) setThreads(tabId, "review", undefined)
+      readReview(tabId)
+    }),
+  )
   return shown
 })
 

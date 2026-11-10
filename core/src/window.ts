@@ -1,6 +1,6 @@
 import type { SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
-import type { CoreMessage, FileChange, FollowUp, ImageAttachment, PluginLayout, QueuedMessage, TabInfo, ThreadEvent } from "@desk/protocol"
-import { changesSince, snapshot } from "./checkpoints"
+import type { CoreMessage, FileChange, FollowUp, ImageAttachment, PluginLayout, QueuedMessage, ReviewScope, TabInfo, ThreadEvent } from "@desk/protocol"
+import { branchBase, changesSince, headTree, snapshot } from "./checkpoints"
 import { threadContext, threadHistory } from "./past-threads"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { sameRunSettings, Session } from "./session"
@@ -85,8 +85,8 @@ export class Window {
   }
 
   /**
-   * Sends a message in a tab. A thread's first message snapshots the project first, so Review can show
-   * what the thread changed. A plugin may move the tab to another thread during the snapshot. The message
+   * Sends a message in a tab. Each turn snapshots the project first, so Review can show what the turn
+   * changed, and the thread's first snapshot shows what the thread changed. A plugin may move the tab to another thread during the snapshot. The message
    * then belongs to no thread the tab shows, so it is not sent.
    */
   async send(tabId: string, text: string, images: readonly ImageAttachment[] = [], followUp: FollowUp = "steer") {
@@ -97,11 +97,9 @@ export class Window {
     }
     const tab = this.tab(tabId)
     const key = this.thread(tabId).key
-    if (!this.thread(tabId).baseline) {
-      const baseline = await snapshot(tab.project)
-      if (this.thread(tabId).key !== key) throw new Error(MOVED)
-      if (baseline) this.updateThread(tabId, { baseline })
-    }
+    const turnBaseline = await snapshot(tab.project)
+    if (this.thread(tabId).key !== key) throw new Error(MOVED)
+    if (turnBaseline) this.updateThread(tabId, { turnBaseline, ...(this.thread(tabId).baseline ? {} : { baseline: turnBaseline }) })
     this.session(tab).send(text, images)
   }
 
@@ -180,10 +178,13 @@ export class Window {
   }
 
   /** What a tab's thread changed since its first message. A baseline that `git gc` pruned shows nothing. */
-  async review(tabId: string): Promise<FileChange[]> {
-    const baseline = this.thread(tabId).baseline
-    if (!baseline) return []
-    return changesSince(this.tab(tabId).project, baseline).catch(() => [])
+  /** What changed in a tab's project since the point `scope` names. A thread that has not started has no thread or turn changes. */
+  async review(tabId: string, scope: ReviewScope): Promise<FileChange[]> {
+    const project = this.tab(tabId).project
+    const thread = this.thread(tabId)
+    const base = scope === "thread" ? thread.baseline : scope === "turn" ? thread.turnBaseline : scope === "git" ? await headTree(project) : await branchBase(project)
+    if (!base) return []
+    return changesSince(project, base).catch(() => [])
   }
 
   /** Which tab has each of a project's threads open, by Claude session id. */

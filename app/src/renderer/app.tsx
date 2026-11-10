@@ -176,8 +176,8 @@ function TabView(props: { tab: TabInfo }) {
               )}
             </For>
             <Show when={shown() === undefined}>
-              <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
-                <ReviewView review={thread().review} />
+              <div class="flex min-h-0 flex-1 flex-col">
+                <ReviewView tab={props.tab} review={thread().review} />
               </div>
             </Show>
             {/* Terminals stay mounted while another panel tab shows, so their screens keep their state. */}

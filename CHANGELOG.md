@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- Review can show four sets of changes, after OpenCode: the thread's changes, Git changes (uncommitted work), Branch changes (since the branch left the default branch) and Last turn changes. Each tab keeps its choice. Diffs show unified or split, and Desk keeps that choice for every tab. The Review header stays in place while the files scroll.
 - You can send a message while Claude works. By default it steers the running turn: Claude takes it in at once, and it shows marked "Steered". Settings › Providers › Follow-ups can make Enter queue it instead, and ⌘Enter or ⌘-click does the other for one message. Queued messages wait above the message box, with Send now, Edit and Remove. When the turn ends, the next one starts its own turn. A stop or an error pauses the queue until you resume it, and the queue survives a restart.
 - Subagents show in a card at the top of the card stack while they run. Each row shows the agent's task, its status and how long it has run. Click one to see, beside the card, what Claude asked it, its one-line status and each step it has taken. The card leaves once the turn and its subagents are done.
 - A running turn reads like T3 Code's. It opens with "Working for 12 s", then shows only Claude's latest step, such as "Ran npm test", with its latest thought above. Click the step to see every step. Thoughts and tool calls between two replies form one group, summarised like "Read 3 files and ran 2 commands".

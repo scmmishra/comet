@@ -130,6 +130,13 @@ export interface Space {
 }
 
 /** One file a thread changed, with its unified diff. */
+/**
+ * What Review compares the working tree with: the thread's first message, the last commit, where the
+ * branch left the default branch, or the start of the last turn.
+ */
+export const REVIEW_SCOPES = ["thread", "git", "branch", "turn"] as const
+export type ReviewScope = (typeof REVIEW_SCOPES)[number]
+
 export interface FileChange {
   readonly path: string
   readonly status: "added" | "modified" | "deleted" | "renamed"
@@ -455,6 +462,8 @@ export interface TabInfo extends RunSettings {
   readonly terminals: readonly TerminalInfo[]
   /** The panel tab on show: a terminal's id, or a plugin panel's instance id. Absent means Review. */
   readonly panelActive?: string
+  /** What Review compares with. Absent means the thread's changes. */
+  readonly reviewScope?: ReviewScope
   /** Whether the view pane is open beside the thread. Each tab keeps its own, and a new tab starts with it closed. */
   readonly panelOpen?: boolean
 }
@@ -603,7 +612,7 @@ export type ClientMessage =
   | { readonly type: "commands.run"; readonly project: string; readonly ids: readonly string[] }
   | { readonly type: "commands.stop"; readonly project: string; readonly ids: readonly string[] }
   /** The files a tab's thread changed since its first message. */
-  | { readonly type: "review.get"; readonly tabId: string }
+  | { readonly type: "review.get"; readonly tabId: string; readonly scope: ReviewScope }
   /** The window's tabs, in order, sent whenever they change. */
   | { readonly type: "tabs.save"; readonly tabs: readonly TabInfo[]; readonly active?: string }
   /** Opens a file from the thread in the editor. The core refuses paths outside the project. */
@@ -648,7 +657,7 @@ export type CoreMessage =
   | { readonly type: "account"; readonly account?: ClaudeAccount }
   /** `usage` is absent when Claude has no plan limits, such as with an API key. */
   | { readonly type: "usage"; readonly usage?: PlanUsage }
-  | { readonly type: "review"; readonly tabId: string; readonly files: readonly FileChange[] }
+  | { readonly type: "review"; readonly tabId: string; readonly scope: ReviewScope; readonly files: readonly FileChange[] }
   /** A tab's queued messages, sent whole on each change. `held` means a stop or an error paused them. */
   | { readonly type: "queue"; readonly tabId: string; readonly messages: readonly QueuedMessage[]; readonly held: boolean }
   /** The answer to `files.search`, with the query it answers: paths relative to the project, best match first. */

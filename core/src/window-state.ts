@@ -12,6 +12,8 @@ export interface TabThread {
    * No ref points at it, so `git gc` may prune it after about two weeks; Review then shows nothing.
    */
   readonly baseline?: string
+  /** A snapshot taken before the last turn, for Review's last-turn changes. */
+  readonly turnBaseline?: string
   /** The last context reading. A restored session is not live until its next message, so it cannot be asked. */
   readonly context?: ContextReading
   /** The key a plugin opened the thread under, such as a conversation's id. */

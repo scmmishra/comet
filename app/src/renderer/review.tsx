@@ -1,18 +1,53 @@
 import { DiffChanges } from "@opencode/ui/diff-changes"
+import { SegmentedControl, SegmentedControlItem } from "@opencode/ui/segmented-control"
+import { Select } from "@opencode/ui/select"
 import { FileDiff, getSingularPatch } from "@pierre/diffs"
-import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
-import type { FileChange } from "@desk/protocol"
+import { createEffect, createRoot, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
+import { REVIEW_SCOPES, type FileChange, type ReviewScope, type TabInfo } from "@desk/protocol"
 import { colorScheme } from "./appearance"
 import { fileIcon } from "./file-icons"
 import { CODE_THEMES } from "./highlight"
 import { plural } from "./format"
 import { Chevron } from "./icons"
+import { reviewScope } from "./threads"
+import { setReviewScope } from "./workspace"
 
-/** Diff options as OpenCode sets them: unified, word-level changes, and no file header of Pierre's own. */
+/** Review's scopes, in OpenCode's words, and what each says when nothing changed. */
+const SCOPES: Record<ReviewScope, { label: string; empty: string }> = {
+  thread: { label: "Thread changes", empty: "This thread has not changed any files." },
+  git: { label: "Git changes", empty: "There are no uncommitted changes." },
+  branch: { label: "Branch changes", empty: "This branch has no changes." },
+  turn: { label: "Last turn changes", empty: "The last turn did not change any files." },
+}
+
+type DiffStyle = "unified" | "split"
+const DIFF_STYLE_KEY = "desk.diffStyle"
+
+/** How diffs draw, in every tab. A per-window preference, so it lives in the page's storage. */
+const [diffStyle, setDiffStyle] = createRoot(() => {
+  const [style, setStyle] = createSignal<DiffStyle>(readDiffStyle())
+  return [style, (next: DiffStyle) => {
+    setStyle(next)
+    try {
+      localStorage.setItem(DIFF_STYLE_KEY, next)
+    } catch {
+      // Storage can be unavailable. The choice then lasts until the page reloads.
+    }
+  }] as const
+})
+
+function readDiffStyle(): DiffStyle {
+  try {
+    return localStorage.getItem(DIFF_STYLE_KEY) === "split" ? "split" : "unified"
+  } catch {
+    return "unified"
+  }
+}
+
+/** Diff options as OpenCode sets them: word-level changes, and no file header of Pierre's own. */
 const DIFF_OPTIONS = {
   theme: CODE_THEMES,
   preferredHighlighter: "highlights",
-  diffStyle: "unified",
   diffIndicators: "bars",
   lineDiffType: "word-line",
   hunkSeparators: "line-info-basic",
@@ -27,10 +62,12 @@ const DIFF_OPTIONS = {
 const OPEN_FILE_LIMIT = 8
 
 /**
- * What this tab's thread changed since its first message, after OpenCode's review: every file's diff
- * in one scrolling list, under a header that stays at the top while its diff scrolls by, and folds it.
+ * What changed in the tab's project, after OpenCode's review. The header picks what to compare with,
+ * and whether diffs are unified or split. Every file's diff shows in one scrolling list, under a header
+ * that stays at the top while its diff scrolls by, and folds it.
  */
-export function ReviewView(props: { review: readonly FileChange[] | undefined }) {
+export function ReviewView(props: { tab: TabInfo; review: readonly FileChange[] | undefined }) {
+  const scope = () => reviewScope(props.tab.id)
   const [toggled, setToggled] = createSignal(new Set<string>())
   const files = () => props.review ?? []
   const totals = () => files().reduce((sum, file) => ({ additions: sum.additions + file.additions, deletions: sum.deletions + file.deletions }), { additions: 0, deletions: 0 })
@@ -43,14 +80,32 @@ export function ReviewView(props: { review: readonly FileChange[] | undefined })
   }
 
   return (
+    <>
+      {/* The controls stay put while the files scroll below them. */}
+      <div class="flex shrink-0 items-center gap-2 px-3 pb-2 pt-0.5 text-fg-2">
+        <Select
+          options={[...REVIEW_SCOPES]}
+          current={scope()}
+          value={(option) => option}
+          label={(option) => SCOPES[option].label}
+          placement="bottom-start"
+          gutter={6}
+          onSelect={(option) => option && setReviewScope(props.tab.id, option)}
+        />
+        <Show when={files().length > 0}>
+          <span class="text-fg-3">{plural(files().length, "file")}</span>
+          <DiffChanges changes={totals()} />
+        </Show>
+        <SegmentedControl class="ml-auto" value={diffStyle()} onChange={(style) => style && setDiffStyle(style as DiffStyle)}>
+          <SegmentedControlItem value="unified">Unified</SegmentedControlItem>
+          <SegmentedControlItem value="split">Split</SegmentedControlItem>
+        </SegmentedControl>
+      </div>
+      <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
     <Show
       when={files().length > 0}
-      fallback={<div class="m-auto px-6 text-center text-fg-3">{props.review ? "This thread has not changed any files." : "Loading changes…"}</div>}
+      fallback={<div class="m-auto px-6 text-center text-fg-3">{props.review ? SCOPES[scope()].empty : "Loading changes…"}</div>}
     >
-      <div class="flex items-center gap-2 px-4 pb-2 pt-0.5 text-fg-2">
-        {plural(files().length, "file")}
-        <DiffChanges class="ml-auto" changes={totals()} />
-      </div>
       <For each={files()}>
         {(file) => {
           const slash = file.path.lastIndexOf("/")
@@ -84,16 +139,21 @@ export function ReviewView(props: { review: readonly FileChange[] | undefined })
         }}
       </For>
     </Show>
+      </div>
+    </>
   )
 }
 
 /** One file's patch, drawn by @pierre/diffs. */
 function PatchDiff(props: { patch: string }) {
   let container!: HTMLDivElement
-  const diff = new FileDiff({ ...DIFF_OPTIONS, themeType: colorScheme() })
+  const diff = new FileDiff({ ...DIFF_OPTIONS, diffStyle: diffStyle(), themeType: colorScheme() })
   createEffect(on(colorScheme, (scheme) => diff.setThemeType(scheme), { defer: true }))
   onMount(() => {
-    createEffect(() => diff.render({ fileDiff: getSingularPatch(props.patch), forceRender: true, containerWrapper: container }))
+    createEffect(() => {
+      diff.setOptions({ ...DIFF_OPTIONS, diffStyle: diffStyle(), themeType: colorScheme() })
+      diff.render({ fileDiff: getSingularPatch(props.patch), forceRender: true, containerWrapper: container })
+    })
   })
   onCleanup(() => diff.cleanUp())
   return (

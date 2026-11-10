@@ -1,4 +1,4 @@
-import type { RunSettings, TabInfo, TerminalInfo } from "@desk/protocol"
+import type { ReviewScope, RunSettings, TabInfo, TerminalInfo } from "@desk/protocol"
 import { permissionFor } from "./models"
 import { createStore, produce } from "solid-js/store"
 import { account } from "./account"
@@ -166,6 +166,12 @@ export function newTerminal() {
 }
 
 /** Shows a tab's panel tab: a terminal or a plugin panel, or Review when `id` is undefined. */
+/** Sets what a tab's Review compares with. */
+export function setReviewScope(tabId: string, scope: ReviewScope) {
+  setWorkspace("tabs", (found) => found.id === tabId, { reviewScope: scope })
+  save()
+}
+
 export function showPanelTab(tabId: string, id: string | undefined) {
   setWorkspace("tabs", (found) => found.id === tabId, { panelActive: id })
   save()

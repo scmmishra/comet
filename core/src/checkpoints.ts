@@ -33,7 +33,34 @@ export async function snapshot(dir: string): Promise<string | undefined> {
   }
 }
 
-/** What changed between a snapshot and the working tree now. */
+/** Git's tree with no files, which a repo with no commits compares with. */
+const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+/** The last commit's tree, for uncommitted changes. A repo with no commits compares with no files. Undefined outside a Git repo. */
+export async function headTree(dir: string): Promise<string | undefined> {
+  try {
+    await git(dir, ["rev-parse", "--git-dir"])
+  } catch {
+    return undefined
+  }
+  return (await git(dir, ["rev-parse", "HEAD^{tree}"]).catch(() => EMPTY_TREE)).trim()
+}
+
+/**
+ * Where the branch left the default branch, for the branch's changes: the merge base with the remote's
+ * default branch, else with a local main or master. On the default branch itself, or without one, it is
+ * the last commit, so the branch's changes are its uncommitted ones.
+ */
+export async function branchBase(dir: string): Promise<string | undefined> {
+  const remoteHead = (await git(dir, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]).catch(() => "")).trim()
+  for (const candidate of [remoteHead, "main", "master"].filter(Boolean)) {
+    const base = (await git(dir, ["merge-base", "HEAD", candidate]).catch(() => "")).trim()
+    if (base) return base
+  }
+  return headTree(dir)
+}
+
+/** What changed between a snapshot or commit and the working tree now. */
 export async function changesSince(dir: string, base: string): Promise<FileChange[]> {
   const current = await snapshot(dir)
   if (!current || current === base) return []

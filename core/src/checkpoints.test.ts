@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test"
 import { readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
-import { changesSince, snapshot } from "./checkpoints"
-import { gitRepo } from "./test-support"
+import { branchBase, changesSince, headTree, snapshot } from "./checkpoints"
+import { gitRepo, tempFolder } from "./test-support"
 
 test("reports what changed since a snapshot, new and deleted files included", async () => {
   const repo = gitRepo({ "a.txt": "one\ntwo\n", "old.txt": "gone\n" })
@@ -42,4 +42,22 @@ test("has no changes when nothing moved", async () => {
   const repo = gitRepo({ "a.txt": "one\n" })
   const base = await snapshot(repo.dir)
   expect(await changesSince(repo.dir, base!)).toEqual([])
+})
+
+test("compares uncommitted work with the last commit, and a branch's work with where it left main", async () => {
+  const { dir, git, write } = gitRepo({ "a.ts": "one\n" })
+  git("checkout", "-q", "-b", "feature")
+  write("b.ts", "committed on the branch\n")
+  git("add", ".")
+  git("commit", "-q", "-m", "branch work")
+  write("a.ts", "one\ntwo\n")
+
+  const uncommitted = await changesSince(dir, (await headTree(dir))!)
+  expect(uncommitted.map((file) => file.path)).toEqual(["a.ts"])
+  const branch = await changesSince(dir, (await branchBase(dir))!)
+  expect(branch.map((file) => file.path).sort()).toEqual(["a.ts", "b.ts"])
+})
+
+test("has no base outside a Git repo", async () => {
+  expect(await headTree(tempFolder("plain"))).toBeUndefined()
 })
