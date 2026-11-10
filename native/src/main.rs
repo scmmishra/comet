@@ -3,6 +3,7 @@
 mod account;
 mod attachments;
 mod base64;
+mod cards;
 mod composer;
 mod core;
 mod diff;

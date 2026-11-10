@@ -6,6 +6,7 @@ use crate::format;
 use crate::protocol::{StepKind, ThreadItem, ThreadRow};
 use crate::shell::Desk;
 use crate::theme;
+use crate::cards::Lane;
 use crate::threads::Thread;
 use rune::{El, GrowthSpec, Icon, ScrollSpec, col, el, icon, memo, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Markdown, Spinner};
@@ -88,7 +89,7 @@ impl Ctx<'_> {
 }
 
 /// The thread of `tab`, scrolling, and staying at the end while it grows unless the user scrolled up.
-pub fn thread(s: &Desk, tab: &str, dark: bool) -> El {
+pub fn thread(s: &Desk, tab: &str, dark: bool, lane: Option<Lane>) -> El {
     let Some(thread) = s.threads.get(tab) else { return el().grow(1.0) };
     let list = col()
         .key("rows")
@@ -100,10 +101,18 @@ pub fn thread(s: &Desk, tab: &str, dark: bool) -> El {
             thread.rows.len(),
             ROW_ESTIMATE,
             |s: &Desk, i| Cow::Owned(active_thread(s).map_or_else(String::new, |t| t.rows[i].id().to_owned())),
-            move |s: &Desk, i| lane_row(s, i, dark),
+            move |s: &Desk, i| lane_row(s, i, dark, lane),
         )
         .virtual_rows_version(thread.rows_version);
     col().key(format!("thread-{tab}")).w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: true }).child(list)
+}
+
+/// Places `content` in the thread's lane: where the session's width puts it, or centred before the width is known.
+pub fn in_lane(content: El, lane: Option<Lane>) -> El {
+    match lane {
+        Some(lane) => row().w_full().child(content.w(lane.width).ml(lane.left)),
+        None => col().w_full().items_center().px(LANE_EDGE).child(content.max_w(COLUMN)),
+    }
 }
 
 fn active_thread(s: &Desk) -> Option<&Thread> {
@@ -111,13 +120,16 @@ fn active_thread(s: &Desk) -> Option<&Thread> {
 }
 
 /// One row in the lane, rebuilt only when what it shows changes.
-fn lane_row(s: &Desk, i: usize, dark: bool) -> El {
+fn lane_row(s: &Desk, i: usize, dark: bool, lane: Option<Lane>) -> El {
     let (Some(tab), Some(thread)) = (s.workspace.active.as_deref(), active_thread(s)) else { return el() };
     let k = theme::kit(dark);
     let c = Ctx { s, tab, thread, k, size: s.account.text_size() };
     let r = &thread.rows[i];
-    memo(r.id().to_owned(), version(&c, r), || {
-        col().w_full().items_center().px(LANE_EDGE).child(col().w_full().max_w(COLUMN).px(LANE_PADDING).pb(ROW_GAP).child(row_view(&c, r)))
+    let mut h = DefaultHasher::new();
+    (version(&c, r), lane.map(|l| (l.left.to_bits(), l.width.to_bits()))).hash(&mut h);
+    memo(r.id().to_owned(), h.finish(), || {
+        let content = col().w_full().px(LANE_PADDING).pb(ROW_GAP).child(row_view(&c, r));
+        in_lane(content, lane)
     })
 }
 

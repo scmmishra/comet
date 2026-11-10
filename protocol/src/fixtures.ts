@@ -70,6 +70,14 @@ export const CORE_MESSAGES = [
   { type: "session.event", tabId: "tab-1", event: { kind: "text.delta", id: "x2", delta: "Hel" } },
   { type: "session.event", tabId: "tab-1", event: { kind: "status", busy: true } },
   { type: "session.event", tabId: "tab-1", event: { kind: "init", model: "claude-opus-5-5" } },
+  {
+    type: "session.event",
+    tabId: "tab-1",
+    event: {
+      kind: "subagent",
+      subagent: { id: "a1", description: "Find the tests", type: "Explore", status: "running", background: false, startedAt: 1_700_000_000_000, toolUses: 2, prompt: "Find them", items: [] },
+    },
+  },
   { type: "session.event", tabId: "tab-1", event: { kind: "context", reading: { percent: 20, tokens: 40_000, maxTokens: 200_000 } } },
   {
     type: "project",
@@ -81,7 +89,14 @@ export const CORE_MESSAGES = [
     type: "project",
     project: "/Users/me/code/web",
     part: "space",
-    value: { name: "web", root: "/Users/me/code/web", branch: "main", changes: { files: 2, additions: 10, deletions: 3 } },
+    value: {
+      name: "web",
+      root: "/Users/me/code/web",
+      branch: "main",
+      upstream: { ahead: 2, behind: 0 },
+      changes: { files: 2, additions: 10, deletions: 3 },
+      pr: { number: 42, title: "Fix login", url: "https://github.com/me/web/pull/42", state: "OPEN", draft: false, checks: { passed: 3, failed: 1, pending: 0 } },
+    },
   },
   { type: "project", project: "/Users/me/code/api", part: "space", value: null },
   {

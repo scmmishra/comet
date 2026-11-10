@@ -55,6 +55,7 @@ pub struct Desk {
     pub now_ms: f64,
     pub toasts: crate::toasts::Toasts,
     pub palette: crate::palette::Palette,
+    pub cards: crate::cards::Cards,
     /// Whether ⌘ is held, so the new tab button opens its tab next to the active one.
     cmd_held: bool,
     strip: TabDragState,
@@ -329,7 +330,8 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
     let card = |key: &str, child: El| col().key(key.to_owned()).w_frac(1.0).grow(1.0).shrink().min_w(0.0).h_full().min_h(0.0).fill(k.c.bg_base).radius(PANEL_RADIUS).clip_rounded(PANEL_RADIUS).border(1.0, k.c.border_muted).child(child);
     let cards = match (&s.status, w.active_tab()) {
         (CoreState::Ready, Some(tab)) => {
-            let session = col().w_full().h_full().min_h(0.0).child(session(s, tab, dark, &mut layer));
+            let width = cx.layout_size("session-card").map(|size| size[0]);
+            let session = col().w_full().h_full().min_h(0.0).child(session(s, tab, dark, width, &mut layer));
             let pane = (tab.panel_open == Some(true)).then(|| card("panel-card", crate::panel::panel(s, tab, k, &mut layer)));
             row().w_full().grow(1.0).min_h(0.0).gap(PANEL_INSET).child(card("session-card", session)).children(pane)
         }
@@ -349,7 +351,7 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
 }
 
 /// A tab's session: its header and its thread.
-fn session(s: &Desk, tab: &TabInfo, dark: bool, layer: &mut Vec<El>) -> El {
+fn session(s: &Desk, tab: &TabInfo, dark: bool, width: Option<f32>, layer: &mut Vec<El>) -> El {
     let k = theme::kit(dark);
     let name = format::project_name(&tab.project);
     let header = row()
@@ -368,11 +370,15 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, layer: &mut Vec<El>) -> El {
         // While the pane is open, its own header holds the toggle, in the window's corner.
         .children((tab.panel_open != Some(true)).then(|| crate::panel::toggle(false, k)));
     let started = s.threads.get(&tab.id).is_some_and(|t| !t.items.is_empty());
+    let lane = width.map(|w| crate::cards::Lane::for_session(w, thread_view::COLUMN));
     let body = if started {
-        col().w_full().grow(1.0).min_h(0.0).child(thread_view::thread(s, &tab.id, dark)).child(composer::composer(s, tab, composer::ListAt::Above, k, layer))
+        col().w_full().grow(1.0).min_h(0.0).child(thread_view::thread(s, &tab.id, dark, lane)).child(composer::composer(s, tab, composer::ListAt::Above, lane, k, layer))
     } else {
         crate::start_screen::start_screen(s, tab, k, layer)
     };
+    // The cards show beside the lane once the session is wide enough.
+    let rail = width.filter(|w| crate::cards::Lane::rail(*w)).map(|_| crate::cards::rail(s, tab, k, layer));
+    let body = col().w_full().grow(1.0).min_h(0.0).child(body).children(rail);
     col().key(format!("session-{}", tab.id)).w_full().grow(1.0).min_h(0.0).child(header).child(body)
 }
 

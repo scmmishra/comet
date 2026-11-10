@@ -212,6 +212,10 @@ impl Desk {
             self.workspace.name_tab(&tab, &text, &self.core);
         }
         let follow_up = self.busy(&tab).then(|| self.follow_up(alternate).for_text(&text).name().to_owned());
+        // A message sent while Claude works joins its turn or waits, so its subagents stay.
+        if follow_up.is_none() {
+            self.threads.new_turn(&tab);
+        }
         self.core.send(&ClientMessage::SessionSend { tab_id: tab.clone(), text, images, follow_up });
         self.drafts.edit(&tab).clear();
     }
@@ -322,7 +326,7 @@ pub enum ListAt {
     Below,
 }
 
-pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &Kit, layer: &mut Vec<El>) -> El {
+pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, lane: Option<crate::cards::Lane>, k: &Kit, layer: &mut Vec<El>) -> El {
     let tab = info.id.as_str();
     if let Some(list) = suggestion_list(s, tab, k) {
         let placement = if list_at == ListAt::Above { Placement::TopStart } else { Placement::BottomStart };
@@ -394,7 +398,7 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &
         .child(input)
         .child(actions)
         .on_drop_files(|s: &mut Desk, paths: &[std::path::PathBuf], _| s.attach(paths));
-    col().w_full().items_center().px(crate::thread_view::LANE_EDGE).child(col().w_full().max_w(COLUMN).pt(6.0).pb(16.0).children(queue_view(s, tab, k)).child(card))
+    crate::thread_view::in_lane(col().w_full().pt(6.0).pb(16.0).children(queue_view(s, tab, k)).child(card), lane)
 }
 
 fn suggestion_name(s: &Suggestion) -> &str {

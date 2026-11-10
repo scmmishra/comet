@@ -60,7 +60,7 @@ pub fn start_screen(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
         .max_w(COLUMN)
         .gap(18.0)
         .child(row().w_full().justify_center().child(wordmark))
-        .child(composer::composer(s, tab, composer::ListAt::Below, k, layer))
+        .child(composer::composer(s, tab, composer::ListAt::Below, None, k, layer))
         .child(place)
         .children(recent_threads(s, tab, k));
     col().key(format!("start-{}", tab.id)).w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).child(col().w_full().items_center().pt(48.0).pb(24.0).child(lane))

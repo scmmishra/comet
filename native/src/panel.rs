@@ -122,6 +122,21 @@ impl Desk {
         self.sync_panel();
     }
 
+    /// Opens the tab's pane on Review, comparing with `scope`.
+    pub fn open_review(&mut self, tab: &str, scope: &str) {
+        let scope = scope.to_owned();
+        self.workspace.change_tab(
+            tab,
+            |t| {
+                t.panel_open = Some(true);
+                t.panel_active = None;
+                t.review_scope = Some(scope);
+            },
+            &self.core,
+        );
+        self.sync_panel();
+    }
+
     /// Shows a file from the thread in the tab's panel. A relative path is in the project.
     pub fn open_file(&mut self, tab: &str, path: &str) {
         let Some(project) = self.workspace.tabs.iter().find(|t| t.id == tab).map(|t| t.project.clone()) else { return };

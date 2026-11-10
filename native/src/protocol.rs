@@ -173,10 +173,72 @@ pub struct ThreadSummary {
     pub tab_id: Option<String>,
 }
 
-/// The project's Git checkout, as far as the app reads it.
+/// Commits ahead of and behind the upstream branch.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct Upstream {
+    pub ahead: u32,
+    pub behind: u32,
+}
+
+/// Uncommitted changes against HEAD, untracked files included.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+pub struct Changes {
+    #[serde(default)]
+    pub files: u32,
+    #[serde(default)]
+    pub additions: u32,
+    #[serde(default)]
+    pub deletions: u32,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct Checks {
+    pub passed: u32,
+    pub failed: u32,
+    pub pending: u32,
+}
+
+/// The branch's pull request, when `gh` finds one.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct PullRequest {
+    pub number: u32,
+    pub title: String,
+    pub url: String,
+    /// "OPEN", "CLOSED" or "MERGED".
+    pub state: String,
+    pub draft: bool,
+    pub checks: Checks,
+}
+
+/// The project's Git checkout.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct Space {
+    pub root: String,
     pub branch: String,
+    pub upstream: Option<Upstream>,
+    #[serde(default)]
+    pub changes: Changes,
+    pub pr: Option<PullRequest>,
+}
+
+/// A subagent Claude started in a turn, sent whole each time it changes. It runs beside the thread.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Subagent {
+    pub id: String,
+    pub description: String,
+    /// The kind of agent, such as "Explore".
+    #[serde(rename = "type")]
+    pub kind: Option<String>,
+    /// "running", "completed", "failed" or "stopped".
+    pub status: String,
+    pub started_at: f64,
+    pub ended_at: Option<f64>,
+    pub summary: Option<String>,
+    #[serde(default)]
+    pub tool_uses: u32,
+    pub prompt: Option<String>,
+    pub items: Vec<ThreadItem>,
 }
 
 /// A command Claude Code offers: a skill, or one of its own such as /compact.
@@ -364,6 +426,8 @@ pub enum ThreadEvent {
     /// The model that runs, as the session reports it.
     #[serde(rename = "init")]
     Init { model: String },
+    #[serde(rename = "subagent")]
+    Subagent { subagent: Subagent },
     /// An event the app does not read yet.
     #[serde(other)]
     Other,

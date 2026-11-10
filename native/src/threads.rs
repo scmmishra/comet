@@ -1,6 +1,6 @@
 //! Each tab's thread as the core sends it, as `app/src/renderer/threads.ts` keeps it.
 
-use crate::protocol::{ContextReading, Question, QueuedMessage, ThreadEvent, ThreadItem, ThreadRow};
+use crate::protocol::{ContextReading, Question, QueuedMessage, Subagent, ThreadEvent, ThreadItem, ThreadRow};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Default)]
@@ -22,6 +22,8 @@ pub struct Thread {
     pub queue: Vec<QueuedMessage>,
     /// Whether a stop or an error paused the queue.
     pub queue_held: bool,
+    /// The subagents of the latest turn, and any still running from an earlier one, by id.
+    pub subagents: Vec<Subagent>,
     /// The folds, groups and steps the user opened, by row or item id.
     pub open: HashSet<String>,
 }
@@ -118,6 +120,10 @@ impl Threads {
             ThreadEvent::Status { busy } => thread.busy = busy,
             ThreadEvent::Context { reading } => thread.context = Some(reading),
             ThreadEvent::Init { model } => thread.model = Some(model),
+            ThreadEvent::Subagent { subagent } => match thread.subagents.iter_mut().find(|x| x.id == subagent.id) {
+                Some(known) => *known = subagent,
+                None => thread.subagents.push(subagent),
+            },
             ThreadEvent::Other => {}
         }
     }
@@ -126,6 +132,11 @@ impl Threads {
         let thread = self.get_mut(tab);
         thread.queue = messages;
         thread.queue_held = held;
+    }
+
+    /// A new turn starts a new set of subagents, and those still running stay.
+    pub fn new_turn(&mut self, tab: &str) {
+        self.get_mut(tab).subagents.retain(|x| x.status == "running");
     }
 
     /// Opens a fold, group or step that is closed, and closes one that is open.

@@ -95,6 +95,10 @@ fn thread(s: &mut Desk) {
             { "header": "Tests", "question": "Which kind of test should I add?", "options": [{ "label": "Unit test", "description": "Fast, mocks the network" }, { "label": "End-to-end test" }], "multiSelect": false }
         ] } } },
         { "type": "queue", "tabId": "tab", "messages": [{ "id": "m1", "text": "Then update the changelog" }], "held": false },
+        { "type": "project", "project": "/Users/me/code/web", "part": "space", "value": { "name": "web", "root": "/Users/me/code/web", "branch": "fix-login", "upstream": { "ahead": 2, "behind": 0 },
+            "changes": { "files": 1, "additions": 3, "deletions": 1 },
+            "pr": { "number": 42, "title": "Keep the login error after a retry", "url": "https://example.com/pr/42", "state": "OPEN", "draft": false, "checks": { "passed": 3, "failed": 1, "pending": 0 } } } },
+        { "type": "session.event", "tabId": "tab", "event": { "kind": "subagent", "subagent": { "id": "a1", "description": "Find the login tests", "type": "Explore", "status": "running", "background": false, "startedAt": at(12.0), "toolUses": 3, "items": [] } } },
         { "type": "session.rows", "tabId": "tab", "rows": [
             { "type": "item", "id": "u1" },
             { "type": "fold", "id": "fold:u1", "rows": [{ "type": "group", "id": "group:th1", "steps": ["th1", "t1", "t2", "t3"], "live": false, "summary": "Read a file, ran a command, and changed a file" }], "durationMs": 63_000.0, "stopped": false },
