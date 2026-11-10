@@ -357,7 +357,8 @@ function TabBar() {
 /**
  * Keeps the newest message in view while Claude writes, unless the user scrolled up to read. It follows
  * any change in size, of the thread or of the box: a reply growing, a step appearing, or the queue
- * above the composer taking room.
+ * above the composer taking room. A message the user sends goes to the end and follows again, even
+ * from far up the thread.
  */
 function ThreadScroll(props: { tab: TabInfo }) {
   let box!: HTMLDivElement
@@ -372,6 +373,19 @@ function ThreadScroll(props: { tab: TabInfo }) {
     onCleanup(() => follow.disconnect())
     setMounted(box)
   })
+  // The user's own messages, not those a finished background task adds. A new one means they just sent it.
+  const lastSent = () => threadOf(props.tab.id).items.findLast((item) => item.type === "user" && !item.fromTask)?.id
+  createEffect(
+    on(
+      lastSent,
+      (id, previous) => {
+        if (!id || id === previous) return
+        setPinned(true)
+        box.scrollTop = box.scrollHeight
+      },
+      { defer: true },
+    ),
+  )
   return (
     <div class="relative flex min-h-0 flex-1 flex-col">
       <div ref={box} class="min-h-0 flex-1 overflow-y-auto" onScroll={() => setPinned(box.scrollHeight - box.scrollTop - box.clientHeight < PINNED_WITHIN_PX)}>
