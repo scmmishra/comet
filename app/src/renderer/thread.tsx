@@ -69,7 +69,8 @@ function RowView(props: { row: Row; tab: TabInfo }) {
               </div>
             </Show>
             <Show when={item().text}>
-              <div class="w-fit max-w-[80%] whitespace-pre-wrap rounded-3xl bg-raised px-3.5 py-[9px] text-[length:var(--desk-text-size)] leading-[1.625]">{item().text}</div>
+              {/* A long token, such as an ID or a URL, wraps anywhere, as in a reply, rather than running past the bubble. */}
+              <div class="w-fit max-w-[80%] whitespace-pre-wrap rounded-3xl bg-raised px-3.5 py-[9px] text-[length:var(--desk-text-size)] leading-[1.625] [overflow-wrap:anywhere]">{item().text}</div>
             </Show>
             <MessageMeta text={item().text} at={item().at} />
           </div>
