@@ -13,6 +13,7 @@ export const COMMANDS = {
   "panel.toggle": { title: "Toggle Panel", accelerator: "CmdOrCtrl+\\" },
   "palette.toggle": { title: "Command Palette…", accelerator: "CmdOrCtrl+K" },
   "threads.search": { title: "Search Threads…", accelerator: "CmdOrCtrl+Shift+O" },
+  "files.search": { title: "Search Files…", accelerator: "CmdOrCtrl+P" },
 } as const
 
 export type CommandId = keyof typeof COMMANDS

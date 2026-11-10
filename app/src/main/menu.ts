@@ -41,6 +41,7 @@ export function installMenu(send: (command: DeskCommand) => void, warn: (message
         item("panel.toggle"),
         item("palette.toggle"),
         item("threads.search"),
+        item("files.search"),
         { type: "separator" },
         { role: "reload" },
         { role: "toggleDevTools" },

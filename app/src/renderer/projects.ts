@@ -56,7 +56,7 @@ export function stopCommands(dir: string, ids: readonly string[]) {
   core.send({ type: "commands.stop", project: dir, ids })
 }
 
-/** Asks the core for files in a project that match `query`, for an @ mention. `found` hears answers to this query only. */
+/** Asks the core for files in a project that match `query`, for an @ mention or the file search. `found` hears answers to this query only. */
 export function findFiles(dir: string, query: string, found: (paths: readonly string[]) => void) {
   const stop = core.listen((message) => {
     if (message.type !== "files.found" || message.project !== dir || message.query !== query) return

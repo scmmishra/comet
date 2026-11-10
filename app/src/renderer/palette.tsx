@@ -3,20 +3,24 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogBody } from "@opencode/ui/dialog"
 import { Keybind } from "@opencode/ui/keybind"
 import { SearchHighlight, SearchList } from "@opencode/ui/search-list"
-import { createMemo, createSignal, For, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { COMMANDS, keyLabels, type CommandId, type DeskCommand } from "../shared/commands"
 import { account, updateSettings } from "./account"
 import { THEME_LABELS } from "./appearance"
 import { formatAgo, otherBranch, shortPath } from "./format"
 import { Icon, type IconName } from "./icons"
 import { ProjectMark } from "./project-mark"
-import { projectData, projectLabel, readProject } from "./projects"
+import { fileIcon } from "./file-icons"
+import { openFile } from "./file-tabs"
+import { findFiles, projectData, projectLabel, readProject } from "./projects"
 import { openPanel, plugins, readSetups, runPluginCommand } from "./plugins"
 import { SETTINGS_PAGES } from "./settings/pages"
 import { openThread } from "./threads"
 import { activeProject, activeTab, newTab, openSettings, openSetup, showTab, workspace } from "./workspace"
 
 const DIALOG_ID = "palette"
+/** A list the palette can open on, from its own shortcut. */
+type Start = "threads" | "files"
 /** Threads the palette lists before a search. A search looks through all of them. */
 const RECENT_THREADS = 20
 const THEME_ICONS: Record<(typeof THEMES)[number], IconName> = { dark: "appearance", light: "appearance", auto: "monitor" }
@@ -34,6 +38,8 @@ interface Entry {
   readonly command?: CommandId
   /** Marks the current choice in a list of choices, such as the theme. */
   readonly checked?: boolean
+  /** A file whose type icon leads the row. */
+  readonly file?: string
   /** Runs the entry. An entry without it runs `command`, or opens `page`. */
   readonly run?: () => void
   readonly page?: Page
@@ -44,16 +50,22 @@ interface Page {
   readonly title: string
   /** Asks the core for what the list shows, each time it opens. */
   readonly load?: () => void
+  /**
+   * Asks the core for the entries that match what is typed, for a list too long to send whole, such as a
+   * project's files. The core ranks them, so the palette shows them as they come. Returns how to stop asking.
+   */
+  readonly search?: (query: string) => () => void
   readonly entries: () => Entry[]
 }
 
 /**
  * Opens the command palette, or closes it when it is open. With `threads`, it opens on the active
- * project's threads, for ⌘⇧O. `run` runs a menu command. Call it inside the DialogProvider.
+ * project's threads, for ⌘⇧O, and with `files` on its files, for ⌘P. `run` runs a menu command. Call it
+ * inside the DialogProvider.
  */
 export function usePalette(run: (command: DeskCommand) => void) {
   const dialog = useDialog()
-  return (start?: "threads") => {
+  return (start?: Start) => {
     if (dialog.active?.id === DIALOG_ID) return dialog.close(DIALOG_ID)
     readProject(activeProject(), "threads")
     readProject(activeProject(), "plugins")
@@ -67,8 +79,25 @@ export function usePalette(run: (command: DeskCommand) => void) {
  * open tabs and recent threads. Themes, settings pages and projects sit in nested lists, and a search
  * from the root looks through those too.
  */
-function Palette(props: { start?: "threads"; run: (command: DeskCommand) => void; onDone: () => void }) {
+function Palette(props: { start?: Start; run: (command: DeskCommand) => void; onDone: () => void }) {
   const [query, setQuery] = createSignal("")
+
+  /**
+   * The project's files, after T3 Code's file picker: the best matches for what is typed, by file name
+   * then path. A file opens as a tab in the panel.
+   */
+  const filesPage = (project: string): Page => {
+    const [found, setFound] = createSignal<readonly string[]>([])
+    return {
+      title: `Search files in ${projectLabel(project)}`,
+      search: (typed) => findFiles(project, typed, setFound),
+      entries: () =>
+        found().map((path) => {
+          const slash = path.lastIndexOf("/")
+          return { id: `file:${path}`, section: projectLabel(project), title: path.slice(slash + 1), detail: path.slice(0, slash + 1), file: path, run: () => openFile(project, path) }
+        }),
+    }
+  }
 
   /** A project's threads, newest first, as the core lists them. */
   const threadEntries = (project: string): Entry[] =>
@@ -151,6 +180,7 @@ function Palette(props: { start?: "threads"; run: (command: DeskCommand) => void
     { id: "new-session-in", section: "Actions", title: "New session in…", icon: "folder-add-left", page: newSessionPage },
     { id: "search-threads", section: "Actions", title: "Search threads", icon: "magnifying-glass", command: "threads.search", page: threadsPage(activeProject()) },
     { id: "search-threads-in", section: "Actions", title: "Search threads in…", icon: "magnifying-glass", page: searchThreadsPage },
+    { id: "search-files", section: "Actions", title: "Search files", icon: "magnifying-glass", command: "files.search", page: filesPage(activeProject()) },
     { id: "new-terminal", section: "Actions", title: "New terminal", icon: "terminal", command: "terminal.new" },
     { id: "toggle-panel", section: "Actions", title: activeTab()?.panelOpen ? "Hide panel" : "Show panel", icon: "layout-right", command: "panel.toggle" },
     { id: "open-folder", section: "Actions", title: "Open folder…", icon: "folder", command: "folder.open" },
@@ -163,7 +193,7 @@ function Palette(props: { start?: "threads"; run: (command: DeskCommand) => void
   ]
 
   // The palette opened on a list leaves it by closing, so ⌘⇧O and Escape make a pair.
-  const startPages = props.start === "threads" ? [threadsPage(activeProject())] : []
+  const startPages = props.start === "threads" ? [threadsPage(activeProject())] : props.start === "files" ? [filesPage(activeProject())] : []
   const [pages, setPages] = createSignal<readonly Page[]>(startPages)
   const page = () => pages().at(-1)
   const nested = () => pages().length > startPages.length
@@ -176,8 +206,15 @@ function Palette(props: { start?: "threads"; run: (command: DeskCommand) => void
     return [...root(), ...themePage.entries(), ...settingsPage.entries(), ...newSessionPage.entries(), ...setupsPage.entries(), ...panelsPage.entries(), ...threads()]
   })
 
-  // Every word must appear in the entry's title, its detail or its section.
+  // A list the core searches asks again as the query changes.
+  createEffect(() => {
+    const search = page()?.search
+    if (search) onCleanup(search(query()))
+  })
+
+  // Every word must appear in the entry's title, its detail or its section. A list the core searched already matches.
   const matches = createMemo(() => {
+    if (page()?.search) return entries()
     const words = query().toLowerCase().split(/\s+/).filter(Boolean)
     return entries().filter((entry) => words.every((word) => `${entry.title} ${entry.detail ?? ""} ${entry.section}`.toLowerCase().includes(word)))
   })
@@ -234,9 +271,16 @@ function Palette(props: { start?: "threads"; run: (command: DeskCommand) => void
           {(entry, row) => (
             <button type="button" {...row}>
               <span class="flex min-w-0 flex-1 items-center gap-2.5">
-                <Show when={entry().project} fallback={<Show when={entry().icon}>{(icon) => <Icon name={icon()} class="shrink-0 text-fg-3" />}</Show>}>
-                  {(project) => <ProjectMark project={project()} />}
-                </Show>
+                <Switch fallback={<Show when={entry().icon}>{(icon) => <Icon name={icon()} class="shrink-0 text-fg-3" />}</Show>}>
+                  <Match when={entry().project}>{(project) => <ProjectMark project={project()} />}</Match>
+                  <Match when={entry().file}>
+                    {(file) => (
+                      <svg class="size-4 shrink-0" aria-hidden="true">
+                        <use href={`#${fileIcon(file())}`} />
+                      </svg>
+                    )}
+                  </Match>
+                </Switch>
                 <span class="truncate">
                   <SearchHighlight text={entry().title} />
                 </span>

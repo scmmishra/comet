@@ -757,7 +757,7 @@ export type ClientMessage =
   | { readonly type: "queue.remove"; readonly tabId: string; readonly id: string }
   /** Sends the queue again after a stop or an error paused it. */
   | { readonly type: "queue.resume"; readonly tabId: string }
-  /** Finds files in the project whose path matches `query`, for an @ mention. The core answers with `files.found`. */
+  /** Finds files in the project whose path matches `query`, for an @ mention or the file search. The core answers with `files.found`. */
   | { readonly type: "files.search"; readonly project: string; readonly query: string }
   | { readonly type: "session.interrupt"; readonly tabId: string }
   /** Ends a turn that did not stop when asked, by closing its Claude Code process. */

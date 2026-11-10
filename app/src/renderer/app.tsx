@@ -29,11 +29,11 @@ import { threadOf } from "./threads"
 import { closeFileTab, closeTab, closeTerminal, moveTab, newTab, newTerminal, showPanelTab, shownPanelTab, setPanelOpen, showTab, shownTab, workspace } from "./workspace"
 
 const USAGE_REFRESH_MS = 5 * 60_000
-/** The panel's Tabs value for Review, which has no id of its own. */
 /** How close to the end the thread must be to count as at the end, and follow new content. */
 const PINNED_WITHIN_PX = 48
 /** How far a pressed tab moves before it drags. Less is a click. */
 const DRAG_THRESHOLD_PX = 4
+/** The panel's Tabs value for Review, which has no id of its own. */
 const REVIEW = "review"
 
 export function App() {

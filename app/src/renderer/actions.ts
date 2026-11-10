@@ -33,6 +33,8 @@ export function useCommands() {
         return togglePalette()
       case "threads.search":
         return togglePalette("threads")
+      case "files.search":
+        return togglePalette("files")
       case "tab.select":
         return pickModelByNumber(command.index) || showTabAt(command.index)
       case "project.open":

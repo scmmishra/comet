@@ -3,8 +3,8 @@ import { git } from "./git"
 
 /** How long a project's file list is reused. A search per keystroke then lists the files once. */
 const LIST_TTL_MS = 5_000
-/** Enough results to pick from in a short list. */
-const MAX_RESULTS = 30
+/** Enough results to pick from, in the @ list or the file search. */
+const MAX_RESULTS = 50
 
 const lists = new Map<string, { at: number; files: Promise<string[]> }>()
 
