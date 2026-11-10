@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- A queued message reads in full in its dashed box, with its images at the top, and Send now, Edit and Remove sit under it, as in T3 Code.
 - A single line break in a reply now shows as one, as it does in Claude Code. Lines in a quote or a list of "•" items ran together into one paragraph.
 - Inline code such as `/api` or `~/code/desk` no longer shows as a file chip. A file chip needs a file extension or a line number.
 - Review can show four sets of changes, after OpenCode: the thread's changes, Git changes (uncommitted work), Branch changes (since the branch left the default branch) and Last turn changes. Each tab keeps its choice. Diffs show unified or split, and Desk keeps that choice for every tab. The Review header stays in place while the files scroll.

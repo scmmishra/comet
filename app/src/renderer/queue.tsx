@@ -32,10 +32,22 @@ export function QueuedMessages(props: { tab: TabInfo; onEdit: (message: QueuedMe
         </Show>
         <For each={shown()}>
           {(message) => (
-            <div class="group/queued flex max-w-[80%] items-center gap-1.5">
-              <div class="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/queued:opacity-100">
+            // The message reads in full, as a sent one does, and its actions sit under it, after T3 Code.
+            <div class="flex w-full flex-col items-end gap-1">
+              {/* Dashed and unfilled: a message not sent yet. */}
+              <div class="flex min-w-0 max-w-[80%] flex-col gap-2 rounded-2xl border border-dashed border-fg-3/40 px-3 py-2 text-[length:var(--desk-text-size)] text-fg-2">
+                <Show when={message.images?.length}>
+                  <div class="flex flex-wrap gap-1">
+                    <For each={message.images}>{(image) => <img src={imageUrl(image)} alt="" class="size-8 rounded-md object-cover shadow-[0_0_0_1px_var(--color-line)]" />}</For>
+                  </div>
+                </Show>
+                <Show when={message.text}>
+                  <p class="whitespace-pre-wrap [overflow-wrap:anywhere]">{message.text}</p>
+                </Show>
+              </div>
+              <div class="flex items-center gap-0.5 pe-1 text-[12px] text-fg-3">
                 <Tooltip value={threadOf(props.tab.id).busy ? "Send into the current turn" : "Start a turn with this message"} placement="top">
-                  <Button size="small" variant="ghost" onClick={() => sendQueued(props.tab.id, message.id)}>
+                  <Button size="small" variant="ghost-muted" icon="arrow-up" onClick={() => sendQueued(props.tab.id, message.id)}>
                     Send now
                   </Button>
                 </Tooltip>
@@ -45,16 +57,6 @@ export function QueuedMessages(props: { tab: TabInfo; onEdit: (message: QueuedMe
                 <Tooltip value="Remove from queue" placement="top">
                   <IconButton variant="ghost-muted" size="small" aria-label="Remove queued message" icon={<Icon name="xmark-small" />} onClick={() => removeQueued(props.tab.id, message.id)} />
                 </Tooltip>
-              </div>
-              <div class="flex min-w-0 flex-col items-end gap-1.5 rounded-3xl border border-dashed border-[var(--color-hover)] px-3.5 py-[7px]">
-                <Show when={message.images?.length}>
-                  <div class="flex flex-wrap justify-end gap-1.5">
-                    <For each={message.images}>{(image) => <img src={imageUrl(image)} alt="" class="size-10 rounded-lg object-cover" />}</For>
-                  </div>
-                </Show>
-                <Show when={message.text}>
-                  <span class="line-clamp-3 whitespace-pre-wrap text-[length:var(--desk-text-size)] text-fg-2">{message.text}</span>
-                </Show>
               </div>
             </div>
           )}
