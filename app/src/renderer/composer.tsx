@@ -36,7 +36,7 @@ export function Composer(props: { tab: TabInfo }) {
 
   return (
     <form
-      class="mx-auto flex w-full max-w-column flex-col rounded-3xl bg-card shadow-[0_0_0_1px_var(--color-line)] transition-shadow focus-within:shadow-[0_0_0_1px_var(--color-hover)]"
+      class="flex w-full flex-col rounded-3xl bg-card shadow-[0_0_0_1px_var(--color-line)] transition-shadow focus-within:shadow-[0_0_0_1px_var(--color-hover)]"
       // A click on the box's own blank space types in it. Clicks on its controls, and in their popovers, stay theirs.
       onClick={(event) => (event.target === event.currentTarget || event.target === row) && input.focus()}
       onSubmit={(event) => {

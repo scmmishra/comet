@@ -184,9 +184,38 @@ body {
   -webkit-app-region: no-drag;
 }
 
-/* The Space card floats beside the centred 720px thread. Below this width it would cover it. */
-@media (max-width: 1280px) {
+/*
+ * The thread's lane, which the thread, the composer and the start screen share. It sits centred in the
+ * session. When the project's cards show, it keeps clear of them, as T3 Code's chat does beside its
+ * details card: it slides toward the left edge first, and narrows only when sliding is not enough.
+ * The cards show only while a 600px lane fits beside them: 600 + 16 of edge + 288 for the cards is
+ * the 904px in the queries below. Under it, they fold into the header chip.
+ * A lane sits directly in the session's width, with no padded box around it, so every lane lines up.
+ */
+.desk-session {
+  container: session / inline-size;
+  --lane-edge: 16px;
+  /* The cards' 264px, their 8px from the edge, and a 16px gap to the lane. */
+  --rail-space: 288px;
+}
+.desk-lane {
+  --lane-width: min(var(--container-column), 100cqw - 2 * var(--lane-edge));
+  --lane-left: calc((100cqw - var(--lane-width)) / 2);
+  width: var(--lane-width);
+  margin-inline-start: var(--lane-left);
+}
+.desk-rail {
+  display: none;
+}
+@container session (min-width: 904px) {
+  .desk-lane {
+    --lane-width: min(var(--container-column), 100cqw - var(--rail-space) - var(--lane-edge));
+    --lane-left: max(var(--lane-edge), min((100cqw - var(--lane-width)) / 2, 100cqw - var(--rail-space) - var(--lane-width)));
+  }
   .desk-rail {
+    display: flex;
+  }
+  .desk-chip {
     display: none;
   }
 }

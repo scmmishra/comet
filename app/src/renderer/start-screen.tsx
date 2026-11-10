@@ -16,9 +16,9 @@ const RECENT_THREADS = 8
 export function StartScreen(props: { tab: TabInfo }) {
   onMount(() => readProject(props.tab.project, "threads"))
   return (
-    <div class="flex min-h-0 flex-1 flex-col items-center gap-[18px] overflow-y-auto px-4 pb-6 pt-[6vh]">
-      <div class="desk-wordmark" aria-hidden="true">desk</div>
-      <div class="relative flex w-full max-w-column flex-col gap-[18px]">
+    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto pb-6 pt-[6vh]">
+      <div class="desk-lane relative flex flex-col gap-[18px]">
+        <div class="desk-wordmark self-center" aria-hidden="true">desk</div>
         <Composer tab={props.tab} />
         <div class="flex items-center gap-1 px-0.5 text-fg-2">
           <ProjectSwitcher tab={props.tab} />

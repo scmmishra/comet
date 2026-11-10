@@ -72,8 +72,6 @@ function TabView(props: { tab: TabInfo }) {
   const space = () => projectData(props.tab.project).space
   const setup = () => setupOf(props.tab.setup)
   const pinned = () => setup()?.layout.panel ?? []
-  // The project's cards fold into the header chip when something else takes the room beside the thread: the panel, or a setup's column.
-  const folded = () => workspace.panelOpen || !!props.tab.setup
   return (
     <main class="flex min-h-0 flex-1 gap-2 px-2 pb-2">
       <Show when={setup()?.layout.left.length}>
@@ -91,27 +89,26 @@ function TabView(props: { tab: TabInfo }) {
               <b class="truncate font-medium text-fg">{props.tab.title}</b>
             </span>
             <span class="ml-auto flex items-center gap-1">
-              <Show when={folded()}>
+              {/* Shown only while the session is too narrow for the cards beside the thread, by the lane rules in index.css. */}
+              <span class="desk-chip">
                 <SpaceChip project={props.tab.project} space={space()} />
-              </Show>
+              </span>
               <Show when={thread().context}>{(context) => <ContextRing {...context()} />}</Show>
             </span>
           </header>
-          {/* The project's cards float over the session's corner, so the thread stays centred, unless they are folded. */}
+          {/* The project's cards float over the session's corner, and the thread's lane keeps clear of them. Without room, they fold into the header chip. */}
           <div class="relative flex min-h-0 flex-1">
             <div class="flex min-w-0 flex-1 flex-col">
               <Show when={thread().items.length > 0} fallback={props.tab.setup ? <SetupStart tab={props.tab} /> : <StartScreen tab={props.tab} />}>
                 <ThreadScroll tab={props.tab} />
-                <div class="shrink-0 px-4 pb-4 pt-1.5">
+                <div class="desk-lane shrink-0 pb-4 pt-1.5">
                   <Composer tab={props.tab} />
                 </div>
               </Show>
             </div>
-            <Show when={!folded()}>
-              <aside class="desk-rail desk-no-scrollbar absolute right-2 top-0 flex max-h-full w-[264px] flex-col gap-2 overflow-y-auto pb-2">
-                <ProjectCards project={props.tab.project} />
-              </aside>
-            </Show>
+            <aside class="desk-rail desk-no-scrollbar absolute right-2 top-0 max-h-full w-[264px] flex-col gap-2 overflow-y-auto pb-2">
+              <ProjectCards project={props.tab.project} />
+            </aside>
           </div>
         </section>
         <section class="desk-panel flex flex-col rounded-3xl border border-outline bg-panel" inert={!workspace.panelOpen}>
@@ -204,7 +201,7 @@ function SetupStart(props: { tab: TabInfo }) {
   return (
     <div class="flex min-h-0 flex-1 flex-col">
       <p class="m-auto px-6 text-center text-fg-3">Pick something in a panel to open its thread.</p>
-      <div class="shrink-0 px-4 pb-4 pt-1.5">
+      <div class="desk-lane shrink-0 pb-4 pt-1.5">
         <Composer tab={props.tab} />
       </div>
     </div>
