@@ -4,6 +4,8 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- Scrolled up in a thread, a "Scroll to end" button shows above the message box, after T3 Code.
+- A thread with two or more of your messages gets T3 Code's minimap in its left margin: a mark per message, 8px apart, darker while its turn is on screen. Hovering grows the nearby marks and shows your message with the start of Claude's answer. A click jumps to it, and the previous and next buttons, or the arrow keys, step between turns. In a narrow window it shows on hover.
 - Settings › Providers shows the Claude Code version and whether a newer one is out on your update channel, after T3 Code. Claude Code updates itself only while it runs, so the page checks when it opens. Update runs Claude Code's own updater, for its native install.
 - Desk runs the Claude Code installed on your Mac, as T3 Code does, instead of a copy bundled with the Agent SDK. Desk.app drops from about 755 MB to 448 MB, and Claude Code updates itself as it always does. Desk finds `claude` on your login shell's PATH, and `DESK_CLAUDE` points it at another. Without Claude Code installed, sending a message says so.
 - Each tab keeps the message you are writing when you switch away, and its text also outlives a restart. Images you added stay until Desk quits.

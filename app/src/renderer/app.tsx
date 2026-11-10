@@ -10,6 +10,7 @@ import { useCommands } from "./actions"
 import { Composer } from "./composer"
 import { Icon } from "./icons"
 import { ContextRing, UsageButton } from "./meters"
+import { ThreadMinimap } from "./minimap"
 import { PluginView } from "./plugin-view"
 import { closePanel, isEmptyView, loadLayout, plugins } from "./plugins"
 import { ProjectMark } from "./project-mark"
@@ -27,6 +28,8 @@ import { closeTab, closeTerminal, moveTab, newTab, newTerminal, showPanelTab, sh
 
 const USAGE_REFRESH_MS = 5 * 60_000
 /** The panel's Tabs value for Review, which has no id of its own. */
+/** How close to the end the thread must be to count as at the end, and follow new content. */
+const PINNED_WITHIN_PX = 48
 /** How far a pressed tab moves before it drags. Less is a click. */
 const DRAG_THRESHOLD_PX = 4
 const REVIEW = "review"
@@ -333,18 +336,37 @@ function TabBar() {
 function ThreadScroll(props: { tab: TabInfo }) {
   let box!: HTMLDivElement
   let content!: HTMLDivElement
-  let pinned = true
+  // Pinned means scrolled to the end. Scrolling up unpins it, and Scroll to end shows.
+  const [pinned, setPinned] = createSignal(true)
+  const [mounted, setMounted] = createSignal<HTMLDivElement>()
   onMount(() => {
-    const follow = new ResizeObserver(() => pinned && (box.scrollTop = box.scrollHeight))
+    const follow = new ResizeObserver(() => pinned() && (box.scrollTop = box.scrollHeight))
     follow.observe(box)
     follow.observe(content)
     onCleanup(() => follow.disconnect())
+    setMounted(box)
   })
   return (
-    <div ref={box} class="min-h-0 flex-1 overflow-y-auto" onScroll={() => (pinned = box.scrollHeight - box.scrollTop - box.clientHeight < 48)}>
-      <div ref={content}>
-        <Thread tab={props.tab} />
+    <div class="relative flex min-h-0 flex-1 flex-col">
+      <div ref={box} class="min-h-0 flex-1 overflow-y-auto" onScroll={() => setPinned(box.scrollHeight - box.scrollTop - box.clientHeight < PINNED_WITHIN_PX)}>
+        <div ref={content}>
+          <Thread tab={props.tab} />
+        </div>
       </div>
+      <Show when={mounted()}>{(scrollBox) => <ThreadMinimap tab={props.tab} box={scrollBox()} />}</Show>
+      {/* After T3 Code: a pill above the composer once the end of the thread is out of view. */}
+      <Show when={!pinned()}>
+        <div class="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center">
+          <button
+            class="pointer-events-auto flex h-7 items-center gap-1.5 rounded-full bg-card/90 px-3 text-[12px] text-fg-2 shadow-[0_0_0_1px_var(--color-line),0_4px_12px_rgb(0_0_0/15%)] backdrop-blur hover:text-fg"
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => box.scrollTo({ top: box.scrollHeight })}
+          >
+            <Icon name="chevron-down" class="size-3.5" />
+            Scroll to end
+          </button>
+        </div>
+      </Show>
     </div>
   )
 }

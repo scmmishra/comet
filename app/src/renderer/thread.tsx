@@ -41,7 +41,8 @@ export function Thread(props: { tab: TabInfo }) {
       {/* Rows mostly append, and groups are rebuilt each time an item arrives. Index keys rows by position, so a growing group keeps its element and its open state. */}
       <Index each={shown()}>
         {(row) => (
-          <div class={rise(row())}>
+          // A message's row carries its id, so the minimap can find it.
+          <div class={rise(row())} data-message={row().type === "user" ? (row() as Item).id : undefined}>
             <RowView row={row()} tab={props.tab} />
           </div>
         )}
