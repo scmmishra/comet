@@ -8,7 +8,13 @@ use crate::shell::{CoreState, Desk};
 /// A scene: its name, and what it sets in a fresh window.
 type Scene = (&'static str, fn(&mut Desk));
 
-pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("start", start), ("review", review), ("terminal", terminal)];
+pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette)];
+
+/// A new tab with the command palette open.
+fn palette(s: &mut Desk) {
+    start(s);
+    s.show_palette(Vec::new());
+}
 
 /// The thread with a terminal open in the pane, showing coloured output.
 fn terminal(s: &mut Desk) {

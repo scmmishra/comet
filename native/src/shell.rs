@@ -54,6 +54,7 @@ pub struct Desk {
     /// while a turn runs, for the working head.
     pub now_ms: f64,
     pub toasts: crate::toasts::Toasts,
+    pub palette: crate::palette::Palette,
     /// Whether ⌘ is held, so the new tab button opens its tab next to the active one.
     cmd_held: bool,
     strip: TabDragState,
@@ -223,10 +224,27 @@ pub mod commands {
     pub fn new_terminal(s: &mut Desk, _: &mut Tx) {
         s.new_terminal();
     }
+
+    pub fn palette(s: &mut Desk, tx: &mut Tx) {
+        s.toggle_palette(Vec::new(), tx);
+    }
+
+    /// The palette, opened on the active project's threads.
+    pub fn search_threads(s: &mut Desk, tx: &mut Tx) {
+        let pages = s.workspace.active_tab().map(|t| crate::palette::Page::Threads(t.project.clone())).into_iter().collect();
+        s.toggle_palette(pages, tx);
+    }
+
+    /// The palette, opened on the active project's files.
+    pub fn search_files(s: &mut Desk, tx: &mut Tx) {
+        let pages = s.workspace.active_tab().map(|t| crate::palette::Page::Files(t.project.clone())).into_iter().collect();
+        s.toggle_palette(pages, tx);
+    }
 }
 
 /// Ticks the clock each second while a turn runs. A still window does no work.
 pub fn poll(s: &mut Desk, _: f64, tx: &mut Tx) -> bool {
+    s.sync_palette();
     let composed = composer::poll(s, tx) | copied_poll(s, tx) | toasts_poll(s, tx);
     if !s.working() {
         return composed;
@@ -325,6 +343,7 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
         }
     };
     let main = col().key("main").w_full().grow(1.0).min_h(0.0).px(PANEL_INSET).pb(PANEL_INSET).child(cards);
+    crate::palette::palette(s, k, &mut layer);
     layer.extend(crate::toasts::region(s, k));
     rune_kit::root(col().key("window").w_full().h_full().fill(k.c.bg_deep).child(titlebar).child(main), layer)
 }

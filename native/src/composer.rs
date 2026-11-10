@@ -507,6 +507,7 @@ fn sync(s: &mut Desk) -> Option<std::time::Duration> {
 impl Desk {
     /// Takes the paths the core found, for the query the list asked about.
     pub fn found_files(&mut self, project: String, query: String, paths: Vec<String>) {
+        self.palette_files(&project, &query, &paths);
         if self.drafts.asked.as_ref() == Some(&(project.clone(), query.clone())) {
             self.drafts.found = Some((project, query, paths));
         }

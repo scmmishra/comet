@@ -101,6 +101,14 @@ pub fn project_name(project: &str) -> &str {
     project.trim_end_matches('/').rsplit('/').next().filter(|s| !s.is_empty()).unwrap_or(project)
 }
 
+/// A path with the home folder written as ~.
+pub fn short_path(path: &str) -> String {
+    match std::env::var("HOME") {
+        Ok(home) if !home.is_empty() && path.starts_with(&home) => format!("~{}", &path[home.len()..]),
+        _ => path.to_owned(),
+    }
+}
+
 /// Now, in milliseconds since the epoch, as the core times messages.
 pub fn now_ms() -> f64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |d| d.as_secs_f64() * 1000.0)
