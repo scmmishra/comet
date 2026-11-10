@@ -1,6 +1,7 @@
 //! Desk, drawn with Rune. The Bun core does the work. This app draws what it sends.
 
 mod account;
+mod composer;
 mod core;
 mod diff;
 mod format;

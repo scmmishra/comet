@@ -8,7 +8,7 @@ use crate::shell::Desk;
 use crate::theme;
 use crate::threads::Thread;
 use rune::{El, GrowthSpec, Icon, ScrollSpec, col, el, icon, memo, row, text};
-use rune_kit::{Kit, Markdown, Spinner};
+use rune_kit::{Button, ButtonVariant, ControlSize, Kit, Markdown, Spinner};
 use rune_theme_opencode::icons as ic;
 use std::borrow::Cow;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -207,7 +207,7 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
             .py(8.0)
             .child(text(message.clone()).wrap().font(theme::thread_text(k, c.size)).color(k.c.danger.fg).selectable(true)),
         ThreadItem::Changes { files, .. } => changes_view(c, files),
-        ThreadItem::Permission { detail, reason, .. } => permission_view(c, detail, reason.as_deref()),
+        ThreadItem::Permission { request_id, kind, detail, reason, allow_session, .. } => permission_view(c, request_id, kind, detail, reason.as_deref(), *allow_session),
         ThreadItem::Thinking { .. } | ThreadItem::Tool { .. } => step_view(c, item),
         // Results end turns and questions show in the composer. Neither draws in the thread.
         ThreadItem::Result { .. } | ThreadItem::Question { .. } => el(),
@@ -451,16 +451,36 @@ fn changes_view(c: &Ctx, files: &[crate::protocol::ChangedFile]) -> El {
     col().w_full().radius(BOX_RADIUS).fill(k.c.layer_02).child(head).child(list)
 }
 
-/// A tool call waiting for the user's approval. Its answers come with the composer.
-fn permission_view(c: &Ctx, detail: &str, reason: Option<&str>) -> El {
+/// A tool call waiting for approval, as a work row after T3 Code: what Claude would run or touch, why,
+/// and the answers. Rune's menus need the view's overlay layer, which rows built in `memo` lack, so the
+/// Electron app's "More" choices show as buttons.
+fn permission_view(c: &Ctx, request_id: &str, kind: &str, detail: &str, reason: Option<&str>, allow_session: bool) -> El {
     let k = c.k;
+    let mark = match kind {
+        "command" => kind_icon(StepKind::Command),
+        "file-change" => kind_icon(StepKind::Edit),
+        "file-read" => kind_icon(StepKind::Read),
+        _ => &ic::LOCK,
+    };
+    let answer = |label: &str, value: &'static str, variant: ButtonVariant| {
+        let (tab, request) = (c.tab.to_owned(), request_id.to_owned());
+        Button::new(label).control_size(ControlSize::Small).variant(variant).on_press(move |s: &mut Desk| s.answer_permission(&tab, &request, value)).build(k).key(value)
+    };
+    let waiting = row().gap(4.0).items_center().child(icon(&ic::LOCK, 12.0).color(k.c.warning.fg)).child(text("Waiting for approval").font(k.ty.text_xsmall).color(k.c.warning.fg));
+    let answers = row()
+        .gap(6.0)
+        .items_center()
+        .wrap()
+        .child(waiting)
+        .child(text("·").font(k.ty.text_xsmall).color(k.c.text_faint))
+        .child(answer("Decline", "decline", ButtonVariant::GhostMuted))
+        .child(answer("Approve", "allow", ButtonVariant::Contrast))
+        .children(allow_session.then(|| answer("Always allow this session", "allow-session", ButtonVariant::GhostMuted)))
+        .child(answer("Cancel and stop the turn", "cancel", ButtonVariant::GhostMuted));
     col()
         .w_full()
-        .gap(8.0)
-        .padding(12.0)
-        .radius(BOX_RADIUS)
-        .fill(k.c.layer_01)
-        .border(1.0, k.c.border_base)
-        .child(text(detail.to_owned()).font(k.ty.mono).color(k.c.text_base).wrap_anywhere().selectable(true))
-        .children(reason.map(|r| c.small(r.to_owned()).color(k.c.text_muted).wrap()))
+        .gap(4.0)
+        .role("group")
+        .child(row().gap(8.0).child(icon(mark, STEP_ICON).color(k.c.text_faint).mt(3.0)).child(text(detail.to_owned()).font(k.ty.mono).color(k.c.text_base).wrap_anywhere().selectable(true).max_h(160.0)))
+        .child(col().pl(DETAIL_INDENT).gap(4.0).children(reason.map(|r| text(r.to_owned()).font(k.ty.text_xsmall).color(k.c.text_faint).wrap_anywhere().selectable(true))).child(answers))
 }

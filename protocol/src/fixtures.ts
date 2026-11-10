@@ -74,4 +74,12 @@ export const CORE_MESSAGES = [
 ] satisfies CoreMessage[]
 
 /** In the order the native tests build them. */
-export const CLIENT_MESSAGES = [{ type: "models.get" }, { type: "tab.reopen" }, { type: "tabs.save", tabs: TABS, active: "tab-2" }] satisfies ClientMessage[]
+export const CLIENT_MESSAGES = [
+  { type: "models.get" },
+  { type: "tab.reopen" },
+  { type: "tabs.save", tabs: TABS, active: "tab-2" },
+  { type: "session.send", tabId: "tab-1", text: "Add a test", followUp: "queue" },
+  { type: "session.send", tabId: "tab-1", text: "Hi" },
+  { type: "session.interrupt", tabId: "tab-1" },
+  { type: "permission.answer", tabId: "tab-1", requestId: "r1", answer: "allow-session" },
+] satisfies ClientMessage[]

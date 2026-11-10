@@ -61,6 +61,8 @@ pub struct ClaudeSettings {
     pub model: String,
     pub effort: Option<String>,
     pub permission_mode: String,
+    /// What Enter does while Claude works: "steer" or "queue".
+    pub follow_up: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -301,6 +303,18 @@ pub enum ClientMessage {
     /// Reopens the tab closed last. The core answers with `tab.reopened`.
     #[serde(rename = "tab.reopen")]
     TabReopen,
+    /// Sends a message. While Claude works, `followUp` says whether it steers the turn or waits in the queue.
+    #[serde(rename = "session.send", rename_all = "camelCase")]
+    SessionSend {
+        tab_id: String,
+        text: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        follow_up: Option<String>,
+    },
+    #[serde(rename = "session.interrupt", rename_all = "camelCase")]
+    SessionInterrupt { tab_id: String },
+    #[serde(rename = "permission.answer", rename_all = "camelCase")]
+    PermissionAnswer { tab_id: String, request_id: String, answer: String },
     /// The window's tabs, in order, sent whenever they change.
     #[serde(rename = "tabs.save")]
     TabsSave {
@@ -365,7 +379,15 @@ mod tests {
     #[test]
     fn client_messages_encode_as_the_fixtures() {
         let CoreMessage::Tabs { tabs, active } = core_messages().remove(1) else { panic!("tabs second") };
-        let ours = [ClientMessage::ModelsGet, ClientMessage::TabReopen, ClientMessage::TabsSave { tabs, active }];
+        let ours = [
+            ClientMessage::ModelsGet,
+            ClientMessage::TabReopen,
+            ClientMessage::TabsSave { tabs, active },
+            ClientMessage::SessionSend { tab_id: "tab-1".into(), text: "Add a test".into(), follow_up: Some("queue".into()) },
+            ClientMessage::SessionSend { tab_id: "tab-1".into(), text: "Hi".into(), follow_up: None },
+            ClientMessage::SessionInterrupt { tab_id: "tab-1".into() },
+            ClientMessage::PermissionAnswer { tab_id: "tab-1".into(), request_id: "r1".into(), answer: "allow-session".into() },
+        ];
         let encoded: Vec<Value> = ours.iter().map(|m| serde_json::to_value(m).unwrap()).collect();
         assert_eq!(encoded, fixtures("CLIENT_MESSAGES"));
     }

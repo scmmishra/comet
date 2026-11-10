@@ -30,8 +30,10 @@ fn thread(s: &mut Desk) {
             { "type": "changes", "id": "ch1", "files": [{ "path": "src/login.ts", "status": "modified", "additions": 3, "deletions": 1 }] },
             { "type": "compaction", "id": "c1", "status": "done", "preTokens": 180_000.0, "postTokens": 32_000.0 },
             { "type": "user", "id": "u2", "text": "Now add a test for it", "at": at(25.0), "steered": true },
-            { "type": "tool", "id": "t4", "name": "Bash", "summary": "npm test -- login", "kind": "command", "label": "Running npm" }
+            { "type": "tool", "id": "t4", "name": "Bash", "summary": "npm test -- login", "kind": "command", "label": "Running npm" },
+            { "type": "permission", "id": "p1", "requestId": "r1", "tool": "Bash", "kind": "command", "detail": "rm -rf dist && npm run build", "reason": "It deletes the build folder", "allowSession": true }
         ] },
+        { "type": "session.event", "tabId": "tab", "event": { "kind": "status", "busy": true } },
         { "type": "session.rows", "tabId": "tab", "rows": [
             { "type": "item", "id": "u1" },
             { "type": "fold", "id": "fold:u1", "rows": [{ "type": "group", "id": "group:th1", "steps": ["th1", "t1", "t2", "t3"], "live": false, "summary": "Read a file, ran a command, and changed a file" }], "durationMs": 63_000.0, "stopped": false },
@@ -40,7 +42,8 @@ fn thread(s: &mut Desk) {
             { "type": "item", "id": "c1" },
             { "type": "item", "id": "u2" },
             { "type": "working", "id": "working:u2", "since": at(25.0) },
-            { "type": "group", "id": "group:t4", "steps": ["t4"], "live": true, "summary": "Ran a command" }
+            { "type": "group", "id": "group:t4", "steps": ["t4"], "live": true, "summary": "Ran a command" },
+            { "type": "item", "id": "p1" }
         ] }
     ]);
     for message in serde_json::from_value::<Vec<CoreMessage>>(messages).expect("the scene's messages decode") {

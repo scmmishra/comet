@@ -1,6 +1,7 @@
 //! The window: the tab bar, which doubles as the title bar, and the main panel under it.
 
 use crate::account::Account;
+use crate::composer::{self, Drafts};
 use crate::core::{Core, Event};
 use crate::format;
 use crate::protocol::{ClientMessage, CoreMessage, TabInfo, ThemeChoice, ThreadRow};
@@ -40,6 +41,7 @@ pub struct Desk {
     pub account: Account,
     pub workspace: Workspace,
     pub threads: Threads,
+    pub drafts: Drafts,
     /// The wall clock, in milliseconds since the epoch, as of the last tick. It ticks each second
     /// while a turn runs, for the working head.
     pub now_ms: f64,
@@ -104,6 +106,15 @@ impl Desk {
         if let Err(NeedsFolder) = self.workspace.close_tab(id, &self.account, &self.core) {
             open_folder(tx);
         }
+    }
+
+    pub fn cmd_held(&self) -> bool {
+        self.cmd_held
+    }
+
+    /// Answers a permission request in a tab.
+    pub fn answer_permission(&self, tab: &str, request_id: &str, answer: &str) {
+        self.core.send(&ClientMessage::PermissionAnswer { tab_id: tab.to_owned(), request_id: request_id.to_owned(), answer: answer.to_owned() });
     }
 
     /// Whether the active tab's turn is running, so its head counts seconds.
@@ -256,7 +267,14 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool) -> El {
         .child(text(name.to_owned()).font(k.ty.ui).color(k.c.text_muted))
         .child(text("/").font(k.ty.ui).color(k.c.text_faint))
         .child(text(tab.title.clone()).font(k.ty.ui_medium).color(k.c.text_base).truncate());
-    col().key(format!("session-{}", tab.id)).w_full().grow(1.0).min_h(0.0).child(header).child(thread_view::thread(s, &tab.id, dark))
+    col()
+        .key(format!("session-{}", tab.id))
+        .w_full()
+        .grow(1.0)
+        .min_h(0.0)
+        .child(header)
+        .child(thread_view::thread(s, &tab.id, dark))
+        .child(composer::composer(s, &tab.id, k))
 }
 
 /// A project's mark: its initial on a small tile. `@opencode/ui`'s avatar draws generated art in its place.

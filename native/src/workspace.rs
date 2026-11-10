@@ -11,6 +11,11 @@ pub const NEW_TAB_TITLE: &str = "New session";
 /// A tab named after a message keeps this many characters of its first line.
 const TITLE_LENGTH: usize = 40;
 
+/// Whether a tab still has the name a new tab gets.
+pub fn is_untitled(tab: &TabInfo) -> bool {
+    tab.title == NEW_TAB_TITLE
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Place {
     /// At the end of the bar.
