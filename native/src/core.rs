@@ -1,17 +1,22 @@
 //! The Bun core: starting it, reading its messages and stopping it. The core serves every project,
 //! as it does for the Electron app (`app/src/main/core-process.ts` and `app/src/renderer/core.ts`).
 
-use crate::protocol::{CoreMessage, CoreReady};
-use std::io::{BufRead, BufReader, Read};
+use crate::ids;
+use crate::protocol::{ClientMessage, CoreMessage, CoreReady};
+use std::io::{BufRead, BufReader, ErrorKind, Read};
+use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::mpsc;
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tungstenite::Message;
+use tungstenite::{Message, WebSocket};
 
 const START_TIMEOUT: Duration = Duration::from_secs(10);
 const STOP_GRACE: Duration = Duration::from_secs(1);
+/// How long the socket thread waits for a core message before it sends what the app queued. A
+/// message the app sends waits at most this long.
+const SEND_WAIT: Duration = Duration::from_millis(4);
 /// The core keeps the native app's window and plugin builds in `~/.desk/native`, apart from the
 /// Electron Desk's, while both exist.
 pub const INSTANCE: &str = "native";
@@ -24,19 +29,50 @@ pub enum Event {
     Failed(String),
 }
 
-/// The core process, once started. Dropping it leaves the process running, so call `stop`.
-#[derive(Clone, Default)]
+/// The app's one link to the core. Messages sent before the socket opens wait, as in `core.ts`.
+/// Dropping it leaves the process running, so call `stop`.
+#[derive(Clone)]
 pub struct Core {
     process: Arc<Mutex<Option<(Child, ChildStdin)>>>,
+    outgoing: Sender<String>,
+    /// The other end of `outgoing`, until the socket thread takes it.
+    queued: Arc<Mutex<Option<Receiver<String>>>>,
     /// Desk's folder for the core, in place of `~/.desk`, so a test never touches the user's.
     #[cfg(test)]
     home: Option<PathBuf>,
 }
 
+impl Default for Core {
+    fn default() -> Self {
+        let (outgoing, queued) = mpsc::channel();
+        Core {
+            process: Arc::default(),
+            outgoing,
+            queued: Arc::new(Mutex::new(Some(queued))),
+            #[cfg(test)]
+            home: None,
+        }
+    }
+}
+
 impl Core {
+    pub fn send(&self, message: &ClientMessage) {
+        let data = serde_json::to_string(message).expect("a client message encodes");
+        // The socket thread is gone only once the core stopped, and then nothing can be sent.
+        let _ = self.outgoing.send(data);
+    }
+
+    /// What the app sent and the core has not taken, as JSON. Only for a core that never started.
+    #[cfg(test)]
+    pub fn sent(&self) -> Vec<serde_json::Value> {
+        let queued = self.queued.lock().unwrap();
+        queued.as_ref().expect("the core never started").try_iter().map(|data| serde_json::from_str(&data).unwrap()).collect()
+    }
+
     /// Starts the core on a thread and reports each event through `on_event`, from that thread.
     pub fn start(&self, on_event: impl Fn(Event) + Send + 'static) {
         let process = self.process.clone();
+        let Some(queued) = self.queued.lock().unwrap().take() else { return };
         // Only tests change the command, to point the core at their own Desk folder.
         #[cfg_attr(not(test), expect(unused_mut))]
         let mut command = Command::new(std::env::var("DESK_BUN").unwrap_or_else(|_| "bun".into()));
@@ -47,7 +83,7 @@ impl Core {
         std::thread::Builder::new()
             .name("desk-core".into())
             .spawn(move || {
-                if let Err(reason) = run(command, &process, &on_event) {
+                if let Err(reason) = run(command, &process, &queued, &on_event) {
                     on_event(Event::Failed(reason));
                 }
             })
@@ -75,8 +111,8 @@ fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
 }
 
-fn run(mut command: Command, process: &Mutex<Option<(Child, ChildStdin)>>, on_event: &dyn Fn(Event)) -> Result<(), String> {
-    let token = token()?;
+fn run(mut command: Command, process: &Mutex<Option<(Child, ChildStdin)>>, queued: &Receiver<String>, on_event: &dyn Fn(Event)) -> Result<(), String> {
+    let token = ids::hex::<24>();
     let bun = command.get_program().to_string_lossy().into_owned();
     let mut child = command
         .arg("core/src/main.ts")
@@ -93,7 +129,7 @@ fn run(mut command: Command, process: &Mutex<Option<(Child, ChildStdin)>>, on_ev
     *process.lock().unwrap() = Some((child, stdin));
 
     let port = ready_port(stdout)?;
-    let (mut socket, _) = tungstenite::connect(format!("ws://127.0.0.1:{port}/?token={token}")).map_err(|e| format!("Could not connect to the core: {e}"))?;
+    let mut socket = connect(port, &token).map_err(|e| format!("Could not connect to the core: {e}"))?;
     on_event(Event::Ready);
     loop {
         match socket.read() {
@@ -101,10 +137,24 @@ fn run(mut command: Command, process: &Mutex<Option<(Child, ChildStdin)>>, on_ev
                 Ok(message) => on_event(Event::Message(message)),
                 Err(e) => eprintln!("desk: a core message did not decode: {e}"),
             },
-            Ok(Message::Close(_)) | Err(_) => return Err("The core stopped.".into()),
             Ok(_) => {}
+            // No message came in time, so send what the app queued.
+            Err(tungstenite::Error::Io(e)) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+                for data in queued.try_iter() {
+                    socket.send(Message::text(data)).map_err(|_| "The core stopped.".to_string())?;
+                }
+            }
+            Err(_) => return Err("The core stopped.".into()),
         }
     }
+}
+
+/// Opens the WebSocket. Reads time out after the handshake, so one thread both reads and sends.
+fn connect(port: u16, token: &str) -> Result<WebSocket<TcpStream>, String> {
+    let stream = TcpStream::connect(("127.0.0.1", port)).map_err(|e| e.to_string())?;
+    let (socket, _) = tungstenite::client(format!("ws://127.0.0.1:{port}/?token={token}"), stream).map_err(|e| e.to_string())?;
+    socket.get_ref().set_read_timeout(Some(SEND_WAIT)).map_err(|e| e.to_string())?;
+    Ok(socket)
 }
 
 /// Waits for the line the core prints once it listens. Nothing else may print before it.
@@ -124,17 +174,10 @@ fn ready_port(stdout: impl Read + Send + 'static) -> Result<u16, String> {
     Ok(ready.port)
 }
 
-/// A secret only this app and its core know, as 48 hex characters.
-fn token() -> Result<String, String> {
-    let mut bytes = [0u8; 24];
-    std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut bytes)).map_err(|e| format!("Could not make a token: {e}"))?;
-    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::CoreMessage;
+    use crate::protocol::{ClientMessage, CoreMessage};
 
     /// A Desk folder of its own, with a saved window of two tabs in the native instance.
     fn seeded_home() -> PathBuf {
@@ -167,10 +210,26 @@ mod tests {
                 Event::Message(_) => {}
             }
         };
-        core.stop();
-        let _ = std::fs::remove_dir_all(&home);
         assert!(ready, "Ready comes before any message");
         assert_eq!(tabs.0.iter().map(|t| t.title.as_str()).collect::<Vec<_>>(), ["First", "Second"]);
         assert_eq!(tabs.1.as_deref(), Some("b"));
+
+        // The app's saved order reaches the core's file.
+        let mut reversed = tabs.0;
+        reversed.reverse();
+        core.send(&ClientMessage::TabsSave { tabs: reversed, active: Some("a".into()) });
+        let file = home.join(INSTANCE).join("window.json");
+        let saved = |deadline: Instant| loop {
+            let window: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+            if window["active"] == "a" || Instant::now() > deadline {
+                break window;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        let window = saved(Instant::now() + Duration::from_secs(2));
+        core.stop();
+        let _ = std::fs::remove_dir_all(&home);
+        assert_eq!(window["active"], "a");
+        assert_eq!(window["tabs"][0]["id"], "b");
     }
 }

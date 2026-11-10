@@ -33,11 +33,16 @@ What changed from the plan:
 
 ### Phase 2: Thread
 
+Done so far:
+
+- Tabs: new (⌘T and the + button, ⌘-click opens next to the active tab), close, reorder by dragging, reopen (⌘⇧T) and Open Folder (⌘O). The app sends `tabs.save` with whole tabs: fields it does not read travel back unchanged.
+
+Still to do:
+
 - Move `threadRows` into the core first, so both apps receive rows.
 - The thread view, from the spike.
 - The composer: text, the `@` and `/` lists, pills, images and drafts.
 - The model picker and the start screen.
-- Tab logic from `workspace.ts`: new, close, reopen and open folder. The app starts sending `tabs.save` here, with whole tabs.
 - Done when you can hold a real session in it.
 
 ### Phase 3: View pane
