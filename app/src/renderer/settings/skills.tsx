@@ -9,7 +9,9 @@ import { GLOBAL, ScopePills, useScope } from "./scope-pills"
  * available to all projects, grouped by where they come from. A project's pill lists the ones in that project.
  */
 export function SkillsPage() {
-  const { scope, setScope, value: skills } = useScope("skills")
+  // Claude Code's own commands are for the slash menu. This page lists skills and custom commands.
+  const { scope, setScope, value: commands } = useScope("skills")
+  const skills = () => commands()?.filter((skill) => !skill.builtin)
   const own = () => skills()?.filter((skill) => skill.ownProject) ?? []
   // The core lists skills in their groups' order, so the first skill of each group places it.
   const groups = createMemo(() => {

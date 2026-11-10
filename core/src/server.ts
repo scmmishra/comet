@@ -125,6 +125,8 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         return window.resumeQueue(message.tabId)
       case "files.search":
         return reply({ type: "files.found", project: message.project, query: message.query, paths: await searchFiles(message.project, message.query) })
+      case "thread.clear":
+        return window.clearThread(message.tabId)
       case "session.interrupt":
         return window.interrupt(message.tabId)
       case "permission.answer":

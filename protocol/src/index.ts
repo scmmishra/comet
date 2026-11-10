@@ -291,11 +291,18 @@ export interface McpServer {
   readonly error?: string
 }
 
-/** A skill or custom command Claude Code offers in a project. The core lists skills grouped by `group`, in order. */
+/**
+ * A command Claude Code offers in a project: one of its own, a skill or a custom command. The core lists
+ * them grouped by `group`, in order, with Claude Code's own first.
+ */
 export interface Skill {
   /** What follows the slash, such as "pdf" or "figma:figma-use". */
   readonly name: string
   readonly description: string
+  /** What the command takes after its name, such as "<file>". */
+  readonly argumentHint?: string
+  /** Whether it is Claude Code's own command, such as /compact, rather than a skill. */
+  readonly builtin?: boolean
   /** Whether it lives in this project, rather than being available to every project. */
   readonly ownProject: boolean
   /** Where a skill available to every project comes from, such as "User" or "Plugin: figma". */
@@ -632,6 +639,8 @@ export type ClientMessage =
   /** Finds files in the project whose path matches `query`, for an @ mention. The core answers with `files.found`. */
   | { readonly type: "files.search"; readonly project: string; readonly query: string }
   | { readonly type: "session.interrupt"; readonly tabId: string }
+  /** Starts a fresh session in a tab, as /clear asks. */
+  | { readonly type: "thread.clear"; readonly tabId: string }
   | { readonly type: "permission.answer"; readonly tabId: string; readonly requestId: string; readonly allow: boolean }
   /** Asks for what plugins show in a saved tab. The core draws it and answers with `layout`. */
   | { readonly type: "layout.get"; readonly tabId: string }

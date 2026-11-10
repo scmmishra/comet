@@ -86,3 +86,8 @@ test("shows a turn Claude Code recorded as interrupted as stopped, without its m
   expect(items.map((item) => item.type)).toEqual(["user", "tool", "result"])
   expect(items.at(-1)).toMatchObject({ id: "result:u1", stopped: true })
 })
+
+test("shows a command's own output as a reply", () => {
+  const events = new ThreadMapper(DIR).map({ type: "system", subtype: "local_command_output", content: "Context: 12k of 200k", uuid: "c1", session_id: "s" } as never, 5)
+  expect(events).toEqual([{ kind: "item", item: { type: "text", id: "c1", text: "Context: 12k of 200k", done: true, at: 5 } }])
+})

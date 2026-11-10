@@ -19,6 +19,10 @@ import { changeTab } from "./workspace"
 let pickByNumber: ((index: number) => boolean) | undefined
 export const pickModelByNumber = (index: number) => pickByNumber?.(index) ?? false
 
+/** Each tab's picker opens itself here, so /model can open it. */
+const openers = new Map<string, () => void>()
+export const openModelPicker = (tabId: string) => openers.get(tabId)?.()
+
 /**
  * The composer's model button. The popover sets the model on the left and its effort on the
  * right. The button names the model that runs, so "Default" reads as "Opus 5.5".
@@ -62,6 +66,8 @@ export function ModelPicker(props: { tab: TabInfo }) {
     else if (pickByNumber === pickNumber) pickByNumber = undefined
   })
   onCleanup(() => pickByNumber === pickNumber && (pickByNumber = undefined))
+  openers.set(props.tab.id, () => onOpenChange(true))
+  onCleanup(() => openers.delete(props.tab.id))
 
   return (
     <div class="ml-auto">

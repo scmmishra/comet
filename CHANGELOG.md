@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- Typing / at the start of a message lists commands, after T3 Code. /model opens the model picker, and /clear starts a fresh session in the tab. Then come Claude Code's own commands, such as /compact and /context, and your skills and custom commands. Picking one puts it in the message box. A command's own output, such as /context's table, shows in the thread.
 - A queued message reads in full in its dashed box, with its images at the top, and Send now, Edit and Remove sit under it, as in T3 Code.
 - The thread stays scrolled to its newest line when anything changes its size, such as a new step or the queue above the message box. It followed only a reply's text before.
 - A command step names the program it runs, after T3 Code: "Ran python3", not the whole command. Setup such as `cd` and `export` is skipped. Opening the step shows the command in full above its output. Every step label stays on one line, so a long command no longer spills over the rows below it.

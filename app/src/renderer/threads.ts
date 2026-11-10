@@ -50,6 +50,8 @@ export function send(tabId: string, text: string, images: readonly ImageAttachme
 export const sendQueued = (tabId: string, id: string) => core.send({ type: "queue.send", tabId, id })
 export const removeQueued = (tabId: string, id: string) => core.send({ type: "queue.remove", tabId, id })
 export const resumeQueue = (tabId: string) => core.send({ type: "queue.resume", tabId })
+/** Starts a fresh session in a tab, as /clear asks. */
+export const clearThread = (tabId: string) => core.send({ type: "thread.clear", tabId })
 
 export function interrupt(tabId: string) {
   if (threadOf(tabId).busy) core.send({ type: "session.interrupt", tabId })

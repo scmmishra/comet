@@ -177,6 +177,14 @@ export class Window {
     this.sessions.delete(tabId)
   }
 
+  /** Starts a fresh session in a tab, as /clear asks. The tab keeps its plugin key and its queue, and its thread starts empty. */
+  clearThread(tabId: string) {
+    this.closeSession(tabId)
+    const { key, queue, queueHeld } = this.thread(tabId)
+    this.setThread(tabId, { ...(key ? { key } : {}), ...(queue ? { queue, queueHeld } : {}) })
+    this.hooks.broadcast({ type: "session.history", tabId, items: [] })
+  }
+
   /** What changed in a tab's project since the point `scope` names. A thread that has not started has no thread or turn changes. */
   async review(tabId: string, scope: ReviewScope): Promise<FileChange[]> {
     const project = this.tab(tabId).project

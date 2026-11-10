@@ -26,7 +26,10 @@ export class ThreadMapper {
   map(message: SDKMessage, at?: number): ThreadEvent[] {
     switch (message.type) {
       case "system":
-        return message.subtype === "init" ? [{ kind: "init", model: message.model }] : []
+        if (message.subtype === "init") return [{ kind: "init", model: message.model }]
+        // A command such as /context answers with text of its own, not a reply from Claude.
+        if (message.subtype === "local_command_output") return [item({ type: "text", id: message.uuid, text: message.content, done: true, ...(at !== undefined ? { at } : {}) })]
+        return []
       case "stream_event":
         return this.mapStreamEvent(message.event, message.uuid, message.parent_tool_use_id)
       case "assistant":
