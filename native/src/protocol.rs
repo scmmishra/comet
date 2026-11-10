@@ -138,6 +138,26 @@ pub struct QuestionOption {
     pub description: Option<String>,
 }
 
+/// A past thread of a project, which a tab can continue.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadSummary {
+    /// Claude's session id, which resumes the thread.
+    pub id: String,
+    pub title: String,
+    pub branch: Option<String>,
+    /// Milliseconds since the epoch.
+    pub updated_at: f64,
+    /// The tab that has the thread open, if one does.
+    pub tab_id: Option<String>,
+}
+
+/// The project's Git checkout, as far as the app reads it.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct Space {
+    pub branch: String,
+}
+
 /// A message waiting for the running turn to end.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct QueuedMessage {
@@ -325,6 +345,9 @@ pub enum CoreMessage {
         tab_id: String,
         rows: Vec<ThreadRow>,
     },
+    /// Something read about a project. `value` decodes by `part`, in `projects.rs`.
+    #[serde(rename = "project")]
+    Project { project: String, part: String, value: Value },
     /// A tab's queued messages, sent whole on each change. `held` means a stop or an error paused them.
     #[serde(rename = "queue")]
     Queue {
@@ -357,6 +380,12 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         follow_up: Option<String>,
     },
+    /// Asks for one part of what the core reads about a project. The core answers with `project`.
+    #[serde(rename = "project.get")]
+    ProjectGet { project: String, part: String },
+    /// Continues a past thread in a tab that has not started one.
+    #[serde(rename = "thread.resume", rename_all = "camelCase")]
+    ThreadResume { tab_id: String, thread_id: String },
     #[serde(rename = "session.interrupt", rename_all = "camelCase")]
     SessionInterrupt { tab_id: String },
     #[serde(rename = "permission.answer", rename_all = "camelCase")]
@@ -454,6 +483,8 @@ mod tests {
             ClientMessage::QueueSend { tab_id: "tab-1".into(), id: "m1".into() },
             ClientMessage::QueueRemove { tab_id: "tab-1".into(), id: "m1".into() },
             ClientMessage::QueueResume { tab_id: "tab-1".into() },
+            ClientMessage::ProjectGet { project: "/Users/me/code/web".into(), part: "threads".into() },
+            ClientMessage::ThreadResume { tab_id: "tab-2".into(), thread_id: "s1".into() },
         ];
         let encoded: Vec<Value> = ours.iter().map(|m| serde_json::to_value(m).unwrap()).collect();
         assert_eq!(encoded, fixtures("CLIENT_MESSAGES"));

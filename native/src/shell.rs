@@ -43,6 +43,8 @@ pub struct Desk {
     pub threads: Threads,
     pub drafts: Drafts,
     pub picker: crate::model_picker::Picker,
+    pub projects: crate::projects::Projects,
+    pub start: crate::start_screen::Start,
     /// The wall clock, in milliseconds since the epoch, as of the last tick. It ticks each second
     /// while a turn runs, for the working head.
     pub now_ms: f64,
@@ -89,11 +91,13 @@ impl Desk {
             CoreMessage::SessionRows { tab_id, rows } => self.threads.rows(&tab_id, rows),
             CoreMessage::SessionEvent { tab_id, event } => self.threads.apply(&tab_id, event),
             CoreMessage::Queue { tab_id, messages, held } => self.threads.queue(&tab_id, messages, held),
+            CoreMessage::Project { project, part, value } => self.projects.read(project, &part, value),
             CoreMessage::Error { message } => self.error = Some(message),
             CoreMessage::Other => {}
         }
         let tabs: Vec<String> = self.workspace.tabs.iter().map(|t| t.id.clone()).collect();
         self.threads.keep(&tabs);
+        self.sync_start();
         result
     }
 
@@ -102,12 +106,14 @@ impl Desk {
         if let Err(NeedsFolder) = self.workspace.new_tab(place, project, &self.account, &self.core) {
             open_folder(tx);
         }
+        self.sync_start();
     }
 
     fn close_tab(&mut self, id: &str, tx: &mut Tx) {
         if let Err(NeedsFolder) = self.workspace.close_tab(id, &self.account, &self.core) {
             open_folder(tx);
         }
+        self.sync_start();
     }
 
     pub fn cmd_held(&self) -> bool {
@@ -135,7 +141,7 @@ impl Desk {
 }
 
 /// Asks for a folder and opens a tab in it.
-fn open_folder(tx: &mut Tx) {
+pub fn open_folder(tx: &mut Tx) {
     let options = FileDialogOptions { title: "Open Folder".into(), ..Default::default() };
     tx.open_folder(options, |s: &mut Desk, result, tx| match result {
         Ok(Some(dir)) => s.new_tab(Place::End, Some(dir.to_string_lossy().into_owned()), tx),
@@ -168,6 +174,7 @@ pub mod commands {
 
     pub fn show_tab<const INDEX: usize>(s: &mut Desk, _: &mut Tx) {
         s.workspace.show_tab_at(INDEX, &s.core);
+        s.sync_start();
     }
 }
 
@@ -190,6 +197,7 @@ pub fn modifiers(s: &mut Desk, mods: rune::Mods, _: &mut Tx) {
 
 fn select(s: &mut Desk, id: &str, _: &mut Tx) {
     s.workspace.show_tab(id, &s.core);
+    s.sync_start();
 }
 
 fn close(s: &mut Desk, id: &str, tx: &mut Tx) {
@@ -269,18 +277,17 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, layer: &mut Vec<El>) -> El {
         .child(text(name.to_owned()).font(k.ty.ui).color(k.c.text_muted))
         .child(text("/").font(k.ty.ui).color(k.c.text_faint))
         .child(text(tab.title.clone()).font(k.ty.ui_medium).color(k.c.text_base).truncate());
-    col()
-        .key(format!("session-{}", tab.id))
-        .w_full()
-        .grow(1.0)
-        .min_h(0.0)
-        .child(header)
-        .child(thread_view::thread(s, &tab.id, dark))
-        .child(composer::composer(s, tab, k, layer))
+    let started = s.threads.get(&tab.id).is_some_and(|t| !t.items.is_empty());
+    let body = if started {
+        col().w_full().grow(1.0).min_h(0.0).child(thread_view::thread(s, &tab.id, dark)).child(composer::composer(s, tab, k, layer))
+    } else {
+        crate::start_screen::start_screen(s, tab, k, layer)
+    };
+    col().key(format!("session-{}", tab.id)).w_full().grow(1.0).min_h(0.0).child(header).child(body)
 }
 
 /// A project's mark: its initial on a small tile. `@opencode/ui`'s avatar draws generated art in its place.
-fn project_mark(name: &str, k: &rune_kit::Kit) -> El {
+pub fn project_mark(name: &str, k: &rune_kit::Kit) -> El {
     let initial = name.chars().next().unwrap_or(' ').to_uppercase().to_string();
     row()
         .size(HEADER_MARK, HEADER_MARK)
@@ -332,7 +339,9 @@ mod tests {
         rt.frame(1.0 / 60.0);
         assert_eq!(rt.state.workspace.tabs.len(), 2);
         assert_eq!(rt.state.workspace.tabs[1].project, "/code/a");
-        assert_eq!(rt.state.core.sent().last().unwrap()["type"], "tabs.save");
+        let sent = rt.state.core.sent();
+        assert!(sent.iter().any(|m| m["type"] == "tabs.save"), "the new tab is saved");
+        assert!(sent.iter().any(|m| m["type"] == "project.get" && m["part"] == "threads"), "its start screen reads the project's threads");
     }
 
     #[test]

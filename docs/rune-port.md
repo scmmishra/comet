@@ -44,13 +44,17 @@ Done so far:
 - The thread, read-only: every row kind from the core's rows, drawn as `thread.tsx` draws them, inside `virtual_rows` with each row kept by `memo`. Folds, groups and steps open and close. It follows live events and text deltas, sticks to the bottom while it grows, and counts the working head's seconds. The session's header shows the project and the tab's title.
 - `cargo run -- --snap thread.png --scene thread` renders a sample thread without a core, for checking the look.
 
+- Sending: the composer, follow-ups while Claude works (steer or queue, ⌘ for the other), Escape twice to stop, permission answers, Claude's questions and the queue. A real turn runs through the core in `cargo test real_turn -- --ignored`.
+- The model picker: model, effort, speed and permission mode, as `model-picker.tsx` has them.
+- The start screen: the wordmark, the composer, the project switcher and branch, and recent threads to continue.
+
 Still to do:
 
-- Sending: a plain-text composer, interrupt, permission answers, questions and the queue.
 - Each message's copy button and time, images in messages, the shimmer on running labels and the retry note.
+- The permission row's "More" menu: rows are built in `memo`, which has no overlay layer, so its choices show as buttons.
+- The wordmark's fade toward the bottom, and number keys for Claude's options.
 
 - The composer: text, the `@` and `/` lists, pills, images and drafts.
-- The model picker and the start screen.
 - Done when you can hold a real session in it.
 
 ### Phase 3: View pane

@@ -71,6 +71,19 @@ export const CORE_MESSAGES = [
   { type: "session.event", tabId: "tab-1", event: { kind: "status", busy: true } },
   { type: "session.event", tabId: "tab-1", event: { kind: "init", model: "claude-opus-5-5" } },
   { type: "session.event", tabId: "tab-1", event: { kind: "context", reading: { percent: 20, tokens: 40_000, maxTokens: 200_000 } } },
+  {
+    type: "project",
+    project: "/Users/me/code/web",
+    part: "threads",
+    value: [{ id: "s1", title: "Fix the login form", branch: "login", updatedAt: 1_700_000_000_000, tabId: "tab-1" }, { id: "s2", title: "Add tests", updatedAt: 1_699_000_000_000 }],
+  },
+  {
+    type: "project",
+    project: "/Users/me/code/web",
+    part: "space",
+    value: { name: "web", root: "/Users/me/code/web", branch: "main", changes: { files: 2, additions: 10, deletions: 3 } },
+  },
+  { type: "project", project: "/Users/me/code/api", part: "space", value: null },
   { type: "queue", tabId: "tab-1", messages: [{ id: "m1", text: "Then add a test" }], held: true },
   { type: "error", message: "The folder does not exist." },
 ] satisfies CoreMessage[]
@@ -89,4 +102,6 @@ export const CLIENT_MESSAGES = [
   { type: "queue.send", tabId: "tab-1", id: "m1" },
   { type: "queue.remove", tabId: "tab-1", id: "m1" },
   { type: "queue.resume", tabId: "tab-1" },
+  { type: "project.get", project: "/Users/me/code/web", part: "threads" },
+  { type: "thread.resume", tabId: "tab-2", threadId: "s1" },
 ] satisfies ClientMessage[]

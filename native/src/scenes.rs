@@ -8,7 +8,26 @@ use crate::shell::{CoreState, Desk};
 /// A scene: its name, and what it sets in a fresh window.
 type Scene = (&'static str, fn(&mut Desk));
 
-pub const SCENES: &[Scene] = &[("thread", thread), ("models", models)];
+pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("start", start)];
+
+/// A new tab in a project with past threads.
+fn start(s: &mut Desk) {
+    s.status = CoreState::Ready;
+    let now = crate::format::now_ms();
+    let messages = serde_json::json!([
+        { "type": "recent", "projects": ["/Users/me/code/web", "/Users/me/code/api"] },
+        { "type": "tabs", "active": "tab", "tabs": [{ "id": "tab", "title": "New session", "project": "/Users/me/code/web", "terminals": [], "model": "default", "permissionMode": "auto" }] },
+        { "type": "project", "project": "/Users/me/code/web", "part": "space", "value": { "name": "web", "root": "/Users/me/code/web", "branch": "main", "changes": {} } },
+        { "type": "project", "project": "/Users/me/code/web", "part": "threads", "value": [
+            { "id": "s1", "title": "Fix the login form", "updatedAt": now - 5.0 * 60_000.0 },
+            { "id": "s2", "title": "Add a dark theme to the settings page", "branch": "theme", "updatedAt": now - 3.0 * 3_600_000.0 },
+            { "id": "s3", "title": "Speed up the build", "updatedAt": now - 2.0 * 86_400_000.0 }
+        ] }
+    ]);
+    for message in serde_json::from_value::<Vec<CoreMessage>>(messages).expect("the scene's messages decode") {
+        s.receive(Event::Message(message)).expect("the scene has a tab");
+    }
+}
 
 /// The thread with the model picker open.
 fn models(s: &mut Desk) {
