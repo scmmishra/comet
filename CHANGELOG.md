@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- Escape stops Claude only on a second press within 1.5 seconds. The first press shows "Press Esc again to stop Claude.", so a stray Escape no longer cuts a turn short. The Stop button still stops it at once.
 - When a background task Claude started finishes, Claude Code starts a turn on its own. Desk now shows that turn under a quiet line with the task's summary, and marks the tab as working. Before, its steps joined the turn before it, which folded that turn's answer out of sight.
 - A slash command sent while Claude works, such as /rename, waits in the queue instead of steering. Steering it cut the running turn short. Send now still sends it at once.
 - The Subagents card and a newly queued message rise in, and an image added to the message box pops in, so each one shows it arrived. Switching tabs shows them at once, without motion.

@@ -1,5 +1,6 @@
 import { followUpFor, IMAGE_TYPES, type FollowUp, type ImageAttachment, type QueuedMessage, type TabInfo } from "@desk/protocol"
 import { IconButton } from "@opencode/ui/icon-button"
+import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { account } from "./account"
@@ -13,6 +14,8 @@ import { clearThread, interrupt, removeQueued, send, threadOf } from "./threads"
 import { complete, matchCommands, triggerAt, type Trigger } from "./triggers"
 
 const MAX_HEIGHT_PX = 240
+/** How long a first Escape waits for the second that stops Claude. */
+const STOP_AGAIN_MS = 1500
 
 /** One row of the list the composer offers above itself, for @ files or / commands. */
 interface Suggestion {
@@ -147,6 +150,21 @@ export function Composer(props: { tab: TabInfo }) {
     resize()
   }
 
+  /**
+   * Escape stops Claude only when pressed twice, so a reflexive Escape, such as one meant for a menu, does
+   * not cut a turn short. The first press says so.
+   */
+  let escapedAt = 0
+  const stopOnSecondEscape = () => {
+    if (!busy()) return
+    if (Date.now() - escapedAt < STOP_AGAIN_MS) {
+      escapedAt = 0
+      return interrupt(props.tab.id)
+    }
+    escapedAt = Date.now()
+    showToast({ description: "Press Esc again to stop Claude." })
+  }
+
   /** Takes a queued message back into the composer to edit, after anything already typed. */
   const edit = (message: QueuedMessage) => {
     removeQueued(props.tab.id, message.id)
@@ -264,7 +282,7 @@ export function Composer(props: { tab: TabInfo }) {
             event.preventDefault()
             submit(event.metaKey || event.ctrlKey)
           }
-          if (event.key === "Escape") interrupt(props.tab.id)
+          if (event.key === "Escape") stopOnSecondEscape()
         }}
       />
       <div ref={row} class="flex items-center gap-1 px-2.5 pb-2.5 pt-1">
