@@ -65,10 +65,12 @@ Done so far:
 - Review: the scope picker, the counts, unified or split diffs, drawn by rune-kit's `DiffView` from the core's patches. It reads again when a turn ends.
 - The file view: a file opened from the thread's changed files, with numbered lines and the line it opened at marked.
 
+- Terminals in the pane (Ctrl+` or the + button). The shell runs in the core, as before. The screen comes from `alacritty_terminal`, a pure Rust engine, behind `terminal.rs`, until Rune has a terminal of its own. Rows draw as text on a grid of cells, with wide characters in their own cells. Keys follow xterm's encoding, ⌘V pastes, bracketed when asked, and ⌘⌫ deletes the line.
+
 Still to do:
 
 - Syntax colours in the file view, and Review's per-file "open" button.
-- The terminal: libghostty-vt, plus a grid pass of our own in Rune's compositor hook.
+- In the terminal: selection and copy, mouse reporting and IME. Box-drawing characters come from a fallback font, so lines may not join.
 - Done when daily coding work needs no Electron.
 
 ### Phase 4: The rest
@@ -90,7 +92,7 @@ Still to do:
 
 ## Rune gaps
 
-- No cell-grid text for the terminal. Box-drawing glyphs come from a fallback font and do not join up.
+- No terminal or cell-grid text. Desk uses `alacritty_terminal` and draws rows as text until Rune adds one. libghostty-vt was set aside: its build needs Zig 0.15.2 and an SDK pin.
 - Rune keeps winit's Quit on ⌘Q, so the press-twice quit cannot take that key.
 - Markdown messages are their own selection group, so a drag stops at a message's end. `.selection_group(false)` works around it.
 - `Collapsible` builds its content even when closed.

@@ -47,6 +47,7 @@ pub struct Desk {
     pub start: crate::start_screen::Start,
     pub images: crate::images::Images,
     pub panel: crate::panel::Panel,
+    pub terminals: crate::terminal_view::Terminals,
     /// The message whose copy button shows a check, and since when.
     pub copied: Option<(String, std::time::Instant)>,
     /// The wall clock, in milliseconds since the epoch, as of the last tick. It ticks each second
@@ -117,6 +118,8 @@ impl Desk {
             CoreMessage::Project { project, part, value } => self.projects.read(project, &part, value),
             CoreMessage::FilesFound { project, query, paths } => self.found_files(project, query, paths),
             CoreMessage::Review { tab_id, scope, files } => self.take_review(tab_id, scope, files),
+            CoreMessage::TerminalOutput { id, data } => self.terminal_output(&id, &data),
+            CoreMessage::TerminalExit { id } => self.terminal_exit(&id),
             CoreMessage::File { project, path, file } => self.take_file(project, path, file),
             CoreMessage::Error { message } => self.error = Some(message),
             CoreMessage::Other => {}
@@ -215,6 +218,10 @@ pub mod commands {
 
     pub fn toggle_panel(s: &mut Desk, _: &mut Tx) {
         s.toggle_panel();
+    }
+
+    pub fn new_terminal(s: &mut Desk, _: &mut Tx) {
+        s.new_terminal();
     }
 }
 

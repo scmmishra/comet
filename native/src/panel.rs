@@ -91,6 +91,11 @@ impl Desk {
             self.panel.file_shown = None;
             return;
         }
+        self.open_terminals();
+        if tab.terminals.iter().any(|t| Some(&t.id) == tab.panel_active.as_ref()) {
+            self.panel.file_shown = None;
+            return;
+        }
         match tab.files.iter().find(|f| Some(&f.id) == tab.panel_active.as_ref()) {
             Some(file) => {
                 if self.panel.file_shown.as_ref() != Some(&file.id) {
@@ -153,6 +158,7 @@ pub fn toggle(open: bool, k: &Kit) -> El {
 
 pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let shown = tab.files.iter().find(|f| Some(&f.id) == tab.panel_active.as_ref());
+    let terminal = tab.terminals.iter().find(|t| Some(&t.id) == tab.panel_active.as_ref());
     let tab_button = |key: String, label: El, active: bool, on: El| {
         row()
             .key(key)
@@ -167,10 +173,11 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .child(on)
     };
     let review_id = tab.id.clone();
+    let on_review = shown.is_none() && terminal.is_none();
     let review = tab_button(
         "panel-review".into(),
-        row().gap(7.0).items_center().child(icon(&ic::REVIEW, 15.0).color(k.c.text_muted)).child(text("Review").font(k.ty.ui).color(if shown.is_none() { k.c.text_base } else { k.c.text_muted })),
-        shown.is_none(),
+        row().gap(7.0).items_center().child(icon(&ic::REVIEW, 15.0).color(k.c.text_muted)).child(text("Review").font(k.ty.ui).color(if on_review { k.c.text_base } else { k.c.text_muted })),
+        on_review,
         el(),
     )
     .role("tab")
@@ -197,10 +204,46 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
         .role("tab")
         .on_press(move |s: &mut Desk| s.show_panel_tab(&show_tab, Some(show_id.clone())))
     });
-    let header = row().key("panel-header").w_full().h(HEADER_HEIGHT).items_center().gap(4.0).pl(8.0).pr(10.0).child(review).children(files).child(row().grow(1.0)).child(toggle(true, k));
-    let body = match shown {
-        Some(file) => file_view(s, tab, &file.path, file.line, k),
-        None => review_view(s, tab, k, layer),
+    let terminals = tab.terminals.iter().map(|t| {
+        let active = terminal.is_some_and(|x| x.id == t.id);
+        let (show_tab, show_id, close_tab, close_id) = (tab.id.clone(), t.id.clone(), tab.id.clone(), t.id.clone());
+        let close = IconButton::new(&ic::XMARK_SMALL)
+            .variant(IconButtonVariant::GhostMuted)
+            .control_size(ControlSize::Small)
+            .label("Close terminal")
+            .on_press(move |s: &mut Desk| {
+                s.workspace.close_terminal(&close_tab, &close_id, &s.core);
+                s.sync_panel();
+            })
+            .build(k);
+        tab_button(
+            format!("panel-{}", t.id),
+            row().gap(7.0).items_center().child(icon(&ic::TERMINAL, 15.0).color(k.c.text_muted)).child(text(t.title.clone()).font(k.ty.ui).color(if active { k.c.text_base } else { k.c.text_muted })),
+            active,
+            close,
+        )
+        .role("tab")
+        .on_press(move |s: &mut Desk| s.show_panel_tab(&show_tab, Some(show_id.clone())))
+    });
+    let new_terminal = IconButton::new(&ic::PLUS).variant(IconButtonVariant::GhostMuted).control_size(ControlSize::Large).label("New terminal").help("New terminal").on_press(|s: &mut Desk| s.new_terminal()).build(k);
+    let header = row()
+        .key("panel-header")
+        .w_full()
+        .h(HEADER_HEIGHT)
+        .items_center()
+        .gap(4.0)
+        .pl(8.0)
+        .pr(10.0)
+        .child(review)
+        .children(terminals)
+        .children(files)
+        .child(new_terminal)
+        .child(row().grow(1.0))
+        .child(toggle(true, k));
+    let body = match (terminal, shown) {
+        (Some(t), _) => crate::terminal_view::terminal(s, &t.id, k),
+        (None, Some(file)) => file_view(s, tab, &file.path, file.line, k),
+        (None, None) => review_view(s, tab, k, layer),
     };
     col().key("panel").w_full().h_full().min_h(0.0).child(header).child(body)
 }

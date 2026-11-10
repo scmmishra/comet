@@ -416,6 +416,11 @@ pub enum CoreMessage {
     /// Something read about a project. `value` decodes by `part`, in `projects.rs`.
     #[serde(rename = "project")]
     Project { project: String, part: String, value: Value },
+    #[serde(rename = "terminal.output")]
+    TerminalOutput { id: String, data: String },
+    /// The shell ended. Its exit code is not shown.
+    #[serde(rename = "terminal.exit")]
+    TerminalExit { id: String },
     /// The files a tab's thread changed, in a Review scope.
     #[serde(rename = "review")]
     Review {
@@ -470,6 +475,13 @@ pub enum ClientMessage {
     /// Finds files in the project whose path matches `query`, for an @ mention. The core answers with `files.found`.
     #[serde(rename = "files.search")]
     FilesSearch { project: String, query: String },
+    /// Starts a terminal, or reattaches to one already running under this id, which replays its output.
+    #[serde(rename = "terminal.open")]
+    TerminalOpen { id: String, cols: usize, rows: usize },
+    #[serde(rename = "terminal.input")]
+    TerminalInput { id: String, data: String },
+    #[serde(rename = "terminal.resize")]
+    TerminalResize { id: String, cols: usize, rows: usize },
     /// The files a tab's thread changed, in a Review scope. The core answers with `review`.
     #[serde(rename = "review.get", rename_all = "camelCase")]
     ReviewGet { tab_id: String, scope: String },
@@ -591,6 +603,9 @@ mod tests {
             ClientMessage::ThreadResume { tab_id: "tab-2".into(), thread_id: "s1".into() },
             ClientMessage::FilesSearch { project: "/Users/me/code/web".into(), query: "login".into() },
             ClientMessage::ThreadClear { tab_id: "tab-1".into() },
+            ClientMessage::TerminalOpen { id: "term-1".into(), cols: 80, rows: 24 },
+            ClientMessage::TerminalInput { id: "term-1".into(), data: "ls\r".into() },
+            ClientMessage::TerminalResize { id: "term-1".into(), cols: 100, rows: 30 },
             ClientMessage::ReviewGet { tab_id: "tab-1".into(), scope: "git".into() },
             ClientMessage::FileRead { project: "/Users/me/code/web".into(), path: "src/login.ts".into() },
             ClientMessage::FileOpen { project: "/Users/me/code/web".into(), path: "src/login.ts".into(), line: Some(12) },

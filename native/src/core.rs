@@ -229,6 +229,38 @@ mod tests {
     }
 
     #[test]
+    fn a_terminal_runs_a_shell_in_the_core_and_its_output_fills_the_screen() {
+        let home = seeded_home();
+        let core = Core { home: Some(home.clone()), ..Core::default() };
+        let (send, receive) = mpsc::channel();
+        core.start(move |event| {
+            let _ = send.send(event);
+        });
+        // The core opens only a terminal a saved tab lists, as the app saves a new terminal before opening it.
+        let project = home.join("project").to_string_lossy().into_owned();
+        let tab: crate::protocol::TabInfo = serde_json::from_value(serde_json::json!({ "id": "a", "title": "First", "project": project, "terminals": [{ "id": "term", "title": "Terminal" }], "model": "default", "permissionMode": "auto" })).unwrap();
+        core.send(&ClientMessage::TabsSave { tabs: vec![tab], active: Some("a".into()) });
+        core.send(&ClientMessage::TerminalOpen { id: "term".into(), cols: 60, rows: 10 });
+        core.send(&ClientMessage::TerminalInput { id: "term".into(), data: "echo desk-$((40+2))\r".into() });
+        let mut screen = crate::terminal::Screen::new(crate::terminal::Size { cols: 60, rows: 10 });
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let shown = loop {
+            let shown = screen.rows.iter().any(|r| r.text.contains("desk-42"));
+            if shown || Instant::now() > deadline {
+                break shown;
+            }
+            if let Ok(Event::Message(CoreMessage::TerminalOutput { id, data })) = receive.recv_timeout(Duration::from_millis(200))
+                && id == "term"
+            {
+                screen.feed(data.as_bytes());
+            }
+        };
+        core.stop();
+        let _ = std::fs::remove_dir_all(&home);
+        assert!(shown, "the shell's answer shows: {:?}", screen.rows.iter().map(|r| r.text.trim_end()).collect::<Vec<_>>());
+    }
+
+    #[test]
     fn a_real_core_sends_the_saved_tabs() {
         let home = seeded_home();
         let core = Core { home: Some(home.clone()), ..Core::default() };

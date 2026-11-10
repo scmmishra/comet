@@ -22,6 +22,8 @@ mod shell;
 mod start_screen;
 mod theme;
 mod thread_view;
+mod terminal;
+mod terminal_view;
 mod threads;
 mod triggers;
 mod workspace;
@@ -35,6 +37,7 @@ type Command = (&'static str, &'static str, &'static str, fn(&mut Desk, &mut Tx)
 
 const COMMANDS: &[Command] = &[
     ("New Session", "cmd+t", "File", commands::new_session),
+    ("New Terminal", "ctrl+`", "File", commands::new_terminal),
     ("Open Folder…", "cmd+o", "File", commands::open_folder),
     ("Close Tab", "cmd+w", "File", commands::close_tab),
     ("Reopen Closed Tab", "cmd+shift+t", "File", commands::reopen_tab),

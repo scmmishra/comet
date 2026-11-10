@@ -184,6 +184,29 @@ impl Workspace {
         );
     }
 
+    /// Opens a terminal in a tab's panel, opening the panel. Returns its id.
+    pub fn new_terminal(&mut self, id: &str, core: &Core) -> Option<String> {
+        let terminal = ids::uuid();
+        let created = terminal.clone();
+        let found = self.tabs.iter().any(|t| t.id == id);
+        self.change_tab(
+            id,
+            |t| {
+                let title = if t.terminals.is_empty() { "Terminal".to_owned() } else { format!("Terminal {}", t.terminals.len() + 1) };
+                t.terminals.push(crate::protocol::TerminalInfo { id: terminal.clone(), title });
+                t.panel_active = Some(terminal);
+                t.panel_open = Some(true);
+            },
+            core,
+        );
+        found.then_some(created)
+    }
+
+    /// Closes a panel terminal. The core ends the shell of a terminal no tab lists.
+    pub fn close_terminal(&mut self, id: &str, terminal: &str, core: &Core) {
+        self.change_tab(id, |t| t.terminals.retain(|x| x.id != terminal), core);
+    }
+
     pub fn close_file_tab(&mut self, id: &str, file: &str, core: &Core) {
         self.change_tab(id, |t| t.files.retain(|f| f.id != file), core);
     }
