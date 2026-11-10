@@ -8,7 +8,8 @@ import { highlight } from "./highlight"
 // Raw HTML in a reply shows as text. Model output is untrusted, and the renderer can reach the core.
 const marked = new Marked({
   gfm: true,
-  breaks: false,
+  // A single newline breaks the line, as Claude Code shows it. Claude writes lists and quotes that way.
+  breaks: true,
   renderer: {
     html: ({ text }) => escapeHtml(text),
     code: ({ text, lang }) => {
