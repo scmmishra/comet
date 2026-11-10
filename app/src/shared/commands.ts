@@ -9,6 +9,7 @@ export const COMMANDS = {
   "terminal.new": { title: "New Terminal", accelerator: "Ctrl+`" },
   "folder.open": { title: "Open Folder…", accelerator: "CmdOrCtrl+O" },
   "tab.close": { title: "Close Tab", accelerator: "CmdOrCtrl+W" },
+  "tab.reopen": { title: "Reopen Closed Tab", accelerator: "CmdOrCtrl+Shift+T" },
   "panel.toggle": { title: "Toggle Panel", accelerator: "CmdOrCtrl+\\" },
   "palette.toggle": { title: "Command Palette…", accelerator: "CmdOrCtrl+K" },
   "threads.search": { title: "Search Threads…", accelerator: "CmdOrCtrl+Shift+O" },

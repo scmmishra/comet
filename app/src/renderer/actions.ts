@@ -2,7 +2,7 @@ import type { DeskCommand } from "../shared/commands"
 import { pickModelByNumber } from "./model-picker"
 import { usePalette } from "./palette"
 import { SETTINGS_PAGES } from "./settings/pages"
-import { closeSettings, closeTab, newTab, newTerminal, openFolder, openSettings, showTabAt, togglePanel, workspace, whenRestored } from "./workspace"
+import { closeSettings, closeTab, newTab, newTerminal, openFolder, openSettings, reopenTab, showTabAt, togglePanel, workspace, whenRestored } from "./workspace"
 
 /**
  * Runs the app's commands, from the menu, from `desk <folder>` and from the palette. A command waits
@@ -25,6 +25,8 @@ export function useCommands() {
       // Close what is in front: Settings when they show, else the tab.
       case "tab.close":
         return workspace.settingsPage === undefined ? closeTab(workspace.active) : closeSettings()
+      case "tab.reopen":
+        return reopenTab()
       case "panel.toggle":
         return togglePanelInstantly()
       case "palette.toggle":

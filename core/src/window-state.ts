@@ -40,6 +40,16 @@ export interface WindowState {
   readonly keys: Readonly<Record<string, string>>
   /** Each tab's plugin layout. A tab with none shows no plugin views but cards. */
   readonly layouts: Readonly<Record<string, PluginLayout>>
+  /** Tabs closed lately, newest last, with what reopening one needs. */
+  readonly closed: readonly ClosedTab[]
+}
+
+/** A closed tab: the tab, where it stood in the bar, and its thread and layout as they were. */
+export interface ClosedTab {
+  readonly tab: TabInfo
+  readonly index: number
+  readonly thread?: TabThread
+  readonly layout?: PluginLayout
 }
 
 const windowStatePath = () => join(instanceHome(), "window.json")
@@ -50,7 +60,7 @@ export function loadWindowState(): WindowState {
   try {
     saved = JSON.parse(readFileSync(windowStatePath(), "utf8")) as Partial<WindowState>
   } catch {
-    return { tabs: [], threads: {}, recent: [], keys: {}, layouts: {} }
+    return { tabs: [], threads: {}, recent: [], keys: {}, layouts: {}, closed: [] }
   }
   return {
     tabs: Array.isArray(saved.tabs) ? saved.tabs.filter(isTab) : [],
@@ -59,6 +69,7 @@ export function loadWindowState(): WindowState {
     recent: Array.isArray(saved.recent) ? saved.recent.filter((dir) => typeof dir === "string") : [],
     keys: typeof saved.keys === "object" && saved.keys ? saved.keys : {},
     layouts: typeof saved.layouts === "object" && saved.layouts ? saved.layouts : {},
+    closed: Array.isArray(saved.closed) ? saved.closed.filter((closed) => isTab(closed?.tab) && Number.isInteger(closed.index)) : [],
   }
 }
 

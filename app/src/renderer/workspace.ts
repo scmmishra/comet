@@ -111,6 +111,11 @@ export function closeTab(id: string) {
   else save()
 }
 
+/** Asks the core for the tab closed last. It answers with the tab, which goes back where it was. */
+export function reopenTab() {
+  core.send({ type: "tab.reopen" })
+}
+
 /** Brings a tab to the front. Settings close, so the tab shows. */
 export function showTab(id: string) {
   setWorkspace({ active: id, settingsPage: undefined })
@@ -202,6 +207,16 @@ function save() {
 core.listen((message) => {
   if (message.type === "recent") setWorkspace("recent", message.projects)
   else if (message.type === "tab.title") nameTab(message.tabId, message.title)
+  else if (message.type === "tab.reopened") {
+    setWorkspace(
+      produce((draft) => {
+        draft.tabs.splice(Math.min(message.index, draft.tabs.length), 0, message.tab)
+        draft.active = message.tab.id
+        draft.settingsPage = undefined
+      }),
+    )
+    save()
+  }
   else if (message.type === "panel.show") {
     showPanelTab(message.tabId, message.id)
     // A plugin's panel opens the pane only in a tab where the user has not opened or closed it yet.

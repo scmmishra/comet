@@ -115,6 +115,8 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         return usage.refresh()
       case "tabs.save":
         return window.save(message.tabs, message.active)
+      case "tab.reopen":
+        return window.reopenTab(reply)
       case "session.send":
         return window.send(message.tabId, message.text, checkImages(message.images ?? []), message.followUp)
       case "queue.send":

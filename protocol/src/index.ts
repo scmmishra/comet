@@ -644,6 +644,8 @@ export type ClientMessage =
   | { readonly type: "commands.stop"; readonly project: string; readonly ids: readonly string[] }
   /** The files a tab's thread changed since its first message. */
   | { readonly type: "review.get"; readonly tabId: string; readonly scope: ReviewScope }
+  /** Reopens the tab closed last, as ⌘⇧T asks. The core answers with `tab.reopened`. */
+  | { readonly type: "tab.reopen" }
   /** The window's tabs, in order, sent whenever they change. */
   | { readonly type: "tabs.save"; readonly tabs: readonly TabInfo[]; readonly active?: string }
   /** Opens a file from the thread in the editor. The core refuses paths outside the project. */
@@ -695,6 +697,8 @@ export type CoreMessage =
   | { readonly type: "review"; readonly tabId: string; readonly scope: ReviewScope; readonly files: readonly FileChange[] }
   /** Setups across projects, each with the project it opens in. A setup on in every project shows once, for the active one. */
   | { readonly type: "setups"; readonly setups: readonly ProjectSetup[] }
+  /** A closed tab to add back at `index`, its place before it closed. Its thread follows. */
+  | { readonly type: "tab.reopened"; readonly tab: TabInfo; readonly index: number }
   /** A tab's queued messages, sent whole on each change. `held` means a stop or an error paused them. */
   | { readonly type: "queue"; readonly tabId: string; readonly messages: readonly QueuedMessage[]; readonly held: boolean }
   /** The answer to `files.search`, with the query it answers: paths relative to the project, best match first. */

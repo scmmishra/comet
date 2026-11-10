@@ -47,3 +47,29 @@ test("refuses a tab that opens a folder that is not there", () => {
   const { window } = open({ tabs: [], threads: {}, recent: [] })
   expect(() => window.save([tab("a", "/no/such/folder")], "a")).toThrow("not a folder")
 })
+
+test("reopens the tab closed last, in its place, with its thread and layout, and without its terminals", async () => {
+  const [one, gone] = [tempFolder("one"), join(tempFolder("two"), "gone")]
+  const kept = { ...tab("b", one), terminals: [{ id: "x1", title: "Terminal" }], panelActive: "x1" }
+  const { window } = open({
+    tabs: [tab("a", one), kept, tab("c", gone)],
+    threads: { b: { baseline: "abc", key: "conv-1" } },
+    layouts: { b: { sidebar: "support.inbox", panels: [], hiddenCards: [] } },
+    recent: [],
+  })
+  window.save([tab("a", one), tab("c", gone)], "a")
+  window.save([tab("a", one)], "a")
+  expect(saved().threads.b).toBeUndefined()
+
+  const replies: CoreMessage[] = []
+  // The tab closed last sits in a folder that is gone, so the one before it comes back.
+  await window.reopenTab((message) => replies.push(message))
+  expect(replies).toEqual([{ type: "tab.reopened", tab: { ...tab("b", one), terminals: [] }, index: 1 }])
+  expect(saved().threads.b).toEqual({ baseline: "abc", key: "conv-1" })
+  expect(saved().layouts.b).toEqual({ sidebar: "support.inbox", panels: [], hiddenCards: [] })
+  expect(saved().closed).toEqual([])
+
+  const none: CoreMessage[] = []
+  await window.reopenTab((message) => none.push(message))
+  expect(none).toEqual([])
+})

@@ -5,7 +5,7 @@ import { threadContext, threadHistory } from "./past-threads"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { sameRunSettings, Session } from "./session"
 import { Terminals } from "./terminals"
-import { loadWindowState, saveWindowState, type TabThread, type WindowState } from "./window-state"
+import { loadWindowState, saveWindowState, type ClosedTab, type TabThread, type WindowState } from "./window-state"
 
 type Send = (message: CoreMessage) => void
 
@@ -48,13 +48,35 @@ export class Window {
   async greet(reply: Send) {
     reply({ type: "recent", projects: this.recent() })
     reply({ type: "tabs", tabs: this.state.tabs, active: this.state.active })
-    for (const tab of this.state.tabs) {
-      const thread = this.thread(tab.id)
-      if (thread.queue?.length) reply({ type: "queue", tabId: tab.id, messages: thread.queue, held: !!thread.queueHeld })
-      if (!thread.sessionId) continue
-      reply({ type: "session.history", tabId: tab.id, items: await this.history(tab, thread.sessionId), context: thread.context })
-      if (!thread.context) this.fillContext(tab.id, thread.sessionId)
-    }
+    for (const tab of this.state.tabs) await this.sendThread(tab, reply)
+  }
+
+  /**
+   * Reopens the tab closed last whose folder is still there, with its thread and layout, as ⌘⇧T asks.
+   * Its terminals ended when it closed, so it comes back without them. The app adds it back and saves.
+   */
+  async reopenTab(reply: Send) {
+    const closed = [...this.state.closed]
+    let found: ClosedTab | undefined
+    while ((found = closed.pop()) && !isProjectFolder(found.tab.project));
+    this.persist({ closed })
+    if (!found) return
+    const tab: TabInfo = { ...found.tab, terminals: [], ...(found.tab.terminals.some((terminal) => terminal.id === found!.tab.panelActive) ? { panelActive: undefined } : {}) }
+    this.persist({
+      threads: found.thread ? { ...this.state.threads, [tab.id]: found.thread } : this.state.threads,
+      layouts: found.layout ? { ...this.state.layouts, [tab.id]: found.layout } : this.state.layouts,
+    })
+    reply({ type: "tab.reopened", tab, index: found.index })
+    await this.sendThread(tab, reply)
+  }
+
+  /** Sends a client a tab's queue and thread, read back from Claude's transcript. */
+  private async sendThread(tab: TabInfo, reply: Send) {
+    const thread = this.thread(tab.id)
+    if (thread.queue?.length) reply({ type: "queue", tabId: tab.id, messages: thread.queue, held: !!thread.queueHeld })
+    if (!thread.sessionId) return
+    reply({ type: "session.history", tabId: tab.id, items: await this.history(tab, thread.sessionId), context: thread.context })
+    if (!thread.context) this.fillContext(tab.id, thread.sessionId)
   }
 
   /**
@@ -70,7 +92,12 @@ export class Window {
     const moved = tabs.find((tab) => before.has(tab.id) && before.get(tab.id)!.project !== tab.project && this.thread(tab.id).sessionId)
     if (moved) throw new Error("A tab can change its project only before its thread starts.")
     const kept = <T>(byTab: Readonly<Record<string, T>>) => Object.fromEntries(tabs.flatMap((tab) => (byTab[tab.id] ? [[tab.id, byTab[tab.id]!]] : [])))
-    this.persist({ tabs, active, threads: kept(this.state.threads), layouts: kept(this.state.layouts) })
+    // A closed tab is kept a while, with its thread and layout, so ⌘⇧T can bring it back.
+    const closing = this.state.tabs.flatMap((tab, index): ClosedTab[] =>
+      tabs.some((found) => found.id === tab.id) ? [] : [{ tab, index, ...(this.state.threads[tab.id] ? { thread: this.state.threads[tab.id] } : {}), ...(this.state.layouts[tab.id] ? { layout: this.state.layouts[tab.id] } : {}) }],
+    )
+    const closed = [...this.state.closed, ...closing].slice(-CLOSED_TABS)
+    this.persist({ tabs, active, threads: kept(this.state.threads), layouts: kept(this.state.layouts), closed })
     for (const tab of tabs) {
       const old = before.get(tab.id)
       if (old && old.project !== tab.project) this.closeSession(tab.id)
@@ -408,6 +435,9 @@ const MOVED = "The tab moved to another thread before the message was sent."
 const threadKey = (project: string, key: string) => `${project}\n${key}`
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
+/** How many closed tabs ⌘⇧T can bring back. */
+const CLOSED_TABS = 10
 
 /** A restored turn's result is named after the message it answers: `result:<message id>`. */
 const RESULT_PREFIX = "result:"

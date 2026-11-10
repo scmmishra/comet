@@ -27,7 +27,7 @@ export function installMenu(send: (command: DeskCommand) => void, warn: (message
         { label: `Quit ${app.name}`, accelerator: "CmdOrCtrl+Q", click: (_item, _window, event) => (event.triggeredByAccelerator ? quitShortcut(warn) : app.quit()) },
       ],
     },
-    { label: "File", submenu: [item("tab.new"), item("terminal.new"), item("folder.open"), { type: "separator" }, item("tab.close")] },
+    { label: "File", submenu: [item("tab.new"), item("terminal.new"), item("folder.open"), { type: "separator" }, item("tab.close"), item("tab.reopen")] },
     { role: "editMenu" },
     {
       label: "View",
