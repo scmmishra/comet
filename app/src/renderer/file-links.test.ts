@@ -10,7 +10,7 @@ test("recognises repo-relative paths with and without a position", () => {
 })
 
 test("leaves code that is not a path alone", () => {
-  for (const text of ["parseChanges", "git status --short", "a/b", "src/", "https://example.com/a.ts", "github.com/owner/repo", "v1.2.3/x", "src/…/x.ts", "README.md"]) {
+  for (const text of ["parseChanges", "git status --short", "a/b", "src/", "https://example.com/a.ts", "github.com/owner/repo", "v1.2.3/x", "src/…/x.ts", "README.md", "/api", "/api/v1/accounts", "~/code/desk"]) {
     expect(fileReference(text)).toBeUndefined()
   }
 })

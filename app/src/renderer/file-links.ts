@@ -32,10 +32,11 @@ export function fileReference(text: string): FileReference | undefined {
   if (!EXPLICIT_PREFIX.test(path)) {
     const first = path.split("/")[0] ?? path
     if (HOSTNAME.test(first)) return undefined
-    const name = basename(path)
-    if (VERSION_SUFFIX.test(name)) return undefined
-    if (!position && !FILE_EXTENSION.test(name)) return undefined
+    if (VERSION_SUFFIX.test(basename(path))) return undefined
   }
+  // A file has an extension or a line. Without either, `/api` is a route and `~/code/desk` a folder,
+  // and Desk opens only files.
+  if (!position && !FILE_EXTENSION.test(basename(path))) return undefined
 
   return {
     path,

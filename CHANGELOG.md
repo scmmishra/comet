@@ -5,6 +5,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 ## Unreleased
 
 - A single line break in a reply now shows as one, as it does in Claude Code. Lines in a quote or a list of "•" items ran together into one paragraph.
+- Inline code such as `/api` or `~/code/desk` no longer shows as a file chip. A file chip needs a file extension or a line number.
 - Review can show four sets of changes, after OpenCode: the thread's changes, Git changes (uncommitted work), Branch changes (since the branch left the default branch) and Last turn changes. Each tab keeps its choice. Diffs show unified or split, and Desk keeps that choice for every tab. The Review header stays in place while the files scroll.
 - You can send a message while Claude works. By default it steers the running turn: Claude takes it in at once, and it shows marked "Steered". Settings › Providers › Follow-ups can make Enter queue it instead, and ⌘Enter or ⌘-click does the other for one message. Queued messages wait above the message box, with Send now, Edit and Remove. When the turn ends, the next one starts its own turn. A stop or an error pauses the queue until you resume it, and the queue survives a restart.
 - Subagents show in a card at the top of the card stack while they run. Each row shows the agent's task, its status and how long it has run. Click one to see, beside the card, what Claude asked it, its one-line status and each step it has taken. The card leaves once the turn and its subagents are done.
