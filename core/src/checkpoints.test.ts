@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
-import { branchBase, changesSince, headCommit, headTree, sameHistory, snapshot } from "./checkpoints"
+import { branchBase, changesSince, checkpoint, headTree, snapshot, workSince } from "./checkpoints"
 import { gitRepo, tempFolder } from "./test-support"
 
 test("reports what changed since a snapshot, new and deleted files included", async () => {
@@ -62,24 +62,51 @@ test("has no base outside a Git repo", async () => {
   expect(await headTree(tempFolder("plain"))).toBeUndefined()
 })
 
-test("stays on the same history through a commit, and leaves it on a branch switch or a reset", async () => {
+/** Commits everything with a commit time an hour ago, as work done before a turn started. */
+function commitEarlier(dir: string, message: string) {
+  const env = { ...process.env, GIT_COMMITTER_DATE: `@${Math.floor(Date.now() / 1000) - 3600}` }
+  Bun.spawnSync(["git", "add", "-A"], { cwd: dir })
+  Bun.spawnSync(["git", "commit", "-q", "-m", message], { cwd: dir, env })
+}
+
+test("leaves out the files a switch to a branch built on this one brings in", async () => {
   const { dir, git, write } = gitRepo({ "a.ts": "one\n" })
-  const start = await headCommit(dir)
-  write("b.ts", "new\n")
-  git("add", ".")
-  git("commit", "-q", "-m", "work")
-  expect(await sameHistory(dir, start)).toBe(true)
-
-  git("checkout", "-q", "-b", "other", start!)
-  write("c.ts", "elsewhere\n")
-  git("add", ".")
-  git("commit", "-q", "-m", "other work")
-  const onOther = await headCommit(dir)
+  git("checkout", "-q", "-b", "next")
+  write("b.ts", "the next pull request\n")
+  commitEarlier(dir, "next")
   git("checkout", "-q", "main")
-  expect(await sameHistory(dir, onOther)).toBe(false)
+  const start = (await checkpoint(dir))!
+  git("checkout", "-q", "next")
+  expect(await workSince(dir, start)).toEqual([])
+})
 
-  const tip = await headCommit(dir)
-  git("reset", "-q", "--hard", start!)
-  expect(await sameHistory(dir, tip)).toBe(false)
-  expect(await sameHistory(dir, undefined)).toBe(true)
+test("leaves out what a pull or a switch brings in, and keeps what the work wrote", async () => {
+  const { dir, git, write } = gitRepo({ "a.ts": "one\n" })
+  git("checkout", "-q", "-b", "other")
+  write("theirs.ts", "someone else's\n")
+  commitEarlier(dir, "theirs")
+  git("checkout", "-q", "main")
+  const start = (await checkpoint(dir))!
+  write("dirty.ts", "uncommitted\n")
+  git("checkout", "-q", "other")
+  write("mine.ts", "committed in the turn\n")
+  git("add", "mine.ts")
+  git("commit", "-q", "-m", "mine")
+  expect((await workSince(dir, start)).map((file) => file.path).sort()).toEqual(["dirty.ts", "mine.ts"])
+})
+
+test("keeps every file while HEAD stays put", async () => {
+  const { dir, write } = gitRepo({ "a.ts": "one\n" })
+  const start = (await checkpoint(dir))!
+  write("a.ts", "two\n")
+  expect((await workSince(dir, start)).map((file) => file.path)).toEqual(["a.ts"])
+})
+
+test("reads paths Git would quote or split", async () => {
+  const repo = gitRepo({ "x b/café.ts": "one\n" })
+  const base = await snapshot(repo.dir)
+  repo.write("x b/café.ts", "two\n")
+  const [change] = await changesSince(repo.dir, base!)
+  expect(change).toMatchObject({ path: "x b/café.ts", additions: 1, deletions: 1 })
+  expect(change!.patch).toContain("+two")
 })

@@ -1,6 +1,6 @@
 import type { SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
 import { followUpFor, type ChangedFile, type CoreMessage, type FileChange, type FollowUp, type ImageAttachment, type PluginLayout, type QueuedMessage, type ReviewScope, type TabInfo, type ThreadEvent, type ThreadItem } from "@desk/protocol"
-import { branchBase, changesSince, headCommit, headTree, sameHistory, snapshot } from "./checkpoints"
+import { branchBase, changesSince, type Checkpoint, checkpoint, headTree, workSince } from "./checkpoints"
 import { threadContext, threadHistory } from "./past-threads"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { sameRunSettings, Session } from "./session"
@@ -117,9 +117,9 @@ export class Window {
   }
 
   /**
-   * Sends a message in a tab. Each turn snapshots the project first, so Review can show what the turn
-   * changed, and the thread's first snapshot shows what the thread changed. A plugin may move the tab to another thread during the snapshot. The message
-   * then belongs to no thread the tab shows, so it is not sent.
+   * Sends a message in a tab. A turn the message starts takes a checkpoint of the project first. A plugin
+   * may move the tab to another thread during the checkpoint. The message then belongs to no thread the
+   * tab shows, so it is not sent.
    */
   async send(tabId: string, text: string, images: readonly ImageAttachment[] = [], followUp: FollowUp = "steer") {
     const running = this.sessions.get(tabId)
@@ -129,9 +129,9 @@ export class Window {
     }
     const tab = this.tab(tabId)
     const key = this.thread(tabId).key
-    const [turnBaseline, turnHead] = await Promise.all([snapshot(tab.project), headCommit(tab.project)])
+    const start = await checkpoint(tab.project)
     if (this.thread(tabId).key !== key) throw new Error(MOVED)
-    if (turnBaseline) this.updateThread(tabId, { turnBaseline, turnHead, ...(this.thread(tabId).baseline ? {} : { baseline: turnBaseline }) })
+    if (start) this.startTurn(tabId, start)
     this.session(tab).send(text, images)
   }
 
@@ -239,6 +239,11 @@ export class Window {
     this.sessions.delete(tabId)
   }
 
+  /** Records where a turn started. The thread's first turn also marks where the thread started, for Review. */
+  private startTurn(tabId: string, start: Checkpoint) {
+    this.updateThread(tabId, { turnStart: start, ...(this.thread(tabId).threadStart ? {} : { threadStart: start }) })
+  }
+
   /** Starts a fresh session in a tab, as /clear asks. The tab keeps its plugin key and its queue, and its thread starts empty. */
   clearThread(tabId: string) {
     this.closeSession(tabId)
@@ -251,9 +256,12 @@ export class Window {
   async review(tabId: string, scope: ReviewScope): Promise<FileChange[]> {
     const project = this.tab(tabId).project
     const thread = this.thread(tabId)
-    const base = scope === "thread" ? thread.baseline : scope === "turn" ? thread.turnBaseline : scope === "git" ? await headTree(project) : await branchBase(project)
-    if (!base) return []
-    return changesSince(project, base).catch(() => [])
+    if (scope === "thread" || scope === "turn") {
+      const start = scope === "thread" ? thread.threadStart : thread.turnStart
+      return start ? workSince(project, start).catch(() => []) : []
+    }
+    const base = scope === "git" ? await headTree(project) : await branchBase(project)
+    return base ? changesSince(project, base).catch(() => []) : []
   }
 
   /** Which tab has each of a project's threads open, by Claude session id. */
@@ -321,6 +329,9 @@ export class Window {
       // The message the running turn answers, which names the turn's summary, and the summary being made.
       let lastMessage: string | undefined
       let summary: Promise<void> = Promise.resolve()
+      // Whether a turn runs, and the checkpoint of a turn Desk did not send, which its summary waits for.
+      let running = false
+      let starting: Promise<void> = Promise.resolve()
       const emit = (event: ThreadEvent) => {
         if (!current()) {
           // A parked session's turn ended while its thread was away. Nothing shows it, so it closes. Its transcript keeps the turn.
@@ -329,10 +340,17 @@ export class Window {
         }
         if (event.kind === "context") this.updateThread(tab.id, { context: event.reading })
         this.hooks.broadcast({ type: "session.event", tabId: tab.id, event })
-        if (event.kind === "item" && event.item.type === "user") lastMessage = event.item.id
+        if (event.kind === "item" && event.item.type === "user") {
+          lastMessage = event.item.id
+          // A background task that finished starts a turn on its own. Its checkpoint is taken as the turn
+          // starts, so its summary does not repeat the turn before. Claude may already have begun.
+          if (event.item.fromTask && !running) starting = checkpoint(tab.project).then((start) => void (start && current() && this.startTurn(tab.id, start)))
+        }
+        if (event.kind === "status") running = event.busy
         if (event.kind === "item" && event.item.type === "result") {
           pause = !!event.item.stopped || event.item.isError
-          if (lastMessage) summary = this.summarizeTurn(tab.id, lastMessage, current)
+          const answered = lastMessage
+          if (answered) summary = starting.then(() => this.summarizeTurn(tab.id, answered, current))
         }
         if (event.kind === "item" && event.item.type === "error") pause = true
         if (event.kind === "status" && !event.busy) {
@@ -373,16 +391,14 @@ export class Window {
 
   /**
    * Lists the files a turn changed under its answer, and saves the list for when the thread is restored.
-   * It compares the snapshot taken before the turn with the working tree, so edits the user made during
-   * the turn count too. A turn that changed nothing, or left the branch's history, gets no summary.
+   * It compares the turn's checkpoint with the working tree, so edits the user made during the turn count
+   * too. Files a branch switch or a pull brought in are left out. A turn that changed nothing gets no summary.
    */
   private async summarizeTurn(tabId: string, lastMessage: string, current: () => boolean) {
     const tab = this.state.tabs.find((found) => found.id === tabId)
-    const { turnBaseline: baseline, turnHead } = this.thread(tabId)
-    if (!tab || !baseline) return
-    // A turn that left the branch's history, such as by switching branches, would list how two branches differ, not what it changed.
-    if (!(await sameHistory(tab.project, turnHead))) return
-    const files = (await changesSince(tab.project, baseline).catch(() => [])).map(({ patch: _patch, ...file }) => file)
+    const start = this.thread(tabId).turnStart
+    if (!tab || !start) return
+    const files = (await workSince(tab.project, start).catch(() => [])).map(({ patch: _patch, ...file }) => file)
     if (!files.length || !current()) return
     this.updateThread(tabId, { turnChanges: { ...this.thread(tabId).turnChanges, [lastMessage]: files } })
     this.hooks.broadcast({ type: "session.event", tabId, event: { kind: "item", item: changesItem(lastMessage, files) } })

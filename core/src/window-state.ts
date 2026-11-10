@@ -1,6 +1,7 @@
 import type { ChangedFile, ContextReading, PluginLayout, QueuedMessage, TabInfo } from "@desk/protocol"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import type { Checkpoint } from "./checkpoints"
 import { instanceHome, writeJsonFile } from "./data-files"
 
 /** What the core keeps about a tab's thread. The app never sees it. */
@@ -8,14 +9,12 @@ export interface TabThread {
   /** The Claude session to resume. Absent until the tab's first message. */
   readonly sessionId?: string
   /**
-   * A snapshot of the working tree taken before the thread's first message. Review diffs against it.
-   * No ref points at it, so `git gc` may prune it after about two weeks; Review then shows nothing.
+   * Where the thread's first turn started, for Review's thread changes. No ref points at its snapshot,
+   * so `git gc` may prune it after about two weeks. Review then shows nothing.
    */
-  readonly baseline?: string
-  /** A snapshot taken before the last turn, for Review's last-turn changes. */
-  readonly turnBaseline?: string
-  /** The commit HEAD pointed to when the last turn started, so its summary can tell a branch switch from edits. */
-  readonly turnHead?: string
+  readonly threadStart?: Checkpoint
+  /** Where the last turn started, for its summary and Review's last-turn changes. */
+  readonly turnStart?: Checkpoint
   /**
    * The files each turn changed, by the id of the message that started it. Claude's transcript does not
    * record them, so a restored thread reads its turns' summaries from here.
@@ -67,7 +66,7 @@ export function loadWindowState(): WindowState {
   return {
     tabs: Array.isArray(saved.tabs) ? saved.tabs.filter(isTab) : [],
     ...(typeof saved.active === "string" ? { active: saved.active } : {}),
-    threads: typeof saved.threads === "object" && saved.threads ? saved.threads : {},
+    threads: typeof saved.threads === "object" && saved.threads ? Object.fromEntries(Object.entries(saved.threads).map(([id, thread]) => [id, upgradeThread(thread)])) : {},
     recent: Array.isArray(saved.recent) ? saved.recent.filter((dir) => typeof dir === "string") : [],
     keys: typeof saved.keys === "object" && saved.keys ? saved.keys : {},
     layouts: typeof saved.layouts === "object" && saved.layouts ? saved.layouts : {},
@@ -77,6 +76,19 @@ export function loadWindowState(): WindowState {
 
 export function saveWindowState(state: WindowState) {
   writeJsonFile(windowStatePath(), state)
+}
+
+/**
+ * A thread saved before Desk kept checkpoints held bare snapshots as `baseline` and `turnBaseline`.
+ * Without the commit and time they were taken at, they compare as before, with no files left out.
+ */
+function upgradeThread(thread: TabThread & { baseline?: unknown; turnBaseline?: unknown; turnHead?: unknown }): TabThread {
+  const { baseline, turnBaseline, turnHead: _turnHead, ...rest } = thread
+  return {
+    ...rest,
+    ...(typeof baseline === "string" && !rest.threadStart ? { threadStart: { tree: baseline, at: 0 } } : {}),
+    ...(typeof turnBaseline === "string" && !rest.turnStart ? { turnStart: { tree: turnBaseline, at: 0 } } : {}),
+  }
 }
 
 function isTab(value: unknown): value is TabInfo {
