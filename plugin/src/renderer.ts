@@ -1,4 +1,4 @@
-import type { UiOp, UiValue } from "@desk/protocol"
+import { ROOT_NODE, TEXT_NODE, type UiOp, type UiValue } from "@desk/protocol"
 import { createRenderer } from "solid-js/universal"
 
 /**
@@ -7,26 +7,27 @@ import { createRenderer } from "solid-js/universal"
  * ids, so nothing but data leaves the plugin.
  */
 
-export interface UiNode {
+export interface PluginNode {
   readonly id: number
   readonly type: string
-  parent?: UiNode
-  readonly children: UiNode[]
+  parent?: PluginNode
+  readonly children: PluginNode[]
   readonly props: Record<string, UiValue>
   text?: string
 }
 
 let nextId = 1
 let nextHandler = 1
-const nodes = new Map<number, UiNode>()
+const nodes = new Map<number, PluginNode>()
 const handlers = new Map<number, (...args: never[]) => unknown>()
 let pending: UiOp[] = []
 let flush: ((ops: UiOp[]) => void) | undefined
 /**
  * Nodes removed in this batch. Solid removes a node and inserts it again in one update, such as the
  * text after a changed value, so a removed node is freed only if the batch ends with it still out.
+ * A batch is one flush of operations, so protocol's `applyOps` frees the client's copy by the same rule.
  */
-const removed = new Set<UiNode>()
+const removed = new Set<PluginNode>()
 
 /** Where the renderer sends its operations, once per microtask. */
 export function onOps(send: (ops: UiOp[]) => void) {
@@ -45,16 +46,15 @@ function emit(op: UiOp) {
   pending.push(op)
 }
 
-/** Runs the handler a node's prop was given. */
 export function callHandler(id: number, args: readonly unknown[]) {
   const handler = handlers.get(id)
   if (!handler) throw new Error("This control is gone.")
   return (handler as (...args: unknown[]) => unknown)(...args)
 }
 
-/** A node to render a panel into. */
-export function createRoot(): UiNode {
-  return node("root")
+/** A node to render a view into. */
+export function createRoot(): PluginNode {
+  return node(ROOT_NODE)
 }
 
 /** Every node, in an order that rebuilds the tree, for an app that connects after the plugin drew. */
@@ -69,9 +69,9 @@ export function snapshot(): UiOp[] {
   return ops
 }
 
-/** Drops a node and everything under it, once nothing shows it. */
-export function dispose(root: UiNode) {
-  const walk = (found: UiNode) => {
+/** Drops a node and everything under it, with their handlers. The app keeps its copy until it is sent a snapshot. */
+export function dispose(root: PluginNode) {
+  const walk = (found: PluginNode) => {
     found.children.forEach(walk)
     for (const value of Object.values(found.props)) if (isHandler(value)) handlers.delete(value.handler)
     nodes.delete(found.id)
@@ -79,8 +79,8 @@ export function dispose(root: UiNode) {
   walk(root)
 }
 
-function node(type: string): UiNode {
-  const created: UiNode = { id: nextId++, type, children: [], props: {} }
+function node(type: string): PluginNode {
+  const created: PluginNode = { id: nextId++, type, children: [], props: {} }
   nodes.set(created.id, created)
   emit({ op: "create", id: created.id, type })
   return created
@@ -113,12 +113,12 @@ export const {
   setProp,
   mergeProps,
   use,
-} = createRenderer<UiNode>({
+} = createRenderer<PluginNode>({
   createElement: node,
   // Solid passes numbers through as they are, so `{count()}` arrives as 1, not "1".
   createTextNode(value) {
     const text = String(value)
-    const created: UiNode = { id: nextId++, type: "#text", children: [], props: {}, text }
+    const created: PluginNode = { id: nextId++, type: TEXT_NODE, children: [], props: {}, text }
     nodes.set(created.id, created)
     emit({ op: "text", id: created.id, text })
     return created
@@ -156,7 +156,7 @@ export const {
   },
 })
 
-function detach(child: UiNode) {
+function detach(child: PluginNode) {
   const siblings = child.parent?.children
   if (siblings) siblings.splice(siblings.indexOf(child), 1)
   child.parent = undefined

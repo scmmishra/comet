@@ -1,3 +1,4 @@
+import type { PluginLayout } from "@desk/plugin/host"
 import type { ContextReading, TabInfo } from "@desk/protocol"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -27,6 +28,8 @@ export interface WindowState {
   readonly recent: readonly string[]
   /** The Claude session each thread key leads to, by project and key. One key always resumes the same thread. */
   readonly keys: Readonly<Record<string, string>>
+  /** Each tab's plugin layout. A tab with none shows no plugin views but cards. */
+  readonly layouts: Readonly<Record<string, PluginLayout>>
 }
 
 const windowStatePath = () => join(deskHome(), "window.json")
@@ -37,7 +40,7 @@ export function loadWindowState(): WindowState {
   try {
     saved = JSON.parse(readFileSync(windowStatePath(), "utf8")) as Partial<WindowState>
   } catch {
-    return { tabs: [], threads: {}, recent: [], keys: {} }
+    return { tabs: [], threads: {}, recent: [], keys: {}, layouts: {} }
   }
   return {
     tabs: Array.isArray(saved.tabs) ? saved.tabs.filter(isTab) : [],
@@ -45,6 +48,7 @@ export function loadWindowState(): WindowState {
     threads: typeof saved.threads === "object" && saved.threads ? saved.threads : {},
     recent: Array.isArray(saved.recent) ? saved.recent.filter((dir) => typeof dir === "string") : [],
     keys: typeof saved.keys === "object" && saved.keys ? saved.keys : {},
+    layouts: typeof saved.layouts === "object" && saved.layouts ? saved.layouts : {},
   }
 }
 

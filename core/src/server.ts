@@ -6,11 +6,11 @@ import { openInEditor, projectFile } from "./files"
 import { readMcpServers, toggleMcpServer } from "./mcp"
 import { Models } from "./models"
 import { recentThreads } from "./past-threads"
+import { Layouts } from "./plugins/layouts"
 import { Plugins } from "./plugins/plugins"
 import { findIconFiles, iconFile } from "./project-icons"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { loadSettings, saveSettings, updateSettings } from "./settings"
-import { loadSetups } from "./setups"
 import { readSkills } from "./skills"
 import { readSpace } from "./space"
 import { Usage } from "./usage"
@@ -39,11 +39,23 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
   let settings = loadSettings()
   const models = new Models(broadcast)
   const usage = new Usage(broadcast)
+  const report = (error: unknown) => broadcast({ type: "error", message: error instanceof Error ? error.message : String(error) })
   const plugins = new Plugins({
     broadcast,
-    openThread: (tabId, thread) => void window.openKey(tabId, thread).catch((error) => broadcast({ type: "error", message: error instanceof Error ? error.message : String(error) })),
+    openThread: (tabId, thread) => void window.openKey(tabId, thread).catch(report),
+    openPanel: (tabId, panel, params) => void layouts.openPanel(tabId, panel, params).catch(report),
+    closePanel: (tabId, id) => void layouts.closePanel(tabId, id).catch(report),
   })
-  const window = new Window({ broadcast, compactIdle: () => settings.claude.compactIdle, rateLimit: (info) => usage.rateLimit(info), tabClosed: (tabId) => plugins.dropTab(tabId) })
+  const window = new Window({
+    broadcast,
+    compactIdle: () => settings.claude.compactIdle,
+    rateLimit: (info) => usage.rateLimit(info),
+    tabClosed: (tabId) => {
+      plugins.dropTab(tabId)
+      layouts.dropTab(tabId)
+    },
+  })
+  const layouts = new Layouts(plugins, window, broadcast)
   // Each project's commands, made the first time the project is named. They run as long as the core.
   const commands = new Map<string, Commands>()
   const commandsOf = (dir: string) => {
@@ -64,6 +76,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     icons: (dir, reply) => findIconFiles(dir).then(reply),
     mcp: (dir, reply) => readMcpServers(dir, reply),
     skills: (dir, reply) => readSkills(dir).then(reply),
+    plugins: (dir, reply) => plugins.contributions(dir).then(reply),
   }
   const read = <K extends ProjectPart>(dir: string, part: K, reply: Send) => readers[part](dir, (value) => reply(project(dir, part, value)))
 
@@ -109,10 +122,16 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         return window.resume(message.tabId, message.threadId, reply)
       case "review.get":
         return reply({ type: "review", tabId: message.tabId, files: await window.review(message.tabId) })
-      case "panel.open": {
-        const { plugin, root } = await plugins.open(message.tabId, message.project, message.panel)
-        return reply({ type: "panel", tabId: message.tabId, panel: message.panel, plugin, root })
-      }
+      case "layout.get":
+        return layouts.send(message.tabId)
+      case "panel.open":
+        return layouts.openPanel(message.tabId, message.panel, message.params)
+      case "panel.close":
+        return layouts.closePanel(message.tabId, message.id)
+      case "setup.open":
+        return layouts.openSetup(message.tabId, message.setup)
+      case "plugin.command":
+        return plugins.command(message.tabId, window.projectOf(message.tabId), message.command, message.input)
       case "plugin.event":
         return plugins.event(message.plugin, message.handler, message.args)
       case "terminal.open":
@@ -146,7 +165,6 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         clients.add(ws)
         const reply: Send = (message) => ws.send(JSON.stringify(message))
         reply({ type: "settings", settings })
-        reply({ type: "setups", setups: loadSetups() })
         plugins.resend()
         void window.greet(reply)
       },

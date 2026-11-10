@@ -315,20 +315,49 @@ export interface ProjectParts {
   readonly mcp: readonly McpServer[] | null
   /** Skills and custom commands. Null when Claude Code could not be asked. */
   readonly skills: readonly Skill[] | null
+  /** What the plugins on in the project let the user start. Reading starts those plugins. */
+  readonly plugins: PluginContributions
 }
 export type ProjectPart = keyof ProjectParts
 
 /**
- * A named layout for one project. `left` holds panels in a column beside the thread, for navigation
- * such as an inbox. `panel` pins panels as tabs at the front of the view pane, for what is read beside
- * the thread, such as the open conversation. A panel is named `<plugin>.<panel>`, such as
- * `chatwoot.inbox`. Setups live in `~/.desk/setups/<id>.json`.
+ * What the plugins on in a project let the user start from the palette, each named `<plugin>.<name>`,
+ * such as `newrelic.dashboard`. Panels here need no parameters. A command with `input` runs on text typed in the palette.
  */
-export interface SetupInfo {
+export interface PluginContributions {
+  readonly panels: readonly { readonly id: string; readonly title: string }[]
+  readonly setups: readonly { readonly id: string; readonly title: string }[]
+  readonly commands: readonly { readonly id: string; readonly title: string; readonly input?: string }[]
+}
+
+/** A panel's parameters. They name one instance of the panel, so they are plain values. */
+export type PanelParams = Readonly<Record<string, string | number | boolean | null>>
+
+/**
+ * The id of one open panel: the panel and its parameters in key order, such as `support.conversation?id=1001`.
+ * Opening the same panel with the same parameters names the same instance. Values are URI-encoded,
+ * because the view pane's Tabs put the id in a CSS selector without escaping it, and a quote breaks it.
+ */
+export function panelInstanceId(panel: string, params: PanelParams = {}): string {
+  const keys = Object.keys(params).sort()
+  return keys.length ? `${panel}?${keys.map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(JSON.stringify(params[key]))}`).join("&")}` : panel
+}
+
+/** A plugin view drawn for a tab: the plugin that drew it and the node it starts at. */
+export interface DrawnView {
   readonly id: string
-  readonly name: string
-  readonly project: string
-  readonly layout: { readonly left: readonly string[]; readonly panel: readonly string[] }
+  readonly title: string
+  readonly plugin: string
+  readonly root: number
+}
+
+/** What plugins show in a tab. The core keeps it and sends it whole on every change. */
+export interface TabLayout {
+  readonly sidebar?: DrawnView
+  /** Open panel instances, in order. Each `id` comes from panelInstanceId. */
+  readonly panels: readonly DrawnView[]
+  /** Cards for the card stack, after the Space card. */
+  readonly cards: readonly DrawnView[]
 }
 
 /** A terminal in a tab's panel. Its shell runs in the core under this id. */
@@ -348,14 +377,60 @@ export interface TabInfo extends RunSettings {
   readonly project: string
   /** The terminals in this tab's panel, in order. The core closes any shell that no tab lists. */
   readonly terminals: readonly TerminalInfo[]
-  /** The panel tab on show: a terminal's id, or a setup panel's name. Absent means Review. */
+  /** The panel tab on show: a terminal's id, or a plugin panel's instance id. Absent means Review. */
   readonly panelActive?: string
-  /** The setup the tab shows, by id. Its panels sit around the thread, and plugins choose the thread. */
-  readonly setup?: string
 }
 
 /** A value a plugin's UI node can hold. A function becomes a handler id, which the app calls back through `plugin.event`. */
 export type UiValue = string | number | boolean | null | undefined | { readonly handler: number } | readonly UiValue[] | { readonly [key: string]: UiValue }
+
+/** The node a view is drawn into, and the node type of a text. Neither is a primitive. */
+export const ROOT_NODE = "root"
+export const TEXT_NODE = "#text"
+
+/** Colours a plugin's badge may take. */
+export type Tint = "neutral" | "blue" | "green" | "orange" | "red" | "purple"
+
+export type ButtonVariant = "primary" | "secondary" | "ghost"
+
+/** One message in a conversation. `note` sets it apart as private, `activity` draws it as one quiet line. */
+export interface MessageData {
+  readonly id: string
+  readonly text: string
+  readonly author?: string
+  /** Milliseconds since the epoch. */
+  readonly at?: number
+  readonly kind?: "message" | "note" | "activity"
+  /** Whether it came from the other side, such as a customer. */
+  readonly incoming?: boolean
+}
+
+/**
+ * The UI primitives a plugin draws with, by node type, and their props as the plugin writes them. The
+ * plugin package builds its components from this list, and the app draws each type, so both change together.
+ */
+export interface UiPrimitives {
+  /** Children in a row or a column. */
+  stack: { direction?: "row" | "column"; gap?: number; grow?: boolean }
+  /** Text. `muted` sets it quieter, `strong` heavier. */
+  text: { tone?: "normal" | "muted" | "strong" }
+  /** A scrolling list of items. */
+  list: {}
+  /** One row of a list. It is selectable when it has `onSelect`. */
+  item: { title: string; subtitle?: string; detail?: string; badge?: { text: string; tint?: Tint }; selected?: boolean; onSelect?: () => void }
+  button: { label: string; variant?: ButtonVariant; disabled?: boolean; onClick: () => void }
+  /** A text field. Desk keeps what is typed and reports it through `onInput`. Setting `value` replaces it, such as "" to clear it. */
+  textinput: { value: string; placeholder?: string; multiline?: boolean; onInput: (value: string) => void; /** Enter, or ⌘Enter in a multiline field. */ onSubmit?: () => void }
+  /** A conversation, oldest first. */
+  messages: { items: readonly MessageData[] }
+  markdown: { text: string }
+}
+export type UiPrimitive = keyof UiPrimitives
+
+/** A primitive's props as the app receives them. Each function the plugin passed is a handler id. */
+export type UiProps<T extends UiPrimitive> = {
+  readonly [K in keyof UiPrimitives[T]]: NonNullable<UiPrimitives[T][K]> extends (...args: never[]) => unknown ? { readonly handler: number } | undefined : UiPrimitives[T][K]
+}
 
 /**
  * One change to a plugin's UI tree, after the remote-DOM idea MCP-UI used: the plugin's code builds the
@@ -382,6 +457,7 @@ export interface UiNode {
  * Applies a batch of operations to a client's copy of a plugin's nodes, in place. A node moved to
  * another parent leaves its old one first. Solid removes a node and inserts it again in one update,
  * such as the text after a changed value, so a removed node is dropped only if the batch ends with it out.
+ * The plugin's renderer frees its own tree by the same rule, and sends one batch per flush.
  */
 export function applyOps(nodes: Record<number, UiNode>, ops: readonly UiOp[]) {
   const detach = (id: number) => {
@@ -400,7 +476,7 @@ export function applyOps(nodes: Record<number, UiNode>, ops: readonly UiOp[]) {
     else if (op.op === "text") {
       const node = nodes[op.id]
       if (node) node.text = op.text
-      else nodes[op.id] = { type: "#text", props: {}, children: [], text: op.text }
+      else nodes[op.id] = { type: TEXT_NODE, props: {}, children: [], text: op.text }
     } else if (op.op === "set") {
       const node = nodes[op.id]
       if (node) node.props[op.key] = op.value
@@ -457,11 +533,15 @@ export type ClientMessage =
   | { readonly type: "session.send"; readonly tabId: string; readonly text: string }
   | { readonly type: "session.interrupt"; readonly tabId: string }
   | { readonly type: "permission.answer"; readonly tabId: string; readonly requestId: string; readonly allow: boolean }
-  /**
-   * Draws a plugin panel for a tab, in the tab's project, or names the one already drawn. The core
-   * answers with `panel`. It names the project, because a new tab's panels open before its first save.
-   */
-  | { readonly type: "panel.open"; readonly tabId: string; readonly project: string; readonly panel: string }
+  /** Asks for what plugins show in a saved tab. The core draws it and answers with `layout`. */
+  | { readonly type: "layout.get"; readonly tabId: string }
+  /** Opens a panel instance in a saved tab, or brings the open one to the front. */
+  | { readonly type: "panel.open"; readonly tabId: string; readonly panel: string; readonly params?: PanelParams }
+  | { readonly type: "panel.close"; readonly tabId: string; readonly id: string }
+  /** Lays a saved tab out as a setup says: its sidebar and panels. */
+  | { readonly type: "setup.open"; readonly tabId: string; readonly setup: string }
+  /** Runs a plugin command for a saved tab. */
+  | { readonly type: "plugin.command"; readonly tabId: string; readonly command: string; readonly input?: string }
   /** Runs a handler a plugin's node holds, such as a button's onClick. */
   | { readonly type: "plugin.event"; readonly plugin: string; readonly handler: number; readonly args: readonly UiValue[] }
 
@@ -488,15 +568,15 @@ export type CoreMessage =
   | { readonly type: "session.event"; readonly tabId: string; readonly event: ThreadEvent }
   /** A restored thread, read back from Claude's transcript in one message, so the app can tell it from live events. */
   | { readonly type: "session.history"; readonly tabId: string; readonly items: readonly ThreadItem[]; readonly context?: ContextReading }
-  /** The setups in `~/.desk/setups`, sent on connect. */
-  | { readonly type: "setups"; readonly setups: readonly SetupInfo[] }
   /** Changes to a plugin's UI. With `reset`, they replace every node the app holds for the plugin. */
   | { readonly type: "plugin.ops"; readonly plugin: string; readonly ops: readonly UiOp[]; readonly reset?: boolean }
-  /** A panel drawn for a tab: the plugin's node it starts at. */
-  | { readonly type: "panel"; readonly tabId: string; readonly panel: string; readonly plugin: string; readonly root: number }
-  /** A plugin asked to bring one of its panel tabs to the front, opening the panel. */
-  | { readonly type: "panel.show"; readonly tabId: string; readonly panel: string }
+  /** What plugins show in a tab, sent whole on every change. */
+  | { readonly type: "layout"; readonly tabId: string; readonly layout: TabLayout }
+  /** A panel instance opened, so the app brings it to the front and opens the view pane. */
+  | { readonly type: "panel.show"; readonly tabId: string; readonly id: string }
   /** A plugin opened a thread in a tab under this name. */
   | { readonly type: "tab.title"; readonly tabId: string; readonly title: string }
   /** Something the user asked for failed. The app shows the message. */
   | { readonly type: "error"; readonly message: string }
+  /** A short message for the user, such as a plugin's toast. */
+  | { readonly type: "notice"; readonly message: string }

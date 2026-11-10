@@ -39,10 +39,13 @@ const solidJsx: BunPlugin = {
   },
 }
 
-/** Bundles `entry`, a host module that imports the plugin at `pluginPath`, and returns the bundle's path. */
-export async function bundlePlugin(name: string, entry: string): Promise<string> {
+/** Bundles the plugin whose module is at `plugin` into `<name>.js` for a worker, and returns the bundle's path. */
+export async function bundlePlugin(name: string, plugin: string): Promise<string> {
   const outdir = join(deskHome(), "cache", "plugins")
   mkdirSync(outdir, { recursive: true })
+  // The bundle starts from a small module that hands the plugin to the host, so both share one renderer.
+  const entry = join(outdir, `${name}.entry.ts`)
+  await Bun.write(entry, `import { startHost } from "@desk/plugin/host"\nimport plugin from ${JSON.stringify(plugin)}\nstartHost(plugin)\n`)
   const result = await Bun.build({
     entrypoints: [entry],
     outdir,

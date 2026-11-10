@@ -5,6 +5,7 @@ import { threadContext, threadHistory } from "./past-threads"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { sameRunSettings, Session } from "./session"
 import { Terminals } from "./terminals"
+import type { PluginLayout } from "@desk/plugin/host"
 import { loadWindowState, saveWindowState, type TabThread, type WindowState } from "./window-state"
 
 type Send = (message: CoreMessage) => void
@@ -25,7 +26,7 @@ interface WindowHooks {
 /**
  * The window's tabs and what runs for them: each tab's Claude session and its panel terminals. The
  * app owns the tabs and sends them on every change. The core keeps each tab's thread: its session,
- * its baseline for Review and its last context reading.
+ * its baseline for Review and its last context reading. It also keeps each tab's plugin layout.
  */
 export class Window {
   private state: WindowState = loadWindowState()
@@ -63,11 +64,8 @@ export class Window {
     // A thread's transcript, baseline and Review belong to its folder, so only a tab with no thread can move.
     const moved = tabs.find((tab) => before.has(tab.id) && before.get(tab.id)!.project !== tab.project && this.thread(tab.id).sessionId)
     if (moved) throw new Error("A tab can change its project only before its thread starts.")
-    this.persist({
-      tabs,
-      active,
-      threads: Object.fromEntries(tabs.flatMap((tab) => (this.state.threads[tab.id] ? [[tab.id, this.state.threads[tab.id]!]] : []))),
-    })
+    const kept = <T>(byTab: Readonly<Record<string, T>>) => Object.fromEntries(tabs.flatMap((tab) => (byTab[tab.id] ? [[tab.id, byTab[tab.id]!]] : [])))
+    this.persist({ tabs, active, threads: kept(this.state.threads), layouts: kept(this.state.layouts) })
     for (const tab of tabs) {
       const old = before.get(tab.id)
       if (old && old.project !== tab.project) this.closeSession(tab.id)
@@ -162,6 +160,20 @@ export class Window {
 
   resizeTerminal(id: string, cols: number, rows: number) {
     this.terminals.resize(id, cols, rows)
+  }
+
+  /** The folder a saved tab works in. */
+  projectOf(tabId: string): string {
+    return this.tab(tabId).project
+  }
+
+  layout(tabId: string): PluginLayout | undefined {
+    return this.state.layouts[tabId]
+  }
+
+  setLayout(tabId: string, layout: PluginLayout) {
+    this.tab(tabId)
+    this.persist({ layouts: { ...this.state.layouts, [tabId]: layout } })
   }
 
   stop() {
