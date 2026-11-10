@@ -1,7 +1,8 @@
-import type { RunSettings, SetupInfo, TabInfo, TerminalInfo } from "@desk/protocol"
+import type { RunSettings, TabInfo, TerminalInfo } from "@desk/protocol"
 import { createStore, produce } from "solid-js/store"
 import { account } from "./account"
 import { core } from "./core"
+import { applySetup, plugins } from "./plugins"
 
 const NEW_TAB_TITLE = "New session"
 const TITLE_LENGTH = 40
@@ -24,6 +25,16 @@ const [workspace, setWorkspace] = createStore({
 export { workspace }
 
 export const activeTab = () => workspace.tabs.find((tab) => tab.id === workspace.active)
+
+/**
+ * The view pane tab a tab shows: a terminal's id or an open plugin panel's, or undefined for Review.
+ * A choice whose terminal or panel has closed, such as a panel the plugin closed, shows Review.
+ */
+export function shownPanelTab(tab: TabInfo): string | undefined {
+  const chosen = tab.panelActive
+  const open = tab.terminals.some((terminal) => terminal.id === chosen) || !!plugins.layouts[tab.id]?.panels.some((panel) => panel.id === chosen)
+  return open ? chosen : undefined
+}
 
 /** The tab on show: the active tab, unless Settings shows in its place. */
 export const shownTab = () => (workspace.settingsPage ? undefined : activeTab())
@@ -53,9 +64,10 @@ export function newTab(place: "end" | "next" = "end", project = activeProject())
   return addTab(tabIn(project), place)
 }
 
-/** Opens a setup in a tab of its own. Its plugins choose the tab's thread. */
-export function openSetup(setup: SetupInfo) {
-  return addTab({ ...tabIn(setup.project), title: setup.name, setup: setup.id }, "end")
+/** Opens a plugin's setup in a tab of its own, in `project`. The core lays the tab out once it is saved. */
+export function openSetup(project: string, setup: { readonly id: string; readonly title: string }) {
+  const tabId = addTab({ ...tabIn(project), title: setup.title }, "end")
+  applySetup(tabId, setup.id)
 }
 
 /** A new tab in `project`. Its thread starts on the default model and effort, and on the speed and permission mode of the tab in front. */
@@ -66,14 +78,15 @@ function tabIn(project: string): TabInfo {
 }
 
 function addTab(tab: TabInfo, place: "end" | "next") {
+  // The tab is saved before it shows, because a shown tab asks the core for its layout, and the core knows only saved tabs.
   setWorkspace(
     produce((draft) => {
       const index = place === "next" ? draft.tabs.findIndex((found) => found.id === draft.active) + 1 : draft.tabs.length
       draft.tabs.splice(index, 0, tab)
-      draft.active = tab.id
-      draft.settingsPage = undefined
     }),
   )
+  save()
+  setWorkspace({ active: tab.id, settingsPage: undefined })
   save()
   return tab.id
 }
@@ -141,25 +154,23 @@ export function newTerminal() {
   const tab = activeTab()
   if (!tab) return
   const terminal: TerminalInfo = { id: crypto.randomUUID(), title: tab.terminals.length ? `Terminal ${tab.terminals.length + 1}` : "Terminal" }
-  // The panel's Tabs pick their first tab when the chosen one has no trigger yet, and report it as a change. So the terminal joins the panel first, then shows.
-  setWorkspace("tabs", (found) => found.id === tab.id, { terminals: [...tab.terminals, terminal] })
-  setWorkspace("tabs", (found) => found.id === tab.id, { panelActive: terminal.id })
+  setWorkspace("tabs", (found) => found.id === tab.id, { terminals: [...tab.terminals, terminal], panelActive: terminal.id })
   setWorkspace("settingsPage", undefined)
   save()
   if (!workspace.panelOpen) togglePanel()
 }
 
-/** Shows a tab's panel tab: a terminal or a setup's pinned panel, or Review when `id` is undefined. */
+/** Shows a tab's panel tab: a terminal or a plugin panel, or Review when `id` is undefined. */
 export function showPanelTab(tabId: string, id: string | undefined) {
   setWorkspace("tabs", (found) => found.id === tabId, { panelActive: id })
   save()
 }
 
 /** Closes a panel terminal. The core ends the shell of a terminal no tab lists. */
-export function closeTerminal(id: string) {
-  const tab = activeTab()
+export function closeTerminal(tabId: string, id: string) {
+  const tab = workspace.tabs.find((found) => found.id === tabId)
   if (!tab) return
-  setWorkspace("tabs", (found) => found.id === tab.id, { terminals: tab.terminals.filter((terminal) => terminal.id !== id), panelActive: tab.panelActive === id ? undefined : tab.panelActive })
+  setWorkspace("tabs", (found) => found.id === tabId, { terminals: tab.terminals.filter((terminal) => terminal.id !== id) })
   save()
 }
 
@@ -172,10 +183,9 @@ core.listen((message) => {
   if (message.type === "recent") setWorkspace("recent", message.projects)
   else if (message.type === "tab.title") nameTab(message.tabId, message.title)
   else if (message.type === "panel.show") {
-    showPanelTab(message.tabId, message.panel)
+    showPanelTab(message.tabId, message.id)
     if (!workspace.panelOpen) togglePanel()
-  }
-  else if (message.type === "tabs") {
+  } else if (message.type === "tabs") {
     setWorkspace({ tabs: [...message.tabs], active: message.active ?? message.tabs[0]?.id ?? "", restored: true })
     for (const action of waiting) action()
     waiting = []

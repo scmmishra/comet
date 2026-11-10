@@ -3,15 +3,15 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Spinner } from "@opencode/ui/spinner"
 import { Tabs } from "@opencode/ui/tabs"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createSignal, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
 import { COMMANDS, keyLabels } from "../shared/commands"
 import { account, refreshUsage } from "./account"
 import { useCommands } from "./actions"
 import { Composer } from "./composer"
 import { Icon } from "./icons"
 import { ContextRing, UsageButton } from "./meters"
-import { PluginPanel } from "./plugin-view"
-import { setupOf } from "./plugins"
+import { PluginView } from "./plugin-view"
+import { closePanel, isEmptyView, loadLayout, plugins } from "./plugins"
 import { ProjectMark } from "./project-mark"
 import { projectData, projectLabel, readProject } from "./projects"
 import { ReviewView } from "./review"
@@ -21,10 +21,10 @@ import { StartScreen } from "./start-screen"
 import { TerminalView } from "./terminal"
 import { Thread } from "./thread"
 import { threadOf } from "./threads"
-import { closeTab, closeTerminal, newTab, newTerminal, showPanelTab, showTab, shownTab, togglePanel, workspace } from "./workspace"
+import { closeTab, closeTerminal, newTab, newTerminal, showPanelTab, shownPanelTab, showTab, shownTab, togglePanel, workspace } from "./workspace"
 
 const USAGE_REFRESH_MS = 5 * 60_000
-/** The panel's Tabs value for Review, which has no id of its own: a tab's panelActive is absent then. */
+/** The panel's Tabs value for Review, which has no id of its own. */
 const REVIEW = "review"
 
 export function App() {
@@ -70,12 +70,23 @@ export function App() {
 function TabView(props: { tab: TabInfo }) {
   const thread = () => threadOf(props.tab.id)
   const space = () => projectData(props.tab.project).space
-  const setup = () => setupOf(props.tab.setup)
-  const pinned = () => setup()?.layout.panel ?? []
+  onMount(() => loadLayout(props.tab.id))
+  const layout = () => plugins.layouts[props.tab.id]
+  const panels = () => layout()?.panels ?? []
+  const cards = () => (layout()?.cards ?? []).filter((card) => !isEmptyView(card.plugin, card.root))
+  const shown = () => shownPanelTab(props.tab)
+  // The Tabs pick their first tab when the chosen one has no trigger yet, and report it as a change. A new
+  // terminal or plugin panel gets its trigger in the update that shows it, so the Tabs learn of a change one update later.
+  const [tabsValue, setTabsValue] = createSignal(untrack(shown) ?? REVIEW)
+  createEffect(() => setTabsValue(shown() ?? REVIEW))
   return (
     <main class="flex min-h-0 flex-1 gap-2 px-2 pb-2">
-      <Show when={setup()?.layout.left.length}>
-        <SetupColumn tab={props.tab} panels={setup()!.layout.left} />
+      <Show when={layout()?.sidebar}>
+        {(sidebar) => (
+          <aside class="flex w-[320px] shrink-0 flex-col overflow-hidden rounded-3xl border border-outline bg-card p-2">
+            <PluginView view={sidebar()} project={props.tab.project} />
+          </aside>
+        )}
       </Show>
       {/* The session's width and the panel's slide run on the same curve, so the gap between them stays put while the panel opens. */}
       <div class="desk-split relative min-h-0 flex-1 overflow-hidden" data-panel={workspace.panelOpen ? "open" : "closed"}>
@@ -99,7 +110,7 @@ function TabView(props: { tab: TabInfo }) {
           {/* The project's cards float over the session's corner, and the thread's lane keeps clear of them. Without room, they fold into the header chip. */}
           <div class="relative flex min-h-0 flex-1">
             <div class="flex min-w-0 flex-1 flex-col">
-              <Show when={thread().items.length > 0} fallback={props.tab.setup ? <SetupStart tab={props.tab} /> : <StartScreen tab={props.tab} />}>
+              <Show when={thread().items.length > 0} fallback={layout()?.sidebar ? <SidebarStart tab={props.tab} /> : <StartScreen tab={props.tab} />}>
                 <ThreadScroll tab={props.tab} />
                 <div class="desk-lane shrink-0 pb-4 pt-1.5">
                   <Composer tab={props.tab} />
@@ -108,18 +119,26 @@ function TabView(props: { tab: TabInfo }) {
             </div>
             <aside class="desk-rail desk-no-scrollbar absolute right-2 top-0 max-h-full w-[264px] flex-col gap-2 overflow-y-auto pb-2">
               <ProjectCards project={props.tab.project} />
+              <For each={cards()}>
+                {(card) => (
+                  <section class="flex flex-col gap-1 rounded-3xl border border-outline bg-card p-3">
+                    <span class="text-[12px] text-fg-3">{card.title}</span>
+                    <PluginView view={card} project={props.tab.project} />
+                  </section>
+                )}
+              </For>
             </aside>
           </div>
         </section>
         <section class="desk-panel flex flex-col rounded-3xl border border-outline bg-panel" inert={!workspace.panelOpen}>
           <div class="desk-no-scrollbar flex h-[46px] shrink-0 items-center gap-1 overflow-x-auto pl-2 pr-12">
-            <Tabs variant="surface" value={props.tab.panelActive ?? REVIEW} onChange={(value) => showPanelTab(props.tab.id, value === REVIEW ? undefined : value)} class="min-w-0">
+            <Tabs variant="surface" value={tabsValue()} onChange={(value) => showPanelTab(props.tab.id, value === REVIEW ? undefined : value)} class="min-w-0">
               <Tabs.List>
-                {/* A setup's panels are pinned at the front: the setup owns them, so they have no close button. */}
-                <For each={pinned()}>
+                {/* Plugin panels sit at the front, in the order they opened. */}
+                <For each={panels()}>
                   {(panel) => (
-                    <Tabs.Trigger value={panel} class="shrink-0">
-                      {panelTitle(panel)}
+                    <Tabs.Trigger value={panel.id} class="shrink-0" closeButton={<Tabs.CloseButton aria-label="Close panel" onClick={() => closePanel(props.tab.id, panel.id)} />}>
+                      {panel.title}
                     </Tabs.Trigger>
                   )}
                 </For>
@@ -131,7 +150,7 @@ function TabView(props: { tab: TabInfo }) {
                 </Tabs.Trigger>
                 <For each={props.tab.terminals}>
                   {(terminal) => (
-                    <Tabs.Trigger value={terminal.id} class="shrink-0" closeButton={<Tabs.CloseButton aria-label="Close terminal" onClick={() => closeTerminal(terminal.id)} />}>
+                    <Tabs.Trigger value={terminal.id} class="shrink-0" closeButton={<Tabs.CloseButton aria-label="Close terminal" onClick={() => closeTerminal(props.tab.id, terminal.id)} />}>
                       <span class="flex items-center gap-[7px]">
                         <Icon name="terminal" />
                         {terminal.title}
@@ -146,15 +165,15 @@ function TabView(props: { tab: TabInfo }) {
             </Tooltip>
           </div>
           <div class="flex min-h-0 flex-1 flex-col">
-            {/* Pinned panels, like terminals, stay mounted while another panel tab shows. */}
-            <For each={pinned()}>
+            {/* Plugin panels, like terminals, stay mounted while another panel tab shows. */}
+            <For each={panels()}>
               {(panel) => (
-                <div class="flex min-h-0 flex-1 flex-col px-3 pb-3" classList={{ hidden: panel !== props.tab.panelActive }}>
-                  <PluginPanel tabId={props.tab.id} project={props.tab.project} panel={panel} />
+                <div class="flex min-h-0 flex-1 flex-col px-3 pb-3" classList={{ hidden: panel.id !== shown() }}>
+                  <PluginView view={panel} project={props.tab.project} />
                 </div>
               )}
             </For>
-            <Show when={props.tab.panelActive === undefined}>
+            <Show when={shown() === undefined}>
               <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
                 <ReviewView review={thread().review} />
               </div>
@@ -162,7 +181,7 @@ function TabView(props: { tab: TabInfo }) {
             {/* Terminals stay mounted while another panel tab shows, so their screens keep their state. */}
             <For each={props.tab.terminals}>
               {(terminal) => (
-                <div class="min-h-0 flex-1 overflow-hidden px-3 pb-3" classList={{ hidden: terminal.id !== props.tab.panelActive }}>
+                <div class="min-h-0 flex-1 overflow-hidden px-3 pb-3" classList={{ hidden: terminal.id !== shown() }}>
                   <TerminalView id={terminal.id} />
                 </div>
               )}
@@ -175,32 +194,11 @@ function TabView(props: { tab: TabInfo }) {
   )
 }
 
-/** A column of a setup's plugin panels beside the thread, each on a card of its own. */
-function SetupColumn(props: { tab: TabInfo; panels: readonly string[] }) {
-  return (
-    <aside class="flex w-[320px] shrink-0 flex-col gap-2">
-      <For each={props.panels}>
-        {(panel) => (
-          <section class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-outline bg-card p-2">
-            <PluginPanel tabId={props.tab.id} project={props.tab.project} panel={panel} />
-          </section>
-        )}
-      </For>
-    </aside>
-  )
-}
-
-/** A pinned panel's tab label: its name after the plugin's, such as "Conversation" for `chatwoot.conversation`. */
-const panelTitle = (panel: string) => {
-  const name = panel.slice(panel.indexOf(".") + 1)
-  return name.charAt(0).toUpperCase() + name.slice(1)
-}
-
-/** A setup tab before its plugins open a thread: the composer, under a line on how to start. */
-function SetupStart(props: { tab: TabInfo }) {
+/** A tab with a plugin sidebar, before the sidebar opens a thread: the composer, under a line on how to start. */
+function SidebarStart(props: { tab: TabInfo }) {
   return (
     <div class="flex min-h-0 flex-1 flex-col">
-      <p class="m-auto px-6 text-center text-fg-3">Pick something in a panel to open its thread.</p>
+      <p class="m-auto px-6 text-center text-fg-3">Pick something in the sidebar to open its thread.</p>
       <div class="desk-lane shrink-0 pb-4 pt-1.5">
         <Composer tab={props.tab} />
       </div>

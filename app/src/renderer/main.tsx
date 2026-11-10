@@ -9,7 +9,10 @@ import { core } from "./core"
 void core.connect()
 applyAppearance()
 // The core reports what it could not do, such as a command it refused to save.
-core.listen((message) => message.type === "error" && showToast({ variant: "error", description: message.message }))
+core.listen((message) => {
+  if (message.type === "error") showToast({ variant: "error", description: message.message })
+  else if (message.type === "notice") showToast({ description: message.message })
+})
 render(
   () => (
     <DialogProvider>

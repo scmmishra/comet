@@ -11,10 +11,10 @@ import { formatAgo, otherBranch, shortPath } from "./format"
 import { Icon, type IconName } from "./icons"
 import { ProjectMark } from "./project-mark"
 import { projectData, projectLabel, readProject } from "./projects"
-import { plugins } from "./plugins"
+import { openPanel, runPluginCommand } from "./plugins"
 import { SETTINGS_PAGES } from "./settings/pages"
 import { openThread } from "./threads"
-import { activeProject, newTab, openSettings, openSetup, showTab, workspace } from "./workspace"
+import { activeProject, activeTab, newTab, openSettings, openSetup, showTab, workspace } from "./workspace"
 
 const DIALOG_ID = "palette"
 /** Threads the palette lists before a search. A search looks through all of them. */
@@ -56,6 +56,7 @@ export function usePalette(run: (command: DeskCommand) => void) {
   return (start?: "threads") => {
     if (dialog.active?.id === DIALOG_ID) return dialog.close(DIALOG_ID)
     readProject(activeProject(), "threads")
+    readProject(activeProject(), "plugins")
     dialog.show(() => <Palette start={start} run={run} onDone={() => dialog.close(DIALOG_ID)} />, undefined, DIALOG_ID)
   }
 }
@@ -112,11 +113,28 @@ function Palette(props: { start?: "threads"; run: (command: DeskCommand) => void
   })
   const newSessionPage = projectPage("New session in", (project) => ({ run: () => newTab("end", project) }))
   const searchThreadsPage = projectPage("Search threads in", (project) => ({ page: threadsPage(project) }))
+  const offered = () => projectData(activeProject()).plugins
   const setupsPage: Page = {
     title: "Open setup",
-    entries: () =>
-      plugins.setups.map((setup) => ({ id: `setup:${setup.id}`, section: "Setups", title: setup.name, detail: projectLabel(setup.project), project: setup.project, run: () => openSetup(setup) })),
+    entries: () => (offered()?.setups ?? []).map((setup) => ({ id: `setup:${setup.id}`, section: "Setups", title: setup.title, icon: "workspace", run: () => openSetup(activeProject(), setup) })),
   }
+  const panelsPage: Page = {
+    title: "Open panel",
+    entries: () => (offered()?.panels ?? []).map((panel) => ({ id: `panel:${panel.id}`, section: "Panels", title: panel.title, icon: "layout-right", run: () => withTab((tabId) => openPanel(tabId, panel.id)) })),
+  }
+  /** A command that asks for text runs on what the field holds. */
+  const inputPage = (command: { id: string; title: string; input?: string }): Page => ({
+    title: command.input ?? command.title,
+    entries: () => (query().trim() ? [{ id: `input:${command.id}`, section: command.title, title: query().trim(), run: () => withTab((tabId) => runPluginCommand(tabId, command.id, query().trim())) }] : []),
+  })
+  const pluginCommands = (): Entry[] =>
+    (offered()?.commands ?? []).map((command) => ({
+      id: `command:${command.id}`,
+      section: "Plugins",
+      title: command.title,
+      icon: "code",
+      ...(command.input ? { page: inputPage(command) } : { run: () => withTab((tabId) => runPluginCommand(tabId, command.id)) }),
+    }))
 
   const root = (): Entry[] => [
     { id: "new-session", section: "Actions", title: "New session", icon: "plus", command: "tab.new" },
@@ -127,6 +145,8 @@ function Palette(props: { start?: "threads"; run: (command: DeskCommand) => void
     { id: "toggle-panel", section: "Actions", title: workspace.panelOpen ? "Hide panel" : "Show panel", icon: "layout-right", command: "panel.toggle" },
     { id: "open-folder", section: "Actions", title: "Open folder…", icon: "folder", command: "folder.open" },
     { id: "open-setup", section: "Actions", title: "Open setup…", icon: "workspace", page: setupsPage },
+    { id: "open-panel", section: "Actions", title: "Open panel…", icon: "layout-right", page: panelsPage },
+    ...pluginCommands(),
     { id: "change-theme", section: "Actions", title: "Change theme…", icon: "appearance", page: themePage },
     { id: "open-settings", section: "Actions", title: "Open settings…", icon: "settings-gear", page: settingsPage },
     ...workspace.tabs.map((tab): Entry => ({ id: `tab:${tab.id}`, section: "Tabs", title: tab.title, detail: projectLabel(tab.project), project: tab.project, run: () => showTab(tab.id) })),
@@ -143,7 +163,7 @@ function Palette(props: { start?: "threads"; run: (command: DeskCommand) => void
     if (current) return current.entries()
     // A search from the root also finds what the nested lists hold.
     if (!query().trim()) return [...root(), ...threads().slice(0, RECENT_THREADS)]
-    return [...root(), ...themePage.entries(), ...settingsPage.entries(), ...newSessionPage.entries(), ...setupsPage.entries(), ...threads()]
+    return [...root(), ...themePage.entries(), ...settingsPage.entries(), ...newSessionPage.entries(), ...setupsPage.entries(), ...panelsPage.entries(), ...threads()]
   })
 
   // Every word must appear in the entry's title, its detail or its section.
@@ -228,6 +248,11 @@ function Palette(props: { start?: "threads"; run: (command: DeskCommand) => void
       </DialogBody>
     </Dialog>
   )
+}
+
+function withTab(action: (tabId: string) => void) {
+  const tab = activeTab()
+  if (tab) action(tab.id)
 }
 
 /** The keys the palette answers, as T3 Code lists them under its results. */

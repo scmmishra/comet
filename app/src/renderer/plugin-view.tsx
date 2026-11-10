@@ -1,16 +1,18 @@
-import type { UiValue } from "@desk/protocol"
+import { ROOT_NODE, TEXT_NODE, type ButtonVariant, type DrawnView, type MessageData, type Tint, type UiPrimitive, type UiProps, type UiValue } from "@desk/protocol"
 import { Badge } from "@opencode/ui/badge"
 import { Button } from "@opencode/ui/button"
 import { TextInput } from "@opencode/ui/text-input"
 import { Textarea } from "@opencode/ui/textarea"
-import { createEffect, createSignal, For, Match, onMount, Show, Switch, type JSX } from "solid-js"
+import { createEffect, createSignal, For, Show, type JSX } from "solid-js"
+import { Dynamic } from "solid-js/web"
 import { formatMessageTime } from "./format"
 import { Markdown } from "./markdown"
-import { fire, openPanel, plugins } from "./plugins"
+import { fire, plugins } from "./plugins"
 import { openFile } from "./projects"
 
 /** Badge tints a plugin may ask for, as Desk's colours. */
-const TINTS: Record<string, string> = {
+const TINTS: Record<Tint, string> = {
+  neutral: "",
   blue: "bg-accent-soft text-accent",
   green: "bg-add-soft text-add",
   red: "bg-del-soft text-del",
@@ -18,101 +20,85 @@ const TINTS: Record<string, string> = {
   purple: "bg-accent-soft text-fg",
 }
 
-const BUTTON_VARIANTS = { primary: "contrast", secondary: "neutral", ghost: "ghost" } as const
+const BUTTON_VARIANTS: Record<ButtonVariant, "contrast" | "neutral" | "ghost"> = { primary: "contrast", secondary: "neutral", ghost: "ghost" }
 
-/** A plugin's panel in a tab. It asks the core to draw it, then draws the plugin's nodes. Where it sits gives it its frame. */
-export function PluginPanel(props: { tabId: string; project: string; panel: string }) {
-  onMount(() => openPanel(props.tabId, props.project, props.panel))
-  const drawn = () => plugins.panels[props.tabId]?.[props.panel]
-  return (
-    <Show when={drawn()} fallback={<div class="p-2 text-fg-3">Loading {props.panel}…</div>}>
-      {(found) => <NodeView plugin={found().plugin} id={found().root} project={props.project} />}
-    </Show>
-  )
+interface DrawProps<T extends UiPrimitive> {
+  readonly props: UiProps<T>
+  readonly children: JSX.Element
+  readonly run: (handler: { readonly handler: number } | undefined, ...args: UiValue[]) => void
+  readonly project: string
 }
 
-/** One node, drawn with Desk's component of its type. */
+/** Desk's component for each primitive. It names every type in UiPrimitives, so a new primitive must be drawn here. */
+const DRAW: { [T in UiPrimitive]: (draw: DrawProps<T>) => JSX.Element } = {
+  stack: (draw) => (
+    <div
+      class="flex min-h-0 min-w-0"
+      classList={{ "flex-row items-center": draw.props.direction === "row", "flex-col": draw.props.direction !== "row", "flex-1": !!draw.props.grow }}
+      style={{ gap: `${(draw.props.gap ?? 2) * 4}px` }}
+    >
+      {draw.children}
+    </div>
+  ),
+  text: (draw) => <span classList={{ "text-fg-3": draw.props.tone === "muted", "font-medium text-fg": draw.props.tone === "strong" }}>{draw.children}</span>,
+  list: (draw) => <div class="desk-no-scrollbar flex min-h-0 flex-1 flex-col gap-px overflow-y-auto">{draw.children}</div>,
+  item: (draw) => (
+    <button
+      type="button"
+      class="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-x-2 rounded-lg px-2.5 py-2 text-left"
+      classList={{ "bg-raised": !!draw.props.selected, "hover:bg-hover": !draw.props.selected, "cursor-default": !draw.props.onSelect }}
+      onClick={() => draw.run(draw.props.onSelect)}
+    >
+      <span class="truncate text-fg">{draw.props.title}</span>
+      <Show when={draw.props.badge}>{(badge) => <Badge class={`border-0 ${TINTS[badge().tint ?? "neutral"]}`}>{badge().text}</Badge>}</Show>
+      <Show when={draw.props.subtitle}>{(subtitle) => <span class="col-span-2 truncate text-[12px] text-fg-3">{subtitle()}</span>}</Show>
+      <Show when={draw.props.detail}>{(detail) => <span class="col-span-2 truncate text-[12px] text-fg-3">{detail()}</span>}</Show>
+    </button>
+  ),
+  button: (draw) => (
+    <Button variant={BUTTON_VARIANTS[draw.props.variant ?? "secondary"]} disabled={!!draw.props.disabled} onClick={() => draw.run(draw.props.onClick)}>
+      {draw.props.label}
+    </Button>
+  ),
+  textinput: (draw) => (
+    <PluginInput
+      value={draw.props.value}
+      placeholder={draw.props.placeholder}
+      multiline={!!draw.props.multiline}
+      onInput={(value) => draw.run(draw.props.onInput, value)}
+      onSubmit={draw.props.onSubmit ? () => draw.run(draw.props.onSubmit) : undefined}
+    />
+  ),
+  messages: (draw) => <MessagesView items={draw.props.items ?? []} />,
+  markdown: (draw) => (
+    <div class="min-h-0 overflow-y-auto">
+      <Markdown text={draw.props.text} done onOpenFile={(path, line) => openFile(draw.project, path, line)} />
+    </div>
+  ),
+}
+
+const isPrimitive = (type: string): type is UiPrimitive => Object.hasOwn(DRAW, type)
+
+/** A view a plugin drew for a tab, such as a sidebar, a panel or a card. Where it sits gives it its frame. */
+export function PluginView(props: { view: DrawnView; project: string }) {
+  return <NodeView plugin={props.view.plugin} id={props.view.root} project={props.project} />
+}
+
 function NodeView(props: { plugin: string; id: number; project: string }): JSX.Element {
   const node = () => plugins.nodes[props.plugin]?.[props.id]
-  const prop = (key: string) => node()?.props[key]
-  const text = (key: string) => {
-    const value = prop(key)
-    return typeof value === "string" || typeof value === "number" ? String(value) : undefined
-  }
   const children = () => <For each={node()?.children ?? []}>{(child) => <NodeView plugin={props.plugin} id={child} project={props.project} />}</For>
-  const handle = (key: string) => (...args: UiValue[]) => fire(props.plugin, prop(key), ...args)
-
+  const run = (handler: { readonly handler: number } | undefined, ...args: UiValue[]) => fire(props.plugin, handler, ...args)
   return (
     <Show when={node()}>
-      {(found) => (
-        <Switch fallback={<span class="text-fg-3">{found().type} is not a Desk element.</span>}>
-          <Match when={found().type === "#text"}>{found().text}</Match>
-          <Match when={found().type === "root"}>{children()}</Match>
-          <Match when={found().type === "stack"}>
-            <div
-              class="flex min-h-0 min-w-0"
-              classList={{ "flex-row items-center": prop("direction") === "row", "flex-col": prop("direction") !== "row", "flex-1": !!prop("grow") }}
-              style={{ gap: `${Number(prop("gap") ?? 2) * 4}px` }}
-            >
-              {children()}
-            </div>
-          </Match>
-          <Match when={found().type === "text"}>
-            <span classList={{ "text-fg-3": prop("tone") === "muted", "font-medium text-fg": prop("tone") === "strong" }}>{children()}</span>
-          </Match>
-          <Match when={found().type === "list"}>
-            <div class="desk-no-scrollbar flex min-h-0 flex-1 flex-col gap-px overflow-y-auto">{children()}</div>
-          </Match>
-          <Match when={found().type === "item"}>
-            <button
-              type="button"
-              class="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-x-2 rounded-lg px-2.5 py-2 text-left"
-              classList={{ "bg-raised": !!prop("selected"), "hover:bg-hover": !prop("selected"), "cursor-default": !prop("onSelect") }}
-              onClick={() => handle("onSelect")()}
-            >
-              <span class="truncate text-fg">{text("title")}</span>
-              <Show when={prop("badge") as { text: string; tint?: string } | undefined}>
-                {(badge) => <Badge class={`border-0 ${TINTS[badge().tint ?? ""] ?? ""}`}>{badge().text}</Badge>}
-              </Show>
-              <Show when={text("subtitle")}>{(subtitle) => <span class="col-span-2 truncate text-[12px] text-fg-3">{subtitle()}</span>}</Show>
-              <Show when={text("detail")}>{(detail) => <span class="col-span-2 truncate text-[12px] text-fg-3">{detail()}</span>}</Show>
-            </button>
-          </Match>
-          <Match when={found().type === "button"}>
-            <Button variant={BUTTON_VARIANTS[(prop("variant") as keyof typeof BUTTON_VARIANTS) ?? "secondary"] ?? "neutral"} disabled={!!prop("disabled")} onClick={() => handle("onClick")()}>
-              {text("label")}
-            </Button>
-          </Match>
-          <Match when={found().type === "textinput"}>
-            <PluginInput
-              value={text("value") ?? ""}
-              placeholder={text("placeholder")}
-              multiline={!!prop("multiline")}
-              onInput={handle("onInput")}
-              onSubmit={prop("onSubmit") ? handle("onSubmit") : undefined}
-            />
-          </Match>
-          <Match when={found().type === "messages"}>
-            <MessagesView items={(prop("items") ?? []) as unknown as MessageData[]} />
-          </Match>
-          <Match when={found().type === "markdown"}>
-            <div class="min-h-0 overflow-y-auto">
-              <Markdown text={text("text") ?? ""} done onOpenFile={(path, line) => openFile(props.project, path, line)} />
-            </div>
-          </Match>
-        </Switch>
-      )}
+      {(found) => {
+        const type = found().type
+        if (type === TEXT_NODE) return <>{found().text}</>
+        if (type === ROOT_NODE) return children()
+        if (!isPrimitive(type)) return <span class="text-fg-3">{type} is not a Desk element.</span>
+        return <Dynamic component={DRAW[type] as (draw: DrawProps<UiPrimitive>) => JSX.Element} props={found().props as never} run={run} project={props.project}>{children()}</Dynamic>
+      }}
     </Show>
   )
-}
-
-interface MessageData {
-  readonly id: string
-  readonly text: string
-  readonly author?: string
-  readonly at?: number
-  readonly kind?: "message" | "note" | "activity"
-  readonly incoming?: boolean
 }
 
 /** A conversation, oldest first, kept scrolled to its end. */

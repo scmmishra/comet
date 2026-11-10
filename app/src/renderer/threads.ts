@@ -3,7 +3,7 @@ import { createEffect, createMemo, createRoot, on } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
 import { readProject } from "./projects"
-import { activeTab, isUntitled, nameTab, newTab, shownTab, showTab, workspace } from "./workspace"
+import { activeTab, isUntitled, nameTab, newTab, shownPanelTab, shownTab, showTab, workspace } from "./workspace"
 
 /** `arrivedAt` is when an item arrived live, from performance.now(). Items replayed from a transcript have none. */
 export type Item = ThreadItem & { arrivedAt?: number }
@@ -103,7 +103,7 @@ core.listen((message) => {
 const reviewShown = createRoot(() => {
   const shown = createMemo(() => {
     const tab = shownTab()
-    return tab && workspace.panelOpen && tab.panelActive === undefined ? tab.id : undefined
+    return tab && workspace.panelOpen && shownPanelTab(tab) === undefined ? tab.id : undefined
   })
   createEffect(on(shown, (tabId) => tabId && readReview(tabId)))
   return shown
