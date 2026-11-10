@@ -13,6 +13,7 @@ export const CHANNELS = {
   isFullScreen: "desk:is-full-screen",
   fullScreen: "desk:full-screen",
   command: "desk:command",
+  notice: "desk:notice",
 } as const
 
 /** What the preload script gives the page as `window.desk`. */
@@ -25,4 +26,6 @@ export interface DeskBridge {
   onFullScreen(listener: (fullScreen: boolean) => void): () => void
   /** Commands from the app menu. Returns a function that stops listening. */
   onCommand(listener: (command: DeskCommand) => void): () => void
+  /** Short notices from the main process to show as a toast. Returns a function that stops listening. */
+  onNotice(listener: (message: string) => void): () => void
 }

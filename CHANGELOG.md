@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- ⌘Q quits only on a second press within two seconds. The first press shows "Press ⌘Q again to quit Desk.", so a slip no longer stops every running turn. Quit from the menu bar or the Dock still quits at once.
 - Switching a plugin's conversation, such as in the Chatwoot inbox, no longer stops Claude's turn in the one you left. The turn goes on out of sight. Coming back shows it where it is, still running or done.
 - A plugin opening a panel, such as the Chatwoot inbox on each conversation, no longer reopens a view pane you closed. The panel comes to the front for when you open the pane. In a tab where you have not opened or closed the pane yet, the panel still opens it.
 - A long word in your message, such as an ID or a URL, wraps inside its bubble. It ran past the bubble's edge.

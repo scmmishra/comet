@@ -13,6 +13,8 @@ core.listen((message) => {
   if (message.type === "error") showToast({ variant: "error", description: message.message })
   else if (message.type === "notice") showToast({ description: message.message })
 })
+// The main process speaks to the user the same way, such as when ⌘Q waits for a second press.
+window.desk.onNotice((message) => showToast({ description: message }))
 render(
   () => (
     <DialogProvider>

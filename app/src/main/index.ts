@@ -95,7 +95,11 @@ app.whenReady().then(async () => {
   ipcMain.handle(CHANNELS.core, () => core?.info)
   ipcMain.handle(CHANNELS.isFullScreen, () => window?.isFullScreen() ?? false)
   ipcMain.handle(CHANNELS.chooseFolder, () => chooseFolder(window))
-  installMenu(send)
+  installMenu(send, (message) => {
+    if (!window || window.webContents.isLoading()) return false
+    window.webContents.send(CHANNELS.notice, message)
+    return true
+  })
   createWindow()
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

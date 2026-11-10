@@ -14,6 +14,7 @@ const bridge: DeskBridge = {
   isFullScreen: () => ipcRenderer.invoke(CHANNELS.isFullScreen),
   onFullScreen: (listener) => listen(CHANNELS.fullScreen, listener),
   onCommand: (listener) => listen(CHANNELS.command, listener),
+  onNotice: (listener) => listen(CHANNELS.notice, listener),
 }
 
 contextBridge.exposeInMainWorld("desk", bridge)
