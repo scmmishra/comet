@@ -4,6 +4,7 @@ import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { account } from "./account"
+import { draftOf, setDraft } from "./drafts"
 import { imageUrl, readImages } from "./attachments"
 import { BackgroundRow } from "./background"
 import { fileIcon } from "./file-icons"
@@ -46,8 +47,12 @@ const FOLLOW_UP: Record<FollowUp, { label: string; icon: "arrow-up-right" | "out
  * the turn or waits in the queue, as the Follow-ups setting says, and ⌘Enter does the other.
  */
 export function Composer(props: { tab: TabInfo }) {
-  const [text, setText] = createSignal("")
-  const [images, setImages] = createSignal<ImageAttachment[]>([])
+  // The message being written is the tab's draft, so it survives a tab switch and a restart.
+  const text = () => draftOf(props.tab.id).text
+  const setText = (value: string | ((current: string) => string)) => setDraft(props.tab.id, { text: typeof value === "function" ? value(text()) : value })
+  const images = () => draftOf(props.tab.id).images
+  const setImages = (value: readonly ImageAttachment[] | ((current: readonly ImageAttachment[]) => readonly ImageAttachment[])) =>
+    setDraft(props.tab.id, { images: typeof value === "function" ? value(images()) : value })
   const [trigger, setTrigger] = createSignal<Trigger>()
   const [files, setFiles] = createSignal<readonly string[]>([])
   const [active, setActive] = createSignal(0)
@@ -63,7 +68,11 @@ export function Composer(props: { tab: TabInfo }) {
   let picker!: HTMLInputElement
 
   // A new tab, and the first message moving the composer to the bottom, both start typing here.
-  onMount(() => input.focus())
+  // A restored draft may run to several lines, so the box takes its height at once.
+  onMount(() => {
+    input.focus()
+    resize()
+  })
 
   const resize = () => {
     input.style.height = "auto"
