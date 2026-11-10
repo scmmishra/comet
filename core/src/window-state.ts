@@ -14,6 +14,8 @@ export interface TabThread {
   readonly baseline?: string
   /** A snapshot taken before the last turn, for Review's last-turn changes. */
   readonly turnBaseline?: string
+  /** The commit HEAD pointed to when the last turn started, so its summary can tell a branch switch from edits. */
+  readonly turnHead?: string
   /**
    * The files each turn changed, by the id of the message that started it. Claude's transcript does not
    * record them, so a restored thread reads its turns' summaries from here.

@@ -1,6 +1,6 @@
 import type { SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
 import { followUpFor, type ChangedFile, type CoreMessage, type FileChange, type FollowUp, type ImageAttachment, type PluginLayout, type QueuedMessage, type ReviewScope, type TabInfo, type ThreadEvent, type ThreadItem } from "@desk/protocol"
-import { branchBase, changesSince, headTree, snapshot } from "./checkpoints"
+import { branchBase, changesSince, headCommit, headTree, sameHistory, snapshot } from "./checkpoints"
 import { threadContext, threadHistory } from "./past-threads"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { sameRunSettings, Session } from "./session"
@@ -129,9 +129,9 @@ export class Window {
     }
     const tab = this.tab(tabId)
     const key = this.thread(tabId).key
-    const turnBaseline = await snapshot(tab.project)
+    const [turnBaseline, turnHead] = await Promise.all([snapshot(tab.project), headCommit(tab.project)])
     if (this.thread(tabId).key !== key) throw new Error(MOVED)
-    if (turnBaseline) this.updateThread(tabId, { turnBaseline, ...(this.thread(tabId).baseline ? {} : { baseline: turnBaseline }) })
+    if (turnBaseline) this.updateThread(tabId, { turnBaseline, turnHead, ...(this.thread(tabId).baseline ? {} : { baseline: turnBaseline }) })
     this.session(tab).send(text, images)
   }
 
@@ -370,12 +370,14 @@ export class Window {
   /**
    * Lists the files a turn changed under its answer, and saves the list for when the thread is restored.
    * It compares the snapshot taken before the turn with the working tree, so edits the user made during
-   * the turn count too. A turn that changed nothing gets no summary.
+   * the turn count too. A turn that changed nothing, or left the branch's history, gets no summary.
    */
   private async summarizeTurn(tabId: string, lastMessage: string, current: () => boolean) {
     const tab = this.state.tabs.find((found) => found.id === tabId)
-    const baseline = this.thread(tabId).turnBaseline
+    const { turnBaseline: baseline, turnHead } = this.thread(tabId)
     if (!tab || !baseline) return
+    // A turn that left the branch's history, such as by switching branches, would list how two branches differ, not what it changed.
+    if (!(await sameHistory(tab.project, turnHead))) return
     const files = (await changesSince(tab.project, baseline).catch(() => [])).map(({ patch: _patch, ...file }) => file)
     if (!files.length || !current()) return
     this.updateThread(tabId, { turnChanges: { ...this.thread(tabId).turnChanges, [lastMessage]: files } })

@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- A turn that switches branches, resets or rebases no longer lists every file that differs between the two branches as its changes. Its summary is left out. A turn that commits, pulls or merges still lists what it changed.
 - ⌘⇧T reopens the tab closed last, as in a browser, in its old place and with its thread. Desk keeps the last 10 closed tabs, also after a restart. A reopened tab comes back without its terminals, which ended when it closed.
 - A file named in a reply reads as part of the sentence, after T3 Code: its icon and name in the reply's own size, in the accent colour, on the line's baseline. It was a small grey box that sat off the line.
 - Escape stops Claude only on a second press within 1.5 seconds. The first press shows "Press Esc again to stop Claude.", so a stray Escape no longer cuts a turn short. The Stop button still stops it at once.

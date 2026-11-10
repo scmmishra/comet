@@ -60,6 +60,27 @@ export async function branchBase(dir: string): Promise<string | undefined> {
   return headTree(dir)
 }
 
+/** The commit HEAD points to, or undefined outside a Git repo or before its first commit. */
+export async function headCommit(dir: string): Promise<string | undefined> {
+  return (await git(dir, ["rev-parse", "--verify", "--quiet", "HEAD"]).catch(() => "")).trim() || undefined
+}
+
+/**
+ * Whether the working tree still stands on the history it stood on at `start`: HEAD is that commit or
+ * one after it, as after a commit, a pull or a merge. A branch switch, a reset or a rebase leaves it.
+ * Without a `start`, as in a repo with no commits yet, it never left.
+ */
+export async function sameHistory(dir: string, start: string | undefined): Promise<boolean> {
+  // A repo with no commit at the start has no history to leave.
+  if (!start) return true
+  const head = await headCommit(dir)
+  if (!head || head === start) return head === start
+  return git(dir, ["merge-base", "--is-ancestor", start, head]).then(
+    () => true,
+    () => false,
+  )
+}
+
 /** What changed between a snapshot or commit and the working tree now. */
 export async function changesSince(dir: string, base: string): Promise<FileChange[]> {
   const current = await snapshot(dir)

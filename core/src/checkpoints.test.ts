@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
-import { branchBase, changesSince, headTree, snapshot } from "./checkpoints"
+import { branchBase, changesSince, headCommit, headTree, sameHistory, snapshot } from "./checkpoints"
 import { gitRepo, tempFolder } from "./test-support"
 
 test("reports what changed since a snapshot, new and deleted files included", async () => {
@@ -60,4 +60,26 @@ test("compares uncommitted work with the last commit, and a branch's work with w
 
 test("has no base outside a Git repo", async () => {
   expect(await headTree(tempFolder("plain"))).toBeUndefined()
+})
+
+test("stays on the same history through a commit, and leaves it on a branch switch or a reset", async () => {
+  const { dir, git, write } = gitRepo({ "a.ts": "one\n" })
+  const start = await headCommit(dir)
+  write("b.ts", "new\n")
+  git("add", ".")
+  git("commit", "-q", "-m", "work")
+  expect(await sameHistory(dir, start)).toBe(true)
+
+  git("checkout", "-q", "-b", "other", start!)
+  write("c.ts", "elsewhere\n")
+  git("add", ".")
+  git("commit", "-q", "-m", "other work")
+  const onOther = await headCommit(dir)
+  git("checkout", "-q", "main")
+  expect(await sameHistory(dir, onOther)).toBe(false)
+
+  const tip = await headCommit(dir)
+  git("reset", "-q", "--hard", start!)
+  expect(await sameHistory(dir, tip)).toBe(false)
+  expect(await sameHistory(dir, undefined)).toBe(true)
 })
