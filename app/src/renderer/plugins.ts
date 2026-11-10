@@ -1,4 +1,4 @@
-import { applyOps, type TabLayout, type UiNode, type UiOp, type UiValue } from "@desk/protocol"
+import { applyOps, type ProjectSetup, type TabLayout, type UiNode, type UiOp, type UiValue } from "@desk/protocol"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
 
@@ -7,6 +7,8 @@ const [plugins, setPlugins] = createStore({
   nodes: {} as Record<string, Record<number, UiNode>>,
   /** By tab. A tab the core has not laid out yet is absent. */
   layouts: {} as Record<string, TabLayout>,
+  /** Setups across projects, as last read for the palette. */
+  setups: [] as readonly ProjectSetup[],
 })
 export { plugins }
 if (import.meta.env.DEV) Object.assign(window, { __deskPlugins: plugins })
@@ -16,6 +18,11 @@ export function loadLayout(tabId: string) {
   if (asked.has(tabId)) return
   asked.add(tabId)
   core.send({ type: "layout.get", tabId })
+}
+
+/** Reads the setups of every project with plugins on, with `project`'s first. */
+export function readSetups(project: string) {
+  core.send({ type: "setups.get", project })
 }
 
 export function openPanel(tabId: string, panel: string) {
@@ -56,6 +63,7 @@ function apply(plugin: string, ops: readonly UiOp[], reset: boolean) {
 
 core.listen((message) => {
   if (message.type === "plugin.ops") apply(message.plugin, message.ops, !!message.reset)
+  else if (message.type === "setups") setPlugins("setups", message.setups)
   // Replaced whole, so a sidebar the tab no longer has goes.
   else if (message.type === "layout") setPlugins("layouts", produce((all) => void (all[message.tabId] = message.layout)))
   // The core sends the tabs on each connect. A core that restarted holds no drawn views, so each tab that asked before asks again.

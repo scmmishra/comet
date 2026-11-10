@@ -1,11 +1,12 @@
 import type { FromPlugin, Offers, ToPlugin, ViewRequest, ViewResult } from "@desk/plugin/host"
-import { contributionId, splitContributionId, type CoreMessage, type PanelParams, type PluginContributions, type UiValue } from "@desk/protocol"
+import { contributionId, splitContributionId, type CoreMessage, type PanelParams, type PluginContributions, type ProjectSetup, type UiValue } from "@desk/protocol"
+import { isProjectFolder } from "../project-path"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { deskHome } from "../data-files"
 import { loginShellPath } from "../shell"
 import { bundlePlugin } from "./bundle"
-import { pluginsOn } from "./config"
+import { pluginProjects, pluginsOn } from "./config"
 
 type Send = (message: CoreMessage) => void
 
@@ -108,6 +109,24 @@ export class Plugins {
       setups: offered.setups.map(({ id, title }) => ({ id, title })),
       commands: offered.commands,
     }
+  }
+
+  /**
+   * The setups of every project with plugins on, so the palette can open one in any project. The active
+   * project's come first. A setup from a plugin on everywhere shows once, for the active project.
+   */
+  async setups(active: string): Promise<ProjectSetup[]> {
+    const projects = [active, ...pluginProjects().filter((project) => project !== active && isProjectFolder(project))]
+    const seen = new Set<string>()
+    const found: ProjectSetup[] = []
+    for (const project of projects) {
+      for (const { id, title } of (await this.offers(project)).setups) {
+        if (seen.has(id)) continue
+        seen.add(id)
+        found.push({ project, id, title })
+      }
+    }
+    return found
   }
 
   /** Runs a command of a plugin on in `project`, for a tab. */

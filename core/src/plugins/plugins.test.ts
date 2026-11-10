@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { panelInstanceId } from "@desk/protocol"
+import { join } from "node:path"
 import { tempFolder, until, useTempHome } from "../test-support"
 import { harness, installPlugin, turnOn } from "./test-plugins"
 
@@ -197,5 +198,22 @@ export default definePlugin((desk) => {
   expect(errors().filter((error) => error.includes("crash plugin stopped"))).toHaveLength(1)
   await layouts.send("tab-1")
   expect(layout("tab-1")!.cards).toEqual([])
+  plugins.stop()
+}, 20_000)
+
+test("lists setups across projects, the active project's first, and a setup on everywhere once", async () => {
+  installPlugin("inbox", INBOX)
+  installPlugin("desk", `
+import { definePlugin } from "@desk/plugin"
+export default definePlugin((desk) => { desk.setup("focus", { title: "Focus" }) })
+`)
+  const here = tempFolder("here")
+  const there = tempFolder("there")
+  turnOn({ everywhere: ["desk"], projects: { [here]: ["inbox"], [join(there, "missing")]: ["inbox"] } })
+  const { plugins } = harness()
+  expect(await plugins.setups(there)).toEqual([
+    { project: there, id: "desk.focus", title: "Focus" },
+    { project: here, id: "inbox.triage", title: "Triage" },
+  ])
   plugins.stop()
 }, 20_000)

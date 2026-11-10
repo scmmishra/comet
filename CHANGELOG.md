@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- ⌘K › Open setup lists the setups of every project with plugins on, not only the active project's. Each opens in its own project, which the row names.
 - Typing / at the start of a message lists commands, after T3 Code. /model opens the model picker, and /clear starts a fresh session in the tab. Then come Claude Code's own commands, such as /compact and /context, and your skills and custom commands. Picking one puts it in the message box. A command's own output, such as /context's table, shows in the thread.
 - A queued message reads in full in its dashed box, with its images at the top, and Send now, Edit and Remove sit under it, as in T3 Code.
 - The thread stays scrolled to its newest line when anything changes its size, such as a new step or the queue above the message box. It followed only a reply's text before.

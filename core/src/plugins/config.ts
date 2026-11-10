@@ -36,4 +36,15 @@ export function pluginsOn(project: string): string[] {
   return [...new Set([...names(saved.everywhere, "everywhere"), ...here])]
 }
 
+/** The project folders `plugins.json` turns plugins on for, beyond those on everywhere. A broken file names none. */
+export function pluginProjects(): string[] {
+  const file = join(deskHome(), "plugins.json")
+  try {
+    const saved = JSON.parse(readFileSync(file, "utf8")) as { projects?: Record<string, unknown> }
+    return Object.keys(saved.projects ?? {}).map(expandHome)
+  } catch {
+    return []
+  }
+}
+
 const expandHome = (folder: string) => (folder === "~" || folder.startsWith("~/") ? join(homedir(), folder.slice(1)) : folder).replace(/(.)\/+$/, "$1")

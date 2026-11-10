@@ -11,7 +11,7 @@ import { formatAgo, otherBranch, shortPath } from "./format"
 import { Icon, type IconName } from "./icons"
 import { ProjectMark } from "./project-mark"
 import { projectData, projectLabel, readProject } from "./projects"
-import { openPanel, runPluginCommand } from "./plugins"
+import { openPanel, plugins, readSetups, runPluginCommand } from "./plugins"
 import { SETTINGS_PAGES } from "./settings/pages"
 import { openThread } from "./threads"
 import { activeProject, activeTab, newTab, openSettings, openSetup, showTab, workspace } from "./workspace"
@@ -57,6 +57,7 @@ export function usePalette(run: (command: DeskCommand) => void) {
     if (dialog.active?.id === DIALOG_ID) return dialog.close(DIALOG_ID)
     readProject(activeProject(), "threads")
     readProject(activeProject(), "plugins")
+    readSetups(activeProject())
     dialog.show(() => <Palette start={start} run={run} onDone={() => dialog.close(DIALOG_ID)} />, undefined, DIALOG_ID)
   }
 }
@@ -116,7 +117,16 @@ function Palette(props: { start?: "threads"; run: (command: DeskCommand) => void
   const offered = () => projectData(activeProject()).plugins
   const setupsPage: Page = {
     title: "Open setup",
-    entries: () => (offered()?.setups ?? []).map((setup) => ({ id: `setup:${setup.id}`, section: "Setups", title: setup.title, icon: "workspace", run: () => openSetup(activeProject(), setup) })),
+    // Every project's setups, each opening in its own project, which the row names when it is not the active one.
+    entries: () =>
+      plugins.setups.map((setup) => ({
+        id: `setup:${setup.project}:${setup.id}`,
+        section: "Setups",
+        title: setup.title,
+        project: setup.project,
+        ...(setup.project !== activeProject() ? { detail: projectLabel(setup.project) } : {}),
+        run: () => openSetup(setup.project, setup),
+      })),
   }
   const panelsPage: Page = {
     title: "Open panel",

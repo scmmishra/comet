@@ -399,6 +399,13 @@ export type ProjectPart = keyof ProjectParts
  * What the plugins on in a project let the user start from the palette, each named `<plugin>.<name>`,
  * such as `newrelic.dashboard`. Panels here need no parameters. A command with `input` runs on text typed in the palette.
  */
+/** A setup and the project it opens in. */
+export interface ProjectSetup {
+  readonly project: string
+  readonly id: string
+  readonly title: string
+}
+
 export interface PluginContributions {
   readonly panels: readonly { readonly id: string; readonly title: string }[]
   readonly setups: readonly { readonly id: string; readonly title: string }[]
@@ -639,6 +646,8 @@ export type ClientMessage =
   /** Finds files in the project whose path matches `query`, for an @ mention. The core answers with `files.found`. */
   | { readonly type: "files.search"; readonly project: string; readonly query: string }
   | { readonly type: "session.interrupt"; readonly tabId: string }
+  /** Lists the setups of every project with plugins on, the active `project`'s first. The core answers with `setups`. */
+  | { readonly type: "setups.get"; readonly project: string }
   /** Starts a fresh session in a tab, as /clear asks. */
   | { readonly type: "thread.clear"; readonly tabId: string }
   | { readonly type: "permission.answer"; readonly tabId: string; readonly requestId: string; readonly allow: boolean }
@@ -672,6 +681,8 @@ export type CoreMessage =
   /** `usage` is absent when Claude has no plan limits, such as with an API key. */
   | { readonly type: "usage"; readonly usage?: PlanUsage }
   | { readonly type: "review"; readonly tabId: string; readonly scope: ReviewScope; readonly files: readonly FileChange[] }
+  /** Setups across projects, each with the project it opens in. A setup on in every project shows once, for the active one. */
+  | { readonly type: "setups"; readonly setups: readonly ProjectSetup[] }
   /** A tab's queued messages, sent whole on each change. `held` means a stop or an error paused them. */
   | { readonly type: "queue"; readonly tabId: string; readonly messages: readonly QueuedMessage[]; readonly held: boolean }
   /** The answer to `files.search`, with the query it answers: paths relative to the project, best match first. */
