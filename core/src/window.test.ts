@@ -53,7 +53,7 @@ test("reopens the tab closed last, in its place, with its thread and layout, and
   const kept = { ...tab("b", one), terminals: [{ id: "x1", title: "Terminal" }], panelActive: "x1" }
   const { window } = open({
     tabs: [tab("a", one), kept, tab("c", gone)],
-    threads: { b: { threadStart: { tree: "abc", at: 1 }, key: "conv-1" } },
+    threads: { b: { threadStart: "abc", key: "conv-1" } },
     layouts: { b: { sidebar: "support.inbox", panels: [], hiddenCards: [] } },
     recent: [],
   })
@@ -65,7 +65,7 @@ test("reopens the tab closed last, in its place, with its thread and layout, and
   // The tab closed last sits in a folder that is gone, so the one before it comes back.
   await window.reopenTab((message) => replies.push(message))
   expect(replies).toEqual([{ type: "tab.reopened", tab: { ...tab("b", one), terminals: [] }, index: 1 }])
-  expect(saved().threads.b).toEqual({ threadStart: { tree: "abc", at: 1 }, key: "conv-1" })
+  expect(saved().threads.b).toEqual({ threadStart: "abc", key: "conv-1" })
   expect(saved().layouts.b).toEqual({ sidebar: "support.inbox", panels: [], hiddenCards: [] })
   expect(saved().closed).toEqual([])
 

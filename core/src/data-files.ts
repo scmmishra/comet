@@ -13,6 +13,9 @@ export const deskHome = () => process.env.DESK_HOME ?? join(homedir(), ".desk")
  */
 export const instanceHome = () => (process.env.DESK_INSTANCE ? join(deskHome(), process.env.DESK_INSTANCE) : deskHome())
 
+/** The running Desk's name: `dev` for a dev Desk, else `main`. */
+export const instanceName = () => process.env.DESK_INSTANCE ?? "main"
+
 /**
  * Where Desk keeps one kind of data for a project: `~/.desk/<kind>/<folder>-<hash>.json`, as Rune
  * names its space files. The hash keeps two checkouts with the same folder name apart.

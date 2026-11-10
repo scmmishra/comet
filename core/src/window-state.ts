@@ -1,7 +1,6 @@
 import type { ChangedFile, ContextReading, PluginLayout, QueuedMessage, TabInfo } from "@desk/protocol"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import type { Checkpoint } from "./checkpoints"
 import { instanceHome, writeJsonFile } from "./data-files"
 
 /** What the core keeps about a tab's thread. The app never sees it. */
@@ -9,12 +8,15 @@ export interface TabThread {
   /** The Claude session to resume. Absent until the tab's first message. */
   readonly sessionId?: string
   /**
-   * Where the thread's first turn started, for Review's thread changes. No ref points at its snapshot,
-   * so `git gc` may prune it after about two weeks. Review then shows nothing.
+   * Checkpoint commits, after T3 Code. Each turn runs from the checkpoint the turn before it ended on,
+   * so edits made between turns count toward the next one.
+   * - `threadStart`: taken before the thread's first turn, for Review's thread changes.
+   * - `turnFrom` and `turnTo`: where the last finished turn started and ended, for Review's last-turn
+   *   changes. `turnTo` is where the next turn starts.
    */
-  readonly threadStart?: Checkpoint
-  /** Where the last turn started, for its summary and Review's last-turn changes. */
-  readonly turnStart?: Checkpoint
+  readonly threadStart?: string
+  readonly turnFrom?: string
+  readonly turnTo?: string
   /**
    * The files each turn changed, by the id of the message that started it. Claude's transcript does not
    * record them, so a restored thread reads its turns' summaries from here.
@@ -79,16 +81,13 @@ export function saveWindowState(state: WindowState) {
 }
 
 /**
- * A thread saved before Desk kept checkpoints held bare snapshots as `baseline` and `turnBaseline`.
- * Without the commit and time they were taken at, they compare as before, with no files left out.
+ * Threads saved before checkpoints were commits held bare snapshots, under these names or under
+ * `threadStart` as an object. A snapshot holds no commit to tell a pull from the turn's work, so they
+ * are dropped and the thread's next turn takes a checkpoint of its own.
  */
-function upgradeThread(thread: TabThread & { baseline?: unknown; turnBaseline?: unknown; turnHead?: unknown }): TabThread {
-  const { baseline, turnBaseline, turnHead: _turnHead, ...rest } = thread
-  return {
-    ...rest,
-    ...(typeof baseline === "string" && !rest.threadStart ? { threadStart: { tree: baseline, at: 0 } } : {}),
-    ...(typeof turnBaseline === "string" && !rest.turnStart ? { turnStart: { tree: turnBaseline, at: 0 } } : {}),
-  }
+function upgradeThread(thread: TabThread & { baseline?: unknown; turnBaseline?: unknown; turnHead?: unknown; turnStart?: unknown }): TabThread {
+  const { baseline: _baseline, turnBaseline: _turnBaseline, turnHead: _turnHead, turnStart: _turnStart, threadStart, ...rest } = thread
+  return { ...rest, ...(typeof threadStart === "string" ? { threadStart } : {}) }
 }
 
 function isTab(value: unknown): value is TabInfo {
