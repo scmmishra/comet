@@ -17,9 +17,10 @@ Always build code cleanly, modularly, and with proper architecture and separatio
 
 - `core/` is a Bun process. It owns sessions, the Claude Agent SDK, Git, PTYs, commands and space data, for every project the window's tabs work in. Later it also owns cards, variables and the MCP server.
 - `app/` is Electron with Solid and `@opencode/ui`. It is a thin client: it draws what the core sends. Its state lives in four modules by concern: `workspace.ts` (tabs and what shows), `threads.ts` (each tab's thread), `projects.ts` (what is read about each project) and `account.ts` (settings, models and usage).
-- `protocol/` holds the message types the two share. They talk JSON over one WebSocket on loopback, guarded by a token.
+- `protocol/` holds the message types the two share. They talk JSON over one WebSocket on loopback, guarded by a token. `protocol/src/fixtures.ts` holds one core message of each type the native app reads.
+- `native/` is the Rune app that will replace `app/`. It is a second client of the same core and runs it as its own instance, keeping its window in `~/.desk/native`. `mise run native:dev` runs it and `mise run native:test` tests it. Its protocol types are written by hand for the messages it reads, and its tests decode the fixtures.
 
-Keep logic in the core. The UI may later move to Anomaly's Rust framework, and the core stays as it is.
+Keep logic in the core. The UI is moving to Rune, Anomaly's Rust framework, and the core stays as it is.
 
 ## UI components
 

@@ -20,3 +20,11 @@ run = "scripts/install.sh"
 [tasks.icons]
 description = "Render assets/logo.svg into the app's icons"
 run = "scripts/icons.sh"
+
+[tasks."native:dev"]
+description = "Run the native Desk, built with Rune, in development"
+run = "cargo run --manifest-path native/Cargo.toml"
+
+[tasks."native:test"]
+description = "Test the native Desk"
+run = "cargo test --manifest-path native/Cargo.toml"
