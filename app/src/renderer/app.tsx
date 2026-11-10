@@ -18,14 +18,17 @@ import { ReviewView } from "./review"
 import { SettingsScreen } from "./settings/screen"
 import { ProjectCards, SpaceChip } from "./space"
 import { SubagentsCard } from "./subagents"
+import { dropIndex } from "./tab-drag"
 import { StartScreen } from "./start-screen"
 import { TerminalView } from "./terminal"
 import { Thread } from "./thread"
 import { threadOf } from "./threads"
-import { closeTab, closeTerminal, newTab, newTerminal, showPanelTab, shownPanelTab, setPanelOpen, showTab, shownTab, workspace } from "./workspace"
+import { closeTab, closeTerminal, moveTab, newTab, newTerminal, showPanelTab, shownPanelTab, setPanelOpen, showTab, shownTab, workspace } from "./workspace"
 
 const USAGE_REFRESH_MS = 5 * 60_000
 /** The panel's Tabs value for Review, which has no id of its own. */
+/** How far a pressed tab moves before it drags. Less is a click. */
+const DRAG_THRESHOLD_PX = 4
 const REVIEW = "review"
 
 export function App() {
@@ -249,6 +252,29 @@ function TabBar() {
   // Settings show in place of the active tab, so while they are open no tab is marked active.
   const shown = (id: string) => id === shownTab()?.id
 
+  // A tab pressed and moved past a few pixels is dragged: it takes the slot under the pointer as it goes.
+  // A press that does not move stays a click. Written here because @opencode/ui has no sortable list.
+  const [dragging, setDragging] = createSignal<string>()
+  const startDrag = (event: PointerEvent, id: string) => {
+    if (event.button !== 0) return
+    const startX = event.clientX
+    let moved = false
+    const move = (next: PointerEvent) => {
+      if (!moved && Math.abs(next.clientX - startX) < DRAG_THRESHOLD_PX) return
+      if (!moved) setDragging(id)
+      moved = true
+      const others = [...strip.querySelectorAll<HTMLElement>("[data-tab]")].filter((element) => element.dataset.tab !== id)
+      moveTab(id, dropIndex(others.map((element) => element.getBoundingClientRect().left + element.offsetWidth / 2), next.clientX))
+    }
+    const end = () => {
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", end)
+      setDragging(undefined)
+    }
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", end)
+  }
+
   return (
     <nav class="desk-titlebar flex h-11 shrink-0 items-center gap-1 pr-2.5" classList={{ "pl-[84px]": !fullScreen(), "pl-1": fullScreen() }}>
       <div ref={strip} class="desk-no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1">
@@ -258,7 +284,8 @@ function TabBar() {
             <div
               data-tab={tab.id}
               class="desk-no-drag group relative flex h-8 w-[210px] shrink-0 items-center rounded-xl"
-              classList={{ "desk-tab-enter": tab.id === entering(), "bg-tab text-fg shadow-[inset_0_0_0_1px_var(--color-outline)]": shown(tab.id), "text-fg-3 hover:bg-tab-hover hover:text-fg-2": !shown(tab.id) }}
+              onPointerDown={(event) => startDrag(event, tab.id)}
+              classList={{ "desk-tab-enter": tab.id === entering(), "opacity-70": tab.id === dragging(), "bg-tab text-fg shadow-[inset_0_0_0_1px_var(--color-outline)]": shown(tab.id), "text-fg-3 hover:bg-tab-hover hover:text-fg-2": !shown(tab.id) }}
             >
               {/* The tab and its close button are siblings: a button cannot hold another. */}
               <button class="flex h-full min-w-0 flex-1 items-center gap-2 pl-2 pr-7 text-left" onClick={() => showTab(tab.id)}>

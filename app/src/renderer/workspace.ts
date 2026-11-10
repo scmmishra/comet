@@ -111,6 +111,19 @@ export function closeTab(id: string) {
   else save()
 }
 
+/** Moves a tab to `index` in the bar. The core saves the new order, which ⌘1–⌘9 follow. */
+export function moveTab(id: string, index: number) {
+  const from = workspace.tabs.findIndex((tab) => tab.id === id)
+  if (from < 0 || from === index) return
+  setWorkspace(
+    produce((draft) => {
+      const [tab] = draft.tabs.splice(from, 1)
+      draft.tabs.splice(index, 0, tab!)
+    }),
+  )
+  save()
+}
+
 /** Asks the core for the tab closed last. It answers with the tab, which goes back where it was. */
 export function reopenTab() {
   core.send({ type: "tab.reopen" })
