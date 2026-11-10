@@ -8,7 +8,20 @@ use crate::shell::{CoreState, Desk};
 /// A scene: its name, and what it sets in a fresh window.
 type Scene = (&'static str, fn(&mut Desk));
 
-pub const SCENES: &[Scene] = &[("thread", thread)];
+pub const SCENES: &[Scene] = &[("thread", thread), ("models", models)];
+
+/// The thread with the model picker open.
+fn models(s: &mut Desk) {
+    thread(s);
+    let models = serde_json::json!({ "type": "models", "models": [
+        { "value": "default", "label": "Default", "description": "The recommended model", "resolvedModel": "claude-opus-5-5", "efforts": ["low", "medium", "high", "xhigh", "max"], "defaultEffort": "high", "fast": true, "autoMode": true },
+        { "value": "sonnet", "label": "Sonnet", "description": "Fast and capable for everyday tasks", "resolvedModel": "claude-sonnet-5-5", "efforts": ["low", "medium", "high"], "fast": false, "autoMode": true },
+        { "value": "haiku", "label": "Haiku", "description": "Fastest for quick answers", "efforts": [], "fast": false, "autoMode": false },
+        { "value": "claude-opus-4-8", "label": "Opus 4.8", "description": "Older model", "efforts": ["high"], "fast": false, "autoMode": true }
+    ] });
+    s.receive(Event::Message(serde_json::from_value(models).expect("the models decode"))).expect("models need no folder");
+    s.toggle_picker();
+}
 
 /// A tab with a finished turn, a steered message, and a running turn with a live group.
 fn thread(s: &mut Desk) {

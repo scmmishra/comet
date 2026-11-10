@@ -184,7 +184,8 @@ impl Desk {
 }
 
 /// The composer of `tab`, centred in the thread's column, with the queue above it.
-pub fn composer(s: &Desk, tab: &str, k: &Kit) -> El {
+pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
+    let tab = info.id.as_str();
     let edit = s.drafts.by_tab.get(tab).cloned().unwrap_or_else(|| TextEdit::new(""));
     let empty = edit.text.trim().is_empty();
     let question = s.question(tab);
@@ -216,7 +217,7 @@ pub fn composer(s: &Desk, tab: &str, k: &Kit) -> El {
         Some((request, questions)) => answer_button(s, tab, request, questions, empty, k),
         None => send_button(s, tab, empty, k),
     };
-    let actions = row().w_full().items_center().gap(4.0).px(10.0).pb(10.0).pt(4.0).child(row().grow(1.0)).child(button);
+    let actions = row().w_full().items_center().gap(4.0).px(10.0).pb(10.0).pt(4.0).child(row().grow(1.0)).child(crate::model_picker::model_picker(s, info, k, layer)).child(button);
     let border = if edit.focused { k.c.layer_03 } else { k.c.border_base };
     let card = col()
         .key("composer")

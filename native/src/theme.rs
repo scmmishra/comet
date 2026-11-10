@@ -119,6 +119,16 @@ fn build(dark: bool, d: &Colors) -> Kit {
     k
 }
 
+/// Claude's mark, Desk's `--color-claude`.
+pub fn claude() -> Color {
+    color("#d97757")
+}
+
+/// Fast mode's bolt, Desk's `--color-fast`.
+pub fn fast(dark: bool) -> Color {
+    color(if dark { "#f5c542" } else { "#c98a00" })
+}
+
 /// The thread's text at `size` points, with Desk's line height.
 pub fn thread_text(k: &Kit, size: f32) -> TextStyle {
     TextStyle { size, line_height: (size * THREAD_LINE_HEIGHT).round(), ..k.ty.body }

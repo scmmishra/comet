@@ -15,6 +15,8 @@ pub struct Thread {
     /// Moves whenever `rows` changes.
     pub rows_version: u64,
     pub busy: bool,
+    /// The model that ran, as the session reported it.
+    pub model: Option<String>,
     pub context: Option<ContextReading>,
     /// Messages waiting for the running turn to end, as the core keeps them.
     pub queue: Vec<QueuedMessage>,
@@ -115,6 +117,7 @@ impl Threads {
             }
             ThreadEvent::Status { busy } => thread.busy = busy,
             ThreadEvent::Context { reading } => thread.context = Some(reading),
+            ThreadEvent::Init { model } => thread.model = Some(model),
             ThreadEvent::Other => {}
         }
     }

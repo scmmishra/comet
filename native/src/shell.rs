@@ -42,6 +42,7 @@ pub struct Desk {
     pub workspace: Workspace,
     pub threads: Threads,
     pub drafts: Drafts,
+    pub picker: crate::model_picker::Picker,
     /// The wall clock, in milliseconds since the epoch, as of the last tick. It ticks each second
     /// while a turn runs, for the working head.
     pub now_ms: f64,
@@ -227,7 +228,7 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
     let dark = s.dark(cx);
     let line = |words: String| text(words).font(k.ty.ui).color(k.c.text_muted);
     let content = match (&s.status, w.active_tab()) {
-        (CoreState::Ready, Some(tab)) => session(s, tab, dark),
+        (CoreState::Ready, Some(tab)) => session(s, tab, dark, &mut layer),
         (status, _) => {
             let words = match status {
                 CoreState::Starting => line("Starting…".into()),
@@ -253,7 +254,7 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
 }
 
 /// A tab's session: its header and its thread.
-fn session(s: &Desk, tab: &TabInfo, dark: bool) -> El {
+fn session(s: &Desk, tab: &TabInfo, dark: bool, layer: &mut Vec<El>) -> El {
     let k = theme::kit(dark);
     let name = format::project_name(&tab.project);
     let header = row()
@@ -275,7 +276,7 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool) -> El {
         .min_h(0.0)
         .child(header)
         .child(thread_view::thread(s, &tab.id, dark))
-        .child(composer::composer(s, &tab.id, k))
+        .child(composer::composer(s, tab, k, layer))
 }
 
 /// A project's mark: its initial on a small tile. `@opencode/ui`'s avatar draws generated art in its place.

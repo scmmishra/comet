@@ -32,7 +32,7 @@ export const CORE_MESSAGES = [
   {
     type: "models",
     models: [
-      { value: "default", label: "Default", description: "The recommended model", efforts: ["low", "high"], fast: false, autoMode: true },
+      { value: "default", label: "Default", description: "The recommended model", resolvedModel: "claude-opus-5-5", efforts: ["low", "high"], defaultEffort: "high", fast: true, autoMode: true },
       { value: "haiku", label: "Haiku", description: "Fastest", efforts: [], fast: false, autoMode: false },
     ],
   },
@@ -69,6 +69,7 @@ export const CORE_MESSAGES = [
   { type: "session.event", tabId: "tab-1", event: { kind: "item", item: { type: "text", id: "x2", text: "", done: false } } },
   { type: "session.event", tabId: "tab-1", event: { kind: "text.delta", id: "x2", delta: "Hel" } },
   { type: "session.event", tabId: "tab-1", event: { kind: "status", busy: true } },
+  { type: "session.event", tabId: "tab-1", event: { kind: "init", model: "claude-opus-5-5" } },
   { type: "session.event", tabId: "tab-1", event: { kind: "context", reading: { percent: 20, tokens: 40_000, maxTokens: 200_000 } } },
   { type: "queue", tabId: "tab-1", messages: [{ id: "m1", text: "Then add a test" }], held: true },
   { type: "error", message: "The folder does not exist." },

@@ -75,7 +75,18 @@ pub struct DeskSettings {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelOption {
+    /// What a session is started with, such as "opus". "default" is Claude Code's own default.
     pub value: String,
+    pub label: String,
+    pub description: String,
+    /// The model that runs, such as "claude-opus-5-5".
+    pub resolved_model: Option<String>,
+    /// The effort levels the model takes. Empty when it takes none.
+    pub efforts: Vec<String>,
+    /// The effort Claude Code uses when the tab sets none.
+    pub default_effort: Option<String>,
+    /// Whether the model has fast mode.
+    pub fast: bool,
     /// Whether the model takes the Auto permission mode.
     pub auto_mode: bool,
 }
@@ -262,6 +273,9 @@ pub enum ThreadEvent {
     Status { busy: bool },
     #[serde(rename = "context")]
     Context { reading: ContextReading },
+    /// The model that runs, as the session reports it.
+    #[serde(rename = "init")]
+    Init { model: String },
     /// An event the app does not read yet.
     #[serde(other)]
     Other,

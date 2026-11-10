@@ -1,7 +1,8 @@
 //! The window's tabs and which one is in front, as `app/src/renderer/workspace.ts` keeps them. The
 //! core saves the tabs as the app sends them, and sends them back on connect.
 
-use crate::account::{Account, permission_for};
+use crate::account::Account;
+use crate::models::permission_for;
 use crate::core::Core;
 use crate::ids;
 use crate::protocol::{ClientMessage, TabInfo};
@@ -134,6 +135,14 @@ impl Workspace {
         self.active = Some(tab.id.clone());
         self.tabs.insert(index.min(self.tabs.len()), tab);
         self.save(core);
+    }
+
+    /// Changes a tab's run settings or project, and saves it.
+    pub fn change_tab(&mut self, id: &str, change: impl FnOnce(&mut TabInfo), core: &Core) {
+        if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
+            change(tab);
+            self.save(core);
+        }
     }
 
     /// Names a tab after the first line of `text`.
