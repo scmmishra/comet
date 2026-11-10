@@ -103,7 +103,13 @@ pub fn thread(s: &Desk, tab: &str, dark: bool, lane: Option<Lane>) -> El {
             |s: &Desk, i| Cow::Owned(active_thread(s).map_or_else(String::new, |t| t.rows[i].id().to_owned())),
             move |s: &Desk, i| lane_row(s, i, dark, lane),
         )
-        .virtual_rows_version(thread.rows_version);
+        .virtual_rows_version(thread.rows_version)
+        // The minimap darkens the marks of the turns on screen.
+        .on_visible_rows(|s: &mut Desk, rows| {
+            let changed = s.minimap.visible != rows;
+            s.minimap.visible = rows;
+            changed
+        });
     col().key(format!("thread-{tab}")).w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: true }).child(list)
 }
 

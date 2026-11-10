@@ -58,6 +58,7 @@ pub struct Desk {
     pub cards: crate::cards::Cards,
     pub commands_card: crate::commands_card::CommandsCard,
     pub meters: crate::meters::Meters,
+    pub minimap: crate::minimap::Minimap,
     /// Whether ⌘ is held, so the new tab button opens its tab next to the active one.
     cmd_held: bool,
     strip: TabDragState,
@@ -342,8 +343,8 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
     let card = |key: &str, child: El| col().key(key.to_owned()).w_frac(1.0).grow(1.0).shrink().min_w(0.0).h_full().min_h(0.0).fill(k.c.bg_base).radius(PANEL_RADIUS).clip_rounded(PANEL_RADIUS).border(1.0, k.c.border_muted).child(child);
     let cards = match (&s.status, w.active_tab()) {
         (CoreState::Ready, Some(tab)) => {
-            let width = cx.layout_size("session-card").map(|size| size[0]);
-            let session = col().w_full().h_full().min_h(0.0).child(session(s, tab, dark, width, &mut layer));
+            let size = cx.layout_size("session-card");
+            let session = col().w_full().h_full().min_h(0.0).child(session(s, tab, dark, size, &mut layer));
             let pane = (tab.panel_open == Some(true)).then(|| card("panel-card", crate::panel::panel(s, tab, k, &mut layer)));
             row().w_full().grow(1.0).min_h(0.0).gap(PANEL_INSET).child(card("session-card", session)).children(pane)
         }
@@ -369,7 +370,8 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
 }
 
 /// A tab's session: its header and its thread.
-fn session(s: &Desk, tab: &TabInfo, dark: bool, width: Option<f32>, layer: &mut Vec<El>) -> El {
+fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, layer: &mut Vec<El>) -> El {
+    let width = size.map(|size| size[0]);
     let k = theme::kit(dark);
     let name = format::project_name(&tab.project);
     let header = row()
@@ -397,7 +399,12 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, width: Option<f32>, layer: &mut 
     };
     // The cards show beside the lane once the session is wide enough.
     let rail = width.filter(|w| crate::cards::Lane::rail(*w)).map(|_| crate::cards::rail(s, tab, k, layer));
-    let body = col().w_full().grow(1.0).min_h(0.0).child(body).children(rail);
+    // The minimap sits in the lane's left gutter, over the thread.
+    let minimap = match (started, lane, size, s.threads.get(&tab.id)) {
+        (true, Some(lane), Some([_, height]), Some(thread)) => crate::minimap::minimap(s, &tab.id, thread, lane.left, height, k),
+        _ => None,
+    };
+    let body = col().w_full().grow(1.0).min_h(0.0).child(body).children(rail).children(minimap);
     col().key(format!("session-{}", tab.id)).w_full().grow(1.0).min_h(0.0).child(header).child(body)
 }
 

@@ -14,6 +14,7 @@ mod ids;
 mod images;
 mod instance;
 mod meters;
+mod minimap;
 mod model_picker;
 mod models;
 mod palette;
