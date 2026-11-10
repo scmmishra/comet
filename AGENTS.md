@@ -77,4 +77,5 @@ T3 Code and OpenCode are cloned in `~/scmmishra/reference`. T3 Code's server sho
 - `@opencode/ui`'s `menu.css` sits outside Tailwind's layers. Its rules beat utility classes, so an override needs `!`.
 - An `@opencode/ui` popover closes when focus leaves its content. A menu inside a popover must render without `Menu.Portal`.
 - `@opencode/ui`'s Tabs put each tab's value in a CSS selector without escaping it. A value must not hold quotes, so panel instance ids are URI-encoded.
+- `@opencode/ui`'s `showToast` gives a toast with only a description an empty title, which draws as a blank line above the text. `index.css` hides an empty toast title.
 - `@opencode/ui` names its source before its types, so TypeScript checks its `.tsx` files under the app's tsconfig. The app's tsconfig turns off `verbatimModuleSyntax` and uses the ES2025 lib for that.

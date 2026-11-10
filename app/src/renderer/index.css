@@ -611,3 +611,10 @@ body {
     font-size: 12px;
   }
 }
+
+/* @opencode/ui's showToast gives a toast with only a description an empty title, which Sonner still draws
+   as a line. The description then sits a line below the close button. The toast hides an empty
+   description, so an empty title goes the same way. */
+.toast-v2 [data-title]:empty {
+  display: none;
+}
