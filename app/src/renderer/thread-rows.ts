@@ -11,8 +11,11 @@ export type Row<T> = T | Group | Fold<T> | Working
 
 type NotStep<T> = Exclude<T, Step>
 
-/** What a folded turn keeps in view: errors, and permission requests still waiting for the user. */
-const staysOut = (item: ThreadItem) => item.type === "error" || item.type === "permission"
+/** What a folded turn keeps in view: errors, compactions, and permission requests still waiting for the user. */
+const staysOut = (item: ThreadItem) => item.type === "error" || item.type === "compaction" || item.type === "permission"
+
+/** A message that only asks Claude Code to compact, such as `/compact` or `/compact keep the plan`. */
+const COMPACT_COMMAND = /^\/compact(\s|$)/
 
 /**
  * Requests show only while they wait, after T3 Code: an answered one leaves, and its tool call shows what
@@ -51,6 +54,12 @@ export function threadRows<T extends ThreadItem>(items: readonly T[], busy: bool
     const body = turn.filter((item) => item.type !== "result" && item.type !== "changes")
     const id = opener?.id ?? body[0]?.id ?? "start"
     turn = []
+    // A /compact turn is the compaction itself, after T3 Code: its divider stands in for the message and the working head.
+    if (opener && COMPACT_COMMAND.test(opener.text) && body.some((item) => item.type === "compaction")) {
+      if ((out.at(-1) as unknown) === opener) out.pop()
+      out.push(...(body.filter((item) => !isStep(item)) as NotStep<T>[]), ...summary)
+      return
+    }
     if (!finished) {
       out.push({ type: "working", id: `working:${id}`, since: opener?.at }, ...grouped(body, true), ...summary)
       return

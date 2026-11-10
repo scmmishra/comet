@@ -25,6 +25,12 @@ export interface Thread {
   queue?: readonly QueuedMessage[]
   /** Whether a stop or an error paused the queue. */
   queueHeld?: boolean
+  /** Set from the user's Stop until the turn ends, and marked unresponsive once Claude Code is slow to stop. */
+  stopping?: { since: number; unresponsive: boolean }
+  /** Claude Code retrying a failed API request, until more output arrives. */
+  retry?: Extract<ThreadEvent, { kind: "retry" }>
+  /** The branch the thread last ran on. */
+  branch?: string
 }
 
 /** What a tab with no thread yet shows. A tab that gets a thread gets a record of its own. */
@@ -60,6 +66,12 @@ export const clearThread = (tabId: string) => core.send({ type: "thread.clear", 
 export function interrupt(tabId: string) {
   if (threadOf(tabId).busy) core.send({ type: "session.interrupt", tabId })
 }
+
+/** Ends a turn that did not stop when asked. */
+export const forceStop = (tabId: string) => core.send({ type: "session.forceStop", tabId })
+
+/** Switches the tab's project back to the branch its thread last ran on. */
+export const restoreBranch = (tabId: string) => core.send({ type: "branch.restore", tabId })
 
 export function answerPermission(tabId: string, requestId: string, answer: PermissionAnswer) {
   core.send({ type: "permission.answer", tabId, requestId, answer })
@@ -102,6 +114,8 @@ function apply(tabId: string, event: ThreadEvent, arrivedAt?: number) {
   setThreads(
     tabId,
     produce((thread) => {
+      // Output means the request that was retried went through.
+      if (event.kind === "item" || event.kind === "text.delta") thread.retry = undefined
       if (event.kind === "item") {
         const index = thread.items.findIndex((item) => item.id === event.item.id)
         if (index < 0) thread.items.push({ ...event.item, arrivedAt })
@@ -109,7 +123,14 @@ function apply(tabId: string, event: ThreadEvent, arrivedAt?: number) {
       } else if (event.kind === "text.delta") {
         const item = thread.items.find((found) => found.id === event.id)
         if (item?.type === "text") thread.items[thread.items.indexOf(item)] = { ...item, text: item.text + event.delta }
-      } else if (event.kind === "status") thread.busy = event.busy
+      } else if (event.kind === "status") {
+        thread.busy = event.busy
+        if (!event.busy) {
+          thread.stopping = undefined
+          thread.retry = undefined
+        }
+      } else if (event.kind === "stopping") thread.stopping = { since: event.since, unresponsive: event.unresponsive }
+      else if (event.kind === "retry") thread.retry = event
       else if (event.kind === "init") thread.model = event.model
       else if (event.kind === "context") thread.context = event.reading
       else if (event.kind === "subagent") thread.subagents = { ...thread.subagents, [event.subagent.id]: event.subagent }
@@ -127,7 +148,10 @@ function apply(tabId: string, event: ThreadEvent, arrivedAt?: number) {
 core.listen((message) => {
   if (message.type === "session.event") apply(message.tabId, message.event, performance.now())
   else if (message.type === "session.history") setThreads(message.tabId, { items: [...message.items], busy: false, context: message.context })
-  else if (message.type === "queue") {
+  else if (message.type === "thread.branch") {
+    ensure(message.tabId)
+    setThreads(message.tabId, "branch", message.branch)
+  } else if (message.type === "queue") {
     ensure(message.tabId)
     setThreads(message.tabId, produce((thread) => {
       thread.queue = message.messages

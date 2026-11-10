@@ -11,6 +11,7 @@ import { BackgroundRow } from "./background"
 import { fileIcon } from "./file-icons"
 import { Icon } from "./icons"
 import { ModelPicker, openModelPicker } from "./model-picker"
+import { ThreadNotices } from "./notices"
 import { findFiles, projectData, readProject } from "./projects"
 import { QueuedMessages } from "./queue"
 import { advanceQuestion, canAdvance, isLastQuestion, QuestionPanel, typedAnswer, typeQuestionAnswer } from "./question-panel"
@@ -193,6 +194,7 @@ export function Composer(props: { tab: TabInfo }) {
 
   return (
     <>
+    <ThreadNotices tab={props.tab} />
     <BackgroundRow tab={props.tab} />
     <QueuedMessages tab={props.tab} onEdit={edit} />
     <form

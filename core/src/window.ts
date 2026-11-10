@@ -1,9 +1,11 @@
 import type { SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
 import { followUpFor, type ChangedFile, type CoreMessage, type FileChange, type FollowUp, type ImageAttachment, type PermissionAnswer, type PluginLayout, type QueuedMessage, type ReviewScope, type TabInfo, type ThreadEvent, type ThreadItem } from "@desk/protocol"
 import { branchBase, capture, changesSince, checkpointChanges, headTree, keepCheckpoints } from "./checkpoints"
+import { git } from "./git"
 import { threadContext, threadHistory } from "./past-threads"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { sameRunSettings, Session } from "./session"
+import { currentBranch } from "./space"
 import { Terminals } from "./terminals"
 import { loadWindowState, saveWindowState, type ClosedTab, type TabThread, type WindowState } from "./window-state"
 
@@ -92,6 +94,7 @@ export class Window {
   private async sendThread(tab: TabInfo, reply: Send) {
     const thread = this.thread(tab.id)
     if (thread.queue?.length) reply({ type: "queue", tabId: tab.id, messages: thread.queue, held: !!thread.queueHeld })
+    if (thread.branch) reply({ type: "thread.branch", tabId: tab.id, branch: thread.branch })
     if (!thread.sessionId) return
     reply({ type: "session.history", tabId: tab.id, items: await this.history(tab, thread.sessionId), context: thread.context })
     if (!thread.context) this.fillContext(tab.id, thread.sessionId)
@@ -153,6 +156,7 @@ export class Window {
       if (threadStart) this.updateThread(tabId, { threadStart })
     }
     this.session(tab).send(text, images)
+    void this.recordBranch(tabId)
   }
 
   /** Continues a past thread in a tab. The tab may hold a session that never sent a message; the thread replaces it. */
@@ -235,6 +239,30 @@ export class Window {
 
   stopTasks(tabId: string, ids: readonly string[]) {
     return this.sessions.get(tabId)?.stopTasks(ids)
+  }
+
+  /** Notes the branch the tab's thread runs on now. A detached HEAD keeps the branch it last ran on. */
+  private async recordBranch(tabId: string) {
+    const tab = this.state.tabs.find((found) => found.id === tabId)
+    const branch = tab && (await currentBranch(tab.project))
+    if (branch && branch !== this.thread(tabId).branch) this.updateThread(tabId, { branch })
+  }
+
+  /**
+   * Switches the tab's project back to the branch its thread last ran on, after T3 Code. Git refuses
+   * when uncommitted changes would be lost, and the user sees why. Returns the project.
+   */
+  async restoreBranch(tabId: string): Promise<string> {
+    const { project } = this.tab(tabId)
+    const branch = this.thread(tabId).branch
+    if (!branch) throw new Error("This thread has no branch to go back to.")
+    await git(project, ["switch", branch])
+    return project
+  }
+
+  /** Ends a turn that did not stop when asked. Its session closes, and the next message starts a new one on the thread. */
+  forceStop(tabId: string) {
+    if (this.sessions.get(tabId)?.forceStop()) this.closeSession(tabId)
   }
 
   answerPermission(tabId: string, requestId: string, answer: PermissionAnswer) {
@@ -418,6 +446,7 @@ export class Window {
     if (!to || !current()) return
     const from = this.thread(tabId).turnTo ?? this.thread(tabId).threadStart
     this.updateThread(tabId, { turnTo: to, ...(from ? { turnFrom: from } : { threadStart: to }) })
+    await this.recordBranch(tabId)
     if (!from) return
     const files = (await checkpointChanges(tab.project, from, to).catch(() => [])).map(({ patch: _patch, ...file }) => file)
     if (!files.length || !current()) return
@@ -462,6 +491,8 @@ export class Window {
   }
 
   private setThread(tabId: string, thread: TabThread) {
+    // The tab's branch notice follows the thread it shows.
+    if (thread.branch !== this.state.threads[tabId]?.branch) this.hooks.broadcast({ type: "thread.branch", tabId, ...(thread.branch ? { branch: thread.branch } : {}) })
     this.persist({ threads: { ...this.state.threads, [tabId]: thread } })
   }
 

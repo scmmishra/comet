@@ -24,7 +24,8 @@ export async function recentThreads(dir: string, openIn: ReadonlyMap<string, str
 
 /** A thread read back from Claude's transcript. */
 export async function threadHistory(dir: string, sessionId: string): Promise<ThreadItem[]> {
-  return new ThreadMapper(dir).history(await getSessionMessages(sessionId, { dir }))
+  // System messages mark where Claude Code compacted the thread.
+  return new ThreadMapper(dir).history(await getSessionMessages(sessionId, { dir, includeSystemMessages: true }))
 }
 
 /**

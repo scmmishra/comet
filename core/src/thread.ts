@@ -1,8 +1,13 @@
-import type { SDKAssistantMessage, SDKMessage, SDKPartialAssistantMessage, SessionMessage } from "@anthropic-ai/claude-agent-sdk"
+import type { SDKAPIRetryMessage, SDKAssistantMessage, SDKMessage, SDKPartialAssistantMessage, SessionMessage } from "@anthropic-ai/claude-agent-sdk"
 import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, type ThreadItem } from "@desk/protocol"
 
 /** What Claude Code writes into a transcript when the user stops a turn, with or without "for tool use". */
 const INTERRUPTED = /^\[Request interrupted by user/
+/**
+ * How Claude Code opens the summary it writes when it compacts a thread. A stored transcript keeps the
+ * summary as a user message, and the SDK drops the flag that marks it, so its opening tells it apart.
+ */
+const COMPACT_SUMMARY = /^This session is being continued from a previous conversation/
 
 /** Tool output beyond this many characters is cut. The thread shows a summary, not a log. */
 const MAX_TOOL_OUTPUT = 4000
@@ -19,6 +24,8 @@ type ToolItem = Extract<ThreadItem, { type: "tool" }>
 export class ThreadMapper {
   private streaming?: string
   private tools = new Map<string, ToolItem>()
+  /** The id of the compaction running now, which its result and its boundary update. */
+  private compacting?: string
 
   constructor(private readonly dir: string) {}
 
@@ -29,6 +36,16 @@ export class ThreadMapper {
         if (message.subtype === "init") return [{ kind: "init", model: message.model }]
         // A command such as /context answers with text of its own, not a reply from Claude.
         if (message.subtype === "local_command_output") return [item({ type: "text", id: message.uuid, text: message.content, done: true, ...(at !== undefined ? { at } : {}) })]
+        if (message.subtype === "status") return this.mapCompactionStatus(message)
+        if (message.subtype === "compact_boundary") {
+          const id = this.compacting ?? `compaction:${message.uuid}`
+          this.compacting = undefined
+          const { pre_tokens: preTokens, post_tokens: postTokens } = message.compact_metadata
+          return [item({ type: "compaction", id, status: "done", preTokens, ...(postTokens ? { postTokens } : {}) })]
+        }
+        if (message.subtype === "api_retry") {
+          return [{ kind: "retry", attempt: message.attempt, maxRetries: message.max_retries, delayMs: message.retry_delay_ms, error: retryReason(message.error, message.error_status) }]
+        }
         return []
       case "stream_event":
         return this.mapStreamEvent(message.event, message.uuid, message.parent_tool_use_id)
@@ -48,6 +65,23 @@ export class ThreadMapper {
       default:
         return []
     }
+  }
+
+  /**
+   * Claude Code says it is compacting, then how it went, after T3 Code. A compaction that worked ends at
+   * its boundary, which carries the token counts. One that failed ends here.
+   */
+  private mapCompactionStatus(message: Extract<SDKMessage, { type: "system"; subtype: "status" }>): ThreadEvent[] {
+    if (message.status === "compacting" && !this.compacting) {
+      this.compacting = `compaction:${message.uuid}`
+      return [item({ type: "compaction", id: this.compacting, status: "running" })]
+    }
+    if (message.compact_result === "failed" && this.compacting) {
+      const id = this.compacting
+      this.compacting = undefined
+      return [item({ type: "compaction", id, status: "failed", ...(message.compact_error ? { error: message.compact_error } : {}) })]
+    }
+    return []
   }
 
   private mapStreamEvent(event: SDKPartialAssistantMessage["event"], uuid: string, parent: string | null): ThreadEvent[] {
@@ -105,9 +139,15 @@ export class ThreadMapper {
       if (turn?.end !== undefined) add({ type: "result", id: `result:${turn.id}`, durationMs: turn.end - turn.start, isError: false, ...(turn.stopped ? { stopped: true } : {}) })
       turn = undefined
     }
+    // A stored compaction is a bare system message, followed by Claude Code's summary as a user message.
+    let boundary: string | undefined
     for (const stored of messages) {
       if (stored.parent_tool_use_id) continue
       const at = stored.timestamp ? Date.parse(stored.timestamp) : undefined
+      if (stored.type === "system") {
+        boundary = stored.uuid
+        continue
+      }
       if (stored.type === "assistant") {
         if (turn && at !== undefined) turn.end = at
         this.mapAssistant((stored.message as SDKAssistantMessage["message"]).content, stored.uuid, at).forEach(add)
@@ -123,6 +163,12 @@ export class ThreadMapper {
         const text = userText(content)
         if (text === undefined) {
           this.mapToolResults(content).forEach(add)
+          continue
+        }
+        // The summary is Claude's context, not the user's words. The compaction shows in its place.
+        if (COMPACT_SUMMARY.test(text)) {
+          add({ type: "compaction", id: `compaction:${boundary ?? stored.uuid}`, status: "done" })
+          boundary = undefined
           continue
         }
         // Claude Code records a stopped turn as a message of its own. The turn shows as stopped instead.
@@ -200,6 +246,19 @@ function taskSummary(content: unknown): string | undefined {
  * The text the user typed, without any images, or undefined for a tool result. Claude Code also
  * stores messages it writes itself, such as command output and reminders. They start with a tag and stay hidden.
  */
+/** Why an API request failed, in a few words, for the retry notice. */
+const RETRY_REASONS: Partial<Record<SDKAPIRetryMessage["error"], string>> = {
+  rate_limit: "Rate limited",
+  overloaded: "The API is overloaded",
+  server_error: "The API had an error",
+  authentication_failed: "Authentication failed",
+  billing_error: "A billing problem",
+}
+
+function retryReason(error: SDKAPIRetryMessage["error"], status: number | null): string {
+  return RETRY_REASONS[error] ?? (status ? `The API answered ${status}` : "The request failed")
+}
+
 function userText(content: unknown): string | undefined {
   const text =
     typeof content === "string"

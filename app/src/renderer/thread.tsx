@@ -12,7 +12,7 @@ import { imageUrl } from "./attachments"
 import { now } from "./clock"
 import { lineDiff } from "./diff"
 import { fileIcon } from "./file-icons"
-import { COPIED_MS, formatDuration, formatMessageTime, plural } from "./format"
+import { COPIED_MS, formatDuration, formatMessageTime, formatTokens, plural } from "./format"
 import { Chevron, Icon, type IconName } from "./icons"
 import { Markdown } from "./markdown"
 import { openFile } from "./projects"
@@ -24,6 +24,8 @@ import { groupSummary, ICON_BY_KIND, isStep, stepKind, stepLabel, type Step } fr
 type ToolItem = Extract<Item, { type: "tool" }>
 type PermissionItem = Extract<Item, { type: "permission" }>
 type ChangesItem = Extract<Item, { type: "changes" }>
+type CompactionItem = Extract<Item, { type: "compaction" }>
+type RetryEvent = NonNullable<ReturnType<typeof threadOf>["retry"]>
 type Row = ThreadRow<Exclude<Item, Step>>
 
 /** The first item a row draws, which says when the row arrived. */
@@ -99,7 +101,8 @@ function RowView(props: { row: Row; tab: TabInfo }) {
           </div>
         )}
       </Match>
-      <Match when={props.row.type === "working" && (props.row as Working)}>{(working) => <WorkingRow since={working().since} />}</Match>
+      <Match when={props.row.type === "working" && (props.row as Working)}>{(working) => <WorkingRow since={working().since} retry={threadOf(props.tab.id).retry} />}</Match>
+      <Match when={props.row.type === "compaction" && (props.row as CompactionItem)}>{(item) => <CompactionRow item={item()} />}</Match>
       <Match when={props.row.type === "fold" && (props.row as Fold<Exclude<Item, Step>>)}>{(fold) => <FoldView fold={fold()} tab={props.tab} />}</Match>
       <Match when={props.row.type === "group" && (props.row as Group)}>{(group) => <GroupView group={group()} tab={props.tab} />}</Match>
       <Match when={props.row.type === "changes" && (props.row as ChangesItem)}>{(item) => <TurnChanges item={item()} tab={props.tab} />}</Match>
@@ -133,12 +136,55 @@ function MessageMeta(props: { text: string; at?: number }) {
 }
 
 /** The head of a running turn: how long Claude has worked on it, counted each second. */
-function WorkingRow(props: { since?: number }) {
+/**
+ * The head of a running turn. While Claude Code retries a failed API request, it says so, after T3 Code,
+ * so a slow turn does not look stuck.
+ */
+function WorkingRow(props: { since?: number; retry?: RetryEvent }) {
   const label = () => (props.since ? `Working for ${formatDuration(Math.max(0, now() - props.since))}` : "Working…")
   return (
-    <div class="flex items-center gap-2 text-[13px] text-fg-3">
-      <Spinner class="size-3.5" />
+    <div class="flex min-w-0 items-center gap-2 text-[13px] text-fg-3">
+      <Spinner class="size-3.5 shrink-0" />
       <TextShimmer text={label()} />
+      <Show when={props.retry}>
+        {(retry) => (
+          <span class="min-w-0 truncate text-warning">
+            · {retry().error}. Retrying, attempt {retry().attempt} of {retry().maxRetries}
+          </span>
+        )}
+      </Show>
+    </div>
+  )
+}
+
+const COMPACTION_LABEL: Record<CompactionItem["status"], string> = {
+  running: "Compacting context",
+  done: "Context compacted",
+  failed: "Context compaction failed",
+  stopped: "Context compaction stopped",
+}
+
+/**
+ * Where Claude Code compacted the thread's context, as a line across the thread after T3 Code: the token
+ * counts before and after once it is done, a shimmer while it runs, and the reason when it failed.
+ */
+function CompactionRow(props: { item: CompactionItem }) {
+  const label = () => {
+    const { status, preTokens, postTokens } = props.item
+    return status === "done" && preTokens && postTokens ? `${COMPACTION_LABEL.done} ${formatTokens(preTokens)} → ${formatTokens(postTokens)} tokens` : COMPACTION_LABEL[status]
+  }
+  const failed = () => props.item.status === "failed"
+  return (
+    <div role="separator" aria-label={label()} class="flex items-center gap-3 py-1 text-[12px]" classList={{ "text-del": failed(), "text-fg-3": !failed() }}>
+      <span class="h-px flex-1" classList={{ "bg-del/30": failed(), "bg-line": !failed() }} />
+      <span class="flex min-w-0 items-center gap-1.5">
+        <Icon name={failed() ? "circle-exclamation" : "collapse"} class="size-3 shrink-0" />
+        <Show when={props.item.status === "running"} fallback={<span>{label()}</span>}>
+          <TextShimmer text={label()} />
+        </Show>
+        <Show when={props.item.error}>{(error) => <span class="min-w-0 truncate opacity-80">· {error()}</span>}</Show>
+      </span>
+      <span class="h-px flex-1" classList={{ "bg-del/30": failed(), "bg-line": !failed() }} />
     </div>
   )
 }

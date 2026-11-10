@@ -139,6 +139,11 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         return window.clearThread(message.tabId)
       case "session.interrupt":
         return window.interrupt(message.tabId)
+      case "session.forceStop":
+        return window.forceStop(message.tabId)
+      case "branch.restore":
+        // Every client shows the project's branch, so each reads the Space card again.
+        return read(await window.restoreBranch(message.tabId), "space", broadcast)
       case "tasks.stop":
         return window.stopTasks(message.tabId, message.ids)
       case "permission.answer":

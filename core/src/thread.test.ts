@@ -103,3 +103,43 @@ test("opens a turn of Claude's own when a background task's notice arrives, live
   ] as never)
   expect(restored.map((found) => `${found.type}:${found.id}`)).toEqual(["user:u1", "text:a1:0", "result:result:u1", "user:n1", "text:a2:0", "result:result:n1"])
 })
+
+test("shows a compaction while it runs, then with its token counts once Claude Code reaches the boundary", () => {
+  const mapper = new ThreadMapper(DIR)
+  expect(mapper.map(sdk({ type: "system", subtype: "status", status: "compacting", uuid: "s1" }))).toEqual([{ kind: "item", item: { type: "compaction", id: "compaction:s1", status: "running" } }])
+  // Claude Code repeats its status while it compacts. One compaction shows.
+  expect(mapper.map(sdk({ type: "system", subtype: "status", status: "compacting", uuid: "s2" }))).toEqual([])
+  expect(mapper.map(sdk({ type: "system", subtype: "status", status: null, compact_result: "success", uuid: "s3" }))).toEqual([])
+  expect(mapper.map(sdk({ type: "system", subtype: "compact_boundary", uuid: "b1", compact_metadata: { trigger: "auto", pre_tokens: 180_000, post_tokens: 32_000 } }))).toEqual([
+    { kind: "item", item: { type: "compaction", id: "compaction:s1", status: "done", preTokens: 180_000, postTokens: 32_000 } },
+  ])
+})
+
+test("ends a failed compaction with Claude Code's reason, and lets the next one start", () => {
+  const mapper = new ThreadMapper(DIR)
+  mapper.map(sdk({ type: "system", subtype: "status", status: "compacting", uuid: "s1" }))
+  expect(mapper.map(sdk({ type: "system", subtype: "status", status: null, compact_result: "failed", compact_error: "Not enough messages", uuid: "s2" }))).toEqual([
+    { kind: "item", item: { type: "compaction", id: "compaction:s1", status: "failed", error: "Not enough messages" } },
+  ])
+  expect(mapper.map(sdk({ type: "system", subtype: "status", status: "compacting", uuid: "s3" }))).toEqual([{ kind: "item", item: { type: "compaction", id: "compaction:s3", status: "running" } }])
+})
+
+test("says when Claude Code retries a failed API request, and why", () => {
+  const mapper = new ThreadMapper(DIR)
+  expect(mapper.map(sdk({ type: "system", subtype: "api_retry", attempt: 2, max_retries: 10, retry_delay_ms: 4000, error_status: 529, error: "overloaded", uuid: "r1" }))).toEqual([
+    { kind: "retry", attempt: 2, maxRetries: 10, delayMs: 4000, error: "The API is overloaded" },
+  ])
+  expect(mapper.map(sdk({ type: "system", subtype: "api_retry", attempt: 1, max_retries: 10, retry_delay_ms: 500, error_status: 418, error: "unknown", uuid: "r2" }))[0]).toMatchObject({ error: "The API answered 418" })
+})
+
+test("restores a compaction as a line in place of Claude Code's summary", () => {
+  const items = new ThreadMapper(DIR).history([
+    { type: "system", uuid: "b1", session_id: "s", parent_tool_use_id: null },
+    { type: "user", uuid: "u1", session_id: "s", parent_tool_use_id: null, message: { role: "user", content: "This session is being continued from a previous conversation that ran out of context. Summary: ..." } },
+    { type: "user", uuid: "u2", session_id: "s", parent_tool_use_id: null, message: { role: "user", content: "Carry on" } },
+  ] as never)
+  expect(items).toEqual([
+    { type: "compaction", id: "compaction:b1", status: "done" },
+    { type: "user", id: "u2", text: "Carry on" },
+  ])
+})

@@ -6,6 +6,9 @@ import { git, numstatLine } from "./git"
 const part = <T>(read: Promise<T>): Promise<T | undefined> => read.catch(() => undefined)
 const gitOutput = (dir: string, args: string[]) => part(git(dir, args).then((output) => output.trim()))
 
+/** The branch checked out in `dir`, or undefined outside a Git repo, before the first commit or on a detached HEAD. */
+export const currentBranch = async (dir: string): Promise<string | undefined> => (await gitOutput(dir, ["branch", "--show-current"])) || undefined
+
 /** Reads what the Space card shows, or null outside a Git repo. A missing `gh` only hides the PR. */
 export async function readSpace(dir: string): Promise<Space | null> {
   const root = await gitOutput(dir, ["rev-parse", "--show-toplevel"])

@@ -96,6 +96,18 @@ export type ThreadItem =
     }
   /** Questions Claude asks with AskUserQuestion, waiting for answers. `requestId` answers them. It leaves the thread once answered. */
   | { readonly type: "question"; readonly id: string; readonly requestId: string; readonly questions: readonly Question[]; readonly answered?: boolean }
+  /**
+   * Claude Code compacting the thread's context, after T3 Code. Live compactions carry the token counts
+   * before and after. A restored one has none. `error` is Claude Code's reason when it failed.
+   */
+  | {
+      readonly type: "compaction"
+      readonly id: string
+      readonly status: "running" | "done" | "failed" | "stopped"
+      readonly preTokens?: number
+      readonly postTokens?: number
+      readonly error?: string
+    }
   /** The end of a turn. `stopped` means the user stopped it. */
   | { readonly type: "result"; readonly id: string; readonly durationMs: number; readonly isError: boolean; readonly stopped?: boolean }
   | { readonly type: "error"; readonly id: string; readonly message: string }
@@ -133,6 +145,13 @@ export type ThreadEvent =
   | { readonly kind: "subagent"; readonly subagent: Subagent }
   /** The commands running in the background now, sent whole each time the set changes. */
   | { readonly kind: "background"; readonly tasks: readonly BackgroundTask[] }
+  /**
+   * The user asked the turn to stop, at `since`. `unresponsive` once Claude Code has not stopped in
+   * time, so Force stop can end it. The turn's end clears it.
+   */
+  | { readonly kind: "stopping"; readonly since: number; readonly unresponsive: boolean }
+  /** A request to the API failed and Claude Code tries again, as attempt `attempt` of `maxRetries`, after `delayMs`. More output clears it. */
+  | { readonly kind: "retry"; readonly attempt: number; readonly maxRetries: number; readonly delayMs: number; readonly error: string }
 
 /** A command Claude left running in the background, such as a long review or a dev server. */
 export interface BackgroundTask {
@@ -720,6 +739,10 @@ export type ClientMessage =
   /** Finds files in the project whose path matches `query`, for an @ mention. The core answers with `files.found`. */
   | { readonly type: "files.search"; readonly project: string; readonly query: string }
   | { readonly type: "session.interrupt"; readonly tabId: string }
+  /** Ends a turn that did not stop when asked, by closing its Claude Code process. */
+  | { readonly type: "session.forceStop"; readonly tabId: string }
+  /** Switches the tab's project back to the branch its thread last ran on. */
+  | { readonly type: "branch.restore"; readonly tabId: string }
   /** Stops commands Claude left running in the background in a tab. */
   | { readonly type: "tasks.stop"; readonly tabId: string; readonly ids: readonly string[] }
   /** Lists the setups of every project with plugins on, the active `project`'s first. The core answers with `setups`. */
@@ -766,6 +789,8 @@ export type CoreMessage =
   | { readonly type: "tab.reopened"; readonly tab: TabInfo; readonly index: number }
   /** A tab's queued messages, sent whole on each change. `held` means a stop or an error paused them. */
   | { readonly type: "queue"; readonly tabId: string; readonly messages: readonly QueuedMessage[]; readonly held: boolean }
+  /** The branch a tab's thread last ran on. Absent outside a Git repo or on a detached HEAD. */
+  | { readonly type: "thread.branch"; readonly tabId: string; readonly branch?: string }
   /** The answer to `files.search`, with the query it answers: paths relative to the project, best match first. */
   | { readonly type: "files.found"; readonly project: string; readonly query: string; readonly paths: readonly string[] }
   | { readonly type: "terminal.output"; readonly id: string; readonly data: string }

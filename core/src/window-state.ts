@@ -24,6 +24,8 @@ export interface TabThread {
   readonly turnChanges?: Readonly<Record<string, readonly ChangedFile[]>>
   /** The last context reading. A restored session is not live until its next message, so it cannot be asked. */
   readonly context?: ContextReading
+  /** The branch the thread last ran on, so the tab can say when the checkout moved off it. */
+  readonly branch?: string
   /** The key a plugin opened the thread under, such as a conversation's id. */
   readonly key?: string
   /** Messages waiting for the running turn to end. They are saved, so a restart keeps them. */

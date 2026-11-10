@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import type { CoreMessage, TabInfo } from "@desk/protocol"
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { tempFolder, useTempHome } from "./test-support"
+import { gitRepo, tempFolder, useTempHome } from "./test-support"
 import { Window } from "./window"
 
 useTempHome()
@@ -72,4 +72,17 @@ test("reopens the tab closed last, in its place, with its thread and layout, and
   const none: CoreMessage[] = []
   await window.reopenTab((message) => none.push(message))
   expect(none).toEqual([])
+})
+
+test("switches a tab's project back to the branch its thread last ran on, and says when it cannot", async () => {
+  const repo = gitRepo({ "a.ts": "one\n" })
+  repo.git("checkout", "-q", "-b", "feature")
+  const { window, sent } = open({ tabs: [tab("a", repo.dir)], threads: { a: { branch: "main" } }, recent: [] })
+  expect(await window.restoreBranch("a")).toBe(repo.dir)
+  expect(repo.git("branch", "--show-current")).toBe("main")
+
+  // A new thread on the tab has no branch, and the tab hears so.
+  window.clearThread("a")
+  expect(sent).toContainEqual({ type: "thread.branch", tabId: "a" })
+  await expect(window.restoreBranch("a")).rejects.toThrow("no branch")
 })

@@ -53,3 +53,18 @@ test("shows a permission request only while it waits, and Claude's questions nev
   expect(kinds(threadRows([user("u1"), tool("a"), permission(), question, text("answer")], false))).toEqual(["user", "fold", "permission", "text"])
   expect(kinds(threadRows([user("u1"), tool("a"), permission(true), question, text("answer")], false))).toEqual(["user", "fold", "text"])
 })
+
+test("keeps a compaction out of the fold, as a line in the thread", () => {
+  const compaction: ThreadItem = { type: "compaction", id: "c", status: "done", preTokens: 180_000, postTokens: 32_000 }
+  expect(kinds(threadRows([user("u1"), tool("a"), compaction, tool("b"), text("answer")], false))).toEqual(["user", "fold", "compaction", "text"])
+})
+
+test("shows a /compact turn as its compaction alone, running or done", () => {
+  const compact: ThreadItem = { type: "user", id: "u2", text: "/compact keep the plan" }
+  const running: ThreadItem = { type: "compaction", id: "c", status: "running" }
+  expect(kinds(threadRows([user("u1"), text("hi"), compact, running], true))).toEqual(["user", "text", "compaction"])
+  const done: ThreadItem = { ...running, status: "done" } as ThreadItem
+  expect(kinds(threadRows([user("u1"), text("hi"), compact, done, user("u3")], false))).toEqual(["user", "text", "compaction", "user"])
+  // A message that only mentions compacting is an ordinary turn.
+  expect(kinds(threadRows([{ type: "user", id: "u4", text: "/compactor docs" }, text("ok")], false))).toEqual(["user", "text"])
+})

@@ -5,6 +5,13 @@ export function formatDuration(ms: number) {
   return seconds % 60 ? `${minutes} min ${seconds % 60} s` : `${minutes} min`
 }
 
+/** A token count in short: 820, 32k, 1.2M. */
+export function formatTokens(tokens: number) {
+  if (tokens < 1000) return String(tokens)
+  if (tokens < 999_500) return `${Math.round(tokens / 1000)}k`
+  return `${(tokens / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`
+}
+
 /** How long ago a time was, in the largest whole unit: "now", "5m", "3h", "2d", then a date. */
 export function formatAgo(time: number, now = Date.now()) {
   const minutes = Math.floor((now - time) / 60_000)

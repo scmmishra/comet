@@ -76,6 +76,8 @@ export class Session {
   private sessionId?: string
   /** Set while a turn the user stopped winds down, until its result arrives. */
   private stopping = false
+  /** Marks a stop unresponsive once it has waited too long. */
+  private unresponsive?: ReturnType<typeof setTimeout>
   private running = false
   /** Set from the first message, while Claude Code is found and started, until the session fails. */
   private started = false
@@ -140,13 +142,41 @@ export class Session {
     await Promise.all(ids.map((id) => this.query?.stopTask(id)))
   }
 
+  /**
+   * Asks the turn to stop. If Claude Code has not stopped in time, the tab says so and offers Force
+   * stop, after T3 Code.
+   */
   async interrupt() {
-    if (!this.query) return
+    if (!this.query || this.stopping) return
     this.stopping = true
+    const since = Date.now()
+    this.emit({ kind: "stopping", since, unresponsive: false })
+    clearTimeout(this.unresponsive)
+    this.unresponsive = setTimeout(() => this.stopping && this.emit({ kind: "stopping", since, unresponsive: true }), UNRESPONSIVE_AFTER_MS)
     await this.query.interrupt()
   }
 
+  /**
+   * Ends a turn that did not stop when asked, as stopped. The window then closes the session, which ends
+   * Claude Code, and the next message starts a new one on the same thread. Says whether there was a stop to force.
+   */
+  forceStop(): boolean {
+    if (!this.stopping) return false
+    this.emit({ kind: "item", item: { type: "result", id: `result:forced-${Date.now()}`, durationMs: 0, isError: false, stopped: true } })
+    this.endTurn()
+    return true
+  }
+
+  /** What a turn's end resets, and the status that tells the tab. */
+  private endTurn() {
+    this.stopping = false
+    clearTimeout(this.unresponsive)
+    this.running = false
+    this.emit({ kind: "status", busy: false })
+  }
+
   close() {
+    clearTimeout(this.unresponsive)
     for (const { resolve } of this.requests.values()) resolve({ behavior: "deny", message: "The tab was closed." })
     this.requests.clear()
     this.inbox.close()
@@ -223,18 +253,19 @@ export class Session {
           // The result of a turn the user stopped says so, so the thread can tell it from one that finished.
           // A turn Claude Code starts itself, after a background task, makes the tab busy again.
           if (event.kind === "status" && event.busy) this.running = true
-          const stopped = this.stopping && event.kind === "item" && event.item.type === "result"
-          this.emit(stopped ? { ...event, item: { ...event.item, stopped: true } } : event)
+          this.emit(this.stopping ? stoppedEvent(event) : event)
         }
+        // A compaction changes how much of the context is used.
+        if (message.type === "system" && message.subtype === "compact_boundary") void this.reportContext(running)
         if (message.type === "result") {
-          this.stopping = false
           // A steered message that missed the turn starts the next one, so the tab stays busy.
           if (this.steering) {
+            this.stopping = false
+            clearTimeout(this.unresponsive)
             this.steering = false
             continue
           }
-          this.running = false
-          this.emit({ kind: "status", busy: false })
+          this.endTurn()
           void this.reportContext(running)
         }
       }
@@ -247,6 +278,8 @@ export class Session {
   private fail(error: unknown) {
     this.running = false
     this.steering = false
+    this.stopping = false
+    clearTimeout(this.unresponsive)
     this.emit({ kind: "item", item: { type: "error", id: `error-${Date.now()}`, message: error instanceof Error ? error.message : String(error) } })
     this.emit({ kind: "status", busy: false })
     this.inbox.close()
@@ -291,6 +324,20 @@ export class Session {
     this.emit({ kind: "item", item: { ...request.item, answered: true } })
     request.resolve(result)
   }
+}
+
+/** How long a stop may take before the tab offers Force stop, as in T3 Code. */
+const UNRESPONSIVE_AFTER_MS = 15_000
+
+/**
+ * An event of a turn the user is stopping. Its result says it was stopped, so the thread can tell it from
+ * one that finished. A compaction that fails because of the stop was stopped, not failed.
+ */
+function stoppedEvent(event: ThreadEvent): ThreadEvent {
+  if (event.kind !== "item") return event
+  if (event.item.type === "result") return { ...event, item: { ...event.item, stopped: true } }
+  if (event.item.type === "compaction" && event.item.status === "failed") return { ...event, item: { type: "compaction", id: event.item.id, status: "stopped" } }
+  return event
 }
 
 /** Whether two tabs run the same way, so a save can skip reconfiguring a session. */
