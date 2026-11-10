@@ -6,6 +6,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 - A queued message reads in full in its dashed box, with its images at the top, and Send now, Edit and Remove sit under it, as in T3 Code.
 - The thread stays scrolled to its newest line when anything changes its size, such as a new step or the queue above the message box. It followed only a reply's text before.
+- A command step names the program it runs, after T3 Code: "Ran python3", not the whole command. Setup such as `cd` and `export` is skipped. Opening the step shows the command in full above its output. Every step label stays on one line, so a long command no longer spills over the rows below it.
 - A single line break in a reply now shows as one, as it does in Claude Code. Lines in a quote or a list of "•" items ran together into one paragraph.
 - Inline code such as `/api` or `~/code/desk` no longer shows as a file chip. A file chip needs a file extension or a line number.
 - A turn that was stopped, such as by Desk quitting mid-turn, shows as "You stopped after…" when the thread is resumed. It showed a "[Request interrupted by user]" message as if you had typed it.

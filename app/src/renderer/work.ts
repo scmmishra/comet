@@ -41,11 +41,16 @@ export const stepKind = (step: Step): StepKind => (step.type === "thinking" ? "t
  * line. A command still running reads "Running", and one that failed reads "Failed".
  */
 export function stepLabel(step: Step): string {
+  // A label is one line, whatever its target holds, so a long command never spills over the rows below.
+  return label(step).replace(/\s+/g, " ").trim()
+}
+
+function label(step: Step): string {
   if (step.type === "thinking") return step.text ? thoughtLine(step.text) : "Thought"
   const target = step.file ?? step.summary
   switch (step.name) {
     case "Bash":
-      return `${!step.result ? "Running" : step.result.isError ? "Failed" : "Ran"} ${target}`
+      return `${!step.result ? "Running" : step.result.isError ? "Failed" : "Ran"} ${commandProgram(step.summary)}`
     case "Read":
       return `Read ${target}`
     case "Edit":
@@ -70,6 +75,27 @@ export function stepLabel(step: Step): string {
     default:
       return `${step.name} ${target}`.trim()
   }
+}
+
+/** Words that set up a command rather than run it, so a label names the program after them. */
+const SETUP = /^(cd|pushd|popd|export|source|\.|set|unset|alias)$/
+/** Words that run the command after them, such as `sudo npm test`. */
+const WRAPPERS = new Set(["sudo", "env", "time", "nice", "nohup", "exec", "command"])
+
+/**
+ * The program a shell command runs, after T3 Code: `cd app && npm test` runs npm, and
+ * `. ./env.sh; python3 - <<EOF` runs python3. It skips setup such as `cd` and `export`, variables set
+ * before the program, and wrappers such as `sudo`. A command of setup alone names its first word.
+ */
+export function commandProgram(command: string): string {
+  const segments = command.split(/\n|&&|\|\||;|\|/).map((segment) => segment.trim()).filter(Boolean)
+  for (const segment of segments) {
+    const words = segment.split(/\s+/).filter((word) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word))
+    while (words.length > 1 && WRAPPERS.has(words[0]!)) words.shift()
+    const first = words[0]
+    if (first && !SETUP.test(first)) return first.split("/").at(-1)!
+  }
+  return segments[0]?.split(/\s+/)[0] ?? "a command"
 }
 
 /** A thought in one line: its leading **heading** if it has one, else its first sentence. */

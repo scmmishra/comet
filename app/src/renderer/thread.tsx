@@ -246,7 +246,8 @@ export function Transcript(props: { items: readonly ThreadItem[]; tab: TabInfo }
 function StepRow(props: { step: Step; tab: TabInfo }) {
   const [open, setOpen] = createSignal(false)
   const failed = () => props.step.type === "tool" && !!props.step.result?.isError
-  const hasDetail = () => (props.step.type === "thinking" ? !!props.step.text : !!props.step.edits?.length || !!props.step.result)
+  const isCommand = () => props.step.type === "tool" && stepKind(props.step) === "command"
+  const hasDetail = () => (props.step.type === "thinking" ? !!props.step.text : isCommand() || !!props.step.edits?.length || !!props.step.result)
   return (
     <div class="min-w-0">
       <button
@@ -277,7 +278,12 @@ function StepRow(props: { step: Step; tab: TabInfo }) {
             <Match when={props.step.type === "tool" && (props.step as ToolItem)}>
               {(tool) => (
                 <pre class="max-h-64 overflow-auto whitespace-pre-wrap rounded-2xl bg-ground px-3 py-2.5 font-mono text-[12px] text-fg-2 shadow-[0_0_0_1px_var(--color-line)]">
-                  {tool().result?.output || "(no output)"}
+                  {/* The label names only the program, so a command's detail starts with the command in full. */}
+                  <Show when={isCommand()}>
+                    <span class="text-fg">$ {tool().summary}</span>
+                    {"\n"}
+                  </Show>
+                  {tool().result ? tool().result!.output || "(no output)" : "Running…"}
                 </pre>
               )}
             </Match>
