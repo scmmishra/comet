@@ -13,6 +13,7 @@ mod images;
 mod instance;
 mod model_picker;
 mod models;
+mod panel;
 mod projects;
 mod protocol;
 mod questions;
@@ -37,6 +38,7 @@ const COMMANDS: &[Command] = &[
     ("Open Folder…", "cmd+o", "File", commands::open_folder),
     ("Close Tab", "cmd+w", "File", commands::close_tab),
     ("Reopen Closed Tab", "cmd+shift+t", "File", commands::reopen_tab),
+    ("Toggle Panel", "cmd+\\", "View", commands::toggle_panel),
     ("Tab 1", "cmd+1", "View", commands::show_tab::<0>),
     ("Tab 2", "cmd+2", "View", commands::show_tab::<1>),
     ("Tab 3", "cmd+3", "View", commands::show_tab::<2>),

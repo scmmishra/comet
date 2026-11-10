@@ -59,7 +59,15 @@ Still to do:
 
 ### Phase 3: View pane
 
-- The review pane with diffs, and the file view.
+Done so far:
+
+- The view pane beside the thread, opened by its toggle or ⌘\\, with a tab for Review and one per open file.
+- Review: the scope picker, the counts, unified or split diffs, drawn by rune-kit's `DiffView` from the core's patches. It reads again when a turn ends.
+- The file view: a file opened from the thread's changed files, with numbered lines and the line it opened at marked.
+
+Still to do:
+
+- Syntax colours in the file view, and Review's per-file "open" button.
 - The terminal: libghostty-vt, plus a grid pass of our own in Rune's compositor hook.
 - Done when daily coding work needs no Electron.
 

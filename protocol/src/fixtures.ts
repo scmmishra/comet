@@ -93,6 +93,13 @@ export const CORE_MESSAGES = [
       { name: "pdf", description: "Read PDFs", argumentHint: "<file>", ownProject: false, group: "User" },
     ],
   },
+  {
+    type: "review",
+    tabId: "tab-1",
+    scope: "thread",
+    files: [{ path: "src/login.ts", status: "modified", additions: 1, deletions: 1, patch: "--- a/src/login.ts\n+++ b/src/login.ts\n@@ -1 +1 @@\n-a\n+b\n" }],
+  },
+  { type: "file", project: "/Users/me/code/web", path: "src/login.ts", file: { path: "/Users/me/code/web/src/login.ts", text: "export {}\n" } },
   { type: "files.found", project: "/Users/me/code/web", query: "login", paths: ["src/login.ts", "test/login.test.ts"] },
   { type: "queue", tabId: "tab-1", messages: [{ id: "m1", text: "Then add a test" }], held: true },
   { type: "error", message: "The folder does not exist." },
@@ -116,4 +123,7 @@ export const CLIENT_MESSAGES = [
   { type: "thread.resume", tabId: "tab-2", threadId: "s1" },
   { type: "files.search", project: "/Users/me/code/web", query: "login" },
   { type: "thread.clear", tabId: "tab-1" },
+  { type: "review.get", tabId: "tab-1", scope: "git" },
+  { type: "file.read", project: "/Users/me/code/web", path: "src/login.ts" },
+  { type: "file.open", project: "/Users/me/code/web", path: "src/login.ts", line: 12 },
 ] satisfies ClientMessage[]

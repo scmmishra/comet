@@ -89,7 +89,7 @@ impl Workspace {
             effort: claude.and_then(|c| c.effort.clone()),
             fast: self.active_tab().and_then(|t| t.fast),
             model,
-            rest: Map::new(),
+            files: vec![], panel_active: None, review_scope: None, panel_open: None, rest: Map::new(),
         }
     }
 
@@ -145,6 +145,49 @@ impl Workspace {
         }
     }
 
+    /// Opens or closes a tab's view pane. Each tab keeps its own.
+    pub fn set_panel_open(&mut self, id: &str, open: bool, core: &Core) {
+        self.change_tab(id, |t| t.panel_open = Some(open), core);
+    }
+
+    /// Shows a panel tab: a file, or Review when `panel` is None.
+    pub fn show_panel_tab(&mut self, id: &str, panel: Option<String>, core: &Core) {
+        self.change_tab(id, |t| t.panel_active = panel, core);
+    }
+
+    pub fn set_review_scope(&mut self, id: &str, scope: &str, core: &Core) {
+        self.change_tab(id, |t| t.review_scope = Some(scope.to_owned()), core);
+    }
+
+    /// Shows a file in a tab's panel, at `line`, opening the panel. Each file has one tab: a file already
+    /// open comes to the front and moves to the line.
+    pub fn open_file_tab(&mut self, id: &str, path: &str, line: Option<u32>, core: &Core) {
+        self.change_tab(
+            id,
+            |t| {
+                let file_id = match t.files.iter_mut().find(|f| f.path == path) {
+                    Some(open) => {
+                        open.line = line;
+                        open.id.clone()
+                    }
+                    None => {
+                        let file = crate::protocol::FileTabInfo { id: ids::uuid(), path: path.to_owned(), line };
+                        let file_id = file.id.clone();
+                        t.files.push(file);
+                        file_id
+                    }
+                };
+                t.panel_active = Some(file_id);
+                t.panel_open = Some(true);
+            },
+            core,
+        );
+    }
+
+    pub fn close_file_tab(&mut self, id: &str, file: &str, core: &Core) {
+        self.change_tab(id, |t| t.files.retain(|f| f.id != file), core);
+    }
+
     /// Names a tab after the first line of `text`.
     pub fn name_tab(&mut self, id: &str, text: &str, core: &Core) {
         let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) else { return };
@@ -169,7 +212,7 @@ mod tests {
     use super::*;
 
     fn tab(id: &str) -> TabInfo {
-        TabInfo { id: id.into(), title: id.into(), project: format!("/code/{id}"), terminals: vec![], model: "default".into(), effort: None, fast: None, permission_mode: "auto".into(), rest: Map::new() }
+        TabInfo { id: id.into(), title: id.into(), project: format!("/code/{id}"), terminals: vec![], model: "default".into(), effort: None, fast: None, permission_mode: "auto".into(), files: vec![], panel_active: None, review_scope: None, panel_open: None, rest: Map::new() }
     }
 
     fn restored(ids: &[&str], active: &str) -> (Workspace, Core) {
@@ -231,6 +274,19 @@ mod tests {
         w.reopened(tab("d"), 9, &core);
         assert_eq!(order(&w), ["b", "c", "a", "d"]);
         assert_eq!(w.active.as_deref(), Some("d"));
+    }
+
+    #[test]
+    fn a_file_opens_once_and_comes_to_the_front_at_its_new_line() {
+        let (mut w, core) = restored(&["a"], "a");
+        w.open_file_tab("a", "/code/a/x.rs", Some(3), &core);
+        w.show_panel_tab("a", None, &core);
+        w.open_file_tab("a", "/code/a/x.rs", Some(9), &core);
+        let tab = &w.tabs[0];
+        assert_eq!(tab.files.len(), 1);
+        assert_eq!(tab.files[0].line, Some(9));
+        assert_eq!(tab.panel_active.as_deref(), Some(tab.files[0].id.as_str()));
+        assert_eq!(tab.panel_open, Some(true));
     }
 
     #[test]

@@ -8,7 +8,17 @@ use crate::shell::{CoreState, Desk};
 /// A scene: its name, and what it sets in a fresh window.
 type Scene = (&'static str, fn(&mut Desk));
 
-pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("start", start)];
+pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("start", start), ("review", review)];
+
+/// The thread with the view pane open on Review.
+fn review(s: &mut Desk) {
+    thread(s);
+    s.receive(Event::Message(serde_json::from_value(serde_json::json!({ "type": "review", "tabId": "tab", "scope": "thread", "files": [
+        { "path": "src/login.ts", "status": "modified", "additions": 2, "deletions": 1,
+          "patch": "--- a/src/login.ts\n+++ b/src/login.ts\n@@ -1,4 +1,5 @@\n export function retry() {\n-  setError(null)\n   send()\n+  setError(null)\n+  return true\n }\n" }
+    ] })).expect("the review decodes"))).expect("a review needs no folder");
+    s.toggle_panel();
+}
 
 /// A new tab in a project with past threads.
 fn start(s: &mut Desk) {

@@ -391,7 +391,7 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &
         .child(input)
         .child(actions)
         .on_drop_files(|s: &mut Desk, paths: &[std::path::PathBuf], _| s.attach(paths));
-    col().w_full().items_center().child(col().w_full().max_w(COLUMN).pt(6.0).pb(16.0).children(queue_view(s, tab, k)).child(card))
+    col().w_full().items_center().px(crate::thread_view::LANE_EDGE).child(col().w_full().max_w(COLUMN).pt(6.0).pb(16.0).children(queue_view(s, tab, k)).child(card))
 }
 
 fn suggestion_name(s: &Suggestion) -> &str {
@@ -766,7 +766,7 @@ mod tests {
     /// A window with one untitled tab, as restored from the core.
     fn desk() -> Desk {
         let mut s = Desk::default();
-        let tab = TabInfo { id: "t".into(), title: crate::workspace::NEW_TAB_TITLE.into(), project: "/code/x".into(), terminals: vec![], model: "default".into(), effort: None, fast: None, permission_mode: "auto".into(), rest: Map::new() };
+        let tab = TabInfo { id: "t".into(), title: crate::workspace::NEW_TAB_TITLE.into(), project: "/code/x".into(), terminals: vec![], model: "default".into(), effort: None, fast: None, permission_mode: "auto".into(), files: vec![], panel_active: None, review_scope: None, panel_open: None, rest: Map::new() };
         s.receive(Event::Message(CoreMessage::Tabs { tabs: vec![tab], active: Some("t".into()) })).unwrap();
         let _ = s.core.sent();
         s

@@ -46,6 +46,7 @@ pub struct Desk {
     pub projects: crate::projects::Projects,
     pub start: crate::start_screen::Start,
     pub images: crate::images::Images,
+    pub panel: crate::panel::Panel,
     /// The message whose copy button shows a check, and since when.
     pub copied: Option<(String, std::time::Instant)>,
     /// The wall clock, in milliseconds since the epoch, as of the last tick. It ticks each second
@@ -100,6 +101,10 @@ impl Desk {
             CoreMessage::SessionEvent { tab_id, event } => {
                 if let crate::protocol::ThreadEvent::Item { item } = &event {
                     self.remember_images(item);
+                    // A finished turn may have changed files, so Review reads them again.
+                    if matches!(item, crate::protocol::ThreadItem::Result { .. }) {
+                        self.turn_ended(&tab_id);
+                    }
                 }
                 self.threads.apply(&tab_id, event);
             }
@@ -111,12 +116,15 @@ impl Desk {
             }
             CoreMessage::Project { project, part, value } => self.projects.read(project, &part, value),
             CoreMessage::FilesFound { project, query, paths } => self.found_files(project, query, paths),
+            CoreMessage::Review { tab_id, scope, files } => self.take_review(tab_id, scope, files),
+            CoreMessage::File { project, path, file } => self.take_file(project, path, file),
             CoreMessage::Error { message } => self.error = Some(message),
             CoreMessage::Other => {}
         }
         let tabs: Vec<String> = self.workspace.tabs.iter().map(|t| t.id.clone()).collect();
         self.threads.keep(&tabs);
         self.sync_start();
+        self.sync_panel();
         result
     }
 
@@ -202,6 +210,11 @@ pub mod commands {
     pub fn show_tab<const INDEX: usize>(s: &mut Desk, _: &mut Tx) {
         s.workspace.show_tab_at(INDEX, &s.core);
         s.sync_start();
+        s.sync_panel();
+    }
+
+    pub fn toggle_panel(s: &mut Desk, _: &mut Tx) {
+        s.toggle_panel();
     }
 }
 
@@ -240,6 +253,7 @@ pub fn modifiers(s: &mut Desk, mods: rune::Mods, _: &mut Tx) {
 fn select(s: &mut Desk, id: &str, _: &mut Tx) {
     s.workspace.show_tab(id, &s.core);
     s.sync_start();
+    s.sync_panel();
 }
 
 fn close(s: &mut Desk, id: &str, tx: &mut Tx) {
@@ -277,29 +291,25 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
 
     let dark = s.dark(cx);
     let line = |words: String| text(words).font(k.ty.ui).color(k.c.text_muted);
-    let content = match (&s.status, w.active_tab()) {
-        (CoreState::Ready, Some(tab)) => session(s, tab, dark, &mut layer),
+    // A card on the ground: the session, and the view pane beside it while open.
+    let card = |key: &str, child: El| col().key(key.to_owned()).w_frac(1.0).grow(1.0).shrink().min_w(0.0).h_full().min_h(0.0).fill(k.c.bg_base).radius(PANEL_RADIUS).clip_rounded(PANEL_RADIUS).border(1.0, k.c.border_muted).child(child);
+    let error = s.error.clone().map(|e| text(e).key("error").font(k.ty.ui).color(k.c.danger.fg).px(16.0).pb(8.0));
+    let cards = match (&s.status, w.active_tab()) {
+        (CoreState::Ready, Some(tab)) => {
+            let session = col().w_full().h_full().min_h(0.0).child(session(s, tab, dark, &mut layer)).children(error);
+            let pane = (tab.panel_open == Some(true)).then(|| card("panel-card", crate::panel::panel(s, tab, k, &mut layer)));
+            row().w_full().grow(1.0).min_h(0.0).gap(PANEL_INSET).child(card("session-card", session)).children(pane)
+        }
         (status, _) => {
             let words = match status {
                 CoreState::Starting => line("Starting…".into()),
                 CoreState::Failed(reason) => text(reason.clone()).font(k.ty.ui).color(k.c.danger.fg),
                 CoreState::Ready => line("No tabs".into()),
             };
-            col().w_full().grow(1.0).center().child(words.key("status"))
+            row().w_full().grow(1.0).min_h(0.0).child(card("body", col().w_full().h_full().center().child(words.key("status")).children(error)))
         }
     };
-    let body = col()
-        .key("body")
-        .w_full()
-        .grow(1.0)
-        .min_h(0.0)
-        .fill(k.c.bg_base)
-        .radius(PANEL_RADIUS)
-        .clip_rounded(PANEL_RADIUS)
-        .border(1.0, k.c.border_muted)
-        .child(content)
-        .children(s.error.clone().map(|e| text(e).key("error").font(k.ty.ui).color(k.c.danger.fg).px(16.0).pb(8.0)));
-    let main = col().key("main").w_full().grow(1.0).min_h(0.0).px(PANEL_INSET).pb(PANEL_INSET).child(body);
+    let main = col().key("main").w_full().grow(1.0).min_h(0.0).px(PANEL_INSET).pb(PANEL_INSET).child(cards);
     rune_kit::root(col().key("window").w_full().h_full().fill(k.c.bg_deep).child(titlebar).child(main), layer)
 }
 
@@ -313,12 +323,15 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, layer: &mut Vec<El>) -> El {
         .h(HEADER_HEIGHT)
         .items_center()
         .pl(16.0)
-        .pr(48.0)
+        .pr(10.0)
         .gap(7.0)
         .child(project_mark(name, k))
         .child(text(name.to_owned()).font(k.ty.ui).color(k.c.text_muted))
         .child(text("/").font(k.ty.ui).color(k.c.text_faint))
-        .child(text(tab.title.clone()).font(k.ty.ui_medium).color(k.c.text_base).truncate());
+        .child(text(tab.title.clone()).font(k.ty.ui_medium).color(k.c.text_base).truncate())
+        .child(row().grow(1.0))
+        // While the pane is open, its own header holds the toggle, in the window's corner.
+        .children((tab.panel_open != Some(true)).then(|| crate::panel::toggle(false, k)));
     let started = s.threads.get(&tab.id).is_some_and(|t| !t.items.is_empty());
     let body = if started {
         col().w_full().grow(1.0).min_h(0.0).child(thread_view::thread(s, &tab.id, dark)).child(composer::composer(s, tab, composer::ListAt::Above, k, layer))
@@ -348,7 +361,7 @@ mod tests {
     use serde_json::Map;
 
     fn tab(id: &str, title: &str) -> TabInfo {
-        TabInfo { id: id.into(), title: title.into(), project: format!("/code/{id}"), terminals: vec![], model: "default".into(), effort: None, fast: None, permission_mode: "auto".into(), rest: Map::new() }
+        TabInfo { id: id.into(), title: title.into(), project: format!("/code/{id}"), terminals: vec![], model: "default".into(), effort: None, fast: None, permission_mode: "auto".into(), files: vec![], panel_active: None, review_scope: None, panel_open: None, rest: Map::new() }
     }
 
     fn runtime(tabs: Vec<TabInfo>, active: &str) -> Runtime<Desk> {

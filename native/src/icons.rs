@@ -22,3 +22,15 @@ pub static CLAUDE: Icon = Icon {
     body: r#"<path d="M8 1.5v13M1.5 8h13M3.4 3.4l9.2 9.2M12.6 3.4l-9.2 9.2M5.3 1.9l5.4 12.2M10.7 1.9 5.3 14.1M1.9 5.3l12.2 5.4M14.1 5.3 1.9 10.7" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>"#,
 };
 
+
+/// The panel toggle: a window with its right side marked, filled while the panel is open.
+pub static PANEL: Icon = Icon {
+    name: "panel",
+    view: 16.0,
+    body: r#"<rect x="2" y="2.5" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/><path d="M10 2.5v11" fill="none" stroke="currentColor" stroke-width="1.25"/>"#,
+};
+pub static PANEL_OPEN: Icon = Icon {
+    name: "panel-open",
+    view: 16.0,
+    body: r#"<rect x="2" y="2.5" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/><path d="M10 2.5v11" fill="none" stroke="currentColor" stroke-width="1.25"/><rect x="10" y="2.5" width="4" height="11" fill="currentColor"/>"#,
+};

@@ -22,6 +22,8 @@ const SEND_WAIT: Duration = Duration::from_millis(4);
 pub const INSTANCE: &str = "native";
 
 /// What the core tells the app, in order: one `Ready` or `Failed`, then messages until it stops.
+/// Each event moves once, from the socket thread to the app, so its size costs nothing worth boxing.
+#[expect(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum Event {
     Ready,

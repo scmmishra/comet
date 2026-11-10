@@ -15,6 +15,8 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 /// The thread's column, Desk's `--container-column`.
 pub const COLUMN: f32 = 720.0;
+/// The lane keeps this far from the session's sides, Desk's `--lane-edge`.
+pub const LANE_EDGE: f32 = 16.0;
 /// The lane's padding on each side, Desk's `px-6`.
 const LANE_PADDING: f32 = 24.0;
 /// The space between rows, Desk's `gap-3.5`.
@@ -115,7 +117,7 @@ fn lane_row(s: &Desk, i: usize, dark: bool) -> El {
     let c = Ctx { s, tab, thread, k, size: s.account.text_size() };
     let r = &thread.rows[i];
     memo(r.id().to_owned(), version(&c, r), || {
-        col().w_full().items_center().child(col().w_full().max_w(COLUMN).px(LANE_PADDING).pb(ROW_GAP).child(row_view(&c, r)))
+        col().w_full().items_center().px(LANE_EDGE).child(col().w_full().max_w(COLUMN).px(LANE_PADDING).pb(ROW_GAP).child(row_view(&c, r)))
     })
 }
 
@@ -480,6 +482,7 @@ fn changes_view(c: &Ctx, files: &[crate::protocol::ChangedFile]) -> El {
         .child(counts(k, added, removed));
     let list = col().w_full().px(6.0).pb(6.0).children(files.iter().map(|f| {
         let (dir, name) = f.path.rsplit_once('/').map_or(("", f.path.as_str()), |(d, n)| (d, n));
+        let (tab, path) = (c.tab.to_owned(), f.path.clone());
         row()
             .key(f.path.clone())
             .w_full()
@@ -488,6 +491,9 @@ fn changes_view(c: &Ctx, files: &[crate::protocol::ChangedFile]) -> El {
             .px(6.0)
             .py(4.0)
             .radius(6.0)
+            .hover(k.c.hover)
+            .role("button")
+            .on_press(move |s: &mut Desk| s.open_file(&tab, &path))
             .child(
                 row()
                     .grow(1.0)

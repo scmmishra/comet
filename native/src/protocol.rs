@@ -17,6 +17,15 @@ pub struct TerminalInfo {
     pub title: String,
 }
 
+/// A file open in a tab's panel. `path` is absolute. `line`, when set, is the line to show.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct FileTabInfo {
+    pub id: String,
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<u32>,
+}
+
 /// A top tab. The core saves tabs as the app sends them, so a tab keeps every field it arrived with:
 /// fields the app does not read yet travel in `rest` and go back unchanged.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -33,6 +42,18 @@ pub struct TabInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fast: Option<bool>,
     pub permission_mode: String,
+    /// Files open in the tab's panel, in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<FileTabInfo>,
+    /// The panel tab on show: a terminal's, a file's or a plugin panel's id. Absent means Review.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub panel_active: Option<String>,
+    /// What Review compares with. Absent means the thread's changes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_scope: Option<String>,
+    /// Whether the view pane is open. Absent means the user has not opened or closed it yet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub panel_open: Option<bool>,
     #[serde(flatten)]
     pub rest: Map<String, Value>,
 }
@@ -170,6 +191,27 @@ pub struct Skill {
     /// Whether it is Claude Code's own command, rather than a skill.
     #[serde(default)]
     pub builtin: bool,
+}
+
+/// A file a thread or the checkout changed, with its unified diff. Empty for binary files.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct FileChange {
+    pub path: String,
+    pub status: String,
+    pub additions: u32,
+    pub deletions: u32,
+    pub patch: String,
+}
+
+/// A file as the panel shows it. A binary file has no text, and a large one shows only its start.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct FileView {
+    pub path: String,
+    pub text: Option<String>,
+    #[serde(default)]
+    pub binary: bool,
+    #[serde(default)]
+    pub truncated: bool,
 }
 
 /// An image sent with a message, as base64.
@@ -374,6 +416,17 @@ pub enum CoreMessage {
     /// Something read about a project. `value` decodes by `part`, in `projects.rs`.
     #[serde(rename = "project")]
     Project { project: String, part: String, value: Value },
+    /// The files a tab's thread changed, in a Review scope.
+    #[serde(rename = "review")]
+    Review {
+        #[serde(rename = "tabId")]
+        tab_id: String,
+        scope: String,
+        files: Vec<FileChange>,
+    },
+    /// A file read for the panel, for the `path` that was asked for.
+    #[serde(rename = "file")]
+    File { project: String, path: String, file: FileView },
     /// The answer to `files.search`, with the query it answers: paths relative to the project, best match first.
     #[serde(rename = "files.found")]
     FilesFound { project: String, query: String, paths: Vec<String> },
@@ -417,6 +470,20 @@ pub enum ClientMessage {
     /// Finds files in the project whose path matches `query`, for an @ mention. The core answers with `files.found`.
     #[serde(rename = "files.search")]
     FilesSearch { project: String, query: String },
+    /// The files a tab's thread changed, in a Review scope. The core answers with `review`.
+    #[serde(rename = "review.get", rename_all = "camelCase")]
+    ReviewGet { tab_id: String, scope: String },
+    /// Reads a file to show in the panel. The core answers with `file`.
+    #[serde(rename = "file.read")]
+    FileRead { project: String, path: String },
+    /// Opens a file in the editor. A relative path is in the project.
+    #[serde(rename = "file.open")]
+    FileOpen {
+        project: String,
+        path: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        line: Option<u32>,
+    },
     /// Starts a fresh session in a tab, as /clear asks.
     #[serde(rename = "thread.clear", rename_all = "camelCase")]
     ThreadClear { tab_id: String },
@@ -524,6 +591,9 @@ mod tests {
             ClientMessage::ThreadResume { tab_id: "tab-2".into(), thread_id: "s1".into() },
             ClientMessage::FilesSearch { project: "/Users/me/code/web".into(), query: "login".into() },
             ClientMessage::ThreadClear { tab_id: "tab-1".into() },
+            ClientMessage::ReviewGet { tab_id: "tab-1".into(), scope: "git".into() },
+            ClientMessage::FileRead { project: "/Users/me/code/web".into(), path: "src/login.ts".into() },
+            ClientMessage::FileOpen { project: "/Users/me/code/web".into(), path: "src/login.ts".into(), line: Some(12) },
         ];
         let encoded: Vec<Value> = ours.iter().map(|m| serde_json::to_value(m).unwrap()).collect();
         assert_eq!(encoded, fixtures("CLIENT_MESSAGES"));
