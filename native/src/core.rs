@@ -203,7 +203,7 @@ mod tests {
         core.start(move |event| {
             let _ = send.send(event);
         });
-        core.send(&ClientMessage::SessionSend { tab_id: "a".into(), text: "Reply with the single word: pong".into(), follow_up: None });
+        core.send(&ClientMessage::SessionSend { tab_id: "a".into(), text: "Reply with the single word: pong".into(), images: vec![], follow_up: None });
         let deadline = Instant::now() + Duration::from_secs(120);
         let (mut busy_seen, mut text, mut rows) = (false, String::new(), 0);
         loop {
