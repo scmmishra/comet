@@ -41,8 +41,12 @@ export interface WindowState {
   readonly threads: Readonly<Record<string, TabThread>>
   /** Most recent first. */
   readonly recent: readonly string[]
-  /** The Claude session each thread key leads to, by project and key. One key always resumes the same thread. */
-  readonly keys: Readonly<Record<string, string>>
+  /**
+   * Threads a plugin opened under a key, while no tab shows them, by project and key: the thread a tab
+   * switched away from, or the one a closed tab showed. Each keeps its session, queue and summaries, so
+   * opening the key again brings back the thread as it was.
+   */
+  readonly keyed: Readonly<Record<string, TabThread>>
   /** Each tab's plugin layout. A tab with none shows no plugin views but cards. */
   readonly layouts: Readonly<Record<string, PluginLayout>>
   /** Tabs closed lately, newest last, with what reopening one needs. */
@@ -65,14 +69,14 @@ export function loadWindowState(): WindowState {
   try {
     saved = JSON.parse(readFileSync(windowStatePath(), "utf8")) as Partial<WindowState>
   } catch {
-    return { tabs: [], threads: {}, recent: [], keys: {}, layouts: {}, closed: [] }
+    return { tabs: [], threads: {}, recent: [], keyed: {}, layouts: {}, closed: [] }
   }
   return {
     tabs: Array.isArray(saved.tabs) ? saved.tabs.filter(isTab) : [],
     ...(typeof saved.active === "string" ? { active: saved.active } : {}),
     threads: typeof saved.threads === "object" && saved.threads ? Object.fromEntries(Object.entries(saved.threads).map(([id, thread]) => [id, upgradeThread(thread)])) : {},
     recent: Array.isArray(saved.recent) ? saved.recent.filter((dir) => typeof dir === "string") : [],
-    keys: typeof saved.keys === "object" && saved.keys ? saved.keys : {},
+    keyed: typeof saved.keyed === "object" && saved.keyed ? saved.keyed : keyedFromSessions(saved as { keys?: unknown }),
     layouts: typeof saved.layouts === "object" && saved.layouts ? saved.layouts : {},
     closed: Array.isArray(saved.closed) ? saved.closed.filter((closed) => isTab(closed?.tab) && Number.isInteger(closed.index)) : [],
   }
@@ -90,6 +94,20 @@ export function saveWindowState(state: WindowState) {
 function upgradeThread(thread: TabThread & { baseline?: unknown; turnBaseline?: unknown; turnHead?: unknown; turnStart?: unknown }): TabThread {
   const { baseline: _baseline, turnBaseline: _turnBaseline, turnHead: _turnHead, turnStart: _turnStart, threadStart, ...rest } = thread
   return { ...rest, ...(typeof threadStart === "string" ? { threadStart } : {}) }
+}
+
+/**
+ * A window saved before keyed threads kept only each key's session, as `keys`. Each becomes a thread
+ * with that session, so the key still resumes it.
+ */
+function keyedFromSessions(saved: { keys?: unknown }): Record<string, TabThread> {
+  if (typeof saved.keys !== "object" || !saved.keys) return {}
+  return Object.fromEntries(
+    Object.entries(saved.keys as Record<string, unknown>).flatMap(([id, sessionId]) => {
+      const key = id.slice(id.indexOf("\n") + 1)
+      return typeof sessionId === "string" ? [[id, { key, sessionId }]] : []
+    }),
+  )
 }
 
 function isTab(value: unknown): value is TabInfo {

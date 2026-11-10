@@ -86,3 +86,30 @@ test("switches a tab's project back to the branch its thread last ran on, and sa
   expect(sent).toContainEqual({ type: "thread.branch", tabId: "a" })
   await expect(window.restoreBranch("a")).rejects.toThrow("no branch")
 })
+
+test("keeps a plugin thread's queue with the thread when the tab switches to another key, and brings it back", async () => {
+  const project = tempFolder("plugin")
+  const queued = { id: "m1", text: "Then check the refund" }
+  // A paused queue stays put, so coming back shows it without sending.
+  const { window, sent } = open({ tabs: [tab("a", project)], threads: { a: { key: "conv-1", queue: [queued], queueHeld: true } }, recent: [] })
+
+  await window.openKey("a", { key: "conv-2" })
+  expect(sent).toContainEqual({ type: "queue", tabId: "a", messages: [], held: false })
+  expect(saved().keyed[`${project}\nconv-1`]).toEqual({ key: "conv-1", queue: [queued], queueHeld: true })
+
+  sent.length = 0
+  await window.openKey("a", { key: "conv-1" })
+  expect(sent).toContainEqual({ type: "queue", tabId: "a", messages: [queued], held: true })
+  expect(saved().threads.a).toEqual({ key: "conv-1", queue: [queued], queueHeld: true })
+  expect(saved().keyed).toEqual({ [`${project}\nconv-2`]: { key: "conv-2" } })
+})
+
+test("keeps a closed tab's plugin thread under its key, and gives it back when the tab reopens", async () => {
+  const project = tempFolder("plugin-close")
+  const { window } = open({ tabs: [tab("a", project), tab("b", project)], threads: { a: { key: "conv-1", sessionId: "s1" } }, recent: [] })
+  window.save([tab("b", project)], "b")
+  expect(saved().keyed[`${project}\nconv-1`]).toEqual({ key: "conv-1", sessionId: "s1" })
+  await window.reopenTab(() => {})
+  expect(saved().keyed).toEqual({})
+  expect(saved().threads.a).toEqual({ key: "conv-1", sessionId: "s1" })
+})

@@ -82,7 +82,10 @@ export class Window {
     this.persist({ closed })
     if (!found) return
     const tab: TabInfo = { ...found.tab, terminals: [], ...(found.tab.terminals.some((terminal) => terminal.id === found!.tab.panelActive) ? { panelActive: undefined } : {}) }
+    // The tab shows its plugin thread again, so the thread leaves the keyed threads.
+    const { [found.thread?.key ? threadKey(tab.project, found.thread.key) : ""]: _shown, ...keyed } = this.state.keyed
     this.persist({
+      keyed,
       threads: found.thread ? { ...this.state.threads, [tab.id]: found.thread } : this.state.threads,
       layouts: found.layout ? { ...this.state.layouts, [tab.id]: found.layout } : this.state.layouts,
     })
@@ -118,7 +121,10 @@ export class Window {
       tabs.some((found) => found.id === tab.id) ? [] : [{ tab, index, ...(this.state.threads[tab.id] ? { thread: this.state.threads[tab.id] } : {}), ...(this.state.layouts[tab.id] ? { layout: this.state.layouts[tab.id] } : {}) }],
     )
     const closed = [...this.state.closed, ...closing].slice(-CLOSED_TABS)
-    this.persist({ tabs, active, threads: kept(this.state.threads), layouts: kept(this.state.layouts), closed })
+    // A plugin thread outlives its tab under its key, so opening the key again resumes it.
+    const keyed = { ...this.state.keyed }
+    for (const { tab, thread } of closing) if (thread?.key) keyed[threadKey(tab.project, thread.key)] = thread
+    this.persist({ tabs, active, threads: kept(this.state.threads), layouts: kept(this.state.layouts), closed, keyed })
     for (const tab of tabs) {
       const old = before.get(tab.id)
       if (old && old.project !== tab.project) this.closeSession(tab.id)
@@ -173,11 +179,17 @@ export class Window {
    * it. A new one starts empty and, given a prompt, sends it.
    */
   async openKey(tabId: string, thread: { readonly key: string; readonly title?: string; readonly prompt?: string }) {
-    if (this.thread(tabId).key === thread.key) return
+    const leaving = this.thread(tabId)
+    if (leaving.key === thread.key) return
     const tab = this.tab(tabId)
-    const sessionId = this.state.keys[threadKey(tab.project, thread.key)]
     this.parkSession(tabId)
-    this.setThread(tabId, { key: thread.key, ...(sessionId ? { sessionId } : {}) })
+    // The thread leaving keeps everything under its key, and the one coming takes back what it kept.
+    const id = threadKey(tab.project, thread.key)
+    const coming = this.state.keyed[id] ?? this.shownKeyThread(tab.project, thread.key) ?? { key: thread.key }
+    const { [id]: _taken, ...keyed } = this.state.keyed
+    this.persist({ keyed: leaving.key ? { ...keyed, [threadKey(tab.project, leaving.key)]: leaving } : keyed })
+    this.setThread(tabId, coming)
+    const sessionId = coming.sessionId
     if (thread.title) this.hooks.broadcast({ type: "tab.title", tabId, title: thread.title })
     const items = sessionId ? await this.history(tab, sessionId) : []
     // Another key may have taken the tab while the transcript was read.
@@ -194,6 +206,8 @@ export class Window {
     this.hooks.broadcast({ type: "session.history", tabId, items: shown })
     if (running) this.hooks.broadcast({ type: "session.event", tabId, event: { kind: "status", busy: true } })
     if (sessionId) this.fillContext(tabId, sessionId)
+    // A queue whose turn ended while the thread was away sends its next message now.
+    if (!running) this.sendNextQueued(tabId)
     // A newer key that took the tab during the send has its own prompt, so this one goes unsaid.
     else if (thread.prompt) await this.send(tabId, thread.prompt).catch((error: Error) => { if (error.message !== MOVED) throw error })
   }
@@ -230,7 +244,6 @@ export class Window {
 
   private setQueue(tabId: string, queue: readonly QueuedMessage[], held = this.thread(tabId).queueHeld ?? false) {
     this.updateThread(tabId, { queue, queueHeld: held && queue.length > 0 })
-    this.hooks.broadcast({ type: "queue", tabId, messages: queue, held: held && queue.length > 0 })
   }
 
   interrupt(tabId: string) {
@@ -246,6 +259,13 @@ export class Window {
     const tab = this.state.tabs.find((found) => found.id === tabId)
     const branch = tab && (await currentBranch(tab.project))
     if (branch && branch !== this.thread(tabId).branch) this.updateThread(tabId, { branch })
+  }
+
+  /** The thread for a key that another tab shows, so a second tab opening the key resumes the same session. */
+  private shownKeyThread(project: string, key: string): TabThread | undefined {
+    const tab = this.state.tabs.find((found) => found.project === project && this.state.threads[found.id]?.key === key)
+    const sessionId = tab && this.state.threads[tab.id]!.sessionId
+    return sessionId ? { key, sessionId } : undefined
   }
 
   /**
@@ -413,9 +433,11 @@ export class Window {
         settings: tab,
         compactIdle: this.hooks.compactIdle,
         onSessionId: (sessionId) => {
-          // A parked thread still saves its session under its key, so coming back resumes it.
-          if (key) this.persist({ keys: { ...this.state.keys, [threadKey(tab.project, key)]: sessionId } })
-          if (current()) this.updateThread(tab.id, { sessionId })
+          if (current()) return this.updateThread(tab.id, { sessionId })
+          // A parked thread keeps its session under its key, so coming back resumes it.
+          const id = key && threadKey(tab.project, key)
+          const parked = id ? this.state.keyed[id] : undefined
+          if (id && parked) this.persist({ keyed: { ...this.state.keyed, [id]: { ...parked, sessionId } } })
         },
         onRateLimit: this.hooks.rateLimit,
       })
@@ -492,7 +514,10 @@ export class Window {
 
   private setThread(tabId: string, thread: TabThread) {
     // The tab's branch notice follows the thread it shows.
-    if (thread.branch !== this.state.threads[tabId]?.branch) this.hooks.broadcast({ type: "thread.branch", tabId, ...(thread.branch ? { branch: thread.branch } : {}) })
+    const before = this.state.threads[tabId]
+    if (thread.branch !== before?.branch) this.hooks.broadcast({ type: "thread.branch", tabId, ...(thread.branch ? { branch: thread.branch } : {}) })
+    // Its queue follows the thread too, so a message queued in one thread never shows in another.
+    if (thread.queue !== before?.queue || !!thread.queueHeld !== !!before?.queueHeld) this.hooks.broadcast({ type: "queue", tabId, messages: thread.queue ?? [], held: !!thread.queueHeld })
     this.persist({ threads: { ...this.state.threads, [tabId]: thread } })
   }
 
