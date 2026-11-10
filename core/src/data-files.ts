@@ -7,6 +7,13 @@ import { basename, join } from "node:path"
 export const deskHome = () => process.env.DESK_HOME ?? join(homedir(), ".desk")
 
 /**
+ * Where one running Desk keeps what only it may write: its window and its plugin builds. Settings,
+ * commands and plugins stay in `~/.desk` for every Desk. A dev Desk sets DESK_INSTANCE to `dev` and
+ * keeps its own in `~/.desk/dev`, so it runs beside the installed Desk without overwriting its tabs.
+ */
+export const instanceHome = () => (process.env.DESK_INSTANCE ? join(deskHome(), process.env.DESK_INSTANCE) : deskHome())
+
+/**
  * Where Desk keeps one kind of data for a project: `~/.desk/<kind>/<folder>-<hash>.json`, as Rune
  * names its space files. The hash keeps two checkouts with the same folder name apart.
  */

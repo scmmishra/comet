@@ -1,7 +1,7 @@
 import type { ContextReading, PluginLayout, TabInfo } from "@desk/protocol"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { deskHome, writeJsonFile } from "./data-files"
+import { instanceHome, writeJsonFile } from "./data-files"
 
 /** What the core keeps about a tab's thread. The app never sees it. */
 export interface TabThread {
@@ -31,7 +31,7 @@ export interface WindowState {
   readonly layouts: Readonly<Record<string, PluginLayout>>
 }
 
-const windowStatePath = () => join(deskHome(), "window.json")
+const windowStatePath = () => join(instanceHome(), "window.json")
 
 /** The saved window. A missing or broken file gives an empty window, and a tab that is not whole is dropped. */
 export function loadWindowState(): WindowState {

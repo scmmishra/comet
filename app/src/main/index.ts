@@ -6,8 +6,9 @@ import { CoreProcess } from "./core-process"
 import { chooseFolder, folder } from "./folders"
 import { installMenu } from "./menu"
 
-// Without a name, Electron names the app and its settings folder after the npm package.
-app.setName("Desk")
+// Without a name, Electron names the app and its settings folder after the npm package. A dev Desk
+// takes another name, so its single-instance lock and settings folder differ from the installed Desk's.
+app.setName(app.isPackaged ? "Desk" : "Desk Dev")
 
 // Lets an agent read and drive the page over the DevTools protocol, without screenshots.
 if (process.env.DESK_DEBUG_PORT) app.commandLine.appendSwitch("remote-debugging-port", process.env.DESK_DEBUG_PORT)
@@ -89,6 +90,7 @@ app.on("second-instance", (_event, _argv, _cwd, data) => {
 
 app.whenReady().then(async () => {
   if (!firstLaunch) return
+  if (!app.isPackaged) app.dock?.setIcon(join(app.getAppPath(), "build/icon-dev.png"))
   core = await CoreProcess.start()
   ipcMain.handle(CHANNELS.core, () => core?.info)
   ipcMain.handle(CHANNELS.isFullScreen, () => window?.isFullScreen() ?? false)

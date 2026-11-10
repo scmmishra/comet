@@ -33,10 +33,13 @@ Build the UI from `@opencode/ui`. Anomaly's Rust framework ships `rune-kit`, who
 
 ## Run
 
-- `mise run dev` starts the app. A window with no tabs opens on the most recent project, else asks for a folder. ⌘O opens a folder in a new tab. The core keeps recent projects in `~/.desk/window.json`.
-- `bin/desk <folder>` opens the folder in a new tab, in the running Desk if there is one. Link it onto your PATH to use `desk .`.
+- `mise run install` builds Desk.app and installs it in `/Applications`. If Desk is running, Desk quits, updates and opens again. `mise run package` only builds it, in `dist/mac-arm64`. The app carries the core's source, its packages and a Bun binary, and is signed ad hoc for this Mac.
+- `bin/desk <folder>` opens the folder in a new tab of the installed Desk. Link it onto your PATH to use `desk .`.
+- A window with no tabs opens on the most recent project, else asks for a folder. ⌘O opens a folder in a new tab.
 - One Desk runs at a time, with one window. Its tabs are saved in `~/.desk/window.json`.
-- The app starts the core with `bun` from `PATH`. Set `DESK_BUN` to use another binary. The core needs Bun 1.4 or newer.
+- `mise run dev` starts Desk Dev, which runs beside the installed Desk. It has an amber icon and keeps its tabs and plugin builds in `~/.desk/dev`. Settings, commands and plugins are shared. `DESK_DIR=<folder> mise run dev` opens a folder in it.
+- Desk Dev starts the core with `bun` from `PATH`. Set `DESK_BUN` to use another binary. The core needs Bun 1.4 or newer.
+- `assets/logo.svg` and `assets/logo-dark.svg` are the logo in light and dark. `mise run icons` renders them into `app/build`. Commit what it writes.
 - `mise run check` typechecks, runs the core and app tests, and builds the app.
 
 ## Check the UI

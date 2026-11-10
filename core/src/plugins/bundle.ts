@@ -3,7 +3,7 @@ import solid from "babel-preset-solid"
 import type { BunPlugin } from "bun"
 import { mkdirSync } from "node:fs"
 import { basename, dirname, join } from "node:path"
-import { deskHome } from "../data-files"
+import { instanceHome } from "../data-files"
 
 const SOLID = dirname(Bun.resolveSync("solid-js/package.json", import.meta.dir))
 const PLUGIN_PACKAGE = dirname(Bun.resolveSync("@desk/plugin/package.json", import.meta.dir))
@@ -41,7 +41,7 @@ const solidJsx: BunPlugin = {
 
 /** Bundles the plugin whose module is at `plugin` into `<name>.js` for a worker, and returns the bundle's path. */
 export async function bundlePlugin(name: string, plugin: string): Promise<string> {
-  const outdir = join(deskHome(), "cache", "plugins")
+  const outdir = join(instanceHome(), "cache", "plugins")
   mkdirSync(outdir, { recursive: true })
   // The bundle starts from a small module that hands the plugin to the host, so both share one renderer.
   const entry = join(outdir, `${name}.entry.ts`)

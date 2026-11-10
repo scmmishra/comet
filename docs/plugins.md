@@ -88,7 +88,7 @@ A panel's context also has `ctx.params` and `ctx.close()`.
 
 ## Who owns what
 
-- The core owns each tab's layout: its sidebar, its open panel instances and the cards it leaves out. It saves them in `~/.desk/window.json` with the tab.
+- The core owns each tab's layout: its sidebar, its open panel instances and the cards it leaves out. It saves them in `window.json` with the tab.
 - A plugin and the app change a layout the same way, through the core. The core checks that a panel gets its parameters.
 - The core runs a plugin's views and commands only in projects where the plugin is on. One lookup checks this for panels, setups and commands.
 - On each change, the core draws what the layout needs and sends it whole to the app as `layout`. It tells the plugins which instances are open, for `isOpen`.

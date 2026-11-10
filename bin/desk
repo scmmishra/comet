@@ -1,6 +1,11 @@
 #!/bin/bash
-# Opens a folder in Desk: `desk .` or `desk ~/code/repo`. Desk runs from source until it is packaged.
+# Opens a folder in the installed Desk: `desk .` or `desk ~/code/repo`. A second Desk hands the folder
+# to the running one and quits, so -n is safe. `mise run install` installs Desk.
 set -euo pipefail
 folder="$(cd "${1:-.}" && pwd)"
-repo="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
-cd "$repo" && DESK_DIR="$folder" exec mise run dev
+app="/Applications/Desk.app"
+if [ ! -d "$app" ]; then
+  echo "Desk is not installed. Run \`mise run install\` in the Desk repo." >&2
+  exit 1
+fi
+exec open -n -a "$app" --env DESK_DIR="$folder"

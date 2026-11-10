@@ -1,7 +1,7 @@
 import { app } from "electron"
 import { spawn, type ChildProcess } from "node:child_process"
 import { randomBytes } from "node:crypto"
-import { resolve } from "node:path"
+import { join, resolve } from "node:path"
 import { createInterface } from "node:readline"
 import type { CoreReady } from "@desk/protocol"
 import type { CoreInfo } from "../shared/bridge"
@@ -9,7 +9,17 @@ import type { CoreInfo } from "../shared/bridge"
 const START_TIMEOUT_MS = 10_000
 const STOP_GRACE_MS = 1000
 
-/** The Bun core, which serves every project. It runs from source next to the app. */
+/**
+ * How to start the core. A packaged Desk carries the core's source, its packages and a Bun binary in
+ * its resources. A dev Desk runs the core from the repo with `bun` from PATH, and keeps its window
+ * apart from the installed Desk's.
+ */
+function coreCommand() {
+  if (app.isPackaged) return { bun: join(process.resourcesPath, "bun"), cwd: join(process.resourcesPath, "core"), env: {} }
+  return { bun: process.env.DESK_BUN ?? "bun", cwd: resolve(app.getAppPath(), ".."), env: { DESK_INSTANCE: "dev" } }
+}
+
+/** The Bun core, which serves every project. */
 export class CoreProcess {
   private constructor(
     private readonly child: ChildProcess,
@@ -19,9 +29,10 @@ export class CoreProcess {
   /** Starts the core and waits for the line that says where it listens. */
   static start(): Promise<CoreProcess> {
     const token = randomBytes(24).toString("hex")
-    const child = spawn(process.env.DESK_BUN ?? "bun", ["core/src/main.ts"], {
-      cwd: resolve(app.getAppPath(), ".."),
-      env: { ...process.env, DESK_TOKEN: token },
+    const { bun, cwd, env } = coreCommand()
+    const child = spawn(bun, ["core/src/main.ts"], {
+      cwd,
+      env: { ...process.env, ...env, DESK_TOKEN: token },
       stdio: ["pipe", "pipe", "inherit"],
     })
     return new Promise((done, fail) => {
