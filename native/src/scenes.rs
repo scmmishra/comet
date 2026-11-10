@@ -8,7 +8,41 @@ use crate::shell::{CoreState, Desk};
 /// A scene: its name, and what it sets in a fresh window.
 type Scene = (&'static str, fn(&mut Desk));
 
-pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin)];
+pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-projects", settings_projects), ("settings-mcp", settings_mcp)];
+
+/// Settings on Providers, with an update out and plan usage.
+fn settings(s: &mut Desk) {
+    models(s);
+    s.picker = Default::default();
+    let messages = serde_json::json!([
+        { "type": "settings", "settings": { "appearance": { "theme": "dark", "fontSize": 14 }, "claude": { "model": "default", "effort": null, "permissionMode": "auto", "followUp": "steer", "compactIdle": false }, "projects": { "/Users/me/code/web": { "name": "Web", "color": "blue" } } } },
+        { "type": "claude.version", "version": { "installed": "2.5.1", "latest": "2.5.3", "updateAvailable": true, "updatable": true } },
+        { "type": "account", "account": { "email": "me@example.com", "organization": "Example", "plan": "max", "apiProvider": "firstParty" } }
+    ]);
+    for message in serde_json::from_value::<Vec<CoreMessage>>(messages).expect("the scene's messages decode") {
+        s.receive(Event::Message(message)).expect("settings need no folder");
+    }
+    s.open_settings("providers");
+}
+
+/// Settings on Projects.
+fn settings_projects(s: &mut Desk) {
+    settings(s);
+    s.open_settings("projects");
+}
+
+/// Settings on MCP servers, with one server of each kind.
+fn settings_mcp(s: &mut Desk) {
+    settings(s);
+    s.open_settings("mcps");
+    let servers = serde_json::json!({ "type": "project", "project": "/Users/me/code/web", "part": "mcp", "value": [
+        { "name": "postgres", "status": "connected", "scope": "project", "ownProject": true, "target": "npx pg-mcp", "tools": 4 },
+        { "name": "github", "status": "connected", "scope": "user", "ownProject": false, "target": "npx github-mcp", "tools": 12 },
+        { "name": "linear", "status": "needs-auth", "scope": "user", "ownProject": false, "target": "https://mcp.linear.app/sse" },
+        { "name": "sentry", "status": "disabled", "scope": "user", "ownProject": false, "target": "npx sentry-mcp" }
+    ] });
+    s.receive(Event::Message(serde_json::from_value(servers).expect("the servers decode"))).expect("servers need no folder");
+}
 
 /// A tab laid out by a plugin's setup: a sidebar listing made-up conversations, and a card.
 fn plugin(s: &mut Desk) {

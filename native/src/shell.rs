@@ -62,6 +62,7 @@ pub struct Desk {
     pub meters: crate::meters::Meters,
     pub minimap: crate::minimap::Minimap,
     pub plugins: crate::plugins::Plugins,
+    pub settings: crate::settings::SettingsUi,
     /// Whether ⌘ is held, so the new tab button opens its tab next to the active one.
     cmd_held: bool,
     strip: TabDragState,
@@ -95,6 +96,11 @@ impl Desk {
         match message {
             CoreMessage::Settings { settings } => self.account.settings = Some(settings),
             CoreMessage::Models { models } => self.account.models = models,
+            CoreMessage::ClaudeVersion { version } => {
+                self.account.claude_code = Some(version);
+                self.account.updating = false;
+            }
+            CoreMessage::Account { account } => self.account.user = Some(account),
             CoreMessage::Recent { projects } => w.recent = projects,
             CoreMessage::Tabs { tabs, active } => {
                 result = w.restore(tabs, active, account, core);
@@ -218,7 +224,12 @@ pub mod commands {
         super::open_folder(tx);
     }
 
+    /// Closes the tab, or Settings while they show in its place.
     pub fn close_tab(s: &mut Desk, tx: &mut Tx) {
+        if s.workspace.settings_page.is_some() {
+            s.close_settings();
+            return;
+        }
         if let Some(id) = s.workspace.active.clone() {
             s.close_tab(&id, tx);
         }
@@ -240,6 +251,11 @@ pub mod commands {
 
     pub fn new_terminal(s: &mut Desk, _: &mut Tx) {
         s.new_terminal();
+    }
+
+    pub fn settings(s: &mut Desk, tx: &mut Tx) {
+        s.open_settings("providers");
+        tx.focus("settings", false);
     }
 
     pub fn palette(s: &mut Desk, tx: &mut Tx) {
@@ -355,6 +371,8 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
     // A card on the ground: the session, and the view pane beside it while open.
     let card = |key: &str, child: El| col().key(key.to_owned()).w_frac(1.0).grow(1.0).shrink().min_w(0.0).h_full().min_h(0.0).fill(k.c.bg_base).radius(PANEL_RADIUS).clip_rounded(PANEL_RADIUS).border(1.0, k.c.border_muted).child(child);
     let cards = match (&s.status, w.active_tab()) {
+        // Settings show in place of the tab, in the card the session fills.
+        (CoreState::Ready, _) if s.workspace.settings_page.is_some() => row().w_full().grow(1.0).min_h(0.0).child(card("settings-card", crate::settings::screen(s, k, &mut layer))),
         (CoreState::Ready, Some(tab)) => {
             let size = cx.layout_size("session-card");
             let session = col().w_full().h_full().min_h(0.0).child(session(s, tab, dark, size, &mut layer));

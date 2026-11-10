@@ -3,7 +3,7 @@
 //! ⌘⇧O opens it on the threads and ⌘P on the files.
 
 use crate::format;
-use crate::protocol::{ClientMessage, ThreadSummary};
+use crate::protocol::{ClientMessage, ThemeChoice, ThreadSummary};
 use crate::shell::{self, Desk};
 use crate::workspace::Place;
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, icon, row, text, text_input};
@@ -32,6 +32,10 @@ pub enum Page {
     Setups,
     /// Panels the active project's plugins offer.
     Panels,
+    /// The themes.
+    Themes,
+    /// The settings pages.
+    Settings,
     /// Text for a plugin command that runs on it: the command's id, title and prompt.
     Input(String, String, String),
 }
@@ -45,6 +49,8 @@ impl Page {
             Page::SearchThreadsIn => "Search threads in".into(),
             Page::Setups => "Open setup".into(),
             Page::Panels => "Open panel".into(),
+            Page::Themes => "Change theme".into(),
+            Page::Settings => "Open settings".into(),
             Page::Input(_, _, prompt) => prompt.clone(),
         }
     }
@@ -61,6 +67,8 @@ enum Action {
     Setup(String, String, String),
     Panel(String),
     Command(String, Option<String>),
+    Theme(ThemeChoice),
+    Settings(&'static str),
 }
 
 #[derive(Clone)]
@@ -72,12 +80,14 @@ struct Entry {
     /// A project's mark leads the row.
     project: Option<String>,
     shortcut: Option<&'static [&'static str]>,
+    /// Marks the current choice in a list of choices, such as the theme.
+    checked: bool,
     action: Action,
 }
 
 impl Entry {
     fn new(section: &str, title: impl Into<String>, action: Action) -> Entry {
-        Entry { section: section.into(), title: title.into(), detail: None, icon: None, project: None, shortcut: None, action }
+        Entry { section: section.into(), title: title.into(), detail: None, icon: None, project: None, shortcut: None, checked: false, action }
     }
 }
 
@@ -162,8 +172,26 @@ impl Desk {
                 entry
             }).collect()
         };
+        let theme = self.account.settings.as_ref().map(|x| x.appearance.theme);
+        let themes = || -> Vec<Entry> {
+            ThemeChoice::ALL.iter().map(|t| {
+                let mut entry = Entry::new("Themes", t.label(), Action::Theme(*t));
+                entry.icon = Some(if *t == ThemeChoice::Auto { &ic::MONITOR } else { &ic::APPEARANCE });
+                entry.checked = theme == Some(*t);
+                entry
+            }).collect()
+        };
+        let settings = || -> Vec<Entry> {
+            crate::settings::PAGES.iter().map(|(id, title, mark)| {
+                let mut entry = Entry::new("Settings", *title, Action::Settings(id));
+                entry.icon = Some(*mark);
+                entry
+            }).collect()
+        };
         match self.palette.pages.last() {
             Some(Page::Threads(project)) => threads(project),
+            Some(Page::Themes) => themes(),
+            Some(Page::Settings) => settings(),
             Some(Page::Files(project)) => match &self.palette.found {
                 Some((p, q, paths)) if p == project && *q == self.palette.query.text => paths
                     .iter()
@@ -222,6 +250,8 @@ impl Desk {
                 root.push(action("Open folder…", &ic::FOLDER, Some(&["⌘", "O"]), Action::Run(shell::commands::open_folder)));
                 root.push(action("Open setup…", &ic::WORKSPACE, None, Action::Open(Page::Setups)));
                 root.push(action("Open panel…", &crate::icons::PANEL, None, Action::Open(Page::Panels)));
+                root.push(action("Change theme…", &ic::APPEARANCE, None, Action::Open(Page::Themes)));
+                root.push(action("Open settings…", &ic::SETTINGS_GEAR, Some(&["⌘", ","]), Action::Open(Page::Settings)));
                 root.extend(self.offered().into_iter().flat_map(|o| o.commands.iter()).map(|c| {
                     let run = match &c.input {
                         Some(prompt) => Action::Open(Page::Input(c.id.clone(), c.title.clone(), prompt.clone())),
@@ -242,6 +272,8 @@ impl Desk {
                     root.extend(recent.into_iter().take(RECENT_THREADS));
                 } else {
                     // A search from the root also finds what the nested lists hold.
+                    root.extend(themes());
+                    root.extend(settings());
                     root.extend(projects(Action::NewSessionIn));
                     root.extend(recent);
                 }
@@ -306,6 +338,11 @@ impl Desk {
                 if let Some(tab) = self.workspace.active.clone() {
                     self.core.send(&ClientMessage::PluginCommand { tab_id: tab, command, input });
                 }
+            }
+            Action::Theme(theme) => self.set_theme(theme.id()),
+            Action::Settings(page) => {
+                self.open_settings(page);
+                tx.focus("settings", false);
             }
             Action::Open(_) => {}
         }
@@ -427,6 +464,7 @@ fn entry_row(entry: &Entry, index: usize, active: bool, k: &Kit) -> El {
         .children(entry.detail.clone().map(|d| text(d).font(k.ty.text_xsmall).color(k.c.text_faint).truncate()))
         .child(row().grow(1.0))
         .children(entry.shortcut.map(|keys| Keybind::new(keys).build(k)))
+        .children(entry.checked.then(|| icon(&ic::CHECK, 15.0).color(k.c.text_base)))
         .children(matches!(entry.action, Action::Open(_)).then(|| icon(&ic::OUTLINE_CHEVRON_RIGHT, 15.0).color(k.c.text_faint)))
 }
 

@@ -67,6 +67,28 @@ pub enum ThemeChoice {
     Auto,
 }
 
+impl ThemeChoice {
+    /// The choices, in the order Appearance and the palette list them.
+    pub const ALL: [ThemeChoice; 3] = [ThemeChoice::Dark, ThemeChoice::Light, ThemeChoice::Auto];
+
+    /// The choice as the settings file names it.
+    pub fn id(self) -> &'static str {
+        match self {
+            ThemeChoice::Dark => "dark",
+            ThemeChoice::Light => "light",
+            ThemeChoice::Auto => "auto",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ThemeChoice::Dark => "Dark",
+            ThemeChoice::Light => "Light",
+            ThemeChoice::Auto => "System",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppearanceSettings {
@@ -84,12 +106,65 @@ pub struct ClaudeSettings {
     pub permission_mode: String,
     /// What Enter does while Claude works: "steer" or "queue".
     pub follow_up: String,
+    /// Whether Claude Code compacts a large thread that sat idle before its next turn.
+    #[serde(default)]
+    pub compact_idle: bool,
+}
+
+/// How a project shows in tabs and menus.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct ProjectSettings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct DeskSettings {
     pub appearance: AppearanceSettings,
     pub claude: ClaudeSettings,
+    /// By project folder.
+    #[serde(default)]
+    pub projects: std::collections::HashMap<String, ProjectSettings>,
+}
+
+/// The Claude Code that Desk runs, and whether a newer one is out.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeCodeVersion {
+    pub installed: Option<String>,
+    pub latest: Option<String>,
+    pub update_available: bool,
+    /// Whether Desk can update it: only the native install updates itself.
+    pub updatable: bool,
+}
+
+/// The Claude account Claude Code is signed in with.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeAccount {
+    pub email: Option<String>,
+    pub organization: Option<String>,
+    pub plan: Option<String>,
+    pub api_provider: Option<String>,
+    pub api_key_source: Option<String>,
+}
+
+/// An MCP server Claude Code loads.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServer {
+    pub name: String,
+    /// "connected", "failed", "needs-auth", "pending" or "disabled".
+    pub status: String,
+    pub own_project: bool,
+    pub target: Option<String>,
+    #[serde(default)]
+    pub tools: u32,
+    pub error: Option<String>,
 }
 
 /// A model Claude Code offers the account.
@@ -618,6 +693,11 @@ pub enum CoreMessage {
     /// Setups across projects, each with the project it opens in.
     #[serde(rename = "setups")]
     Setups { setups: Vec<ProjectSetup> },
+    #[serde(rename = "claude.version")]
+    ClaudeVersion { version: ClaudeCodeVersion },
+    /// Who Claude Code is signed in as. Absent when it is not signed in.
+    #[serde(rename = "account")]
+    Account { account: Option<ClaudeAccount> },
     /// Plan usage. Absent when Claude has no plan limits, such as with an API key.
     #[serde(rename = "usage")]
     Usage { usage: Option<PlanUsage> },
@@ -647,6 +727,17 @@ pub enum ClientMessage {
     ModelsGet,
     #[serde(rename = "usage.get")]
     UsageGet,
+    /// Changes the named settings. The core saves them and sends them back.
+    #[serde(rename = "settings.update")]
+    SettingsUpdate { change: Value },
+    #[serde(rename = "claude.version.get")]
+    ClaudeVersionGet,
+    /// Updates Claude Code with its own updater. The core answers with `claude.version` once done.
+    #[serde(rename = "claude.update")]
+    ClaudeUpdate,
+    /// Turns an MCP server on or off for the project. Claude Code keeps the choice.
+    #[serde(rename = "mcp.toggle")]
+    McpToggle { project: String, name: String, enabled: bool },
     /// Reopens the tab closed last. The core answers with `tab.reopened`.
     #[serde(rename = "tab.reopen")]
     TabReopen,
@@ -815,6 +906,10 @@ mod tests {
         let ours = [
             ClientMessage::ModelsGet,
             ClientMessage::UsageGet,
+            ClientMessage::SettingsUpdate { change: serde_json::json!({ "appearance": { "theme": "auto" }, "claude": { "effort": null } }) },
+            ClientMessage::ClaudeVersionGet,
+            ClientMessage::ClaudeUpdate,
+            ClientMessage::McpToggle { project: "/Users/me/code/web".into(), name: "github".into(), enabled: false },
             ClientMessage::TabReopen,
             ClientMessage::TabsSave { tabs, active },
             ClientMessage::SessionSend { tab_id: "tab-1".into(), text: "Add a test".into(), images: vec![], follow_up: Some("queue".into()) },
@@ -881,7 +976,7 @@ mod tests {
 
     #[test]
     fn skips_messages_it_does_not_read() {
-        let message: CoreMessage = serde_json::from_str(r#"{"type":"claude.version","version":{}}"#).unwrap();
+        let message: CoreMessage = serde_json::from_str(r#"{"type":"some.future.message","value":{}}"#).unwrap();
         assert!(matches!(message, CoreMessage::Other));
     }
 }

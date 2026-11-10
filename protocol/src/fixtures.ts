@@ -25,7 +25,7 @@ const TABS: TabInfo[] = [
 ]
 
 export const CORE_MESSAGES = [
-  { type: "settings", settings: { ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_SETTINGS.appearance, theme: "light" } } },
+  { type: "settings", settings: { ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_SETTINGS.appearance, theme: "light" }, projects: { "/Users/me/code/web": { name: "Web", color: "blue" } } } },
   { type: "tabs", tabs: TABS, active: "tab-2" },
   { type: "tabs", tabs: [] },
   { type: "recent", projects: ["/Users/me/code/api", "/Users/me/code/web"] },
@@ -136,6 +136,14 @@ export const CORE_MESSAGES = [
   { type: "queue", tabId: "tab-1", messages: [{ id: "m1", text: "Then add a test" }], held: true },
   { type: "error", message: "The folder does not exist." },
   { type: "notice", message: "Copied the link." },
+  { type: "claude.version", version: { installed: "2.5.1", latest: "2.5.3", updateAvailable: true, updatable: true } },
+  { type: "account", account: { email: "me@example.com", organization: "Example", plan: "max", apiProvider: "firstParty" } },
+  {
+    type: "project",
+    project: "/Users/me/code/web",
+    part: "mcp",
+    value: [{ name: "github", status: "connected", scope: "user", ownProject: false, target: "npx github-mcp", tools: 12 }],
+  },
   {
     type: "plugin.ops",
     plugin: "support",
@@ -173,6 +181,10 @@ export const CORE_MESSAGES = [
 export const CLIENT_MESSAGES = [
   { type: "models.get" },
   { type: "usage.get" },
+  { type: "settings.update", change: { appearance: { theme: "auto" }, claude: { effort: null } } },
+  { type: "claude.version.get" },
+  { type: "claude.update" },
+  { type: "mcp.toggle", project: "/Users/me/code/web", name: "github", enabled: false },
   { type: "tab.reopen" },
   { type: "tabs.save", tabs: TABS, active: "tab-2" },
   { type: "session.send", tabId: "tab-1", text: "Add a test", followUp: "queue" },

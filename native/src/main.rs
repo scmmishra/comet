@@ -24,6 +24,7 @@ mod projects;
 mod protocol;
 mod questions;
 mod scenes;
+mod settings;
 mod shell;
 mod start_screen;
 mod theme;
@@ -42,12 +43,16 @@ use std::cell::RefCell;
 /// A menu item: its title and shortcut as `app/src/shared/commands.ts` names them, its menu and what it runs.
 type Command = (&'static str, &'static str, &'static str, fn(&mut Desk, &mut Tx));
 
+/// The app menu, Desk's first, which Rune fills when an item names no menu.
+const APP_MENU: &str = "";
+
 const COMMANDS: &[Command] = &[
     ("New Session", "cmd+t", "File", commands::new_session),
     ("New Terminal", "ctrl+`", "File", commands::new_terminal),
     ("Open Folder…", "cmd+o", "File", commands::open_folder),
     ("Close Tab", "cmd+w", "File", commands::close_tab),
     ("Reopen Closed Tab", "cmd+shift+t", "File", commands::reopen_tab),
+    ("Settings…", "cmd+,", APP_MENU, commands::settings),
     ("Toggle Panel", "cmd+\\", "View", commands::toggle_panel),
     ("Command Palette…", "cmd+k", "View", commands::palette),
     ("Search Threads…", "cmd+shift+o", "View", commands::search_threads),
@@ -98,7 +103,8 @@ fn main() {
     .on_modifiers(shell::modifiers)
     .titlebar(Titlebar::new(shell::TITLEBAR_HEIGHT));
     for &(title, keys, menu, action) in COMMANDS {
-        app = app.menu_item(MenuItem::new(title, action).menu(menu).key_equivalent(keys.parse().expect("a shortcut")));
+        let item = MenuItem::new(title, action).key_equivalent(keys.parse().expect("a shortcut"));
+        app = app.menu_item(if menu == APP_MENU { item } else { item.menu(menu) });
     }
 
     // The core starts once the window shows, so headless runs, which never call on_ready, start none.

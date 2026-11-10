@@ -136,6 +136,7 @@ impl Desk {
             },
             &self.core,
         );
+        self.workspace.settings_page = None;
         self.sync_panel();
     }
 

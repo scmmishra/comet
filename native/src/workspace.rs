@@ -35,6 +35,8 @@ pub struct Workspace {
     pub active: Option<String>,
     /// Folders tabs have opened, most recent first, as the core keeps them.
     pub recent: Vec<String>,
+    /// The settings page that shows in place of the active tab, if any.
+    pub settings_page: Option<String>,
     /// Whether the saved tabs are back. Until then, a change to the tabs would overwrite them.
     restored: bool,
 }
@@ -71,6 +73,7 @@ impl Workspace {
         };
         self.tabs.insert(index, tab);
         self.active = Some(id.clone());
+        self.settings_page = None;
         self.save(core);
         Ok(id)
     }
@@ -97,6 +100,7 @@ impl Workspace {
     pub fn close_tab(&mut self, id: &str, account: &Account, core: &Core) -> Result<(), NeedsFolder> {
         let Some(index) = self.tabs.iter().position(|t| t.id == id) else { return Ok(()) };
         self.tabs.remove(index);
+        self.settings_page = None;
         if self.active.as_deref() == Some(id) {
             self.active = self.tabs.get(index.saturating_sub(1)).map(|t| t.id.clone());
         }
@@ -118,8 +122,10 @@ impl Workspace {
         self.save(core);
     }
 
+    /// Brings a tab to the front. Settings close, so the tab shows.
     pub fn show_tab(&mut self, id: &str, core: &Core) {
         self.active = Some(id.to_owned());
+        self.settings_page = None;
         self.save(core);
     }
 
@@ -133,6 +139,7 @@ impl Workspace {
     /// Puts back a closed tab the core returned, where it was.
     pub fn reopened(&mut self, tab: TabInfo, index: usize, core: &Core) {
         self.active = Some(tab.id.clone());
+        self.settings_page = None;
         self.tabs.insert(index.min(self.tabs.len()), tab);
         self.save(core);
     }
@@ -148,6 +155,7 @@ impl Workspace {
     /// Opens or closes a tab's view pane. Each tab keeps its own.
     pub fn set_panel_open(&mut self, id: &str, open: bool, core: &Core) {
         self.change_tab(id, |t| t.panel_open = Some(open), core);
+        self.settings_page = None;
     }
 
     /// Shows a panel tab: a file, or Review when `panel` is None.

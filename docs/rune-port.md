@@ -75,18 +75,20 @@ Still to do:
 
 ### Phase 4: The rest
 
-Done so far:
+Done:
 
 - Toasts for the core's errors and notices, refused attachments and the first Escape's hint.
-- The command palette (⌘K), opened on threads by ⌘⇧O and on files by ⌘P.
-
-Still to do:
-
-- Cards beside the thread: the Space card, subagents and background tasks.
+- The command palette (⌘K), opened on threads by ⌘⇧O and on files by ⌘P. It lists themes and settings pages too.
+- Cards beside the thread: the Space card, the Commands card and subagents.
 - The minimap rail.
 - Plugin views: sidebars, panels, cards and setups, drawn from the core's primitives.
-- Settings, and the palette's theme and settings lists with them.
 - Meters: the context ring and the usage button.
+- Settings (⌘,): Providers, Appearance, Projects, MCP servers and Skills. Showing a tab closes them, as in the Electron app.
+
+Left out, for now:
+
+- Appearance's interface and code font rows. The native app draws in Geist, which it bundles. It has no way yet to load a font by name.
+- A project's icon in Projects, and the project's colour in its mark. Both wait on the project mark (see Open decisions).
 
 ### Phase 5: Switch
 
