@@ -3,7 +3,7 @@ import type { ServerWebSocket } from "bun"
 import { claudeCodeVersion, updateClaudeCode } from "./claude-update"
 import { discoverCommands } from "./command-sources"
 import { Commands } from "./commands"
-import { openableFile, openInEditor } from "./files"
+import { openableFile, openInEditor, readForView } from "./files"
 import { checkImages } from "./images"
 import { readMcpServers, toggleMcpServer } from "./mcp"
 import { Models } from "./models"
@@ -71,6 +71,13 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     return found
   }
 
+  /** The file a message names, which must exist. */
+  const requireFile = (dir: string, path: string) => {
+    const file = openableFile(dir, path)
+    if (!file) throw new Error(`Desk can only open a file that exists: ${path}`)
+    return file
+  }
+
   /** How each part of a project is read. Each answers the client that asked. */
   const readers: { [K in ProjectPart]: (dir: string, reply: (value: ProjectParts[K]) => void) => unknown } = {
     space: (dir, reply) => readSpace(dir).then(reply),
@@ -97,11 +104,10 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         return read(message.project, message.part, reply)
       case "mcp.toggle":
         return toggleMcpServer(message.project, message.name, message.enabled, (servers) => reply(project(message.project, "mcp", servers)))
-      case "file.open": {
-        const file = openableFile(message.project, message.path)
-        if (!file) throw new Error(`Desk can only open a file that exists: ${message.path}`)
-        return openInEditor(file, message.line)
-      }
+      case "file.open":
+        return openInEditor(requireFile(message.project, message.path), message.line)
+      case "file.read":
+        return reply({ type: "file", project: message.project, path: message.path, file: readForView(requireFile(message.project, message.path)) })
       case "commands.save":
         return commandsOf(message.project).save(message.name, message.processes, message.replacing)
       case "commands.remove":

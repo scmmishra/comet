@@ -552,6 +552,23 @@ export interface TerminalInfo {
   readonly title: string
 }
 
+/** A file open in a tab's panel. `path` is absolute. `line`, when set, is the line to show. */
+export interface FileTabInfo {
+  readonly id: string
+  readonly path: string
+  readonly line?: number
+}
+
+/** A file as the panel shows it. A binary file has no text, and a large one shows only its start. */
+export interface FileView {
+  /** The absolute path. */
+  readonly path: string
+  readonly text?: string
+  readonly binary?: boolean
+  /** Set when the text stops before the end of the file. */
+  readonly truncated?: boolean
+}
+
 /**
  * A top tab as the app keeps it. The core saves the window's tabs, in their order, as the app sends
  * them, and sends them back on connect. Each tab works in one project.
@@ -563,7 +580,9 @@ export interface TabInfo extends RunSettings {
   readonly project: string
   /** The terminals in this tab's panel, in order. The core closes any shell that no tab lists. */
   readonly terminals: readonly TerminalInfo[]
-  /** The panel tab on show: a terminal's id, or a plugin panel's instance id. Absent means Review. */
+  /** Files open in this tab's panel, in order. */
+  readonly files?: readonly FileTabInfo[]
+  /** The panel tab on show: a terminal's, a file's or a plugin panel's id. Absent means Review. */
   readonly panelActive?: string
   /** What Review compares with. Absent means the thread's changes. */
   readonly reviewScope?: ReviewScope
@@ -729,6 +748,8 @@ export type ClientMessage =
   | { readonly type: "tabs.save"; readonly tabs: readonly TabInfo[]; readonly active?: string }
   /** Opens a file from the thread in the editor. A relative path is in the project. The core refuses anything that is not a file. */
   | { readonly type: "file.open"; readonly project: string; readonly path: string; readonly line?: number }
+  /** Reads a file to show in the panel. `path` is relative to the project, absolute, or from ~/. The core answers with `file`. */
+  | { readonly type: "file.read"; readonly project: string; readonly path: string }
   /** Sends a message. While Claude works, `followUp` says whether it steers the turn or waits in the queue. */
   | { readonly type: "session.send"; readonly tabId: string; readonly text: string; readonly images?: readonly ImageAttachment[]; readonly followUp?: FollowUp }
   /** Sends a queued message now: into the running turn, or as a new turn when none runs. */
@@ -789,6 +810,8 @@ export type CoreMessage =
   | { readonly type: "tab.reopened"; readonly tab: TabInfo; readonly index: number }
   /** A tab's queued messages, sent whole on each change. `held` means a stop or an error paused them. */
   | { readonly type: "queue"; readonly tabId: string; readonly messages: readonly QueuedMessage[]; readonly held: boolean }
+  /** A file read for the panel, for the `path` that was asked for. */
+  | { readonly type: "file"; readonly project: string; readonly path: string; readonly file: FileView }
   /** The branch a tab's thread last ran on. Absent outside a Git repo or on a detached HEAD. */
   | { readonly type: "thread.branch"; readonly tabId: string; readonly branch?: string }
   /** The answer to `files.search`, with the query it answers: paths relative to the project, best match first. */

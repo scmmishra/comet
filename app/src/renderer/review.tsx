@@ -1,4 +1,5 @@
 import { DiffChanges } from "@opencode/ui/diff-changes"
+import { IconButton } from "@opencode/ui/icon-button"
 import { SegmentedControl, SegmentedControlItem } from "@opencode/ui/segmented-control"
 import { Select } from "@opencode/ui/select"
 import { FileDiff, getSingularPatch } from "@pierre/diffs"
@@ -8,7 +9,8 @@ import { colorScheme } from "./appearance"
 import { fileIcon } from "./file-icons"
 import { CODE_THEMES } from "./highlight"
 import { plural } from "./format"
-import { Chevron } from "./icons"
+import { Chevron, Icon } from "./icons"
+import { openFile } from "./file-tabs"
 import { reviewScope } from "./threads"
 import { setReviewScope } from "./workspace"
 
@@ -111,11 +113,9 @@ export function ReviewView(props: { tab: TabInfo; review: readonly FileChange[] 
           const slash = file.path.lastIndexOf("/")
           return (
             <section class="border-t border-outline">
-              <button
-                class="sticky top-0 z-10 flex w-full min-w-0 items-center gap-2 bg-panel px-4 py-2 text-left hover:bg-hover"
-                aria-expanded={isOpen(file.path)}
-                onClick={() => toggle(file.path)}
-              >
+              {/* The header folds the diff. Its open button sits beside the fold button, since a button cannot hold another. */}
+              <div class="group/header sticky top-0 z-10 flex min-w-0 items-center bg-panel pr-2 hover:bg-hover">
+              <button class="flex min-w-0 flex-1 items-center gap-2 py-2 pl-4 text-left" aria-expanded={isOpen(file.path)} onClick={() => toggle(file.path)}>
                 <Chevron open={isOpen(file.path)} class="size-[13px] text-fg-3" />
                 <svg class="size-[14px] shrink-0" aria-hidden="true">
                   <use href={`#${fileIcon(file.path)}`} />
@@ -129,6 +129,17 @@ export function ReviewView(props: { tab: TabInfo; review: readonly FileChange[] 
                 </span>
                 <DiffChanges class="shrink-0" changes={file} />
               </button>
+              <Show when={file.status !== "deleted"}>
+                <IconButton
+                  variant="ghost-muted"
+                  size="small"
+                  class="ml-1 shrink-0 opacity-0 focus-visible:opacity-100 group-hover/header:opacity-100"
+                  aria-label={`Open ${file.path}`}
+                  icon={<Icon name="arrow-up-right" />}
+                  onClick={() => openFile(props.tab.project, file.path)}
+                />
+              </Show>
+              </div>
               <Show when={isOpen(file.path)}>
                 <Show when={file.patch} fallback={<div class="px-4 pb-3 text-fg-3">Binary file. No diff to show.</div>}>
                   <PatchDiff patch={file.patch} />

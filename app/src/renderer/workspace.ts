@@ -1,4 +1,4 @@
-import type { ReviewScope, RunSettings, TabInfo, TerminalInfo } from "@desk/protocol"
+import type { FileTabInfo, ReviewScope, RunSettings, TabInfo, TerminalInfo } from "@desk/protocol"
 import { permissionFor } from "./models"
 import { createStore, produce } from "solid-js/store"
 import { account } from "./account"
@@ -25,12 +25,13 @@ export { workspace }
 export const activeTab = () => workspace.tabs.find((tab) => tab.id === workspace.active)
 
 /**
- * The view pane tab a tab shows: a terminal's id or an open plugin panel's, or undefined for Review.
- * A choice whose terminal or panel has closed, such as a panel the plugin closed, shows Review.
+ * The view pane tab a tab shows: a terminal's, a file's or an open plugin panel's id, or undefined for
+ * Review. A choice whose tab has closed, such as a panel the plugin closed, shows Review.
  */
 export function shownPanelTab(tab: TabInfo): string | undefined {
   const chosen = tab.panelActive
-  const open = tab.terminals.some((terminal) => terminal.id === chosen) || !!plugins.layouts[tab.id]?.panels.some((panel) => panel.id === chosen)
+  const open =
+    tab.terminals.some((terminal) => terminal.id === chosen) || !!tab.files?.some((file) => file.id === chosen) || !!plugins.layouts[tab.id]?.panels.some((panel) => panel.id === chosen)
   return open ? chosen : undefined
 }
 
@@ -192,13 +193,13 @@ export function newTerminal() {
   setPanelOpen(tab.id, true)
 }
 
-/** Shows a tab's panel tab: a terminal or a plugin panel, or Review when `id` is undefined. */
 /** Sets what a tab's Review compares with. */
 export function setReviewScope(tabId: string, scope: ReviewScope) {
   setWorkspace("tabs", (found) => found.id === tabId, { reviewScope: scope })
   save()
 }
 
+/** Shows a tab's panel tab: a terminal, a file or a plugin panel, or Review when `id` is undefined. */
 export function showPanelTab(tabId: string, id: string | undefined) {
   setWorkspace("tabs", (found) => found.id === tabId, { panelActive: id })
   save()
@@ -209,6 +210,27 @@ export function closeTerminal(tabId: string, id: string) {
   const tab = workspace.tabs.find((found) => found.id === tabId)
   if (!tab) return
   setWorkspace("tabs", (found) => found.id === tabId, { terminals: tab.terminals.filter((terminal) => terminal.id !== id) })
+  save()
+}
+
+/**
+ * Shows a file in a tab's panel, at `line`, opening the panel. Each file has one tab: a file already open
+ * comes to the front and moves to the line.
+ */
+export function openFileTab(tabId: string, path: string, line?: number) {
+  const tab = workspace.tabs.find((found) => found.id === tabId)
+  if (!tab) return
+  const files = tab.files ?? []
+  const open = files.find((file) => file.path === path)
+  const file: FileTabInfo = { id: open?.id ?? crypto.randomUUID(), path, ...(line ? { line } : {}) }
+  setWorkspace("tabs", (found) => found.id === tabId, { files: open ? files.map((each) => (each.id === open.id ? file : each)) : [...files, file], panelActive: file.id })
+  setPanelOpen(tabId, true)
+}
+
+export function closeFileTab(tabId: string, id: string) {
+  const tab = workspace.tabs.find((found) => found.id === tabId)
+  if (!tab) return
+  setWorkspace("tabs", (found) => found.id === tabId, { files: (tab.files ?? []).filter((file) => file.id !== id) })
   save()
 }
 

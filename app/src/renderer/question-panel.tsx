@@ -5,7 +5,7 @@ import { createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Chevron, Icon } from "./icons"
 import { Markdown } from "./markdown"
-import { openFile } from "./projects"
+import { openFile } from "./file-tabs"
 import { advance, answerOf, EMPTY_DRAFT, pick, typeAnswer, type QuestionDraft } from "./questions"
 import { answerQuestion } from "./threads"
 

@@ -3,7 +3,7 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Spinner } from "@opencode/ui/spinner"
 import { Tabs } from "@opencode/ui/tabs"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createEffect, createSignal, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
+import { For, Index, Show, createEffect, createSignal, on, onCleanup, onMount, untrack } from "solid-js"
 import { COMMANDS, keyLabels } from "../shared/commands"
 import { account, refreshUsage } from "./account"
 import { useCommands } from "./actions"
@@ -15,7 +15,9 @@ import { PluginView } from "./plugin-view"
 import { closePanel, isEmptyView, loadLayout, plugins } from "./plugins"
 import { ProjectMark } from "./project-mark"
 import { projectData, projectLabel, readProject } from "./projects"
+import { fileIcon } from "./file-icons"
 import { ReviewView } from "./review"
+import { FileTabView, fileTitle } from "./file-view"
 import { SettingsScreen } from "./settings/screen"
 import { ProjectCards, SpaceChip } from "./space"
 import { SubagentsCard } from "./subagents"
@@ -24,7 +26,7 @@ import { StartScreen } from "./start-screen"
 import { TerminalView } from "./terminal"
 import { Thread } from "./thread"
 import { threadOf } from "./threads"
-import { closeTab, closeTerminal, moveTab, newTab, newTerminal, showPanelTab, shownPanelTab, setPanelOpen, showTab, shownTab, workspace } from "./workspace"
+import { closeFileTab, closeTab, closeTerminal, moveTab, newTab, newTerminal, showPanelTab, shownPanelTab, setPanelOpen, showTab, shownTab, workspace } from "./workspace"
 
 const USAGE_REFRESH_MS = 5 * 60_000
 /** The panel's Tabs value for Review, which has no id of its own. */
@@ -166,6 +168,22 @@ function TabView(props: { tab: TabInfo }) {
                     </Tabs.Trigger>
                   )}
                 </For>
+                {/*
+                  Keyed by place, not by record: opening an open file at a new line replaces its record, and a
+                  remounted trigger would make Tabs fall back to Review, as AGENTS.md notes.
+                */}
+                <Index each={props.tab.files ?? []}>
+                  {(file) => (
+                    <Tabs.Trigger value={file().id} class="shrink-0" closeButton={<Tabs.CloseButton aria-label={`Close ${fileTitle(file().path)}`} onClick={() => closeFileTab(props.tab.id, file().id)} />}>
+                      <span class="flex items-center gap-[7px]" title={file().path}>
+                        <svg class="size-[14px] shrink-0" aria-hidden="true">
+                          <use href={`#${fileIcon(file().path)}`} />
+                        </svg>
+                        {fileTitle(file().path)}
+                      </span>
+                    </Tabs.Trigger>
+                  )}
+                </Index>
               </Tabs.List>
             </Tabs>
             <Tooltip value="New terminal" placement="bottom">
@@ -186,6 +204,14 @@ function TabView(props: { tab: TabInfo }) {
                 <ReviewView tab={props.tab} review={thread().review} />
               </div>
             </Show>
+            {/* A file draws only while its tab shows. It reads again each time it comes to the front. */}
+            <Index each={props.tab.files ?? []}>
+              {(file) => (
+                <Show when={file().id === shown()}>
+                  <FileTabView tab={props.tab} file={file()} />
+                </Show>
+              )}
+            </Index>
             {/* Terminals stay mounted while another panel tab shows, so their screens keep their state. */}
             <For each={props.tab.terminals}>
               {(terminal) => (

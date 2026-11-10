@@ -8,7 +8,7 @@ import { Dynamic } from "solid-js/web"
 import { formatMessageTime } from "./format"
 import { Markdown } from "./markdown"
 import { fire, plugins } from "./plugins"
-import { openFile } from "./projects"
+import { openFile } from "./file-tabs"
 
 /** Badge tints a plugin may ask for, as Desk's colours. */
 const TINTS: Record<Tint, string> = {

@@ -56,11 +56,6 @@ export function stopCommands(dir: string, ids: readonly string[]) {
   core.send({ type: "commands.stop", project: dir, ids })
 }
 
-/** Opens a file a reply names in the editor. */
-export function openFile(dir: string, path: string, line?: number) {
-  core.send({ type: "file.open", project: dir, path, line })
-}
-
 /** Asks the core for files in a project that match `query`, for an @ mention. `found` hears answers to this query only. */
 export function findFiles(dir: string, query: string, found: (paths: readonly string[]) => void) {
   const stop = core.listen((message) => {

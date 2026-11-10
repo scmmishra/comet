@@ -68,7 +68,7 @@ T3 Code and OpenCode are cloned in `~/scmmishra/reference`. T3 Code's server sho
 - **Plugin.** A TSX module in `~/.desk/plugins` that adds sidebars, panels, cards, setups and commands. `docs/plugins.md` describes it.
 - **Setup.** A starting layout for a tab, registered by a plugin: a sidebar, panels and cards to leave out.
 - **Card.** One unit of information in the card stack beside the thread, such as the Space card.
-- **View pane.** The pane beside the thread that holds Review, terminals and plugin panels.
+- **View pane.** The pane beside the thread that holds Review, terminals, open files and plugin panels.
 
 ## Known quirks
 
