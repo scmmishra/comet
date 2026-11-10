@@ -1,4 +1,4 @@
-import type { ContextReading, FileChange, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
+import type { ContextReading, FileChange, ImageAttachment, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
 import { createEffect, createMemo, createRoot, on } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
@@ -29,11 +29,11 @@ export const threadOf = (tabId: string): Thread => threads[tabId] ?? EMPTY
 /** Starts a tab's thread record the first time something arrives for it. */
 const ensure = (tabId: string) => setThreads(tabId, (thread) => thread ?? { items: [], busy: false })
 
-/** Sends a message in a tab. A tab with no name takes it from the message. */
-export function send(tabId: string, text: string) {
+/** Sends a message in a tab. A tab with no name takes it from the message's text. */
+export function send(tabId: string, text: string, images: readonly ImageAttachment[] = []) {
   const tab = workspace.tabs.find((found) => found.id === tabId)
-  if (tab && isUntitled(tab)) nameTab(tabId, text)
-  core.send({ type: "session.send", tabId, text })
+  if (tab && isUntitled(tab) && text) nameTab(tabId, text)
+  core.send({ type: "session.send", tabId, text, ...(images.length ? { images } : {}) })
 }
 
 export function interrupt(tabId: string) {

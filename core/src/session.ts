@@ -1,5 +1,5 @@
 import { query, type CanUseTool, type PermissionResult, type Query, type SDKRateLimitInfo, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
-import type { RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
+import type { ImageAttachment, RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
 import { readContext } from "./context"
 import { sdkModel } from "./models"
 import { ThreadMapper, toolDetail } from "./thread"
@@ -80,11 +80,15 @@ export class Session {
     await this.query.setPermissionMode(settings.permissionMode)
   }
 
-  send(text: string) {
-    this.emit({ kind: "item", item: { type: "user", id: `user-${++this.sent}`, text, at: Date.now() } })
+  send(text: string, images: readonly ImageAttachment[] = []) {
+    this.emit({ kind: "item", item: { type: "user", id: `user-${++this.sent}`, text, ...(images.length ? { images } : {}), at: Date.now() } })
     this.emit({ kind: "status", busy: true })
     if (!this.query) this.inbox = new Inbox()
-    this.inbox.push({ type: "user", message: { role: "user", content: text }, parent_tool_use_id: null })
+    // Images go before the text, as the API recommends.
+    const content = images.length
+      ? [...images.map((image) => ({ type: "image" as const, source: { type: "base64" as const, media_type: image.mediaType, data: image.data } })), ...(text ? [{ type: "text" as const, text }] : [])]
+      : text
+    this.inbox.push({ type: "user", message: { role: "user", content }, parent_tool_use_id: null })
     if (!this.query) this.start()
   }
 

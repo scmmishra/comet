@@ -3,6 +3,7 @@ import type { ServerWebSocket } from "bun"
 import { discoverCommands } from "./command-sources"
 import { Commands } from "./commands"
 import { openInEditor, projectFile } from "./files"
+import { checkImages } from "./images"
 import { readMcpServers, toggleMcpServer } from "./mcp"
 import { Models } from "./models"
 import { recentThreads } from "./past-threads"
@@ -114,7 +115,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       case "tabs.save":
         return window.save(message.tabs, message.active)
       case "session.send":
-        return window.send(message.tabId, message.text)
+        return window.send(message.tabId, message.text, checkImages(message.images ?? []))
       case "session.interrupt":
         return window.interrupt(message.tabId)
       case "permission.answer":

@@ -63,3 +63,16 @@ test("rebuilds a thread from a stored transcript, timing each turn and hiding Cl
     { type: "result", id: "result:u1", durationMs: 5000, isError: false },
   ])
 })
+
+test("rebuilds a message's images from the transcript, with its text", () => {
+  const items = new ThreadMapper(DIR).history([
+    {
+      type: "user",
+      uuid: "u1",
+      session_id: "s",
+      parent_tool_use_id: null,
+      message: { role: "user", content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "iVBOR" } }, { type: "text", text: "What is this?" }] },
+    },
+  ] as never)
+  expect(items).toEqual([{ type: "user", id: "u1", text: "What is this?", images: [{ mediaType: "image/png", data: "iVBOR" }] }])
+})

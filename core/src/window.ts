@@ -1,5 +1,5 @@
 import type { SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
-import type { CoreMessage, FileChange, PluginLayout, TabInfo, ThreadEvent } from "@desk/protocol"
+import type { CoreMessage, FileChange, ImageAttachment, PluginLayout, TabInfo, ThreadEvent } from "@desk/protocol"
 import { changesSince, snapshot } from "./checkpoints"
 import { threadContext, threadHistory } from "./past-threads"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
@@ -88,7 +88,7 @@ export class Window {
    * what the thread changed. A plugin may move the tab to another thread during the snapshot. The message
    * then belongs to no thread the tab shows, so it is not sent.
    */
-  async send(tabId: string, text: string) {
+  async send(tabId: string, text: string, images: readonly ImageAttachment[] = []) {
     const tab = this.tab(tabId)
     const key = this.thread(tabId).key
     if (!this.thread(tabId).baseline) {
@@ -96,7 +96,7 @@ export class Window {
       if (this.thread(tabId).key !== key) throw new Error(MOVED)
       if (baseline) this.updateThread(tabId, { baseline })
     }
-    this.session(tab).send(text)
+    this.session(tab).send(text, images)
   }
 
   /** Continues a past thread in a tab. The tab may hold a session that never sent a message; the thread replaces it. */

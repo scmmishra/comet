@@ -1,5 +1,5 @@
 import type { SDKAssistantMessage, SDKMessage, SDKPartialAssistantMessage, SessionMessage } from "@anthropic-ai/claude-agent-sdk"
-import type { TextEdit, ThreadEvent, ThreadItem } from "@desk/protocol"
+import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, type ThreadItem } from "@desk/protocol"
 
 /** Tool output beyond this many characters is cut. The thread shows a summary, not a log. */
 const MAX_TOOL_OUTPUT = 4000
@@ -107,7 +107,8 @@ export class ThreadMapper {
         }
         closeTurn()
         if (at !== undefined) turn = { id: stored.uuid, start: at }
-        add({ type: "user", id: stored.uuid, text, ...(at !== undefined ? { at } : {}) })
+        const images = userImages(content)
+        add({ type: "user", id: stored.uuid, text, ...(images.length ? { images } : {}), ...(at !== undefined ? { at } : {}) })
       }
     }
     closeTurn()
@@ -156,6 +157,14 @@ function toolOutputText(content: unknown): string {
 
 function truncate(text: string) {
   return text.length > MAX_TOOL_OUTPUT ? `${text.slice(0, MAX_TOOL_OUTPUT)}\n…` : text
+}
+
+/** The images the user sent, as base64. Claude Code stores pasted images in the transcript this way. */
+function userImages(content: unknown): ImageAttachment[] {
+  if (!Array.isArray(content)) return []
+  return content.flatMap((block) =>
+    block.type === "image" && block.source?.type === "base64" && IMAGE_TYPES.includes(block.source.media_type) ? [{ mediaType: block.source.media_type, data: block.source.data }] : [],
+  )
 }
 
 /**

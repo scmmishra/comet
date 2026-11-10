@@ -18,13 +18,24 @@ export interface TextEdit {
   readonly after: string
 }
 
+/** The image types Claude reads. */
+export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const
+/** The largest image Claude takes, in bytes before base64. */
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+/** An image sent with a message, as base64. */
+export interface ImageAttachment {
+  readonly mediaType: (typeof IMAGE_TYPES)[number]
+  readonly data: string
+}
+
 /**
  * One item of a thread, shaped for drawing. The core turns the Agent SDK's messages into these, so the
  * app never reads SDK types or tool inputs. Items are told apart by id within their thread.
  */
 export type ThreadItem =
   /** `at` is when it was sent, in milliseconds since the epoch, when that is known. */
-  | { readonly type: "user"; readonly id: string; readonly text: string; readonly at?: number }
+  | { readonly type: "user"; readonly id: string; readonly text: string; readonly images?: readonly ImageAttachment[]; readonly at?: number }
   /** Assistant text. `at` is when it finished. Text still streaming is not done and has none. */
   | { readonly type: "text"; readonly id: string; readonly text: string; readonly done: boolean; readonly at?: number }
   | { readonly type: "thinking"; readonly id: string }
@@ -553,7 +564,7 @@ export type ClientMessage =
   | { readonly type: "tabs.save"; readonly tabs: readonly TabInfo[]; readonly active?: string }
   /** Opens a file from the thread in the editor. The core refuses paths outside the project. */
   | { readonly type: "file.open"; readonly project: string; readonly path: string; readonly line?: number }
-  | { readonly type: "session.send"; readonly tabId: string; readonly text: string }
+  | { readonly type: "session.send"; readonly tabId: string; readonly text: string; readonly images?: readonly ImageAttachment[] }
   | { readonly type: "session.interrupt"; readonly tabId: string }
   | { readonly type: "permission.answer"; readonly tabId: string; readonly requestId: string; readonly allow: boolean }
   /** Asks for what plugins show in a saved tab. The core draws it and answers with `layout`. */

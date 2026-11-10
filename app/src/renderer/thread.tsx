@@ -7,6 +7,7 @@ import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createMemo, createSignal, For, Index, Match, Show, Switch } from "solid-js"
 import type { TabInfo } from "@desk/protocol"
+import { imageUrl } from "./attachments"
 import { lineDiff } from "./diff"
 import { COPIED_MS, formatDuration, formatMessageTime, plural } from "./format"
 import { Chevron, Icon } from "./icons"
@@ -103,7 +104,14 @@ function RowView(props: { row: Row; tab: TabInfo }) {
       <Match when={props.row.type === "user" && (props.row as Extract<Item, { type: "user" }>)}>
         {(item) => (
           <div class="group/message flex flex-col items-end gap-1">
-            <div class="w-fit max-w-[80%] whitespace-pre-wrap rounded-3xl bg-raised px-3.5 py-[9px] text-[length:var(--desk-text-size)] leading-[1.625]">{item().text}</div>
+            <Show when={item().images?.length}>
+              <div class="flex max-w-[80%] flex-wrap justify-end gap-2">
+                <For each={item().images}>{(image) => <img src={imageUrl(image)} alt="" class="max-h-48 max-w-[240px] rounded-2xl object-cover shadow-[0_0_0_1px_var(--color-line)]" />}</For>
+              </div>
+            </Show>
+            <Show when={item().text}>
+              <div class="w-fit max-w-[80%] whitespace-pre-wrap rounded-3xl bg-raised px-3.5 py-[9px] text-[length:var(--desk-text-size)] leading-[1.625]">{item().text}</div>
+            </Show>
             <MessageMeta text={item().text} at={item().at} />
           </div>
         )}
