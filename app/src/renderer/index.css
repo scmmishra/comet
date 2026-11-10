@@ -438,34 +438,32 @@ body {
   color: var(--shiki-light);
 }
 
-/* A file named in a reply: a chip that opens it in the editor. Prefixed with .desk-prose so it outranks the rule for ordinary links. */
+/*
+ * A file named in a reply, after T3 Code's inline chip: the file's icon and name, in the text's own size,
+ * set apart by colour and weight rather than a box. It lays out as text, so it sits on the line's
+ * baseline. A flex chip would sit on its icon's bottom edge instead. Prefixed with .desk-prose so it
+ * outranks the rule for ordinary links.
+ */
 .desk-prose .desk-file {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  vertical-align: baseline;
   max-width: 100%;
-  padding: 0 6px;
-  border-radius: 6px;
-  background: var(--color-raised);
-  color: var(--color-fg);
-  font-size: 12px;
-  line-height: 20px;
+  border-radius: 4px;
+  color: var(--color-accent);
+  font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
 }
 .desk-prose .desk-file:hover {
-  background: var(--color-hover);
+  background: var(--color-accent-soft);
 }
 .desk-file svg {
-  width: 14px;
-  height: 14px;
-  flex: none;
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.2em;
+  /* Centres the icon on the text's lowercase letters. */
+  vertical-align: -0.15em;
 }
-.desk-file span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+
 
 /*
  * The panel's open and close, after OpenCode's: the session narrows while the panel slides in from
