@@ -1,0 +1,116 @@
+//! Desk's palette under rune-kit's tokens, as `app/src/renderer/index.css` puts it under
+//! `@opencode/ui`'s. Components start from the OpenCode theme, which matches `@opencode/ui`, and
+//! draw in Desk's colours. Desk's colours stay the source.
+
+use rune::Color;
+use rune_kit::Kit;
+use std::sync::OnceLock;
+
+/// Desk's colours for one appearance, named as in `index.css`.
+struct Colors {
+    ground: &'static str,
+    panel: &'static str,
+    card: &'static str,
+    raised: &'static str,
+    hover: &'static str,
+    line: &'static str,
+    /// Black or white, at `outline_alpha`.
+    outline: (&'static str, f32),
+    fg: &'static str,
+    fg_2: &'static str,
+    fg_3: &'static str,
+    accent: &'static str,
+    add: (&'static str, f32),
+    del: (&'static str, f32),
+    ready: &'static str,
+}
+
+const DARK: Colors = Colors {
+    ground: "#08090a",
+    panel: "#0f1011",
+    card: "#131416",
+    raised: "#1c1d1f",
+    hover: "#222326",
+    line: "#232427",
+    outline: ("#ffffff", 0.04),
+    fg: "#e3e4e8",
+    fg_2: "#8a8f98",
+    fg_3: "#62666d",
+    accent: "#6ea8fe",
+    add: ("#62c28a", 0.09),
+    del: ("#e8777e", 0.09),
+    ready: "#3d5fe0",
+};
+
+const LIGHT: Colors = Colors {
+    ground: "#f2f3f5",
+    panel: "#ffffff",
+    card: "#fafafb",
+    raised: "#eef0f2",
+    hover: "#e7e9ec",
+    line: "#e1e3e7",
+    outline: ("#000000", 0.07),
+    fg: "#1c1d20",
+    fg_2: "#5f646d",
+    fg_3: "#8b9099",
+    accent: "#2b6be0",
+    add: ("#1f8a4c", 0.09),
+    del: ("#cf3b45", 0.08),
+    ready: "#3d5fe0",
+};
+
+fn color(hex: &str) -> Color {
+    rune::color::hex(hex).unwrap_or_else(|| panic!("{hex} is a colour"))
+}
+
+/// The kit for one appearance, built once.
+pub fn kit(dark: bool) -> &'static Kit {
+    static KITS: [OnceLock<Kit>; 2] = [const { OnceLock::new() }; 2];
+    KITS[dark as usize].get_or_init(|| build(dark, if dark { &DARK } else { &LIGHT }))
+}
+
+fn build(dark: bool, d: &Colors) -> Kit {
+    let mut k = rune_theme_opencode::kit(dark).clone();
+    let c = &mut k.c;
+    let (ground, panel, card, raised, hover, line) = (color(d.ground), color(d.panel), color(d.card), color(d.raised), color(d.hover), color(d.line));
+    let (fg, fg_2, fg_3, accent) = (color(d.fg), color(d.fg_2), color(d.fg_3), color(d.accent));
+    c.page = ground;
+    c.bg_deep = ground;
+    c.bg_base = panel;
+    c.layer_01 = card;
+    c.layer_02 = raised;
+    c.layer_03 = hover;
+    c.layer_04 = line;
+    c.bg_accent = color(d.ready);
+
+    c.text_base = fg;
+    c.text_muted = fg_2;
+    c.text_faint = fg_3;
+    c.text_inverse = ground;
+    c.text_accent = accent;
+
+    c.icon_base = fg_2;
+    c.icon_muted = fg_3;
+    c.icon_faint = fg_3;
+    c.icon_contrast = fg;
+    c.icon_inverse = ground;
+    c.icon_accent = accent;
+
+    c.border_muted = color(d.outline.0).alpha(d.outline.1);
+    c.border_base = line;
+    c.border_focus = accent;
+    c.hover = hover;
+
+    c.success.fg = color(d.add.0);
+    c.success.bg = color(d.add.0).alpha(d.add.1);
+    c.danger.fg = color(d.del.0);
+    c.danger.bg = color(d.del.0).alpha(d.del.1);
+
+    // The older tokens a few components still read.
+    c.surface_base = card;
+    c.surface_hover = hover;
+    c.surface_raised = raised;
+    c.text_strong = fg;
+    c.text_weak = fg_3;
+    k
+}

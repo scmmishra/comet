@@ -6,3 +6,6 @@ dist
 
 # Personal working notes
 notes/
+
+# The native app's Cargo builds
+native/target
