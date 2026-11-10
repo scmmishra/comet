@@ -241,6 +241,32 @@ pub struct Subagent {
     pub items: Vec<ThreadItem>,
 }
 
+/// Where a command's last run stands: "idle", "running", "exited" or "failed", which has its exit code.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct CommandRun {
+    pub state: String,
+    pub code: Option<i32>,
+}
+
+/// A project's command, run in the background in its folder. Commands that share a group run together.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct CommandInfo {
+    pub id: String,
+    pub name: String,
+    pub command: String,
+    pub group: Option<String>,
+    pub run: CommandRun,
+}
+
+/// A process in the command editor. `id` is the saved command it replaces, when it replaces one.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct CommandProcess {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    pub name: String,
+    pub command: String,
+}
+
 /// A command Claude Code offers: a skill, or one of its own such as /compact.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -539,6 +565,16 @@ pub enum ClientMessage {
     /// Asks for one part of what the core reads about a project. The core answers with `project`.
     #[serde(rename = "project.get")]
     ProjectGet { project: String, part: String },
+    /// Replaces the commands in `replacing` with `processes`. One process saves as a plain command called
+    /// `name`, several as a group called `name`.
+    #[serde(rename = "commands.save")]
+    CommandsSave { project: String, name: String, processes: Vec<CommandProcess>, replacing: Vec<String> },
+    #[serde(rename = "commands.remove")]
+    CommandsRemove { project: String, ids: Vec<String> },
+    #[serde(rename = "commands.run")]
+    CommandsRun { project: String, ids: Vec<String> },
+    #[serde(rename = "commands.stop")]
+    CommandsStop { project: String, ids: Vec<String> },
     /// Finds files in the project whose path matches `query`, for an @ mention. The core answers with `files.found`.
     #[serde(rename = "files.search")]
     FilesSearch { project: String, query: String },
@@ -668,6 +704,15 @@ mod tests {
             ClientMessage::QueueResume { tab_id: "tab-1".into() },
             ClientMessage::ProjectGet { project: "/Users/me/code/web".into(), part: "threads".into() },
             ClientMessage::ThreadResume { tab_id: "tab-2".into(), thread_id: "s1".into() },
+            ClientMessage::CommandsSave {
+                project: "/Users/me/code/web".into(),
+                name: "Dev".into(),
+                processes: vec![CommandProcess { id: Some("c1".into()), name: "web".into(), command: "bun run dev".into() }, CommandProcess { id: None, name: "worker".into(), command: "bun run worker".into() }],
+                replacing: vec!["c1".into()],
+            },
+            ClientMessage::CommandsRemove { project: "/Users/me/code/web".into(), ids: vec!["c1".into()] },
+            ClientMessage::CommandsRun { project: "/Users/me/code/web".into(), ids: vec!["c1".into()] },
+            ClientMessage::CommandsStop { project: "/Users/me/code/web".into(), ids: vec!["c1".into()] },
             ClientMessage::FilesSearch { project: "/Users/me/code/web".into(), query: "login".into() },
             ClientMessage::ThreadClear { tab_id: "tab-1".into() },
             ClientMessage::TerminalOpen { id: "term-1".into(), cols: 80, rows: 24 },

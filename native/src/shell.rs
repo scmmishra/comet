@@ -56,6 +56,7 @@ pub struct Desk {
     pub toasts: crate::toasts::Toasts,
     pub palette: crate::palette::Palette,
     pub cards: crate::cards::Cards,
+    pub commands_card: crate::commands_card::CommandsCard,
     /// Whether ⌘ is held, so the new tab button opens its tab next to the active one.
     cmd_held: bool,
     strip: TabDragState,

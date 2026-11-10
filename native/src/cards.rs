@@ -67,6 +67,7 @@ pub fn rail(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
         .scroll(ScrollSpec { stick_bottom: false })
         .children(subagents)
         .children(space)
+        .children(crate::commands_card::card(s, &tab.project, k, layer))
 }
 
 fn card(k: &Kit) -> El {

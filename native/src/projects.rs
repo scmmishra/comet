@@ -1,6 +1,6 @@
 //! What the core reads about each project, as `app/src/renderer/projects.ts` keeps it.
 
-use crate::protocol::{Skill, Space, ThreadSummary};
+use crate::protocol::{CommandInfo, Skill, Space, ThreadSummary};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -12,6 +12,8 @@ pub struct Project {
     pub space: Option<Space>,
     /// Claude Code's commands in the project. None until read.
     pub skills: Option<Vec<Skill>>,
+    /// The project's own commands, which the Commands card runs. None until read.
+    pub commands: Option<Vec<CommandInfo>>,
 }
 
 #[derive(Default)]
@@ -31,13 +33,14 @@ impl Projects {
             "threads" => project.threads = serde_json::from_value(value).ok(),
             "space" => project.space = serde_json::from_value(value).ok(),
             "skills" => project.skills = serde_json::from_value(value).ok(),
+            "commands" => project.commands = serde_json::from_value(value).ok(),
             _ => {}
         }
     }
 }
 
-/// The parts the start screen shows.
-pub const START_PARTS: [&str; 2] = ["threads", "space"];
+/// The parts a tab shows about its project: the start screen's threads, and the cards' Space and commands.
+pub const START_PARTS: [&str; 3] = ["threads", "space", "commands"];
 
 #[cfg(test)]
 mod tests {

@@ -4,6 +4,7 @@ mod account;
 mod attachments;
 mod base64;
 mod cards;
+mod commands_card;
 mod composer;
 mod core;
 mod diff;

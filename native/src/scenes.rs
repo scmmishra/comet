@@ -98,6 +98,11 @@ fn thread(s: &mut Desk) {
         { "type": "project", "project": "/Users/me/code/web", "part": "space", "value": { "name": "web", "root": "/Users/me/code/web", "branch": "fix-login", "upstream": { "ahead": 2, "behind": 0 },
             "changes": { "files": 1, "additions": 3, "deletions": 1 },
             "pr": { "number": 42, "title": "Keep the login error after a retry", "url": "https://example.com/pr/42", "state": "OPEN", "draft": false, "checks": { "passed": 3, "failed": 1, "pending": 0 } } } },
+        { "type": "project", "project": "/Users/me/code/web", "part": "commands", "value": [
+            { "id": "c1", "name": "web", "command": "bun run dev", "group": "Dev", "run": { "state": "running" } },
+            { "id": "c2", "name": "worker", "command": "bun run worker", "group": "Dev", "run": { "state": "idle" } },
+            { "id": "c3", "name": "Tests", "command": "bun test", "run": { "state": "failed", "code": 1 } }
+        ] },
         { "type": "session.event", "tabId": "tab", "event": { "kind": "subagent", "subagent": { "id": "a1", "description": "Find the login tests", "type": "Explore", "status": "running", "background": false, "startedAt": at(12.0), "toolUses": 3, "items": [] } } },
         { "type": "session.rows", "tabId": "tab", "rows": [
             { "type": "item", "id": "u1" },
