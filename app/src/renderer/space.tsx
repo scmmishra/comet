@@ -7,6 +7,7 @@ import { CommandsCard } from "./commands"
 import { plural, shortPath } from "./format"
 import { Icon, type IconName } from "./icons"
 import { projectData } from "./projects"
+import { openReview } from "./workspace"
 
 type PullRequest = NonNullable<Space["pr"]>
 
@@ -40,7 +41,8 @@ function SpaceCard(props: { space: Space }) {
         <Row icon="branch" detail={upstream(props.space)}>
           {props.space.branch}
         </Row>
-        <Row icon="review" detail={<Changes changes={props.space.changes} />}>
+        {/* The card counts uncommitted work, so it opens Review on the same changes. */}
+        <Row icon="review" detail={<Changes changes={props.space.changes} />} onClick={() => openReview("git")}>
           Changes
         </Row>
       </div>
@@ -98,15 +100,25 @@ export function SpaceChip(props: { project: string; space: Space | null | undefi
   )
 }
 
-function Row(props: { icon: IconName; detail?: JSX.Element; children: JSX.Element }) {
-  return (
-    <div class="flex min-w-0 items-center gap-2.5 rounded-lg px-2 py-[7px]">
+/** One line of a card. Given `onClick`, the line is a button. */
+function Row(props: { icon: IconName; detail?: JSX.Element; children: JSX.Element; onClick?: () => void }) {
+  const content = (
+    <>
       <Icon name={props.icon} class="text-fg-2" />
       <span class="min-w-0 flex-1 truncate">{props.children}</span>
       <Show when={props.detail}>
         <span class="shrink-0 text-fg-3">{props.detail}</span>
       </Show>
-    </div>
+    </>
+  )
+  return (
+    <Show when={props.onClick} fallback={<div class="flex min-w-0 items-center gap-2.5 rounded-lg px-2 py-[7px]">{content}</div>}>
+      {(onClick) => (
+        <button class="flex w-full min-w-0 items-center gap-2.5 rounded-lg px-2 py-[7px] text-left hover:bg-panel" onClick={() => onClick()()}>
+          {content}
+        </button>
+      )}
+    </Show>
   )
 }
 

@@ -150,6 +150,15 @@ export function setPanelOpen(tabId: string, open: boolean) {
   save()
 }
 
+/** Opens the active tab's view pane on Review, comparing with `scope`. */
+export function openReview(scope: ReviewScope) {
+  const tab = activeTab()
+  if (!tab) return
+  setWorkspace("tabs", (found) => found.id === tab.id, { panelOpen: true, panelActive: undefined, reviewScope: scope })
+  setWorkspace("settingsPage", undefined)
+  save()
+}
+
 /** Opens or closes the active tab's view pane. */
 export function togglePanel() {
   const tab = activeTab()
