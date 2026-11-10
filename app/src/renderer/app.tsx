@@ -298,21 +298,26 @@ function TabBar() {
   )
 }
 
-/** Keeps the newest message in view while Claude writes, unless the user scrolled up to read. */
+/**
+ * Keeps the newest message in view while Claude writes, unless the user scrolled up to read. It follows
+ * any change in size, of the thread or of the box: a reply growing, a step appearing, or the queue
+ * above the composer taking room.
+ */
 function ThreadScroll(props: { tab: TabInfo }) {
   let box!: HTMLDivElement
+  let content!: HTMLDivElement
   let pinned = true
-  createEffect(
-    on(
-      () => threadOf(props.tab.id).items.map((item) => (item.type === "text" ? item.text.length : 0)).join(),
-      () => {
-        if (pinned) box.scrollTop = box.scrollHeight
-      },
-    ),
-  )
+  onMount(() => {
+    const follow = new ResizeObserver(() => pinned && (box.scrollTop = box.scrollHeight))
+    follow.observe(box)
+    follow.observe(content)
+    onCleanup(() => follow.disconnect())
+  })
   return (
     <div ref={box} class="min-h-0 flex-1 overflow-y-auto" onScroll={() => (pinned = box.scrollHeight - box.scrollTop - box.clientHeight < 48)}>
-      <Thread tab={props.tab} />
+      <div ref={content}>
+        <Thread tab={props.tab} />
+      </div>
     </div>
   )
 }
