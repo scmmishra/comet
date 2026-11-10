@@ -20,3 +20,10 @@ test("turns every plugin off without a file, and reports a broken one", () => {
   writeFileSync(join(process.env.DESK_HOME!, "plugins.json"), "{ not json")
   expect(() => pluginsOn("/work/chatwoot")).toThrow("not valid JSON")
 })
+
+test("reports a list that is not an array, and a plugin name a full id cannot carry", () => {
+  turnOn({ everywhere: "newrelic" as unknown as string[] })
+  expect(() => pluginsOn("/work/chatwoot")).toThrow("everywhere as something other than an array")
+  turnOn({ projects: { "/work/other": ["my.plugin"] } })
+  expect(() => pluginsOn("/work/chatwoot")).toThrow('names a plugin "my.plugin"')
+})

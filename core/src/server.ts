@@ -45,6 +45,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     openThread: (tabId, thread) => void window.openKey(tabId, thread).catch(report),
     openPanel: (tabId, panel, params) => void layouts.openPanel(tabId, panel, params).catch(report),
     closePanel: (tabId, id) => void layouts.closePanel(tabId, id).catch(report),
+    stopped: () => void layouts.resendAll().catch(report),
   })
   const window = new Window({
     broadcast,

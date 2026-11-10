@@ -52,7 +52,7 @@ T3 Code and OpenCode are cloned in `~/scmmishra/reference`. T3 Code's server sho
 ## Glossary
 
 - **Space.** A repo and its branch.
-- **Tab.** One top tab of the window. A tab is a session in one project, and later also a setup. Tabs from several projects share the window.
+- **Tab.** One top tab of the window. A tab is a session in one project. Tabs from several projects share the window.
 - **Session.** One Claude conversation in a tab.
 - **Thread.** The messages of a session, as Desk draws them.
 - **Plugin.** A TSX module in `~/.desk/plugins` that adds sidebars, panels, cards, setups and commands. `docs/plugins.md` describes it.

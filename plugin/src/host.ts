@@ -1,17 +1,10 @@
-import { panelInstanceId, type PanelParams, type UiOp, type UiValue } from "@desk/protocol"
+import { panelInstanceId, type PanelParams, type PluginLayout, type UiOp, type UiValue } from "@desk/protocol"
 import { basename } from "node:path"
 import { createRoot as solidRoot, createSignal, type Accessor, type JSX, type Setter } from "solid-js"
 import type { Desk, PanelContext, PanelOptions, PluginDefinition, SetupOptions, TabContext } from "./index"
 import { callHandler, createRoot, createComponent, dispose, onOps, render, snapshot, type PluginNode } from "./renderer"
 
 export type ViewKind = "sidebar" | "panel" | "card"
-
-/** What plugins show in a tab, by full name: its sidebar, its open panel instances in order, and the plugin cards it leaves out. */
-export interface PluginLayout {
-  readonly sidebar?: string
-  readonly panels: readonly { readonly panel: string; readonly params: PanelParams }[]
-  readonly hiddenCards: readonly string[]
-}
 
 /** A setup: a titled layout for a new tab. */
 interface SetupLayout extends PluginLayout {
@@ -28,13 +21,26 @@ export interface Offers {
   readonly commands: readonly { readonly name: string; readonly title: string; readonly input?: string }[]
 }
 
-/** Messages from the core to a plugin's worker. `key` names one drawn view in a tab: a panel's instance id, else the view's full name. */
+/** One view a tab shows. `key` is a panel's instance id, else the view's full name. */
+export interface ViewRequest {
+  readonly key: string
+  readonly kind: ViewKind
+  readonly name: string
+  readonly params?: PanelParams
+}
+
+/** A view as drawn, or why it could not be. */
+export type ViewResult = { readonly key: string; readonly root: number; readonly title: string } | { readonly key: string; readonly error: string }
+
+/** Messages from the core to a plugin's worker. */
 export type ToPlugin =
-  | { readonly type: "draw"; readonly tabId: string; readonly project: string; readonly key: string; readonly kind: ViewKind; readonly name: string; readonly params?: PanelParams }
-  | { readonly type: "undraw"; readonly tabId: string; readonly key: string }
-  /** The panel instances open in a tab, by instance id, for `isOpen`. */
-  | { readonly type: "layout"; readonly tabId: string; readonly open: readonly string[] }
+  /**
+   * Every view of this plugin a tab shows, and the panel instances open there for `isOpen`. The worker
+   * draws what it lacks and disposes the rest. `seq` pairs the answer with the ask.
+   */
+  | { readonly type: "show"; readonly seq: number; readonly tabId: string; readonly project: string; readonly views: readonly ViewRequest[]; readonly open: readonly string[] }
   | { readonly type: "command"; readonly tabId: string; readonly project: string; readonly name: string; readonly input?: string }
+  /** A tab closed. Its views and state go. */
   | { readonly type: "drop"; readonly tabId: string }
   | { readonly type: "event"; readonly handler: number; readonly args: readonly UiValue[] }
   | { readonly type: "snapshot" }
@@ -47,9 +53,7 @@ export type FromPlugin =
   | { readonly type: "failed"; readonly message: string }
   | { readonly type: "ops"; readonly ops: readonly UiOp[] }
   | { readonly type: "snapshot"; readonly ops: readonly UiOp[] }
-  | { readonly type: "drawn"; readonly tabId: string; readonly key: string; readonly root: number; readonly title: string }
-  /** A view could not be drawn, such as one the plugin does not have. */
-  | { readonly type: "undrawn"; readonly tabId: string; readonly key: string; readonly message: string }
+  | { readonly type: "shown"; readonly seq: number; readonly views: readonly ViewResult[] }
   | { readonly type: "thread"; readonly tabId: string; readonly key: string; readonly title?: string; readonly prompt?: string }
   | { readonly type: "open"; readonly tabId: string; readonly panel: string; readonly params?: PanelParams }
   | { readonly type: "close"; readonly tabId: string; readonly id: string }
@@ -70,7 +74,8 @@ interface Tab {
 
 /**
  * Runs a plugin inside its worker. Setup runs once and registers the plugin's views. Each view is drawn
- * once per tab, and a panel once per tab and set of parameters, and kept until the core undraws it or the tab closes, so the app can show it again at any time.
+ * once per tab, and a panel once per tab and set of parameters. It is kept while the tab shows it, so
+ * the app can draw it again at any time.
  */
 export function startHost(plugin: PluginDefinition) {
   const post = (message: FromPlugin) => self.postMessage(message)
@@ -82,11 +87,14 @@ export function startHost(plugin: PluginDefinition) {
   const setups = new Map<string, SetupOptions>()
   const commands = new Map<string, { title: string; input?: string; run: (ctx: TabContext, input?: string) => void }>()
   let registering = true
+  // Names are unique across kinds, because a sidebar, a card and a panel without parameters are drawn under their name.
+  const names = new Set<string>()
   const register =
     <T>(kind: string, into: Map<string, T>) =>
     (name: string, options: T) => {
       if (!registering) throw new Error(`A plugin registers its ${kind}s while setup runs, not later.`)
-      if (into.has(name)) throw new Error(`The plugin registers two ${kind}s named ${name}.`)
+      if (names.has(name)) throw new Error(`The plugin registers two things named ${name}.`)
+      names.add(name)
       into.set(name, options)
     }
   const desk: Desk = {
@@ -132,31 +140,43 @@ export function startHost(plugin: PluginDefinition) {
     dispose(drawn.root)
   }
 
-  const draw = (message: Extract<ToPlugin, { type: "draw" }>) => {
-    const tab = tabOf(message.tabId)
-    let drawn = tab.drawn.get(message.key)
-    if (!drawn) {
-      const ctx = contextFor(message.tabId, message.project)
-      let view: () => JSX.Element
-      let title: string
-      if (message.kind === "panel") {
-        const panel = panels.get(message.name)
-        if (!panel) throw new Error(`The plugin has no panel named ${message.name}.`)
-        const params = message.params ?? {}
-        const panelCtx: PanelContext = { ...ctx, params, close: () => post({ type: "close", tabId: message.tabId, id: message.key }) }
-        view = () => panel.view(panelCtx)
-        title = typeof panel.title === "string" ? panel.title : panel.title(params)
-      } else {
-        const found = (message.kind === "sidebar" ? sidebars : cards).get(message.name)
-        if (!found) throw new Error(`The plugin has no ${message.kind} named ${message.name}.`)
-        view = () => found.view(ctx)
-        title = found.title
-      }
-      const root = createRoot()
-      drawn = { root, title, dispose: render(() => createComponent(view as unknown as () => PluginNode, {}), root) }
-      tab.drawn.set(message.key, drawn)
+  /** Draws one view for a tab, or names the one drawn before. */
+  const draw = (tabId: string, project: string, request: ViewRequest): ViewResult => {
+    const tab = tabOf(tabId)
+    const found = tab.drawn.get(request.key)
+    if (found) return { key: request.key, root: found.root.id, title: found.title }
+    const ctx = contextFor(tabId, project)
+    let view: () => JSX.Element
+    let title: string
+    if (request.kind === "panel") {
+      const panel = panels.get(request.name)
+      if (!panel) return { key: request.key, error: `The plugin has no panel named ${request.name}.` }
+      const params = request.params ?? {}
+      const panelCtx: PanelContext = { ...ctx, params, close: () => post({ type: "close", tabId, id: request.key }) }
+      view = () => panel.view(panelCtx)
+      title = typeof panel.title === "string" ? panel.title : panel.title(params)
+    } else {
+      const registered = (request.kind === "sidebar" ? sidebars : cards).get(request.name)
+      if (!registered) return { key: request.key, error: `The plugin has no ${request.kind} named ${request.name}.` }
+      view = () => registered.view(ctx)
+      title = registered.title
     }
-    post({ type: "drawn", tabId: message.tabId, key: message.key, root: drawn.root.id, title: drawn.title })
+    const root = createRoot()
+    try {
+      tab.drawn.set(request.key, { root, title, dispose: render(() => createComponent(view as unknown as () => PluginNode, {}), root) })
+    } catch (error) {
+      dispose(root)
+      return { key: request.key, error: messageOf(error) }
+    }
+    return { key: request.key, root: root.id, title }
+  }
+
+  const show = (message: Extract<ToPlugin, { type: "show" }>) => {
+    const tab = tabOf(message.tabId)
+    const wanted = new Set(message.views.map((view) => view.key))
+    for (const key of [...tab.drawn.keys()]) if (!wanted.has(key)) undraw(tab, key)
+    tab.setOpen(new Set(message.open))
+    post({ type: "shown", seq: message.seq, views: message.views.map((view) => draw(message.tabId, message.project, view)) })
   }
 
   post({
@@ -183,16 +203,7 @@ export function startHost(plugin: PluginDefinition) {
   self.onmessage = async (event: MessageEvent<ToPlugin>) => {
     const message = event.data
     try {
-      if (message.type === "draw") {
-        try {
-          draw(message)
-        } catch (error) {
-          post({ type: "undrawn", tabId: message.tabId, key: message.key, message: messageOf(error) })
-        }
-      } else if (message.type === "undraw") {
-        const tab = tabs.get(message.tabId)
-        if (tab) undraw(tab, message.key)
-      } else if (message.type === "layout") tabOf(message.tabId).setOpen(new Set(message.open))
+      if (message.type === "show") show(message)
       else if (message.type === "command") {
         const command = commands.get(message.name)
         if (!command) throw new Error(`The plugin has no command named ${message.name}.`)

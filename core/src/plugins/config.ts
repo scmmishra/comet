@@ -1,13 +1,15 @@
 import { existsSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import { PLUGIN_NAME } from "@desk/protocol"
 import { deskHome } from "../data-files"
 
 /**
  * The plugins on in a project, from `~/.desk/plugins.json`:
  * `{ "everywhere": ["newrelic"], "projects": { "~/Chatwoot/chatwoot": ["support"] } }`.
  * A project is named by its folder. The file is read on each ask, so an edit applies the next time a
- * project's plugins are read. A missing file turns every plugin off, and a broken one is reported.
+ * project's plugins are read. A missing file turns every plugin off. A broken one turns every plugin
+ * off and is reported, so a typo never quietly turns one plugin off.
  */
 export function pluginsOn(project: string): string[] {
   const file = join(deskHome(), "plugins.json")
@@ -18,10 +20,20 @@ export function pluginsOn(project: string): string[] {
   } catch {
     throw new Error(`${file} is not valid JSON, so no plugin is on.`)
   }
-  if (typeof saved !== "object" || saved === null) throw new Error(`${file} must hold an object, so no plugin is on.`)
-  const names = (value: unknown) => (Array.isArray(value) ? value.filter((name): name is string => typeof name === "string") : [])
-  const here = Object.entries(saved.projects ?? {}).flatMap(([folder, list]) => (expandHome(folder) === project ? names(list) : []))
-  return [...new Set([...names(saved.everywhere), ...here])]
+  const broken = (why: string) => new Error(`${file} ${why}, so no plugin is on.`)
+  if (typeof saved !== "object" || saved === null || Array.isArray(saved)) throw broken("must hold an object")
+  const names = (value: unknown, where: string): string[] => {
+    if (value === undefined) return []
+    if (!Array.isArray(value)) throw broken(`lists ${where} as something other than an array`)
+    for (const name of value) if (typeof name !== "string" || !PLUGIN_NAME.test(name)) throw broken(`names a plugin ${JSON.stringify(name)} in ${where}. A name is lowercase letters, digits, - and _`)
+    return value
+  }
+  if (saved.projects !== undefined && (typeof saved.projects !== "object" || saved.projects === null || Array.isArray(saved.projects))) throw broken("must map projects to lists")
+  const here = Object.entries(saved.projects ?? {}).flatMap(([folder, list]) => {
+    const valid = names(list, folder)
+    return expandHome(folder) === project ? valid : []
+  })
+  return [...new Set([...names(saved.everywhere, "everywhere"), ...here])]
 }
 
 const expandHome = (folder: string) => (folder === "~" || folder.startsWith("~/") ? join(homedir(), folder.slice(1)) : folder).replace(/(.)\/+$/, "$1")

@@ -1,5 +1,4 @@
-import type { PluginLayout } from "@desk/plugin/host"
-import type { ContextReading, TabInfo } from "@desk/protocol"
+import type { ContextReading, PluginLayout, TabInfo } from "@desk/protocol"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { deskHome, writeJsonFile } from "./data-files"

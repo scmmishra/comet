@@ -1,5 +1,5 @@
-import { panelInstanceId, type CoreMessage, type PanelParams, type DrawnView, type TabLayout } from "@desk/protocol"
-import type { PluginLayout, ViewKind } from "@desk/plugin/host"
+import type { ViewRequest } from "@desk/plugin/host"
+import { panelInstanceId, splitContributionId, type CoreMessage, type DrawnView, type PanelParams, type PluginLayout, type TabLayout } from "@desk/protocol"
 import type { Plugins } from "./plugins"
 
 /** Where a tab's project and saved layout live. The window keeps them with the tab. */
@@ -20,6 +20,8 @@ const EMPTY: PluginLayout = { panels: [], hiddenCards: [] }
  */
 export class Layouts {
   private sends = new Map<string, number>()
+  /** Cards that failed to draw in a tab. They stay out of it, so the user hears of each once. */
+  private brokenCards = new Map<string, Set<string>>()
 
   constructor(
     private readonly plugins: Plugins,
@@ -27,6 +29,10 @@ export class Layouts {
     private readonly broadcast: (message: CoreMessage) => void,
   ) {}
 
+  /**
+   * Has the plugins draw what a tab shows, and sends it. A sidebar or panel that cannot be drawn is
+   * closed, and a card is left out of the tab. The user is told why.
+   */
   async send(tabId: string) {
     const project = this.store.projectOf(tabId)
     const send = (this.sends.get(tabId) ?? 0) + 1
@@ -34,21 +40,48 @@ export class Layouts {
     const saved = this.saved(tabId)
     const offered = await this.plugins.offers(project)
     const on = (list: readonly { id: string }[], id: string) => list.some((found) => found.id === id)
-    // A view that cannot be drawn is left out, and the user is told. The saved layout keeps it.
-    const draw = (kind: ViewKind, id: string, params?: PanelParams) =>
-      this.plugins.draw(tabId, project, kind, id, params).catch((error: Error) => {
-        this.broadcast({ type: "error", message: error.message })
-        return undefined
-      })
-    const [sidebar, panels, cards] = await Promise.all([
-      saved.sidebar && on(offered.sidebars, saved.sidebar) ? draw("sidebar", saved.sidebar) : undefined,
-      Promise.all(saved.panels.filter((open) => on(offered.panels, open.panel)).map((open) => draw("panel", open.panel, open.params))),
-      Promise.all(offered.cards.filter((card) => !saved.hiddenCards.includes(card.id)).map((card) => draw("card", card.id))),
-    ])
+    const view = (kind: ViewRequest["kind"], id: string, params?: PanelParams): ViewRequest => ({
+      key: kind === "panel" ? panelInstanceId(id, params) : id,
+      kind,
+      name: splitContributionId(id).name,
+      ...(kind === "panel" ? { params: params ?? {} } : {}),
+    })
+    const broken = this.brokenCards.get(tabId) ?? new Set<string>()
+    const sidebar = saved.sidebar && on(offered.sidebars, saved.sidebar) ? view("sidebar", saved.sidebar) : undefined
+    const panels = saved.panels.filter((open) => on(offered.panels, open.panel)).map((open) => view("panel", open.panel, open.params))
+    const cards = offered.cards.filter((card) => !saved.hiddenCards.includes(card.id) && !broken.has(card.id)).map((card) => view("card", card.id))
+    const views = [...(sidebar ? [sidebar] : []), ...panels, ...cards]
+    const results = await this.plugins.show(tabId, project, views, panels.map((panel) => panel.key))
     if (this.sends.get(tabId) !== send) return
-    const drawn = (views: (DrawnView | undefined)[]) => views.filter((view) => view !== undefined)
-    const layout: TabLayout = { ...(sidebar ? { sidebar } : {}), panels: drawn(panels), cards: drawn(cards) }
-    this.plugins.layout(tabId, layout.panels.map((panel) => panel.id))
+
+    const drawn = (request: ViewRequest): DrawnView | undefined => {
+      const result = results.get(request.key)
+      if (!result) return undefined
+      if ("root" in result) return { id: request.key, title: result.title, plugin: splitContributionId(request.key).plugin, root: result.root }
+      this.broadcast({ type: "error", message: `${request.key} could not be drawn, so it was ${request.kind === "card" ? "left out" : "closed"}: ${result.error}` })
+      return undefined
+    }
+    const shownSidebar = sidebar && drawn(sidebar)
+    const layout: TabLayout = {
+      ...(shownSidebar ? { sidebar: shownSidebar } : {}),
+      panels: panels.flatMap((panel) => drawn(panel) ?? []),
+      cards: cards.flatMap((card) => {
+        const found = drawn(card)
+        if (!found && results.has(card.key)) this.brokenCards.set(tabId, broken.add(card.key))
+        return found ?? []
+      }),
+    }
+    const failed = (request: ViewRequest) => {
+      const result = results.get(request.key)
+      return !!result && "error" in result
+    }
+    if ((sidebar && failed(sidebar)) || panels.some(failed)) {
+      this.store.setLayout(tabId, {
+        ...(saved.sidebar && !(sidebar && failed(sidebar)) ? { sidebar: saved.sidebar } : {}),
+        panels: saved.panels.filter((open) => !panels.some((panel) => failed(panel) && panel.key === panelInstanceId(open.panel, open.params))),
+        hiddenCards: saved.hiddenCards,
+      })
+    }
     this.broadcast({ type: "layout", tabId, layout })
   }
 
@@ -62,11 +95,7 @@ export class Layouts {
     if (!saved.panels.some((open) => panelInstanceId(open.panel, open.params) === id)) {
       const replaced = offered.single ? saved.panels.findIndex((open) => open.panel === panel) : -1
       const panels = [...saved.panels]
-      if (replaced < 0) panels.push({ panel, params })
-      else {
-        this.plugins.undraw(tabId, panelInstanceId(panel, panels[replaced]!.params))
-        panels[replaced] = { panel, params }
-      }
+      panels.splice(replaced < 0 ? panels.length : replaced, replaced < 0 ? 0 : 1, { panel, params })
       this.store.setLayout(tabId, { ...saved, panels })
       await this.send(tabId)
     }
@@ -76,7 +105,6 @@ export class Layouts {
   async closePanel(tabId: string, id: string) {
     const saved = this.saved(tabId)
     this.store.setLayout(tabId, { ...saved, panels: saved.panels.filter((open) => panelInstanceId(open.panel, open.params) !== id) })
-    this.plugins.undraw(tabId, id)
     await this.send(tabId)
   }
 
@@ -87,8 +115,14 @@ export class Layouts {
     await this.send(tabId)
   }
 
+  /** Lays out again every tab sent before, such as after a plugin stopped. */
+  async resendAll() {
+    await Promise.all([...this.sends.keys()].map((tabId) => this.send(tabId)))
+  }
+
   dropTab(tabId: string) {
     this.sends.delete(tabId)
+    this.brokenCards.delete(tabId)
   }
 
   private saved(tabId: string): PluginLayout {

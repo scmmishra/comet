@@ -343,6 +343,26 @@ export function panelInstanceId(panel: string, params: PanelParams = {}): string
   return keys.length ? `${panel}?${keys.map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(JSON.stringify(params[key]))}`).join("&")}` : panel
 }
 
+/** What plugins show in a tab, by full name: its sidebar, its open panel instances in order, and the plugin cards it leaves out. The core saves it with the tab. */
+export interface PluginLayout {
+  readonly sidebar?: string
+  readonly panels: readonly { readonly panel: string; readonly params: PanelParams }[]
+  readonly hiddenCards: readonly string[]
+}
+
+/** A plugin's name: its folder in `~/.desk/plugins`. It holds no dot, so a contribution's full id splits at its first dot. */
+export const PLUGIN_NAME = /^[a-z0-9][a-z0-9_-]*$/
+
+/** The full id of something a plugin registers, such as `support.inbox`. Thread keys a plugin opens are scoped the same way. */
+export const contributionId = (plugin: string, name: string) => `${plugin}.${name}`
+
+/** The plugin and the name a full id holds. A panel instance id splits the same way. */
+export function splitContributionId(id: string): { readonly plugin: string; readonly name: string } {
+  const dot = id.indexOf(".")
+  if (dot < 1) throw new Error(`Plugin views are named <plugin>.<name>, not ${id}.`)
+  return { plugin: id.slice(0, dot), name: id.slice(dot + 1) }
+}
+
 /** A plugin view drawn for a tab: the plugin that drew it and the node it starts at. */
 export interface DrawnView {
   readonly id: string

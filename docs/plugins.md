@@ -34,6 +34,7 @@ Plugins live only in `~/.desk/plugins`. A repo never holds plugins, so opening a
 ```
 
 - A project is named by its folder. A second clone or a worktree is another project.
+- A plugin's name is its folder's name: lowercase letters, digits, `-` and `_`. A name with a dot cannot be told apart from a full id, so it is refused.
 - A plugin on in a project offers all its contributions there. A contribution has no scope of its own.
 - The file is read each time a project's plugins are read. A missing file turns every plugin off. A broken file turns every plugin off and is reported.
 
@@ -63,7 +64,7 @@ export default definePlugin((desk) => {
 ```
 
 - The setup function passed to `definePlugin` runs once per plugin, for every tab. State made there is shared by every tab.
-- Registration happens while `definePlugin` runs. A later call throws.
+- Registration happens while the setup function runs. A later call throws. A name is used once in a plugin, across all kinds.
 - `params` names what a panel needs. Parameters are strings, numbers, booleans or null.
 - A panel with `single: true` has one instance per tab. Opening another replaces it in place, as the support inbox does with conversations.
 - A panel's `title` is a string, or a function of its parameters.
@@ -80,7 +81,7 @@ Each view and command gets a `ctx` for its tab:
 | `ctx.$` | Bun's shell, run in the tab's folder. |
 | `ctx.open(panel, params?)` | Opens a panel instance in the tab, or brings the open one to the front. The view pane opens. |
 | `ctx.isOpen(panel, params?)` | Whether that instance is open in the tab. It updates as panels open and close. |
-| `ctx.openThread({ key, title?, prompt? })` | Opens or resumes the tab's Claude thread for `key`. |
+| `ctx.openThread({ key, title?, prompt? })` | Opens or resumes the tab's Claude thread for `key`. Keys belong to the plugin, so two plugins never share a thread. |
 | `ctx.toast(message)` | Shows a short message. |
 
 A panel's context also has `ctx.params` and `ctx.close()`.
@@ -116,7 +117,9 @@ A panel's context also has `ctx.params` and `ctx.close()`.
 
 - Each plugin runs in one Bun worker in the core, shared by every tab.
 - A worker starts the first time a project it is on is read. Its setup runs, and it reports what it registered.
-- Each view is drawn once per tab and kept until its panel closes or its tab closes.
+- Each view is drawn once per tab and kept while the tab shows it. On every layout change the core tells each plugin the full set of its views a tab shows, and the plugin draws what it lacks and disposes the rest.
+- A sidebar or panel that cannot be drawn is closed. A card that cannot be drawn is left out of the tab. The user is told once.
+- A plugin that fails to start, or stops, is reported once and stays off until Desk restarts. Its views leave every tab.
 - UI crosses to the app as operations: `create`, `text`, `set`, `insert`, `remove`.
 - `protocol` lists the UI primitives and their props once. The plugin package builds its components from that list, and the app draws each one.
 

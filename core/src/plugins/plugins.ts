@@ -1,5 +1,5 @@
-import type { FromPlugin, Offers, ToPlugin, ViewKind } from "@desk/plugin/host"
-import { panelInstanceId, type CoreMessage, type PanelParams, type PluginContributions, type DrawnView, type UiValue } from "@desk/protocol"
+import type { FromPlugin, Offers, ToPlugin, ViewRequest, ViewResult } from "@desk/plugin/host"
+import { contributionId, splitContributionId, type CoreMessage, type PanelParams, type PluginContributions, type UiValue } from "@desk/protocol"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { deskHome } from "../data-files"
@@ -20,13 +20,15 @@ interface PluginHooks {
   readonly openPanel: (tabId: string, panel: string, params: PanelParams) => void
   /** A panel asked to close itself. */
   readonly closePanel: (tabId: string, id: string) => void
+  /** A running plugin stopped. The tabs that showed its views lay out again without it. */
+  readonly stopped: (plugin: string) => void
 }
 
 interface Running {
   readonly worker: Worker
   readonly offers: Offers
-  /** Draws waiting for the plugin's answer, by tab and key. Two asks for one view share one draw, because the plugin answers once. */
-  readonly drawing: Map<string, { readonly view: Promise<DrawnView>; readonly resolve: (view: DrawnView) => void; readonly reject: (error: Error) => void }>
+  /** `show` asks waiting for the plugin's answer, by sequence number. */
+  readonly showing: Map<number, { readonly resolve: (views: readonly ViewResult[]) => void; readonly reject: (error: Error) => void }>
 }
 
 /** What the plugins on in a project offer, by kind, each under its full id, `<plugin>.<name>`. */
@@ -34,50 +36,67 @@ type ProjectOffers = { readonly [K in keyof Offers]: readonly (Omit<Offers[K][nu
 
 const pluginsFolder = () => join(deskHome(), "plugins")
 
-const drawKey = (tabId: string, key: string) => `${tabId}\n${key}`
-
-/** A contribution's id splits into its plugin and its name in the plugin, at the first dot. An instance id splits the same way. */
-function splitId(id: string): { plugin: string; name: string } {
-  const dot = id.indexOf(".")
-  if (dot < 1) throw new Error(`Plugin views are named <plugin>.<name>, not ${id}.`)
-  return { plugin: id.slice(0, dot), name: id.slice(dot + 1) }
-}
 
 /**
  * The plugins in `~/.desk/plugins`, each in a worker of its own, so a slow plugin never stalls a session
  * or a terminal. A plugin starts the first time a project it is on is read, and stays up after. One
- * worker serves every tab.
+ * worker serves every tab. A plugin that fails to start or stops is reported once and stays off until
+ * Desk restarts, as an edited plugin does.
  */
 export class Plugins {
   private running = new Map<string, Promise<Running>>()
+  private failed = new Map<string, Error>()
+  private seq = 0
 
   constructor(private readonly hooks: PluginHooks) {}
 
-  /** What the plugins on in `project` offer. A plugin that fails to start is left out, and the user is told. */
+  /** What the plugins on in `project` offer. A plugin that failed is left out. */
   async offers(project: string): Promise<ProjectOffers> {
     const started = await Promise.all(
       pluginsOn(project).map((plugin) =>
         this.start(plugin).then(
           (running) => ({ plugin, offers: running.offers }),
-          (error: Error) => {
-            this.hooks.broadcast({ type: "error", message: `The ${plugin} plugin could not start: ${error.message}` })
-            return undefined
-          },
+          () => undefined,
         ),
       ),
     )
     const all = started.filter((found) => found !== undefined)
     // TypeScript loses which kind it maps across the union, so the result is named again.
     const named = <K extends keyof Offers>(kind: K) =>
-      all.flatMap(({ plugin, offers }) => (offers[kind] as readonly { name: string }[]).map(({ name, ...rest }) => ({ ...rest, id: `${plugin}.${name}` }))) as unknown as ProjectOffers[K]
+      all.flatMap(({ plugin, offers }) => (offers[kind] as readonly { name: string }[]).map(({ name, ...rest }) => ({ ...rest, id: contributionId(plugin, name) }))) as unknown as ProjectOffers[K]
     return { sidebars: named("sidebars"), panels: named("panels"), cards: named("cards"), setups: named("setups"), commands: named("commands") }
   }
 
   /** One contribution of a plugin on in `project`. Anything else is refused, so a plugin's views and commands run only where it is on. */
   async find<K extends keyof Offers>(project: string, kind: K, id: string): Promise<ProjectOffers[K][number]> {
     const found = (await this.offers(project))[kind].find((offered) => offered.id === id)
-    if (!found) throw new Error(`No plugin on in this project offers ${id}.`)
-    return found
+    if (found) return found
+    const failure = this.failed.get(splitContributionId(id).plugin)
+    throw failure ? new Error(`${id} is not available: ${failure.message}`) : new Error(`No plugin on in this project offers ${id}.`)
+  }
+
+  /**
+   * Tells every running plugin which of its views a tab shows, and which panel instances are open
+   * there. Each draws what it lacks and disposes the rest. Answers the views drawn, by key.
+   */
+  async show(tabId: string, project: string, views: readonly ViewRequest[], open: readonly string[]): Promise<Map<string, ViewResult>> {
+    const byPlugin = new Map<string, ViewRequest[]>()
+    for (const view of views) {
+      const { plugin } = splitContributionId(view.key)
+      byPlugin.set(plugin, [...(byPlugin.get(plugin) ?? []), view])
+    }
+    const answers = await Promise.all(
+      [...this.running.keys()].map(async (plugin) => {
+        const running = await this.running.get(plugin)!.catch(() => undefined)
+        if (!running) return []
+        const seq = ++this.seq
+        const { promise, resolve, reject } = Promise.withResolvers<readonly ViewResult[]>()
+        running.showing.set(seq, { resolve, reject })
+        this.post(running, { type: "show", seq, tabId, project, views: byPlugin.get(plugin) ?? [], open })
+        return promise.catch((error: Error) => (byPlugin.get(plugin) ?? []).map((view) => ({ key: view.key, error: error.message })))
+      }),
+    )
+    return new Map(answers.flat().map((result) => [result.key, result]))
   }
 
   /** What the user can start from the palette in `project`: panels that need no parameters, setups and commands. */
@@ -91,36 +110,10 @@ export class Plugins {
     }
   }
 
-  /**
-   * Draws a view for a tab, or names the one drawn before. A panel is drawn once per set of
-   * parameters, and its view's id is its instance id.
-   */
-  async draw(tabId: string, project: string, kind: ViewKind, id: string, params: PanelParams = {}): Promise<DrawnView> {
-    const { plugin, name } = splitId(id)
-    const running = await this.start(plugin)
-    const key = kind === "panel" ? panelInstanceId(id, params) : id
-    const waiting = running.drawing.get(drawKey(tabId, key))
-    if (waiting) return waiting.view
-    const { promise, resolve, reject } = Promise.withResolvers<DrawnView>()
-    running.drawing.set(drawKey(tabId, key), { view: promise, resolve, reject })
-    this.post(running, { type: "draw", tabId, project, key, kind, name, ...(kind === "panel" ? { params } : {}) })
-    return promise
-  }
-
-  /** Stops drawing a view, such as a closed panel. */
-  undraw(tabId: string, key: string) {
-    void this.running.get(splitId(key).plugin)?.then((running) => this.post(running, { type: "undraw", tabId, key }))
-  }
-
-  /** Tells every running plugin which panel instances a tab has open, for `isOpen`. */
-  layout(tabId: string, open: readonly string[]) {
-    for (const running of this.running.values()) void running.then((found) => this.post(found, { type: "layout", tabId, open }))
-  }
-
   /** Runs a command of a plugin on in `project`, for a tab. */
   async command(tabId: string, project: string, id: string, input?: string) {
     await this.find(project, "commands", id)
-    const { plugin, name } = splitId(id)
+    const { plugin, name } = splitContributionId(id)
     this.post(await this.start(plugin), { type: "command", tabId, project, name, ...(input !== undefined ? { input } : {}) })
   }
 
@@ -146,13 +139,22 @@ export class Plugins {
   }
 
   private start(plugin: string): Promise<Running> {
+    const failure = this.failed.get(plugin)
+    if (failure) return Promise.reject(failure)
     let running = this.running.get(plugin)
     if (!running) {
       running = this.launch(plugin)
       this.running.set(plugin, running)
-      running.catch(() => this.running.delete(plugin))
+      running.catch((error: Error) => this.fail(plugin, error, "could not start"))
     }
     return running
+  }
+
+  /** Turns a plugin off until Desk restarts, and tells the user once. */
+  private fail(plugin: string, error: Error, what: string) {
+    this.running.delete(plugin)
+    this.failed.set(plugin, error)
+    this.hooks.broadcast({ type: "error", message: `The ${plugin} plugin ${what}: ${error.message}` })
   }
 
   private async launch(plugin: string): Promise<Running> {
@@ -165,7 +167,7 @@ export class Plugins {
       worker.onmessage = (event: MessageEvent<FromPlugin>) => {
         const message = event.data
         if (message.type === "ready") {
-          running = { worker, offers: message.offers, drawing: new Map() }
+          running = { worker, offers: message.offers, showing: new Map() }
           resolve(running)
         } else if (message.type === "failed") {
           worker.terminate()
@@ -173,10 +175,14 @@ export class Plugins {
         } else if (running) this.receive(plugin, running, message)
       }
       worker.onerror = (event) => {
-        this.running.delete(plugin)
+        worker.terminate()
         if (!running) return reject(new Error(event.message))
-        for (const waiting of running.drawing.values()) waiting.reject(new Error(event.message))
-        this.hooks.broadcast({ type: "error", message: `The ${plugin} plugin stopped: ${event.message}` })
+        const error = new Error(event.message)
+        for (const waiting of running.showing.values()) waiting.reject(error)
+        this.fail(plugin, error, "stopped")
+        // The app's copy of a stopped plugin's nodes draws nothing anyone can use.
+        this.hooks.broadcast({ type: "plugin.ops", plugin, ops: [], reset: true })
+        this.hooks.stopped(plugin)
       }
     })
   }
@@ -184,15 +190,13 @@ export class Plugins {
   private receive(plugin: string, running: Running, message: FromPlugin) {
     if (message.type === "ops") this.hooks.broadcast({ type: "plugin.ops", plugin, ops: message.ops })
     else if (message.type === "snapshot") this.hooks.broadcast({ type: "plugin.ops", plugin, ops: message.ops, reset: true })
-    else if (message.type === "drawn" || message.type === "undrawn") {
-      const key = drawKey(message.tabId, message.key)
-      const waiting = running.drawing.get(key)
-      running.drawing.delete(key)
-      if (message.type === "drawn") waiting?.resolve({ id: message.key, title: message.title, plugin, root: message.root })
-      else waiting?.reject(new Error(`${plugin}: ${message.message}`))
+    else if (message.type === "shown") {
+      running.showing.get(message.seq)?.resolve(message.views)
+      running.showing.delete(message.seq)
     } else if (message.type === "thread") {
       const { tabId, key, title, prompt } = message
-      this.hooks.openThread(tabId, { key, ...(title ? { title } : {}), ...(prompt ? { prompt } : {}) })
+      // A thread key belongs to its plugin, so two plugins in one project never share a thread.
+      this.hooks.openThread(tabId, { key: contributionId(plugin, key), ...(title ? { title } : {}), ...(prompt ? { prompt } : {}) })
     } else if (message.type === "open") this.hooks.openPanel(message.tabId, message.panel, message.params ?? {})
     else if (message.type === "close") this.hooks.closePanel(message.tabId, message.id)
     else if (message.type === "toast") this.hooks.broadcast({ type: "notice", message: message.message })

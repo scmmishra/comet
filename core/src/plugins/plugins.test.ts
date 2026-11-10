@@ -1,38 +1,9 @@
 import { expect, test } from "bun:test"
-import { applyOps, panelInstanceId, type CoreMessage, type UiNode } from "@desk/protocol"
+import { panelInstanceId } from "@desk/protocol"
 import { tempFolder, until, useTempHome } from "../test-support"
-import { Plugins } from "./plugins"
-import { installPlugin, turnOn } from "./test-plugins"
+import { harness, installPlugin, turnOn } from "./test-plugins"
 
 useTempHome()
-
-/** Plugins whose UI ops land in `nodes`, by plugin, as the app keeps them. */
-function plugins(hooks: Partial<ConstructorParameters<typeof Plugins>[0]> = {}) {
-  const nodes: Record<string, Record<number, UiNode>> = {}
-  const errors: string[] = []
-  const found = new Plugins({
-    broadcast: (message: CoreMessage) => {
-      if (message.type === "error") errors.push(message.message)
-      if (message.type !== "plugin.ops") return
-      if (message.reset || !nodes[message.plugin]) nodes[message.plugin] = {}
-      applyOps(nodes[message.plugin]!, message.ops)
-    },
-    openThread: () => {},
-    openPanel: () => {},
-    closePanel: () => {},
-    ...hooks,
-  })
-  return { plugins: found, nodes, errors }
-}
-
-/** The text under a node, as the app would draw it. */
-function textOf(nodes: Record<number, UiNode> | undefined, id: number): string {
-  const node = nodes?.[id]
-  return node?.text ?? (node?.children ?? []).map((child) => textOf(nodes, child)).join("")
-}
-
-const handlerOf = (nodes: Record<number, UiNode> | undefined, type: string, prop: string) =>
-  (Object.values(nodes ?? {}).find((node) => node.type === type)?.props[prop] as { handler: number } | undefined)?.handler
 
 /** A panel with a counter and a button that bumps it and opens a thread. */
 const COUNTER = `
@@ -53,7 +24,7 @@ export default definePlugin((desk) => {
 })
 `
 
-/** A sidebar that marks the open item and opens it, and a panel per item. */
+/** A sidebar that marks the open item and opens it, a panel per item, a card, a setup and a command. */
 const INBOX = `
 import { definePlugin, Item, List, Text } from "@desk/plugin"
 
@@ -78,70 +49,64 @@ test("offers only the plugins on in a project, and lets the palette start what n
   installPlugin("inbox", INBOX)
   const here = tempFolder("here")
   turnOn({ everywhere: ["counter"], projects: { [here]: ["inbox"] } })
-  const { plugins: found } = plugins()
+  const { plugins } = harness()
 
-  const there = await found.offers(tempFolder("there"))
+  const there = await plugins.offers(tempFolder("there"))
   expect(there.panels.map((panel) => panel.id)).toEqual(["counter.main"])
   expect(there.sidebars).toEqual([])
 
-  const offered = await found.offers(here)
+  const offered = await plugins.offers(here)
   expect(offered.panels.map((panel) => panel.id)).toEqual(["counter.main", "inbox.item"])
   expect(offered.sidebars).toEqual([{ id: "inbox.list", title: "Inbox" }])
   expect(offered.cards).toEqual([{ id: "inbox.count", title: "Count" }])
   expect(offered.setups).toEqual([{ id: "inbox.triage", title: "Triage", sidebar: "inbox.list", panels: [], hiddenCards: ["other.card"] }])
-  await expect(found.find(tempFolder("there"), "setups", "inbox.triage")).rejects.toThrow("No plugin on in this project")
+  await expect(plugins.find(tempFolder("there"), "setups", "inbox.triage")).rejects.toThrow("No plugin on in this project")
 
-  expect(await found.contributions(here)).toEqual({
+  expect(await plugins.contributions(here)).toEqual({
     panels: [{ id: "counter.main", title: "Counter" }],
     setups: [{ id: "inbox.triage", title: "Triage" }],
     commands: [{ id: "inbox.refresh", title: "Refresh", input: "Query" }],
   })
-  found.stop()
+  plugins.stop()
 }, 20_000)
 
-test("draws a panel as operations, runs its handlers, and passes on thread requests", async () => {
+test("draws a panel as operations, runs its handlers, and opens threads under keys the plugin owns", async () => {
   installPlugin("counter", COUNTER)
-  const threads: unknown[] = []
-  const { plugins: found, nodes } = plugins({ openThread: (tabId, thread) => threads.push({ tabId, ...thread }) })
-  const project = tempFolder("project")
-  const view = await found.draw("tab-1", project, "panel", "counter.main")
+  turnOn({ everywhere: ["counter"] })
+  const { plugins, layouts, layout, textOf, handler, threads } = harness()
+  await layouts.openPanel("tab-1", "counter.main")
+  const view = layout("tab-1")!.panels[0]!
   expect(view).toMatchObject({ id: "counter.main", title: "Counter", plugin: "counter" })
-  await until(() => textOf(nodes.counter, view.root).startsWith("Count 0"))
+  await until(() => textOf("counter", view.root).startsWith("Count 0"))
 
-  await found.event("counter", handlerOf(nodes.counter, "button", "onClick")!, [])
+  await plugins.event("counter", handler("counter", "button", "onClick")!, [])
   await until(() => threads.length > 0)
-  expect(threads).toEqual([{ tabId: "tab-1", key: "k1", title: "Thread 1" }])
-  await until(() => textOf(nodes.counter, view.root).startsWith("Count 1"))
+  expect(threads).toEqual([{ tabId: "tab-1", key: "counter.k1", title: "Thread 1" }])
+  await until(() => textOf("counter", view.root).startsWith("Count 1"))
 
-  // Drawing the same view again names the same tree, so an app that reloads finds it.
-  expect((await found.draw("tab-1", project, "panel", "counter.main")).root).toBe(view.root)
-  // Two asks at once, as two overlapping layout sends make, both get the view.
-  const both = Promise.all([found.draw("tab-2", project, "panel", "counter.main"), found.draw("tab-2", project, "panel", "counter.main")])
-  expect(await Promise.race([both.then(() => "drawn"), Bun.sleep(2000).then(() => "stuck")])).toBe("drawn")
-  found.stop()
+  // Laying the tab out again keeps the same tree, so the app's copy stays valid.
+  await layouts.send("tab-1")
+  expect(layout("tab-1")!.panels[0]!.root).toBe(view.root)
+  plugins.stop()
 }, 20_000)
 
 test("opens a panel instance per set of parameters, and tells views which ones are open", async () => {
   installPlugin("inbox", INBOX)
-  const opened: unknown[] = []
-  const { plugins: found, nodes } = plugins({ openPanel: (tabId, panel, params) => opened.push({ tabId, panel, params }) })
-  const project = tempFolder("project")
-  await found.draw("tab-1", project, "sidebar", "inbox.list")
-  await until(() => Object.values(nodes.inbox ?? {}).some((node) => node.type === "item"))
+  turnOn({ everywhere: ["inbox"] })
+  const { plugins, layouts, layout, nodes, handler, textOf } = harness()
+  await layouts.openSetup("tab-1", "inbox.triage")
   const item = () => Object.values(nodes.inbox!).find((node) => node.type === "item")!
+  await until(() => !!nodes.inbox && Object.values(nodes.inbox).some((node) => node.type === "item"))
   expect(item().props.selected).toBe(false)
 
-  await found.event("inbox", handlerOf(nodes.inbox, "item", "onSelect")!, [])
-  await until(() => opened.length > 0)
-  expect(opened).toEqual([{ tabId: "tab-1", panel: "inbox.item", params: { id: 1 } }])
-
+  await plugins.event("inbox", handler("inbox", "item", "onSelect")!, [])
   const id = panelInstanceId("inbox.item", { id: 1 })
-  const panel = await found.draw("tab-1", project, "panel", "inbox.item", { id: 1 })
-  expect(panel).toMatchObject({ id, title: "Item 1" })
-  found.layout("tab-1", [id])
+  await until(() => layout("tab-1")?.panels.some((panel) => panel.id === id) ?? false)
   await until(() => item().props.selected === true)
-  expect(textOf(nodes.inbox, panel.root)).toBe("Item 1")
-  found.stop()
+  const panel = layout("tab-1")!.panels.find((found) => found.id === id)!
+  expect(panel.title).toBe("Item 1")
+  expect(textOf("inbox", panel.root)).toBe("Item 1")
+  plugins.stop()
 }, 20_000)
 
 /** A plugin that shows the open item's id and status in one text, switched by a button, as the support sample does. */
@@ -166,38 +131,71 @@ export default definePlugin((desk) => {
 
 test("keeps text in order when the values inside it change, in the app's copy and in a later resend", async () => {
   installPlugin("label", LABEL)
-  const { plugins: found, nodes } = plugins()
-  const { root } = await found.draw("tab-1", tempFolder("project"), "panel", "label.main")
-  await until(() => textOf(nodes.label, root).startsWith("#1001"))
-  await found.event("label", handlerOf(nodes.label, "button", "onClick")!, [])
-  await until(() => textOf(nodes.label, root).startsWith("#1002"))
-  expect(textOf(nodes.label, root)).toBe("#1002 · pending · sample")
+  turnOn({ everywhere: ["label"] })
+  const { plugins, layouts, layout, nodes, textOf, handler } = harness()
+  await layouts.openPanel("tab-1", "label.main")
+  const { root } = layout("tab-1")!.panels[0]!
+  await until(() => textOf("label", root).startsWith("#1001"))
+  await plugins.event("label", handler("label", "button", "onClick")!, [])
+  await until(() => textOf("label", root).startsWith("#1002"))
+  expect(textOf("label", root)).toBe("#1002 · pending · sample")
   delete nodes.label
-  found.resend()
-  await until(() => textOf(nodes.label, root) !== "")
-  expect(textOf(nodes.label, root)).toBe("#1002 · pending · sample")
-  found.stop()
+  plugins.resend()
+  await until(() => textOf("label", root) !== "")
+  expect(textOf("label", root)).toBe("#1002 · pending · sample")
+  plugins.stop()
 }, 20_000)
 
-test("leaves out a plugin that is on but not installed, and tells the user", async () => {
-  const project = tempFolder("project")
-  turnOn({ projects: { [project]: ["missing"] } })
-  const { plugins: found, errors } = plugins()
-  expect((await found.offers(project)).panels).toEqual([])
-  expect(errors[0]).toContain("found no plugin")
-  await expect(found.draw("tab-1", project, "panel", "missing.main")).rejects.toThrow("found no plugin")
-  found.stop()
+test("a plugin that is on but not installed is left out, reported once, and named as the cause", async () => {
+  turnOn({ everywhere: ["missing"] })
+  const { plugins, project, errors } = harness()
+  expect((await plugins.offers(project)).panels).toEqual([])
+  await plugins.offers(project)
+  expect(errors().filter((error) => error.includes("found no plugin"))).toHaveLength(1)
+  await expect(plugins.find(project, "panels", "missing.main")).rejects.toThrow("found no plugin")
+  plugins.stop()
 })
 
-test("refuses a plugin whose setup registers late", async () => {
+test("refuses a plugin that registers late, or registers one name twice", async () => {
   installPlugin("late", `
 import { definePlugin } from "@desk/plugin"
 export default definePlugin((desk) => { setTimeout(() => desk.panel("main", { title: "Late", view: () => null })) })
 `)
-  turnOn({ everywhere: ["late"] })
-  const { plugins: found, errors } = plugins()
-  await found.offers(tempFolder("project"))
-  await until(() => errors.length > 0)
-  expect(errors[0]).toContain("while setup runs")
-  found.stop()
+  installPlugin("twice", `
+import { definePlugin, Text } from "@desk/plugin"
+export default definePlugin((desk) => {
+  desk.sidebar("inbox", { title: "Inbox", view: () => <Text>a</Text> })
+  desk.card("inbox", { title: "Inbox", view: () => <Text>b</Text> })
 })
+`)
+  turnOn({ everywhere: ["late", "twice"] })
+  const { plugins, project, errors } = harness()
+  await plugins.offers(project)
+  await until(() => errors().length >= 2)
+  expect(errors().some((error) => error.includes("while setup runs"))).toBe(true)
+  expect(errors().some((error) => error.includes("two things named inbox"))).toBe(true)
+  plugins.stop()
+}, 20_000)
+
+test("a plugin that stops loses its views in every tab, is reported once, and stays off", async () => {
+  installPlugin("crash", `
+import { definePlugin, Button } from "@desk/plugin"
+export default definePlugin((desk) => {
+  desk.card("status", { title: "Status", view: () => <Button label="Break" onClick={() => setTimeout(() => { throw new Error("boom") })} /> })
+})
+`)
+  turnOn({ everywhere: ["crash"] })
+  const { plugins, layouts, layout, nodes, handler, errors } = harness()
+  await layouts.send("tab-1")
+  await layouts.send("tab-2")
+  expect(layout("tab-1")!.cards.map((card) => card.id)).toEqual(["crash.status"])
+  await until(() => handler("crash", "button", "onClick") !== undefined)
+
+  await plugins.event("crash", handler("crash", "button", "onClick")!, [])
+  await until(() => layout("tab-1")!.cards.length === 0 && layout("tab-2")!.cards.length === 0)
+  expect(Object.keys(nodes.crash ?? {})).toEqual([])
+  expect(errors().filter((error) => error.includes("crash plugin stopped"))).toHaveLength(1)
+  await layouts.send("tab-1")
+  expect(layout("tab-1")!.cards).toEqual([])
+  plugins.stop()
+}, 20_000)

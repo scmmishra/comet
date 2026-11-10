@@ -1,11 +1,10 @@
 import type { SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
-import type { CoreMessage, FileChange, TabInfo, ThreadEvent } from "@desk/protocol"
+import type { CoreMessage, FileChange, PluginLayout, TabInfo, ThreadEvent } from "@desk/protocol"
 import { changesSince, snapshot } from "./checkpoints"
 import { threadContext, threadHistory } from "./past-threads"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { sameRunSettings, Session } from "./session"
 import { Terminals } from "./terminals"
-import type { PluginLayout } from "@desk/plugin/host"
 import { loadWindowState, saveWindowState, type TabThread, type WindowState } from "./window-state"
 
 type Send = (message: CoreMessage) => void
