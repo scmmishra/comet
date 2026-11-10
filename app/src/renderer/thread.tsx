@@ -5,9 +5,10 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Spinner } from "@opencode/ui/spinner"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createEffect, createMemo, createSignal, For, Index, Match, on, onCleanup, Show, Switch } from "solid-js"
-import type { TabInfo } from "@desk/protocol"
+import { createEffect, createMemo, createSignal, For, Index, Match, on, Show, Switch } from "solid-js"
+import type { TabInfo, ThreadItem } from "@desk/protocol"
 import { imageUrl } from "./attachments"
+import { now } from "./clock"
 import { lineDiff } from "./diff"
 import { COPIED_MS, formatDuration, formatMessageTime } from "./format"
 import { Chevron, Icon } from "./icons"
@@ -15,7 +16,7 @@ import { Markdown } from "./markdown"
 import { openFile } from "./projects"
 import { threadRows, type Fold, type Group, type Row as ThreadRow, type Working } from "./thread-rows"
 import { answerPermission, threadOf, type Item } from "./threads"
-import { groupSummary, ICON_BY_KIND, stepKind, stepLabel, type Step } from "./work"
+import { groupSummary, ICON_BY_KIND, isStep, stepKind, stepLabel, type Step } from "./work"
 
 type ToolItem = Extract<Item, { type: "tool" }>
 type PermissionItem = Extract<Item, { type: "permission" }>
@@ -111,9 +112,6 @@ function MessageMeta(props: { text: string; at?: number }) {
 
 /** The head of a running turn: how long Claude has worked on it, counted each second. */
 function WorkingRow(props: { since?: number }) {
-  const [now, setNow] = createSignal(Date.now())
-  const timer = setInterval(() => setNow(Date.now()), 1000)
-  onCleanup(() => clearInterval(timer))
   const label = () => (props.since ? `Working for ${formatDuration(Math.max(0, now() - props.since))}` : "Working…")
   return (
     <div class="flex items-center gap-2 text-[13px] text-fg-3">
@@ -212,6 +210,28 @@ function StepList(props: { steps: Step[]; tab: TabInfo }) {
       onScroll={() => (atEnd = list.scrollTop + list.clientHeight >= list.scrollHeight - 4)}
     >
       <For each={props.steps}>{(step) => <StepRow step={step} tab={props.tab} />}</For>
+    </div>
+  )
+}
+
+/** A transcript drawn plainly, step by step, for a subagent's card. Steps show their labels, and text shows in full. */
+export function Transcript(props: { items: readonly ThreadItem[]; tab: TabInfo }) {
+  return (
+    <div class="grid min-w-0 gap-0.5">
+      <For each={props.items}>
+        {(item) => (
+          <Switch>
+            <Match when={isStep(item) && item}>{(step) => <StepRow step={step()} tab={props.tab} />}</Match>
+            <Match when={item.type === "text" && item}>
+              {(text) => (
+                <div class="my-1 text-[13px]">
+                  <Markdown text={text().text} done onOpenFile={(path, line) => openFile(props.tab.project, path, line)} />
+                </div>
+              )}
+            </Match>
+          </Switch>
+        )}
+      </For>
     </div>
   )
 }

@@ -17,6 +17,7 @@ import { projectData, projectLabel, readProject } from "./projects"
 import { ReviewView } from "./review"
 import { SettingsScreen } from "./settings/screen"
 import { ProjectCards, SpaceChip } from "./space"
+import { SubagentsCard } from "./subagents"
 import { StartScreen } from "./start-screen"
 import { TerminalView } from "./terminal"
 import { Thread } from "./thread"
@@ -118,6 +119,7 @@ function TabView(props: { tab: TabInfo }) {
               </Show>
             </div>
             <aside class="desk-rail desk-no-scrollbar absolute right-2 top-0 max-h-full w-[264px] flex-col gap-2 overflow-y-auto pb-2">
+              <SubagentsCard tab={props.tab} />
               <ProjectCards project={props.tab.project} />
               <For each={cards()}>
                 {(card) => (

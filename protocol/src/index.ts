@@ -69,6 +69,30 @@ export type ThreadEvent =
   | { readonly kind: "init"; readonly model: string }
   /** Read after each turn. */
   | { readonly kind: "context"; readonly reading: ContextReading }
+  /** A subagent Claude started, sent whole each time it changes. */
+  | { readonly kind: "subagent"; readonly subagent: Subagent }
+
+/**
+ * A subagent Claude started in a turn, such as an Explore agent. It runs beside the thread, so Desk shows
+ * it in its own card, not in the thread. `items` is what it has done so far, shaped as thread items.
+ */
+export interface Subagent {
+  /** Claude Code's task id. */
+  readonly id: string
+  readonly description: string
+  /** The kind of agent, such as "Explore". */
+  readonly type?: string
+  readonly status: "running" | "completed" | "failed" | "stopped"
+  /** Whether it runs in the background, so the turn that started it can end first. */
+  readonly background: boolean
+  readonly startedAt: number
+  readonly endedAt?: number
+  /** A one-line status while it runs, and its result's summary once it ends. */
+  readonly summary?: string
+  readonly toolUses: number
+  readonly prompt?: string
+  readonly items: readonly ThreadItem[]
+}
 
 /** The repo and branch a project is on, for the Space card. */
 export interface Space {

@@ -1,4 +1,4 @@
-import type { ContextReading, FileChange, ImageAttachment, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
+import type { ContextReading, FileChange, ImageAttachment, Subagent, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
 import { createEffect, createMemo, createRoot, on } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
@@ -17,6 +17,8 @@ export interface Thread {
   context?: ContextReading
   /** The files the thread changed. Undefined until asked for. */
   review?: readonly FileChange[]
+  /** The subagents of the latest turn, and any still running from an earlier one, by id. */
+  subagents?: Record<string, Subagent>
 }
 
 /** What a tab with no thread yet shows. A tab that gets a thread gets a record of its own. */
@@ -33,6 +35,9 @@ const ensure = (tabId: string) => setThreads(tabId, (thread) => thread ?? { item
 export function send(tabId: string, text: string, images: readonly ImageAttachment[] = []) {
   const tab = workspace.tabs.find((found) => found.id === tabId)
   if (tab && isUntitled(tab) && text) nameTab(tabId, text)
+  // A new turn starts a new set of subagents. Those still running stay.
+  const running = Object.values(threadOf(tabId).subagents ?? {}).filter((subagent) => subagent.status === "running")
+  if (threads[tabId]) setThreads(tabId, produce((thread) => void (thread.subagents = Object.fromEntries(running.map((subagent) => [subagent.id, subagent])))))
   core.send({ type: "session.send", tabId, text, ...(images.length ? { images } : {}) })
 }
 
@@ -80,6 +85,7 @@ function apply(tabId: string, event: ThreadEvent, arrivedAt?: number) {
       } else if (event.kind === "status") thread.busy = event.busy
       else if (event.kind === "init") thread.model = event.model
       else if (event.kind === "context") thread.context = event.reading
+      else if (event.kind === "subagent") thread.subagents = { ...thread.subagents, [event.subagent.id]: event.subagent }
     }),
   )
   // A finished turn may have changed files, so the Space card and Review read the repo again.

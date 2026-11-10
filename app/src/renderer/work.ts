@@ -64,6 +64,9 @@ export function stepLabel(step: Step): string {
       return `Fetched ${target}`
     case "TodoWrite":
       return "Updated the plan"
+    case "Task":
+    case "Agent":
+      return `Started an agent: ${target}`
     default:
       return `${step.name} ${target}`.trim()
   }

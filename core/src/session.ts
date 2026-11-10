@@ -2,6 +2,7 @@ import { query, type CanUseTool, type PermissionResult, type Query, type SDKRate
 import type { ImageAttachment, RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
 import { readContext } from "./context"
 import { sdkModel } from "./models"
+import { Subagents } from "./subagents"
 import { ThreadMapper, toolDetail } from "./thread"
 
 type Emit = (event: ThreadEvent) => void
@@ -54,6 +55,7 @@ export class Session {
   private inbox = new Inbox()
   private query?: Query
   private mapper: ThreadMapper
+  private subagents: Subagents
   /** Open permission requests: how to answer each, and the item that shows it. */
   private permissions = new Map<string, { readonly resolve: (result: PermissionResult) => void; readonly item: Extract<ThreadItem, { type: "permission" }> }>()
   private sent = 0
@@ -70,6 +72,7 @@ export class Session {
     this.sessionId = options.resume
     this.settings = options.settings
     this.mapper = new ThreadMapper(dir)
+    this.subagents = new Subagents(dir, emit)
   }
 
   /** Changes how the thread runs. A running thread takes the change from its next reply. */
@@ -121,6 +124,9 @@ export class Session {
       options: {
         cwd: this.dir,
         includePartialMessages: true,
+        // A subagent's text and thinking reach Desk too, with a one-line status, for its card.
+        forwardSubagentText: true,
+        agentProgressSummaries: true,
         systemPrompt: { type: "preset", preset: "claude_code" },
         canUseTool: this.askPermission,
         model: sdkModel(this.settings.model),
@@ -148,6 +154,7 @@ export class Session {
           this.options.onSessionId(message.session_id)
         }
         if (message.type === "rate_limit_event") this.options.onRateLimit(message.rate_limit_info)
+        this.subagents.handle(message)
         for (const event of this.mapper.map(message, Date.now())) {
           // The result of a turn the user stopped says so, so the thread can tell it from one that finished.
           const stopped = this.stopping && event.kind === "item" && event.item.type === "result"
