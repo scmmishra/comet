@@ -9,6 +9,7 @@ import { Models } from "./models"
 import { recentThreads } from "./past-threads"
 import { Layouts } from "./plugins/layouts"
 import { Plugins } from "./plugins/plugins"
+import { searchFiles } from "./project-files"
 import { findIconFiles, iconFile } from "./project-icons"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { loadSettings, saveSettings, updateSettings } from "./settings"
@@ -116,6 +117,8 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         return window.save(message.tabs, message.active)
       case "session.send":
         return window.send(message.tabId, message.text, checkImages(message.images ?? []))
+      case "files.search":
+        return reply({ type: "files.found", project: message.project, query: message.query, paths: await searchFiles(message.project, message.query) })
       case "session.interrupt":
         return window.interrupt(message.tabId)
       case "permission.answer":

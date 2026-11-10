@@ -61,6 +61,17 @@ export function openFile(dir: string, path: string, line?: number) {
   core.send({ type: "file.open", project: dir, path, line })
 }
 
+/** Asks the core for files in a project that match `query`, for an @ mention. `found` hears answers to this query only. */
+export function findFiles(dir: string, query: string, found: (paths: readonly string[]) => void) {
+  const stop = core.listen((message) => {
+    if (message.type !== "files.found" || message.project !== dir || message.query !== query) return
+    stop()
+    found(message.paths)
+  })
+  core.send({ type: "files.search", project: dir, query })
+  return stop
+}
+
 core.listen((message) => {
   if (message.type === "project") setProjects(message.project, { [message.part]: message.value })
 })

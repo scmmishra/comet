@@ -565,6 +565,8 @@ export type ClientMessage =
   /** Opens a file from the thread in the editor. The core refuses paths outside the project. */
   | { readonly type: "file.open"; readonly project: string; readonly path: string; readonly line?: number }
   | { readonly type: "session.send"; readonly tabId: string; readonly text: string; readonly images?: readonly ImageAttachment[] }
+  /** Finds files in the project whose path matches `query`, for an @ mention. The core answers with `files.found`. */
+  | { readonly type: "files.search"; readonly project: string; readonly query: string }
   | { readonly type: "session.interrupt"; readonly tabId: string }
   | { readonly type: "permission.answer"; readonly tabId: string; readonly requestId: string; readonly allow: boolean }
   /** Asks for what plugins show in a saved tab. The core draws it and answers with `layout`. */
@@ -597,6 +599,8 @@ export type CoreMessage =
   /** `usage` is absent when Claude has no plan limits, such as with an API key. */
   | { readonly type: "usage"; readonly usage?: PlanUsage }
   | { readonly type: "review"; readonly tabId: string; readonly files: readonly FileChange[] }
+  /** The answer to `files.search`, with the query it answers: paths relative to the project, best match first. */
+  | { readonly type: "files.found"; readonly project: string; readonly query: string; readonly paths: readonly string[] }
   | { readonly type: "terminal.output"; readonly id: string; readonly data: string }
   | { readonly type: "terminal.exit"; readonly id: string; readonly code: number }
   | { readonly type: "session.event"; readonly tabId: string; readonly event: ThreadEvent }

@@ -1,6 +1,6 @@
 import { statSync } from "node:fs"
 import { basename, extname } from "node:path"
-import { git } from "./git"
+import { projectFiles } from "./project-files"
 import { insideProject } from "./project-path"
 
 /** Image types a browser draws, by extension, with the type the core serves them as. */
@@ -21,15 +21,12 @@ const MAX_FILES = 60
 const MAX_ICON_BYTES = 1024 * 1024
 
 /**
- * Images in a project that look like its logo, for the icon picker. Git lists the files, so ignored
- * folders such as node_modules stay out. Favicons and logos near the root come first. A file listed
+ * Images in a project that look like its logo, for the icon picker. Favicons and logos near the root come first. A file listed
  * but deleted, or too large to be an icon, is left out.
  */
 export async function findIconFiles(dir: string): Promise<string[]> {
-  const listed = await git(dir, ["ls-files", "--cached", "--others", "--exclude-standard"]).catch(() => "")
-  return listed
-    .split("\n")
-    .filter((path) => path && ICON_NAME.test(basename(path)))
+  return (await projectFiles(dir))
+    .filter((path) => ICON_NAME.test(basename(path)))
     .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
     // Only what the core will serve, so the picker never shows a broken image.
     .filter((path) => iconFile(dir, path))
