@@ -8,7 +8,7 @@ use crate::shell::Desk;
 use crate::theme;
 use crate::threads::Thread;
 use rune::{El, GrowthSpec, Icon, ScrollSpec, col, el, icon, memo, row, text};
-use rune_kit::{Button, ButtonVariant, ControlSize, Kit, Markdown, Spinner};
+use rune_kit::{Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Markdown, Spinner};
 use rune_theme_opencode::icons as ic;
 use std::borrow::Cow;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -137,6 +137,7 @@ fn hash_row(c: &Ctx, r: &ThreadRow, h: &mut DefaultHasher) {
         ThreadRow::Item { id } => {
             c.thread.revision(id).hash(h);
             open(id, h);
+            c.s.copied.as_ref().is_some_and(|(copied, _)| copied == id).hash(h);
         }
         ThreadRow::Group { id, steps, live, summary } => {
             (live, summary).hash(h);
@@ -185,7 +186,7 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
             .items_center()
             .child(icon(&ic::OUTLINE_CONSOLE, STEP_ICON).color(k.c.text_faint))
             .child(c.small(words.clone()).color(k.c.text_faint).truncate()),
-        ThreadItem::User { text: words, steered, images, .. } => {
+        ThreadItem::User { text: words, steered, images, at, .. } => {
             let steered = steered.then(|| {
                 row().gap(4.0).items_center().child(icon(&ic::ARROW_UP_RIGHT, 12.0).color(k.c.text_faint)).child(text("Steered").font(k.ty.text_xsmall).color(k.c.text_faint))
             });
@@ -201,11 +202,21 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
                     .selection_color(k.selection()),
             );
             let pictures = (!images.is_empty()).then(|| row().gap(8.0).wrap().justify_end().max_w(BUBBLE_MAX).children(images.iter().map(|image| message_image(c, image))));
-            col().w_full().items_end().gap(4.0).children(steered).children(pictures).children((!words.is_empty()).then_some(bubble))
+            col()
+                .w_full()
+                .items_end()
+                .gap(4.0)
+                .hover_group()
+                .children(steered)
+                .children(pictures)
+                .children((!words.is_empty()).then_some(bubble))
+                .child(message_meta(c, item.id(), words, *at))
         }
         // Markdown makes its own selection group. Leaving it joins its texts to the thread's, so a drag crosses messages.
-        ThreadItem::Text { text: words, done, .. } => {
-            Markdown::new(words.as_str()).style(theme::markdown(k, c.size)).streaming(!*done).selectable(true).build(k).selection_group(false)
+        ThreadItem::Text { text: words, done, at, .. } => {
+            let reply = Markdown::new(words.as_str()).style(theme::markdown(k, c.size)).streaming(!*done).selectable(true).build(k).selection_group(false);
+            // A reply still streaming has nothing final to copy.
+            col().w_full().gap(4.0).hover_group().child(reply).children(done.then(|| message_meta(c, item.id(), words, *at)))
         }
         ThreadItem::Compaction { status, pre_tokens, post_tokens, error, .. } => compaction_view(c, status, *pre_tokens, *post_tokens, error.as_deref()),
         ThreadItem::Error { message, .. } => el()
@@ -221,6 +232,25 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
         // Results end turns and questions show in the composer. Neither draws in the thread.
         ThreadItem::Result { .. } | ThreadItem::Question { .. } => el(),
     }
+}
+
+/// A message's copy button and time, after T3 Code. They stay hidden until the message is hovered, so
+/// the thread reads as text.
+fn message_meta(c: &Ctx, id: &str, words: &str, at: Option<f64>) -> El {
+    let k = c.k;
+    let copied = c.s.copied.as_ref().is_some_and(|(copied, _)| copied == id);
+    let (id, words) = (id.to_owned(), words.to_owned());
+    let copy = IconButton::new(if copied { &ic::CHECK } else { &ic::COPY })
+        .variant(IconButtonVariant::GhostMuted)
+        .label("Copy message")
+        .help(if copied { "Copied" } else { "Copy" })
+        .on_press_tx(move |s: &mut Desk, tx| {
+            tx.copy(words.clone());
+            s.copied = Some((id.clone(), std::time::Instant::now()));
+        })
+        .build(k);
+    let time = at.map(|at| text(format::message_time(at, format::now_ms())).font(k.ty.text_xsmall).color(k.c.text_faint));
+    row().h(24.0).gap(6.0).items_center().group_opacity(0.0, 1.0).child(copy).children(time)
 }
 
 /// An image sent with a message, at most `MESSAGE_IMAGE` wide and tall, in its own proportions.

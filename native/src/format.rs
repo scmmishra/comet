@@ -42,9 +42,27 @@ pub fn ago(time_ms: f64, now_ms: f64) -> String {
     month_day(time_ms)
 }
 
+/// A message's time, as T3 Code shows it: "15:54" today, "yesterday at 15:54", then a date.
+pub fn message_time(at_ms: f64, now_ms: f64) -> String {
+    let offset = local_offset_s();
+    let local = |ms: f64| (ms / 1000.0) as i64 + offset;
+    let (at, now) = (local(at_ms), local(now_ms));
+    let time = format!("{:02}:{:02}", at.rem_euclid(86_400) / 3600, at.rem_euclid(3600) / 60);
+    match now.div_euclid(86_400) - at.div_euclid(86_400) {
+        days if days <= 0 => time,
+        1 => format!("yesterday at {time}"),
+        _ => {
+            let ((year, month, day), (this_year, ..)) = (civil_date(at), civil_date(now));
+            let month = MONTHS[(month - 1) as usize];
+            if year == this_year { format!("{day} {month} {time}") } else { format!("{day} {month} {year} {time}") }
+        }
+    }
+}
+
+const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 /// "Nov 3", in the system's time zone.
 fn month_day(time_ms: f64) -> String {
-    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     let (_, month, day) = civil_date((time_ms / 1000.0) as i64 + local_offset_s());
     format!("{} {day}", MONTHS[(month - 1) as usize])
 }
@@ -109,5 +127,10 @@ mod tests {
         assert_eq!(ago(0.0, 3.0 * 3_600_000.0), "3h");
         assert_eq!(ago(0.0, 2.0 * 86_400_000.0), "2d");
         assert_eq!(civil_date(1_700_000_000), (2023, 11, 14));
+        let noon = 1_700_000_000_000.0 - (1_700_000_000 + local_offset_s()).rem_euclid(86_400) as f64 * 1000.0 + 12.0 * 3_600_000.0;
+        assert_eq!(message_time(noon, noon + 60_000.0), "12:00");
+        assert_eq!(message_time(noon, noon + 86_400_000.0), "yesterday at 12:00");
+        let (_, _, day) = civil_date((noon / 1000.0) as i64 + local_offset_s());
+        assert_eq!(message_time(noon, noon + 3.0 * 86_400_000.0), format!("{day} Nov 12:00"));
     }
 }

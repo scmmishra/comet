@@ -46,6 +46,8 @@ pub struct Desk {
     pub projects: crate::projects::Projects,
     pub start: crate::start_screen::Start,
     pub images: crate::images::Images,
+    /// The message whose copy button shows a check, and since when.
+    pub copied: Option<(String, std::time::Instant)>,
     /// The wall clock, in milliseconds since the epoch, as of the last tick. It ticks each second
     /// while a turn runs, for the working head.
     pub now_ms: f64,
@@ -205,7 +207,7 @@ pub mod commands {
 
 /// Ticks the clock each second while a turn runs. A still window does no work.
 pub fn poll(s: &mut Desk, _: f64, tx: &mut Tx) -> bool {
-    let composed = composer::poll(s, tx);
+    let composed = composer::poll(s, tx) | copied_poll(s, tx);
     if !s.working() {
         return composed;
     }
@@ -214,6 +216,20 @@ pub fn poll(s: &mut Desk, _: f64, tx: &mut Tx) -> bool {
     s.now_ms = now;
     tx.wake_after(Duration::from_millis(1000 - (now as u64 % 1000)));
     ticked || composed
+}
+
+/// How long a copy button says it copied.
+const COPIED: Duration = Duration::from_millis(1500);
+
+/// Turns a copy button's check back after a while.
+fn copied_poll(s: &mut Desk, tx: &mut Tx) -> bool {
+    let Some((_, at)) = &s.copied else { return false };
+    if at.elapsed() >= COPIED {
+        s.copied = None;
+        return true;
+    }
+    tx.wake_after(COPIED - at.elapsed());
+    false
 }
 
 /// Hears the modifier keys held down each time they change.
