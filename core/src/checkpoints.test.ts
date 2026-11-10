@@ -69,8 +69,6 @@ function commitEarlier(dir: string, message: string) {
   Bun.spawnSync(["git", "commit", "-q", "-m", message], { cwd: dir, env })
 }
 
-// Each edit below changes a file's size. Desk copies the user's index for a snapshot, and Git may take a
-// same-size edit made in the second the index was written for an unchanged file.
 const paths = (files: readonly { path: string }[]) => files.map((file) => file.path).sort()
 
 test("leaves out the files a switch to a branch built on this one brings in", async () => {
@@ -110,6 +108,16 @@ test("leaves out a branch merged in cleanly during the turn", async () => {
   const from = (await capture(dir))!
   git("merge", "-q", "--no-ff", "-m", "merge feature", "feature")
   expect(await checkpointChanges(dir, from, (await capture(dir))!)).toEqual([])
+})
+
+test("sees a same-size edit made in the second the user's index was written", async () => {
+  // Each round commits, which writes the index, then at once makes an edit of the same size.
+  for (let round = 0; round < 5; round++) {
+    const { dir, write } = gitRepo({ "a.ts": "one\n" })
+    const base = await snapshot(dir)
+    write("a.ts", "two\n")
+    expect(paths(await changesSince(dir, base!))).toEqual(["a.ts"])
+  }
 })
 
 test("keeps every file while HEAD stays put", async () => {

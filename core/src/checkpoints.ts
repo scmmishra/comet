@@ -1,5 +1,5 @@
 import type { FileChange } from "@desk/protocol"
-import { copyFileSync, mkdtempSync, rmSync } from "node:fs"
+import { copyFileSync, mkdtempSync, rmSync, statSync, utimesSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { isAbsolute, join } from "node:path"
 import { instanceName } from "./data-files"
@@ -23,7 +23,13 @@ export async function snapshot(dir: string): Promise<string | undefined> {
     // Without one, as in a repo with no commits, the snapshot starts empty.
     const userIndex = (await git(dir, ["rev-parse", "--git-path", "index"])).trim()
     try {
-      copyFileSync(isAbsolute(userIndex) ? userIndex : join(dir, userIndex), index)
+      const source = isAbsolute(userIndex) ? userIndex : join(dir, userIndex)
+      copyFileSync(source, index)
+      // Git trusts a file's cached stat when the file is older than the index. A copy is newer than its
+      // source, so a same-size edit made in the second the user's index was written would look unchanged.
+      // Dating the copy a second before its source makes Git check those files, after T3 Code.
+      const { mtimeMs } = statSync(source)
+      utimesSync(index, new Date(mtimeMs - 1000), new Date(mtimeMs - 1000))
     } catch {
       await git(dir, ["read-tree", "--empty"], { env })
     }
