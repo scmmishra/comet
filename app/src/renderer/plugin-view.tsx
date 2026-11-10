@@ -20,16 +20,14 @@ const TINTS: Record<string, string> = {
 
 const BUTTON_VARIANTS = { primary: "contrast", secondary: "neutral", ghost: "ghost" } as const
 
-/** A plugin's panel in a tab. It asks the core to draw it, then draws the plugin's nodes. */
+/** A plugin's panel in a tab. It asks the core to draw it, then draws the plugin's nodes. Where it sits gives it its frame. */
 export function PluginPanel(props: { tabId: string; project: string; panel: string }) {
   onMount(() => openPanel(props.tabId, props.project, props.panel))
   const drawn = () => plugins.panels[props.tabId]?.[props.panel]
   return (
-    <section class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-outline bg-card p-2">
-      <Show when={drawn()} fallback={<div class="p-4 text-fg-3">Loading {props.panel}…</div>}>
-        {(found) => <NodeView plugin={found().plugin} id={found().root} project={props.project} />}
-      </Show>
-    </section>
+    <Show when={drawn()} fallback={<div class="p-2 text-fg-3">Loading {props.panel}…</div>}>
+      {(found) => <NodeView plugin={found().plugin} id={found().root} project={props.project} />}
+    </Show>
   )
 }
 

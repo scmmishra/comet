@@ -71,7 +71,8 @@ function TabView(props: { tab: TabInfo }) {
   const thread = () => threadOf(props.tab.id)
   const space = () => projectData(props.tab.project).space
   const setup = () => setupOf(props.tab.setup)
-  // The project's cards fold into the header chip when something else takes the room beside the thread: the panel, or a setup's columns.
+  const pinned = () => setup()?.layout.panel ?? []
+  // The project's cards fold into the header chip when something else takes the room beside the thread: the panel, or a setup's column.
   const folded = () => workspace.panelOpen || !!props.tab.setup
   return (
     <main class="flex min-h-0 flex-1 gap-2 px-2 pb-2">
@@ -115,8 +116,16 @@ function TabView(props: { tab: TabInfo }) {
         </section>
         <section class="desk-panel flex flex-col rounded-3xl border border-outline bg-panel" inert={!workspace.panelOpen}>
           <div class="desk-no-scrollbar flex h-[46px] shrink-0 items-center gap-1 overflow-x-auto pl-2 pr-12">
-            <Tabs variant="surface" value={props.tab.panelActive ?? REVIEW} onChange={(value) => showPanelTab(value === REVIEW ? undefined : value)} class="min-w-0">
+            <Tabs variant="surface" value={props.tab.panelActive ?? REVIEW} onChange={(value) => showPanelTab(props.tab.id, value === REVIEW ? undefined : value)} class="min-w-0">
               <Tabs.List>
+                {/* A setup's panels are pinned at the front: the setup owns them, so they have no close button. */}
+                <For each={pinned()}>
+                  {(panel) => (
+                    <Tabs.Trigger value={panel} class="shrink-0">
+                      {panelTitle(panel)}
+                    </Tabs.Trigger>
+                  )}
+                </For>
                 <Tabs.Trigger value={REVIEW} class="shrink-0">
                   <span class="flex items-center gap-[7px]">
                     <Icon name="review" />
@@ -140,6 +149,14 @@ function TabView(props: { tab: TabInfo }) {
             </Tooltip>
           </div>
           <div class="flex min-h-0 flex-1 flex-col">
+            {/* Pinned panels, like terminals, stay mounted while another panel tab shows. */}
+            <For each={pinned()}>
+              {(panel) => (
+                <div class="flex min-h-0 flex-1 flex-col px-3 pb-3" classList={{ hidden: panel !== props.tab.panelActive }}>
+                  <PluginPanel tabId={props.tab.id} project={props.tab.project} panel={panel} />
+                </div>
+              )}
+            </For>
             <Show when={props.tab.panelActive === undefined}>
               <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
                 <ReviewView review={thread().review} />
@@ -157,20 +174,29 @@ function TabView(props: { tab: TabInfo }) {
         </section>
         <PanelToggle />
       </div>
-      <Show when={setup()?.layout.right.length}>
-        <SetupColumn tab={props.tab} panels={setup()!.layout.right} />
-      </Show>
     </main>
   )
 }
 
-/** A column of a setup's plugin panels beside the thread. */
+/** A column of a setup's plugin panels beside the thread, each on a card of its own. */
 function SetupColumn(props: { tab: TabInfo; panels: readonly string[] }) {
   return (
     <aside class="flex w-[320px] shrink-0 flex-col gap-2">
-      <For each={props.panels}>{(panel) => <PluginPanel tabId={props.tab.id} project={props.tab.project} panel={panel} />}</For>
+      <For each={props.panels}>
+        {(panel) => (
+          <section class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-outline bg-card p-2">
+            <PluginPanel tabId={props.tab.id} project={props.tab.project} panel={panel} />
+          </section>
+        )}
+      </For>
     </aside>
   )
+}
+
+/** A pinned panel's tab label: its name after the plugin's, such as "Conversation" for `chatwoot.conversation`. */
+const panelTitle = (panel: string) => {
+  const name = panel.slice(panel.indexOf(".") + 1)
+  return name.charAt(0).toUpperCase() + name.slice(1)
 }
 
 /** A setup tab before its plugins open a thread: the composer, under a line on how to start. */

@@ -109,6 +109,7 @@ export class Plugins {
       const { tabId, key, title, prompt } = message
       this.hooks.openThread(tabId, { key, ...(title ? { title } : {}), ...(prompt ? { prompt } : {}) })
     }
+    else if (message.type === "show") this.hooks.broadcast({ type: "panel.show", tabId: message.tabId, panel: `${plugin}.${message.panel}` })
     else if (message.type === "toast") this.hooks.broadcast({ type: "error", message: message.message })
     else if (message.type === "error") this.hooks.broadcast({ type: "error", message: `${plugin}: ${message.message}` })
   }

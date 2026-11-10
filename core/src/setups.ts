@@ -18,7 +18,7 @@ export function loadSetups(): SetupInfo[] {
       const setup = JSON.parse(readFileSync(join(setupsFolder(), file), "utf8")) as Partial<SetupInfo>
       const panels = (value: unknown) => (Array.isArray(value) ? value.filter((panel): panel is string => typeof panel === "string") : [])
       if (typeof setup.name !== "string" || typeof setup.project !== "string") return []
-      return [{ id: basename(file, ".json"), name: setup.name, project: setup.project.replace(/^~(?=\/)/, process.env.HOME ?? "~"), layout: { left: panels(setup.layout?.left), right: panels(setup.layout?.right) } }]
+      return [{ id: basename(file, ".json"), name: setup.name, project: setup.project.replace(/^~(?=\/)/, process.env.HOME ?? "~"), layout: { left: panels(setup.layout?.left), panel: panels(setup.layout?.panel) } }]
     } catch {
       return []
     }

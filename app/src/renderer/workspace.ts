@@ -149,11 +149,9 @@ export function newTerminal() {
   if (!workspace.panelOpen) togglePanel()
 }
 
-/** Shows a terminal in the active tab's panel, or Review when `id` is undefined. */
-export function showPanelTab(id: string | undefined) {
-  const tab = activeTab()
-  if (!tab) return
-  setWorkspace("tabs", (found) => found.id === tab.id, { panelActive: id })
+/** Shows a tab's panel tab: a terminal or a setup's pinned panel, or Review when `id` is undefined. */
+export function showPanelTab(tabId: string, id: string | undefined) {
+  setWorkspace("tabs", (found) => found.id === tabId, { panelActive: id })
   save()
 }
 
@@ -173,6 +171,10 @@ function save() {
 core.listen((message) => {
   if (message.type === "recent") setWorkspace("recent", message.projects)
   else if (message.type === "tab.title") nameTab(message.tabId, message.title)
+  else if (message.type === "panel.show") {
+    showPanelTab(message.tabId, message.panel)
+    if (!workspace.panelOpen) togglePanel()
+  }
   else if (message.type === "tabs") {
     setWorkspace({ tabs: [...message.tabs], active: message.active ?? message.tabs[0]?.id ?? "", restored: true })
     for (const action of waiting) action()

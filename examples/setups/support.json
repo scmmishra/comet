@@ -1,5 +1,5 @@
 {
   "name": "Support",
   "project": "~/Chatwoot/chatwoot",
-  "layout": { "left": ["chatwoot.inbox"], "right": ["chatwoot.conversation"] }
+  "layout": { "left": ["chatwoot.inbox"], "panel": ["chatwoot.conversation"] }
 }

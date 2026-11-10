@@ -22,6 +22,11 @@ const nodes = new Map<number, UiNode>()
 const handlers = new Map<number, (...args: never[]) => unknown>()
 let pending: UiOp[] = []
 let flush: ((ops: UiOp[]) => void) | undefined
+/**
+ * Nodes removed in this batch. Solid removes a node and inserts it again in one update, such as the
+ * text after a changed value, so a removed node is freed only if the batch ends with it still out.
+ */
+const removed = new Set<UiNode>()
 
 /** Where the renderer sends its operations, once per microtask. */
 export function onOps(send: (ops: UiOp[]) => void) {
@@ -29,11 +34,14 @@ export function onOps(send: (ops: UiOp[]) => void) {
 }
 
 function emit(op: UiOp) {
-  if (!pending.length) queueMicrotask(() => {
-    const ops = pending
-    pending = []
-    flush?.(ops)
-  })
+  if (!pending.length)
+    queueMicrotask(() => {
+      for (const node of removed) if (!node.parent) dispose(node)
+      removed.clear()
+      const ops = pending
+      pending = []
+      flush?.(ops)
+    })
   pending.push(op)
 }
 
@@ -136,8 +144,8 @@ export const {
   },
   removeNode(parent, child) {
     detach(child)
+    removed.add(child)
     emit({ op: "remove", parent: parent.id, id: child.id })
-    dispose(child)
   },
   isTextNode: (found) => found.text !== undefined,
   getParentNode: (found) => found.parent,

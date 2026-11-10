@@ -1,15 +1,6 @@
-import type { SetupInfo, UiOp, UiValue } from "@desk/protocol"
+import { applyOps, type SetupInfo, type UiNode, type UiOp, type UiValue } from "@desk/protocol"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
-
-/** One node of a plugin's UI, as the app keeps it. */
-export interface UiNode {
-  readonly type: string
-  props: Record<string, UiValue>
-  children: number[]
-  text?: string
-  parent?: number
-}
 
 /** A panel drawn for a tab: which plugin drew it, and the node it starts at. */
 export interface DrawnPanel {
@@ -26,6 +17,8 @@ const [plugins, setPlugins] = createStore({
   setups: [] as readonly SetupInfo[],
 })
 export { plugins }
+// In development, the page's copy of plugin nodes is readable from the console, to compare with what the plugin drew.
+if (import.meta.env.DEV) Object.assign(window, { __deskPlugins: plugins })
 
 export const setupOf = (id: string | undefined) => (id ? plugins.setups.find((setup) => setup.id === id) : undefined)
 
@@ -39,45 +32,12 @@ export function fire(plugin: string, value: UiValue, ...args: UiValue[]) {
   if (typeof value === "object" && value !== null && "handler" in value) core.send({ type: "plugin.event", plugin, handler: value.handler as number, args })
 }
 
-/** Applies a batch of changes to a plugin's nodes. A node moved to another parent leaves its old one first. */
 function apply(plugin: string, ops: readonly UiOp[], reset: boolean) {
   setPlugins(
     "nodes",
     produce((all) => {
       if (reset || !all[plugin]) all[plugin] = {}
-      const nodes = all[plugin]!
-      const detach = (id: number) => {
-        const node = nodes[id]
-        const parent = node?.parent === undefined ? undefined : nodes[node.parent]
-        if (parent) parent.children = parent.children.filter((child) => child !== id)
-        if (node) node.parent = undefined
-      }
-      const drop = (id: number) => {
-        for (const child of nodes[id]?.children ?? []) drop(child)
-        delete nodes[id]
-      }
-      for (const op of ops) {
-        if (op.op === "create") nodes[op.id] = { type: op.type, props: {}, children: [] }
-        else if (op.op === "text") {
-          const node = nodes[op.id]
-          if (node) node.text = op.text
-          else nodes[op.id] = { type: "#text", props: {}, children: [], text: op.text }
-        } else if (op.op === "set") {
-          const node = nodes[op.id]
-          if (node) node.props[op.key] = op.value
-        } else if (op.op === "insert") {
-          const parent = nodes[op.parent]
-          if (!parent || !nodes[op.id]) continue
-          detach(op.id)
-          const at = op.before === undefined ? -1 : parent.children.indexOf(op.before)
-          if (at < 0) parent.children.push(op.id)
-          else parent.children.splice(at, 0, op.id)
-          nodes[op.id]!.parent = op.parent
-        } else if (op.op === "remove") {
-          detach(op.id)
-          drop(op.id)
-        }
-      }
+      applyOps(all[plugin]!, ops)
     }),
   )
 }

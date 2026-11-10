@@ -15,6 +15,8 @@ export interface Desk {
   readonly $: typeof Bun.$
   /** Opens or resumes the tab's Claude thread for `key`. A new thread starts with `prompt`, when given. */
   openThread(thread: { readonly key: string; readonly title?: string; readonly prompt?: string }): void
+  /** Brings one of the plugin's panels, pinned in the tab's view pane, to the front, opening the pane. */
+  showPanel(panel: string): void
   /** Shows a short message. */
   toast(message: string): void
 }

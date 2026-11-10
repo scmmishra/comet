@@ -1,17 +1,17 @@
-import { Button, definePlugin, Item, List, Messages, Stack, Text, TextInput, type MessageData } from "@desk/plugin"
+import { definePlugin, Item, List, Messages, Stack, Text, type MessageData } from "@desk/plugin"
 import { createSignal, For, Show } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createStore } from "solid-js/store"
 
 /**
- * A support inbox, as a Desk plugin, on made-up conversations. It calls no service: replies, notes
- * and resolving change only the sample data in memory. The inbox lists open conversations. Picking one
- * shows it beside the thread and opens the Claude thread kept for it.
+ * A support inbox, as a Desk plugin, on made-up conversations. It calls no service. The inbox lists
+ * open conversations. Picking one shows it in the view pane beside the thread and opens the Claude
+ * thread kept for it.
  */
 
 interface Conversation {
   readonly id: number
   readonly customer: string
-  status: "open" | "resolved"
+  readonly status: "open"
   unread: number
   readonly priority?: "high" | "urgent"
   readonly messages: MessageData[]
@@ -67,11 +67,11 @@ export default definePlugin((desk) => {
   const [conversations, setConversations] = createStore<Conversation[]>(structuredClone(SAMPLE))
   const [openId, setOpenId] = createSignal<number>()
   const open = () => conversations.find((conversation) => conversation.id === openId())
-  const inbox = () => conversations.filter((conversation) => conversation.status === "open")
 
   const pick = (conversation: Conversation) => {
     setOpenId(conversation.id)
     setConversations((found) => found.id === conversation.id, "unread", 0)
+    desk.showPanel("conversation")
     const transcript = conversation.messages.map((message) => `${message.author ?? "Activity"}: ${message.text}`).join("\n")
     desk.openThread({
       key: `sample-support-${conversation.id}`,
@@ -80,21 +80,12 @@ export default definePlugin((desk) => {
     })
   }
 
-  /** Adds a message to the open conversation, as Desk's support agent. */
-  const post = (text: string, kind: MessageData["kind"]) =>
-    setConversations(
-      (found) => found.id === openId(),
-      produce((conversation) => {
-        conversation.messages.push({ id: String(conversation.messages.length + 1), author: "You", text, at: Date.now(), kind })
-      }),
-    )
-
   return {
     panels: {
       inbox: () => (
-        <Show when={inbox().length > 0} fallback={<Text tone="muted">No open conversations.</Text>}>
+        <Show when={conversations.length > 0} fallback={<Text tone="muted">No open conversations.</Text>}>
           <List>
-            <For each={inbox()}>
+            <For each={conversations}>
               {(conversation) => (
                 <Item
                   title={conversation.customer}
@@ -109,34 +100,21 @@ export default definePlugin((desk) => {
         </Show>
       ),
 
-      conversation: () => {
-        const [draft, setDraft] = createSignal("")
-        const send = (kind: MessageData["kind"]) => {
-          post(draft(), kind)
-          setDraft("")
-        }
-        return (
-          <Show when={open()} fallback={<Text tone="muted">Pick a conversation in the inbox.</Text>}>
-            {(conversation) => (
-              <Stack grow>
-                <Stack direction="row">
-                  <Text tone="strong">{conversation().customer}</Text>
-                  <Text tone="muted">
-                    #{conversation().id} · {conversation().status} · sample data
-                  </Text>
-                </Stack>
-                <Messages items={conversation().messages} />
-                <TextInput value={draft()} placeholder="Write a reply…" multiline onInput={setDraft} />
-                <Stack direction="row">
-                  <Button label="Reply" variant="primary" disabled={!draft().trim()} onClick={() => send("message")} />
-                  <Button label="Note" disabled={!draft().trim()} onClick={() => send("note")} />
-                  <Button label="Resolve" variant="ghost" onClick={() => setConversations((found) => found.id === conversation().id, "status", "resolved")} />
-                </Stack>
+      conversation: () => (
+        <Show when={open()} fallback={<Text tone="muted">Pick a conversation in the inbox.</Text>}>
+          {(conversation) => (
+            <Stack grow>
+              <Stack direction="row">
+                <Text tone="strong">{conversation().customer}</Text>
+                <Text tone="muted">
+                  #{conversation().id} · {conversation().status} · sample data
+                </Text>
               </Stack>
-            )}
-          </Show>
-        )
-      },
+              <Messages items={conversation().messages} />
+            </Stack>
+          )}
+        </Show>
+      ),
     },
   }
 })

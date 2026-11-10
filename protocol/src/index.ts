@@ -319,14 +319,16 @@ export interface ProjectParts {
 export type ProjectPart = keyof ProjectParts
 
 /**
- * A named layout for one project: plugin panels placed beside the thread. A panel is named
- * `<plugin>.<panel>`, such as `chatwoot.inbox`. Setups live in `~/.desk/setups/<id>.json`.
+ * A named layout for one project. `left` holds panels in a column beside the thread, for navigation
+ * such as an inbox. `panel` pins panels as tabs at the front of the view pane, for what is read beside
+ * the thread, such as the open conversation. A panel is named `<plugin>.<panel>`, such as
+ * `chatwoot.inbox`. Setups live in `~/.desk/setups/<id>.json`.
  */
 export interface SetupInfo {
   readonly id: string
   readonly name: string
   readonly project: string
-  readonly layout: { readonly left: readonly string[]; readonly right: readonly string[] }
+  readonly layout: { readonly left: readonly string[]; readonly panel: readonly string[] }
 }
 
 /** A terminal in a tab's panel. Its shell runs in the core under this id. */
@@ -346,7 +348,7 @@ export interface TabInfo extends RunSettings {
   readonly project: string
   /** The terminals in this tab's panel, in order. The core closes any shell that no tab lists. */
   readonly terminals: readonly TerminalInfo[]
-  /** The panel tab on show, as a terminal's id. Absent means Review. */
+  /** The panel tab on show: a terminal's id, or a setup panel's name. Absent means Review. */
   readonly panelActive?: string
   /** The setup the tab shows, by id. Its panels sit around the thread, and plugins choose the thread. */
   readonly setup?: string
@@ -366,6 +368,58 @@ export type UiOp =
   | { readonly op: "set"; readonly id: number; readonly key: string; readonly value: UiValue }
   | { readonly op: "insert"; readonly parent: number; readonly id: number; readonly before?: number }
   | { readonly op: "remove"; readonly parent: number; readonly id: number }
+
+/** A plugin's UI node as a client keeps it. */
+export interface UiNode {
+  readonly type: string
+  props: Record<string, UiValue>
+  children: number[]
+  text?: string
+  parent?: number
+}
+
+/**
+ * Applies a batch of operations to a client's copy of a plugin's nodes, in place. A node moved to
+ * another parent leaves its old one first. Solid removes a node and inserts it again in one update,
+ * such as the text after a changed value, so a removed node is dropped only if the batch ends with it out.
+ */
+export function applyOps(nodes: Record<number, UiNode>, ops: readonly UiOp[]) {
+  const detach = (id: number) => {
+    const node = nodes[id]
+    const parent = node?.parent === undefined ? undefined : nodes[node.parent]
+    if (parent) parent.children = parent.children.filter((child) => child !== id)
+    if (node) node.parent = undefined
+  }
+  const drop = (id: number) => {
+    for (const child of nodes[id]?.children ?? []) drop(child)
+    delete nodes[id]
+  }
+  const removed: number[] = []
+  for (const op of ops) {
+    if (op.op === "create") nodes[op.id] = { type: op.type, props: {}, children: [] }
+    else if (op.op === "text") {
+      const node = nodes[op.id]
+      if (node) node.text = op.text
+      else nodes[op.id] = { type: "#text", props: {}, children: [], text: op.text }
+    } else if (op.op === "set") {
+      const node = nodes[op.id]
+      if (node) node.props[op.key] = op.value
+    } else if (op.op === "insert") {
+      const parent = nodes[op.parent]
+      const node = nodes[op.id]
+      if (!parent || !node) continue
+      detach(op.id)
+      const at = op.before === undefined ? -1 : parent.children.indexOf(op.before)
+      if (at < 0) parent.children.push(op.id)
+      else parent.children.splice(at, 0, op.id)
+      node.parent = op.parent
+    } else if (op.op === "remove") {
+      detach(op.id)
+      removed.push(op.id)
+    }
+  }
+  for (const id of removed) if (nodes[id] && nodes[id].parent === undefined) drop(id)
+}
 
 /**
  * Messages from the app. Those about a project's data name the project's folder. Those about a tab's
@@ -440,6 +494,8 @@ export type CoreMessage =
   | { readonly type: "plugin.ops"; readonly plugin: string; readonly ops: readonly UiOp[]; readonly reset?: boolean }
   /** A panel drawn for a tab: the plugin's node it starts at. */
   | { readonly type: "panel"; readonly tabId: string; readonly panel: string; readonly plugin: string; readonly root: number }
+  /** A plugin asked to bring one of its panel tabs to the front, opening the panel. */
+  | { readonly type: "panel.show"; readonly tabId: string; readonly panel: string }
   /** A plugin opened a thread in a tab under this name. */
   | { readonly type: "tab.title"; readonly tabId: string; readonly title: string }
   /** Something the user asked for failed. The app shows the message. */

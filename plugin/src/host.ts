@@ -16,6 +16,7 @@ export type FromPlugin =
   | { readonly type: "snapshot"; readonly ops: readonly UiOp[] }
   | { readonly type: "opened"; readonly tabId: string; readonly panel: string; readonly root: number }
   | { readonly type: "thread"; readonly tabId: string; readonly key: string; readonly title?: string; readonly prompt?: string }
+  | { readonly type: "show"; readonly tabId: string; readonly panel: string }
   | { readonly type: "toast"; readonly message: string }
   /** Something the plugin did failed. The core shows it, named after the plugin. */
   | { readonly type: "error"; readonly message: string }
@@ -47,6 +48,7 @@ export function startHost(plugin: PluginDefinition) {
         project,
         $: Bun.$.cwd(project),
         openThread: (thread) => post({ type: "thread", tabId, ...thread }),
+        showPanel: (panel) => post({ type: "show", tabId, panel }),
         toast: (message) => post({ type: "toast", message }),
       }
       return { panels: plugin.setup(desk).panels, roots: new Map(), dispose: disposeRoot }
