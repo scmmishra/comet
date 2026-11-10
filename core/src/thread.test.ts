@@ -21,7 +21,7 @@ test("completes a tool call with its result, under the call's id", () => {
   const mapper = new ThreadMapper(DIR)
   mapper.map(sdk({ type: "assistant", uuid: "a1", parent_tool_use_id: null, message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "ls" } }] } }))
   const result = mapper.map(sdk({ type: "user", parent_tool_use_id: null, message: { content: [{ type: "tool_result", tool_use_id: "t1", content: [{ type: "text", text: "README.md" }], is_error: false }] } }))
-  expect(result).toEqual([{ kind: "item", item: { type: "tool", id: "t1", name: "Bash", summary: "ls", result: { output: "README.md", isError: false } } }])
+  expect(result).toEqual([{ kind: "item", item: { type: "tool", id: "t1", name: "Bash", summary: "ls", result: { output: "README.md", isError: false }, kind: "command", label: "Ran ls" } }])
 })
 
 test("hides a subagent's own steps", () => {
@@ -37,6 +37,8 @@ test("shapes an edit with its file relative to the project, and other calls by t
     summary: "src/a.ts",
     file: "src/a.ts",
     edits: [{ before: "a", after: "b" }],
+    kind: "edit",
+    label: "Edited src/a.ts",
   })
   expect(toolItem(DIR, "t2", "Grep", { pattern: "TODO", glob: "*.ts" }).summary).toBe("TODO")
   expect(toolItem(DIR, "t3", "Custom", { level: 2 }).summary).toBe('{"level":2}')
@@ -53,7 +55,7 @@ test("rebuilds a thread from a stored transcript, timing each turn and hiding Cl
   const start = Date.parse("2026-11-09T10:00:00.000Z")
   expect(items).toEqual([
     { type: "user", id: "u1", text: "List files", at: start },
-    { type: "tool", id: "t1", name: "Bash", summary: "ls", result: { output: "README.md", isError: false } },
+    { type: "tool", id: "t1", name: "Bash", summary: "ls", result: { output: "README.md", isError: false }, kind: "command", label: "Ran ls" },
     { type: "text", id: "a2:0", text: "One file.", done: true, at: start + 5000 },
     { type: "result", id: "result:u1", durationMs: 5000, isError: false },
   ])

@@ -1,15 +1,11 @@
 import { expect, test } from "bun:test"
-import { commandProgram, groupSummary, stepLabel, thoughtLine, type Step } from "./work"
+import type { Step } from "@desk/protocol"
+import { commandProgram, groupSummary, named, thoughtLine, type BareStep } from "./steps"
 
-const tool = (name: string, summary: string, extra: Partial<Extract<Step, { type: "tool" }>> = {}): Step => ({
-  type: "tool",
-  id: `${name}:${summary}`,
-  name,
-  summary,
-  result: { output: "", isError: false },
-  ...extra,
-})
-const thought = (text?: string): Step => ({ type: "thinking", id: `t:${text}`, ...(text ? { text } : {}) })
+const tool = (name: string, summary: string, extra: Partial<Extract<BareStep, { type: "tool" }>> = {}): Step =>
+  named({ type: "tool", id: `${name}:${summary}`, name, summary, result: { output: "", isError: false }, ...extra })
+const thought = (text?: string): Step => named({ type: "thinking", id: `t:${text}`, ...(text ? { text } : {}) })
+const stepLabel = (step: Step) => step.label
 
 test("labels a step by what it did, and a command by whether it is running or failed", () => {
   expect(stepLabel(tool("Read", "core/src/main.ts"))).toBe("Read core/src/main.ts")

@@ -7,7 +7,7 @@ import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEffect, createMemo, createSignal, For, Index, Match, on, Show, Switch } from "solid-js"
-import { isStep, type PermissionAnswer, type TabInfo, type ThreadItem } from "@desk/protocol"
+import { isStep, type PermissionAnswer, type Step, type TabInfo, type ThreadItem } from "@desk/protocol"
 import { imageUrl } from "./attachments"
 import { now } from "./clock"
 import { lineDiff } from "./diff"
@@ -19,7 +19,7 @@ import { openFile } from "./file-tabs"
 import { resolveRows, type Fold, type Group, type Row as ThreadRow, type Working } from "./thread-rows"
 import { answerPermission, threadOf, type Item } from "./threads"
 import { openReview } from "./workspace"
-import { groupSummary, ICON_BY_KIND, stepKind, stepLabel, type Step } from "./work"
+import { ICON_BY_KIND } from "./work"
 
 type ToolItem = Extract<Item, { type: "tool" }>
 type PermissionItem = Extract<Item, { type: "permission" }>
@@ -212,7 +212,7 @@ function FoldView(props: { fold: Fold<Exclude<Item, Step>>; tab: TabInfo }) {
 
 /** The icon for a group: its kind's, or a general one when it mixes kinds. */
 const groupIcon = (steps: readonly Step[]) => {
-  const kinds = new Set(steps.filter((step) => step.type === "tool").map(stepKind))
+  const kinds = new Set(steps.filter((step) => step.type === "tool").map((step) => step.kind))
   return kinds.size === 1 ? ICON_BY_KIND[[...kinds][0]!] : kinds.size ? "code-slash" : ICON_BY_KIND.thought
 }
 
@@ -236,13 +236,13 @@ function GroupView(props: { group: Group; tab: TabInfo }) {
             {(step) => (
               <div class="flex gap-2 text-[13px] text-fg-3">
                 <Icon name={ICON_BY_KIND.thought} class="mt-[3px] size-[14px] shrink-0" />
-                <span class="line-clamp-4">{stepLabel(step())}</span>
+                <span class="line-clamp-4">{step().label}</span>
               </div>
             )}
           </Show>
           <button class="flex h-6 w-fit max-w-full min-w-0 items-center gap-2 text-left text-[13px] text-fg-2" aria-expanded={open()} onClick={() => setOpen(!open())}>
-            <Icon name={ICON_BY_KIND[stepKind(latest())]} class="size-[14px] shrink-0 text-fg-3" />
-            <TextShimmer class="min-w-0 truncate" text={stepLabel(latest())} />
+            <Icon name={ICON_BY_KIND[latest().kind]} class="size-[14px] shrink-0 text-fg-3" />
+            <TextShimmer class="min-w-0 truncate" text={latest().label} />
             <Chevron open={open()} class="size-[13px] shrink-0 text-fg-3" />
           </button>
           <Show when={open()}>
@@ -254,7 +254,7 @@ function GroupView(props: { group: Group; tab: TabInfo }) {
         <Collapsible variant="ghost" open={open()} onOpenChange={setOpen} class="gap-1.5">
           <Collapsible.Trigger class="inline-flex h-6 w-fit max-w-full items-center gap-2 text-[13px] font-normal text-fg-2 hover:text-fg">
             <Icon name={groupIcon(props.group.steps)} class="size-[14px] shrink-0 text-fg-3" />
-            <span class="min-w-0 truncate">{groupSummary(props.group.steps)}</span>
+            <span class="min-w-0 truncate">{props.group.summary}</span>
             <Chevron open={open()} class="size-[13px] shrink-0 text-fg-3" />
           </Collapsible.Trigger>
           <Collapsible.Content>
@@ -308,7 +308,7 @@ export function Transcript(props: { items: readonly ThreadItem[]; tab: TabInfo }
 function StepRow(props: { step: Step; tab: TabInfo }) {
   const [open, setOpen] = createSignal(false)
   const failed = () => props.step.type === "tool" && !!props.step.result?.isError
-  const isCommand = () => props.step.type === "tool" && stepKind(props.step) === "command"
+  const isCommand = () => props.step.type === "tool" && props.step.kind === "command"
   const hasDetail = () => (props.step.type === "thinking" ? !!props.step.text : isCommand() || !!props.step.edits?.length || !!props.step.result)
   return (
     <div class="min-w-0">
@@ -318,9 +318,9 @@ function StepRow(props: { step: Step; tab: TabInfo }) {
         aria-expanded={open()}
         onClick={() => setOpen(!open())}
       >
-        <Icon name={ICON_BY_KIND[stepKind(props.step)]} class="size-[14px] shrink-0 text-fg-3" />
+        <Icon name={ICON_BY_KIND[props.step.kind]} class="size-[14px] shrink-0 text-fg-3" />
         <span class="min-w-0 truncate" classList={{ "text-del": failed() }}>
-          {stepLabel(props.step)}
+          {props.step.label}
         </span>
         <Show when={hasDetail()}>
           <Chevron open={open()} class="size-[13px] shrink-0 text-fg-3" />

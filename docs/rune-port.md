@@ -39,6 +39,8 @@ Done so far:
 
 - The core lays out each thread's rows and sends them as `session.rows`, after a thread's history and whenever an event changes them. Rows hold item ids. The Electron app puts its items into them (`resolveRows`), and the native app will too.
 
+- The core names each step: tool and thinking items carry their `kind` and `label`, and each group row its `summary`. The rules moved from the app's `work.ts` to `core/src/steps.ts`.
+
 Still to do:
 
 - The thread view, from the spike.

@@ -1,5 +1,6 @@
 import type { SDKAPIRetryMessage, SDKAssistantMessage, SDKMessage, SDKMessageOrigin, SDKPartialAssistantMessage, SessionMessage } from "@anthropic-ai/claude-agent-sdk"
 import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, type ThreadItem } from "@desk/protocol"
+import { named } from "./steps"
 
 /** What Claude Code writes into a transcript when the user stops a turn, with or without "for tool use". */
 const INTERRUPTED = /^\[Request interrupted by user/
@@ -105,7 +106,7 @@ export class ThreadMapper {
       }
       if (block.type === "thinking") {
         const text = block.thinking.trim()
-        return [{ type: "thinking", id: `${uuid}:${index}`, ...(text ? { text } : {}) }]
+        return [named({ type: "thinking", id: `${uuid}:${index}`, ...(text ? { text } : {}) })]
       }
       if (block.type === "tool_use") {
         const tool = toolItem(this.dir, block.id, block.name, block.input as Record<string, unknown>)
@@ -121,7 +122,7 @@ export class ThreadMapper {
     if (!Array.isArray(content)) return []
     return content.flatMap((block): ThreadItem[] => {
       const tool = block.type === "tool_result" ? this.tools.get(String(block.tool_use_id)) : undefined
-      return tool ? [{ ...tool, result: { output: truncate(toolOutputText(block.content)), isError: Boolean(block.is_error) } }] : []
+      return tool ? [named({ ...tool, result: { output: truncate(toolOutputText(block.content)), isError: Boolean(block.is_error) } })] : []
     })
   }
 
@@ -193,13 +194,13 @@ const item = (found: ThreadItem): ThreadEvent => ({ kind: "item", item: found })
 export function toolItem(dir: string, id: string, name: string, input: Record<string, unknown>): ToolItem {
   const edits = toolEdits(name, input)
   const summary = SUMMARY_FIELDS.find((field) => typeof input[field] === "string")
-  return {
+  return named({
     type: "tool",
     id,
     name,
     summary: summary ? relativeTo(dir, String(input[summary])) : JSON.stringify(input),
     ...(edits ? { file: relativeTo(dir, String(input.file_path ?? "")), edits } : {}),
-  }
+  })
 }
 
 /** The edits of an Edit, MultiEdit or Write call, as Claude Code names their inputs. Other tools make none. */

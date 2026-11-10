@@ -1,11 +1,12 @@
 import type { ThreadItem, ThreadRow } from "@desk/protocol"
 import { expect, test } from "bun:test"
+import { named } from "./steps"
 import { ThreadRows, threadRows } from "./thread-rows"
 
 const user = (id: string, at?: number): ThreadItem => ({ type: "user", id, text: id, ...(at ? { at } : {}) })
 const text = (id: string): ThreadItem => ({ type: "text", id, text: id, done: true })
-const thought = (id: string): ThreadItem => ({ type: "thinking", id, text: `${id}.` })
-const tool = (id: string, done = true): ThreadItem => ({ type: "tool", id, name: "Bash", summary: id, ...(done ? { result: { output: "", isError: false } } : {}) })
+const thought = (id: string): ThreadItem => named({ type: "thinking", id, text: `${id}.` })
+const tool = (id: string, done = true): ThreadItem => named({ type: "tool", id, name: "Bash", summary: id, ...(done ? { result: { output: "", isError: false } } : {}) })
 
 /** Each row's kind, with an item row named by its item's type. */
 const kinds = (rows: readonly { type: string; id: string }[], items: readonly ThreadItem[]) =>
@@ -17,8 +18,8 @@ test("a running turn opens with its head, merges thoughts and tools into groups,
   const rows = threadRows([user("u1", 1000), thought("t1"), tool("a"), thought("t2"), tool("b"), text("x"), thought("t3"), tool("c", false)], true)
   expect(rows.map((row) => row.type)).toEqual(["item", "working", "group", "item", "group"])
   expect(rows[1]).toEqual({ type: "working", id: "working:u1", since: 1000 })
-  expect(rows[2]).toEqual({ type: "group", id: "group:t1", steps: ["t1", "a", "t2", "b"], live: false })
-  expect(rows[4]).toEqual({ type: "group", id: "group:t3", steps: ["t3", "c"], live: true })
+  expect(rows[2]).toEqual({ type: "group", id: "group:t1", steps: ["t1", "a", "t2", "b"], live: false, summary: "Ran 2 commands" })
+  expect(rows[4]).toEqual({ type: "group", id: "group:t3", steps: ["t3", "c"], live: true, summary: "Ran a command" })
 })
 
 test("a running turn with no steps yet shows only its head", () => {

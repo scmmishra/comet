@@ -64,7 +64,7 @@ export type ThreadItem =
   /** Assistant text. `at` is when it finished. Text still streaming is not done and has none. */
   | { readonly type: "text"; readonly id: string; readonly text: string; readonly done: boolean; readonly at?: number }
   /** Claude's thinking. `text` is what it thought, when Claude Code shares it. */
-  | { readonly type: "thinking"; readonly id: string; readonly text?: string }
+  | { readonly type: "thinking"; readonly id: string; readonly text?: string; readonly kind: StepKind; readonly label: string }
   /**
    * A tool call. `summary` is what it was given in short, such as its command or path, relative to the
    * project. A call that edits a file carries the file's path and its edits.
@@ -77,6 +77,8 @@ export type ThreadItem =
       readonly file?: string
       readonly edits?: readonly TextEdit[]
       readonly result?: { readonly output: string; readonly isError: boolean }
+      readonly kind: StepKind
+      readonly label: string
     }
   /**
    * A tool call waiting for the user's approval, after T3 Code. `detail` is what the user approves: the
@@ -132,8 +134,14 @@ export interface Question {
   readonly multiSelect: boolean
 }
 
-/** One step of Claude's work in a turn: a thought or a tool call. */
+/**
+ * One step of Claude's work in a turn: a thought or a tool call. The core names each: its `kind`, and
+ * its `label` in a few words, such as "Ran npm" or the thought's first line.
+ */
 export type Step = Extract<ThreadItem, { type: "thinking" | "tool" }>
+
+/** What a step did, which picks its icon. */
+export type StepKind = "thought" | "command" | "edit" | "read" | "search" | "web" | "other"
 
 export const isStep = (item: ThreadItem): item is Step => item.type === "thinking" || item.type === "tool"
 
@@ -149,6 +157,8 @@ export interface StepGroup {
   readonly id: string
   readonly steps: readonly string[]
   readonly live: boolean
+  /** The steps in one line, such as "Read 3 files and ran 2 commands". */
+  readonly summary: string
 }
 
 /**

@@ -1,4 +1,5 @@
-import { isStep, type CoreMessage, type ItemRow, type StepGroup, type ThreadItem, type ThreadRow } from "@desk/protocol"
+import { isStep, type CoreMessage, type ItemRow, type Step, type StepGroup, type ThreadItem, type ThreadRow } from "@desk/protocol"
+import { groupSummary } from "./steps"
 
 /** What a folded turn keeps in view: errors, compactions, and permission requests still waiting for the user. */
 const staysOut = (item: ThreadItem) => item.type === "error" || item.type === "compaction" || item.type === "permission"
@@ -16,16 +17,16 @@ const itemRow = (item: ThreadItem): ItemRow => ({ type: "item", id: item.id })
 
 /** Items with each run of steps gathered into a group. Anything else, such as text or a request, ends a group. */
 function grouped(items: readonly ThreadItem[], live: boolean): (ItemRow | StepGroup)[] {
-  const out: (ItemRow | { type: "group"; id: string; steps: string[]; live: boolean })[] = []
+  const out: (ItemRow | Step[])[] = []
   for (const item of items) {
     const last = out.at(-1)
     if (!isStep(item)) out.push(itemRow(item))
-    else if (last?.type === "group") last.steps.push(item.id)
-    else out.push({ type: "group", id: `group:${item.id}`, steps: [item.id], live: false })
+    else if (Array.isArray(last)) last.push(item)
+    else out.push([item])
   }
-  const tail = out.at(-1)
-  if (live && tail?.type === "group") tail.live = true
-  return out
+  return out.map((row, index) =>
+    Array.isArray(row) ? { type: "group", id: `group:${row[0]!.id}`, steps: row.map((step) => step.id), live: live && index === out.length - 1, summary: groupSummary(row) } : row,
+  )
 }
 
 /**

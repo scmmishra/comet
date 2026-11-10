@@ -15,7 +15,7 @@ test("tracks a subagent from its start, through its forwarded steps and progress
 
   subagents.handle(message({ type: "assistant", uuid: "a1", parent_tool_use_id: "call1", message: { content: [{ type: "tool_use", id: "x1", name: "Bash", input: { command: "ls" } }] } }), 1100)
   subagents.handle(message({ type: "user", uuid: "u1", parent_tool_use_id: "call1", message: { content: [{ type: "tool_result", tool_use_id: "x1", content: "core" }] } }), 1200)
-  expect(last().items).toEqual([{ type: "tool", id: "x1", name: "Bash", summary: "ls", result: { output: "core", isError: false } }])
+  expect(last().items).toEqual([{ type: "tool", id: "x1", name: "Bash", summary: "ls", result: { output: "core", isError: false }, kind: "command", label: "Ran ls" }])
 
   subagents.handle(message({ type: "system", subtype: "task_progress", task_id: "t1", description: "Find tests", usage: { total_tokens: 10, tool_uses: 1, duration_ms: 200 }, summary: "Listing folders" }), 1300)
   expect(last()).toMatchObject({ toolUses: 1, summary: "Listing folders" })
