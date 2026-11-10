@@ -53,8 +53,7 @@ pub struct Desk {
     /// The wall clock, in milliseconds since the epoch, as of the last tick. It ticks each second
     /// while a turn runs, for the working head.
     pub now_ms: f64,
-    /// The last error the core reported for something the user asked.
-    pub error: Option<String>,
+    pub toasts: crate::toasts::Toasts,
     /// Whether ⌘ is held, so the new tab button opens its tab next to the active one.
     cmd_held: bool,
     strip: TabDragState,
@@ -121,7 +120,8 @@ impl Desk {
             CoreMessage::TerminalOutput { id, data } => self.terminal_output(&id, &data),
             CoreMessage::TerminalExit { id } => self.terminal_exit(&id),
             CoreMessage::File { project, path, file } => self.take_file(project, path, file),
-            CoreMessage::Error { message } => self.error = Some(message),
+            CoreMessage::Error { message } => self.toasts.show(message, true),
+            CoreMessage::Notice { message } => self.toasts.show(message, false),
             CoreMessage::Other => {}
         }
         let tabs: Vec<String> = self.workspace.tabs.iter().map(|t| t.id.clone()).collect();
@@ -184,7 +184,7 @@ pub fn open_folder(tx: &mut Tx) {
     tx.open_folder(options, |s: &mut Desk, result, tx| match result {
         Ok(Some(dir)) => s.new_tab(Place::End, Some(dir.to_string_lossy().into_owned()), tx),
         Ok(None) => {}
-        Err(e) => s.error = Some(e.to_string()),
+        Err(e) => s.toasts.show(e.to_string(), true),
     });
 }
 
@@ -227,7 +227,7 @@ pub mod commands {
 
 /// Ticks the clock each second while a turn runs. A still window does no work.
 pub fn poll(s: &mut Desk, _: f64, tx: &mut Tx) -> bool {
-    let composed = composer::poll(s, tx) | copied_poll(s, tx);
+    let composed = composer::poll(s, tx) | copied_poll(s, tx) | toasts_poll(s, tx);
     if !s.working() {
         return composed;
     }
@@ -236,6 +236,15 @@ pub fn poll(s: &mut Desk, _: f64, tx: &mut Tx) -> bool {
     s.now_ms = now;
     tx.wake_after(Duration::from_millis(1000 - (now as u64 % 1000)));
     ticked || composed
+}
+
+/// Takes toasts down when their time is up.
+fn toasts_poll(s: &mut Desk, tx: &mut Tx) -> bool {
+    let (changed, next) = s.toasts.expire();
+    if let Some(next) = next {
+        tx.wake_after(next);
+    }
+    changed
 }
 
 /// How long a copy button says it copied.
@@ -300,10 +309,9 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
     let line = |words: String| text(words).font(k.ty.ui).color(k.c.text_muted);
     // A card on the ground: the session, and the view pane beside it while open.
     let card = |key: &str, child: El| col().key(key.to_owned()).w_frac(1.0).grow(1.0).shrink().min_w(0.0).h_full().min_h(0.0).fill(k.c.bg_base).radius(PANEL_RADIUS).clip_rounded(PANEL_RADIUS).border(1.0, k.c.border_muted).child(child);
-    let error = s.error.clone().map(|e| text(e).key("error").font(k.ty.ui).color(k.c.danger.fg).px(16.0).pb(8.0));
     let cards = match (&s.status, w.active_tab()) {
         (CoreState::Ready, Some(tab)) => {
-            let session = col().w_full().h_full().min_h(0.0).child(session(s, tab, dark, &mut layer)).children(error);
+            let session = col().w_full().h_full().min_h(0.0).child(session(s, tab, dark, &mut layer));
             let pane = (tab.panel_open == Some(true)).then(|| card("panel-card", crate::panel::panel(s, tab, k, &mut layer)));
             row().w_full().grow(1.0).min_h(0.0).gap(PANEL_INSET).child(card("session-card", session)).children(pane)
         }
@@ -313,10 +321,11 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
                 CoreState::Failed(reason) => text(reason.clone()).font(k.ty.ui).color(k.c.danger.fg),
                 CoreState::Ready => line("No tabs".into()),
             };
-            row().w_full().grow(1.0).min_h(0.0).child(card("body", col().w_full().h_full().center().child(words.key("status")).children(error)))
+            row().w_full().grow(1.0).min_h(0.0).child(card("body", col().w_full().h_full().center().child(words.key("status"))))
         }
     };
     let main = col().key("main").w_full().grow(1.0).min_h(0.0).px(PANEL_INSET).pb(PANEL_INSET).child(cards);
+    layer.extend(crate::toasts::region(s, k));
     rune_kit::root(col().key("window").w_full().h_full().fill(k.c.bg_deep).child(titlebar).child(main), layer)
 }
 

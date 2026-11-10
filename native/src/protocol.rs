@@ -446,6 +446,9 @@ pub enum CoreMessage {
     /// Something the user asked for failed.
     #[serde(rename = "error")]
     Error { message: String },
+    /// A short message for the user, such as a plugin's toast.
+    #[serde(rename = "notice")]
+    Notice { message: String },
     /// A message the app does not read yet. The core sends several on connect.
     #[serde(other)]
     Other,

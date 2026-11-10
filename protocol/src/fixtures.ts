@@ -105,6 +105,7 @@ export const CORE_MESSAGES = [
   { type: "files.found", project: "/Users/me/code/web", query: "login", paths: ["src/login.ts", "test/login.test.ts"] },
   { type: "queue", tabId: "tab-1", messages: [{ id: "m1", text: "Then add a test" }], held: true },
   { type: "error", message: "The folder does not exist." },
+  { type: "notice", message: "Copied the link." },
 ] satisfies CoreMessage[]
 
 /** In the order the native tests build them. */

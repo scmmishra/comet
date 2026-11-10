@@ -225,7 +225,7 @@ impl Desk {
                     self.images.remember(&image);
                     self.drafts.images.entry(tab.clone()).or_default().push(image);
                 }
-                Err(reason) => self.error = Some(reason),
+                Err(reason) => self.toasts.show(reason, true),
             }
         }
     }
@@ -305,7 +305,10 @@ impl Desk {
         }
         match self.drafts.escaped_at.take() {
             Some(at) if at.elapsed() < STOP_AGAIN => self.interrupt(tab),
-            _ => self.drafts.escaped_at = Some(Instant::now()),
+            _ => {
+                self.drafts.escaped_at = Some(Instant::now());
+                self.toasts.show("Press Esc again to stop Claude.", false);
+            }
         }
     }
 }
@@ -371,7 +374,7 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &
             tx.open_file(options, |s: &mut Desk, result, _| match result {
                 Ok(Some(path)) => s.attach(&[path]),
                 Ok(None) => {}
-                Err(e) => s.error = Some(e.to_string()),
+                Err(e) => s.toasts.show(e.to_string(), true),
             });
         })
         .build(k)
@@ -872,7 +875,7 @@ mod tests {
         std::fs::write(&png, [137, 80, 78, 71]).unwrap();
         std::fs::write(&text, "x").unwrap();
         s.attach(&[png, text]);
-        assert_eq!(s.error.as_deref(), Some("a.txt is not a PNG, JPEG, GIF or WebP image."));
+        assert_eq!(s.toasts.messages(), ["a.txt is not a PNG, JPEG, GIF or WebP image."]);
         s.submit(false);
         let sent = s.core.sent();
         let send = sent.iter().find(|m| m["type"] == "session.send").expect("an image alone sends");

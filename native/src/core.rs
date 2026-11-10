@@ -181,9 +181,9 @@ mod tests {
     use super::*;
     use crate::protocol::{ClientMessage, CoreMessage};
 
-    /// A Desk folder of its own, with a saved window of two tabs in the native instance.
-    fn seeded_home() -> PathBuf {
-        let home = std::env::temp_dir().join(format!("desk-native-test-{}", std::process::id()));
+    /// A Desk folder of the test's own, with a saved window of two tabs in the native instance.
+    fn seeded_home(test: &str) -> PathBuf {
+        let home = std::env::temp_dir().join(format!("desk-native-{test}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         let project = home.join("project");
         std::fs::create_dir_all(home.join(INSTANCE)).unwrap();
@@ -199,7 +199,7 @@ mod tests {
     #[test]
     #[ignore]
     fn a_real_turn_streams_its_answer_and_ends() {
-        let home = seeded_home();
+        let home = seeded_home("real-turn");
         let core = Core { home: Some(home.clone()), ..Core::default() };
         let (send, receive) = mpsc::channel();
         core.start(move |event| {
@@ -230,7 +230,7 @@ mod tests {
 
     #[test]
     fn a_terminal_runs_a_shell_in_the_core_and_its_output_fills_the_screen() {
-        let home = seeded_home();
+        let home = seeded_home("terminal");
         let core = Core { home: Some(home.clone()), ..Core::default() };
         let (send, receive) = mpsc::channel();
         core.start(move |event| {
@@ -262,7 +262,7 @@ mod tests {
 
     #[test]
     fn a_real_core_sends_the_saved_tabs() {
-        let home = seeded_home();
+        let home = seeded_home("saved-tabs");
         let core = Core { home: Some(home.clone()), ..Core::default() };
         let (send, receive) = mpsc::channel();
         core.start(move |event| {

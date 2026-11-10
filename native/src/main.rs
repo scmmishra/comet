@@ -25,6 +25,7 @@ mod thread_view;
 mod terminal;
 mod terminal_view;
 mod threads;
+mod toasts;
 mod triggers;
 mod workspace;
 
