@@ -284,6 +284,16 @@ export interface ProjectSettings {
   readonly icon?: string
 }
 
+/** The Claude Code that Desk runs, and whether a newer one is out. A version that could not be read is absent. */
+export interface ClaudeCodeVersion {
+  readonly installed?: string
+  /** The newest version on the user's update channel. */
+  readonly latest?: string
+  readonly updateAvailable: boolean
+  /** Whether Desk can update it: only the native install updates itself with `claude update`. */
+  readonly updatable: boolean
+}
+
 /** The Claude account Claude Code is signed in with, as it reports it. */
 export interface ClaudeAccount {
   readonly email?: string
@@ -638,6 +648,10 @@ export type ClientMessage =
   | { readonly type: "mcp.toggle"; readonly project: string; readonly name: string; readonly enabled: boolean }
   | { readonly type: "usage.get" }
   | { readonly type: "models.get" }
+  /** Reads the Claude Code version and the newest one out. The core answers with `claude.version`. */
+  | { readonly type: "claude.version.get" }
+  /** Updates Claude Code with its own updater. The core answers with `claude.version` once it is done. */
+  | { readonly type: "claude.update" }
   /** Continues a past thread in a tab that has not started one. */
   | { readonly type: "thread.resume"; readonly tabId: string; readonly threadId: string }
   /** Starts a terminal, or reattaches to one already running under this id. */
@@ -704,6 +718,7 @@ export type CoreMessage =
   | { [K in ProjectPart]: { readonly type: "project"; readonly project: string; readonly part: K; readonly value: ProjectParts[K] } }[ProjectPart]
   /** The models Claude Code offers, read once when first asked. */
   | { readonly type: "models"; readonly models: readonly ModelOption[] }
+  | { readonly type: "claude.version"; readonly version: ClaudeCodeVersion }
   /** Who Claude Code is signed in as, read with the models. Absent when it is not signed in. */
   | { readonly type: "account"; readonly account?: ClaudeAccount }
   /** `usage` is absent when Claude has no plan limits, such as with an API key. */

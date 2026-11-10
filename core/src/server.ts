@@ -1,5 +1,6 @@
 import type { ClientMessage, CoreMessage, ProjectPart, ProjectParts } from "@desk/protocol"
 import type { ServerWebSocket } from "bun"
+import { claudeCodeVersion, updateClaudeCode } from "./claude-update"
 import { discoverCommands } from "./command-sources"
 import { Commands } from "./commands"
 import { openableFile, openInEditor } from "./files"
@@ -109,6 +110,11 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         return commandsOf(message.project).run(message.ids)
       case "commands.stop":
         return commandsOf(message.project).stop(message.ids)
+      case "claude.version.get":
+        return reply({ type: "claude.version", version: await claudeCodeVersion() })
+      case "claude.update":
+        await updateClaudeCode()
+        return reply({ type: "claude.version", version: await claudeCodeVersion() })
       case "models.get":
         return models.get(reply)
       case "usage.get":

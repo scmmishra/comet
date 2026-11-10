@@ -1,9 +1,10 @@
 import { FOLLOW_UPS, type Effort, type ModelOption } from "@desk/protocol"
 import { Badge } from "@opencode/ui/badge"
+import { Button } from "@opencode/ui/button"
 import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
-import { For, Show } from "solid-js"
-import { account, updateSettings } from "../account"
+import { For, onMount, Show } from "solid-js"
+import { account, readClaudeCodeVersion, updateClaudeCode, updateSettings } from "../account"
 import { ClaudeMark } from "../icons"
 import { UsageRow } from "../meters"
 import { EFFORT_LABEL, effortFor, PERMISSION, permissionFor, permissionModes } from "../models"
@@ -34,6 +35,13 @@ export function ProvidersPage() {
             <SettingsRow title={<span class="flex items-center gap-2"><ClaudeMark />Claude Code</span>} description={<AccountLine />}>
               <Show when={account.userRead}>
                 <Badge variant={account.user ? "accent" : "neutral"}>{account.user ? "Connected" : "Not signed in"}</Badge>
+              </Show>
+            </SettingsRow>
+            <SettingsRow title="Version" description={<ClaudeCodeVersionLine />}>
+              <Show when={account.claudeCode?.updateAvailable && account.claudeCode.updatable}>
+                <Button size="small" variant="contrast" disabled={account.updatingClaudeCode} onClick={updateClaudeCode}>
+                  {account.updatingClaudeCode ? "Updating…" : "Update"}
+                </Button>
               </Show>
             </SettingsRow>
             <SettingsRow title="Default model" description="The model a new tab starts on. A tab can change it in the model picker.">
@@ -116,6 +124,27 @@ export function ProvidersPage() {
         </SettingsSection>
       </div>
     </>
+  )
+}
+
+/**
+ * The Claude Code Desk runs, and whether a newer one is out, after T3 Code. Claude Code updates itself
+ * only while it runs, so the page checks when it opens.
+ */
+function ClaudeCodeVersionLine() {
+  onMount(readClaudeCodeVersion)
+  return (
+    <Show when={account.claudeCode} fallback="Checking the version…">
+      {(version) => (
+        <Show when={version().installed} fallback="Desk found no Claude Code on your PATH.">
+          {(installed) => (
+            <Show when={version().updateAvailable} fallback={`Claude Code ${installed()}${version().latest ? ", the newest" : ""}.`}>
+              {`Claude Code ${installed()}. ${version().latest} is out.${version().updatable ? "" : " Update it the way you installed it."}`}
+            </Show>
+          )}
+        </Show>
+      )}
+    </Show>
   )
 }
 

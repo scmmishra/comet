@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, type ClaudeAccount, type ModelOption, type PlanUsage, type SettingsChange } from "@desk/protocol"
+import { DEFAULT_SETTINGS, type ClaudeAccount, type ClaudeCodeVersion, type ModelOption, type PlanUsage, type SettingsChange } from "@desk/protocol"
 import { createStore } from "solid-js/store"
 import { core } from "./core"
 
@@ -11,6 +11,10 @@ const [account, setAccount] = createStore({
   /** Whether the core has read the account yet, so "not signed in" is not shown while it reads. */
   userRead: false,
   usage: undefined as PlanUsage | undefined,
+  /** The Claude Code Desk runs, and whether a newer one is out. Undefined until read. */
+  claudeCode: undefined as ClaudeCodeVersion | undefined,
+  /** Whether an update Desk started is running. */
+  updatingClaudeCode: false,
 })
 export { account }
 
@@ -24,11 +28,25 @@ export function refreshUsage() {
   core.send({ type: "usage.get" })
 }
 
+/** Reads Claude Code's version and the newest one out. */
+export function readClaudeCodeVersion() {
+  core.send({ type: "claude.version.get" })
+}
+
+/** Updates Claude Code with its own updater. The core sends the new version once it is done. */
+export function updateClaudeCode() {
+  setAccount("updatingClaudeCode", true)
+  core.send({ type: "claude.update" })
+}
+
 core.listen((message) => {
   if (message.type === "settings") setAccount("settings", message.settings)
   else if (message.type === "models") setAccount("models", message.models)
   else if (message.type === "account") setAccount({ user: message.account, userRead: true })
   else if (message.type === "usage") setAccount("usage", message.usage)
+  else if (message.type === "claude.version") setAccount({ claudeCode: message.version, updatingClaudeCode: false })
+  // A failed update reaches the app as an error, which a toast shows.
+  else if (message.type === "error") setAccount("updatingClaudeCode", false)
 })
 core.send({ type: "models.get" })
 refreshUsage()
