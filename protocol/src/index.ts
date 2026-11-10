@@ -132,6 +132,38 @@ export interface Question {
   readonly multiSelect: boolean
 }
 
+/** One step of Claude's work in a turn: a thought or a tool call. */
+export type Step = Extract<ThreadItem, { type: "thinking" | "tool" }>
+
+export const isStep = (item: ThreadItem): item is Step => item.type === "thinking" || item.type === "tool"
+
+/** An item of the thread, shown on its own. */
+export interface ItemRow {
+  readonly type: "item"
+  readonly id: string
+}
+
+/** Steps in a row, with nothing between them, by item id. The last group of a running turn is live: it shows its latest step. */
+export interface StepGroup {
+  readonly type: "group"
+  readonly id: string
+  readonly steps: readonly string[]
+  readonly live: boolean
+}
+
+/**
+ * A row of the thread as the core lays it out, after T3 Code. Rows hold item ids, and the items come
+ * through `session.event` and `session.history`. Ids stay the same while a row changes, so a client
+ * can keep a row's open state under its id.
+ * - `fold`: a finished turn's work, folded into one row. A turn restored without timing has no duration.
+ * - `working`: the head of a running turn. `since` is when its message was sent.
+ */
+export type ThreadRow =
+  | ItemRow
+  | StepGroup
+  | { readonly type: "fold"; readonly id: string; readonly rows: readonly (ItemRow | StepGroup)[]; readonly durationMs?: number; readonly stopped: boolean }
+  | { readonly type: "working"; readonly id: string; readonly since?: number }
+
 /** A change to a thread. An item replaces the item with the same id, or joins the thread after the others. */
 export type ThreadEvent =
   | { readonly kind: "item"; readonly item: ThreadItem }
@@ -820,6 +852,8 @@ export type CoreMessage =
   | { readonly type: "terminal.output"; readonly id: string; readonly data: string }
   | { readonly type: "terminal.exit"; readonly id: string; readonly code: number }
   | { readonly type: "session.event"; readonly tabId: string; readonly event: ThreadEvent }
+  /** A tab's thread as rows, sent after its history and whenever an event changes them. */
+  | { readonly type: "session.rows"; readonly tabId: string; readonly rows: readonly ThreadRow[] }
   /** A restored thread, read back from Claude's transcript in one message, so the app can tell it from live events. */
   | { readonly type: "session.history"; readonly tabId: string; readonly items: readonly ThreadItem[]; readonly context?: ContextReading }
   /** Changes to a plugin's UI. With `reset`, they replace every node the app holds for the plugin. */

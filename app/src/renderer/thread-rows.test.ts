@@ -1,70 +1,23 @@
 import type { ThreadItem } from "@desk/protocol"
 import { expect, test } from "bun:test"
-import { threadRows } from "./thread-rows"
+import { resolveRows } from "./thread-rows"
 
-const user = (id: string, at?: number): ThreadItem => ({ type: "user", id, text: id, ...(at ? { at } : {}) })
-const text = (id: string): ThreadItem => ({ type: "text", id, text: id, done: true })
-const thought = (id: string): ThreadItem => ({ type: "thinking", id, text: `${id}.` })
-const tool = (id: string, done = true): ThreadItem => ({ type: "tool", id, name: "Bash", summary: id, ...(done ? { result: { output: "", isError: false } } : {}) })
-const kinds = (rows: { type: string }[]) => rows.map((row) => row.type)
+const user: ThreadItem = { type: "user", id: "u1", text: "hi" }
+const tool: ThreadItem = { type: "tool", id: "a", name: "Bash", summary: "ls" }
+const answer: ThreadItem = { type: "text", id: "x", text: "done", done: true }
 
-test("a running turn opens with its head, merges thoughts and tools into groups, and keeps the last group live", () => {
-  const rows = threadRows([user("u1", 1000), thought("t1"), tool("a"), thought("t2"), tool("b"), text("x"), thought("t3"), tool("c", false)], true)
-  expect(kinds(rows)).toEqual(["user", "working", "group", "text", "group"])
-  expect(rows[1]).toEqual({ type: "working", id: "working:u1", since: 1000 })
-  expect(rows[2]).toMatchObject({ steps: [{ id: "t1" }, { id: "a" }, { id: "t2" }, { id: "b" }], live: false })
-  expect(rows[4]).toMatchObject({ steps: [{ id: "t3" }, { id: "c" }], live: true })
+test("puts each item in its row, inside folds and groups", () => {
+  const rows = resolveRows(
+    [
+      { type: "item", id: "u1" },
+      { type: "fold", id: "fold:u1", rows: [{ type: "group", id: "group:a", steps: ["a"], live: false }], durationMs: 1000, stopped: false },
+      { type: "item", id: "x" },
+    ],
+    [user, tool, answer],
+  )
+  expect(rows).toEqual([user, { type: "fold", id: "fold:u1", rows: [{ type: "group", id: "group:a", steps: [tool as never], live: false }], durationMs: 1000, stopped: false }, answer])
 })
 
-test("a running turn with no steps yet shows only its head", () => {
-  expect(kinds(threadRows([user("u1")], true))).toEqual(["user", "working"])
-})
-
-test("a finished turn folds everything before its answer, text included, and keeps errors and open requests out", () => {
-  const items: ThreadItem[] = [
-    user("u1"),
-    tool("a"),
-    text("mid"),
-    { type: "error", id: "e", message: "boom" },
-    tool("b"),
-    text("answer"),
-    { type: "result", id: "r", durationMs: 63_000, isError: false, stopped: true },
-    user("u2"),
-  ]
-  const rows = threadRows(items, false)
-  expect(kinds(rows)).toEqual(["user", "fold", "error", "text", "user"])
-  expect(rows[1]).toMatchObject({ durationMs: 63_000, stopped: true })
-  expect(kinds((rows[1] as { rows: { type: string }[] }).rows)).toEqual(["group", "text", "group"])
-})
-
-test("a turn of text alone has nothing to fold", () => {
-  expect(kinds(threadRows([user("u1"), text("hi")], false))).toEqual(["user", "text"])
-})
-
-test("keeps a turn's file summary under its answer, out of the fold", () => {
-  const changes: ThreadItem = { type: "changes", id: "c", files: [{ path: "a.ts", status: "modified", additions: 1, deletions: 0 }] }
-  const rows = threadRows([user("u1"), tool("a"), text("answer"), { type: "result", id: "r", durationMs: 1000, isError: false }, changes], false)
-  expect(kinds(rows)).toEqual(["user", "fold", "text", "changes"])
-})
-
-test("shows a permission request only while it waits, and Claude's questions never, as they show in the composer", () => {
-  const permission = (answered?: boolean): ThreadItem => ({ type: "permission", id: "p", requestId: "p", tool: "Bash", kind: "command", detail: "ls", allowSession: true, ...(answered ? { answered } : {}) })
-  const question: ThreadItem = { type: "question", id: "q", requestId: "q", questions: [] }
-  expect(kinds(threadRows([user("u1"), tool("a"), permission(), question, text("answer")], false))).toEqual(["user", "fold", "permission", "text"])
-  expect(kinds(threadRows([user("u1"), tool("a"), permission(true), question, text("answer")], false))).toEqual(["user", "fold", "text"])
-})
-
-test("keeps a compaction out of the fold, as a line in the thread", () => {
-  const compaction: ThreadItem = { type: "compaction", id: "c", status: "done", preTokens: 180_000, postTokens: 32_000 }
-  expect(kinds(threadRows([user("u1"), tool("a"), compaction, tool("b"), text("answer")], false))).toEqual(["user", "fold", "compaction", "text"])
-})
-
-test("shows a /compact turn as its compaction alone, running or done", () => {
-  const compact: ThreadItem = { type: "user", id: "u2", text: "/compact keep the plan" }
-  const running: ThreadItem = { type: "compaction", id: "c", status: "running" }
-  expect(kinds(threadRows([user("u1"), text("hi"), compact, running], true))).toEqual(["user", "text", "compaction"])
-  const done: ThreadItem = { ...running, status: "done" } as ThreadItem
-  expect(kinds(threadRows([user("u1"), text("hi"), compact, done, user("u3")], false))).toEqual(["user", "text", "compaction", "user"])
-  // A message that only mentions compacting is an ordinary turn.
-  expect(kinds(threadRows([{ type: "user", id: "u4", text: "/compactor docs" }, text("ok")], false))).toEqual(["user", "text"])
+test("leaves out an id whose item has not arrived", () => {
+  expect(resolveRows([{ type: "item", id: "u1" }, { type: "item", id: "later" }, { type: "group", id: "group:b", steps: ["b"], live: true }, { type: "working", id: "working:u1" }], [user])).toEqual([user, { type: "working", id: "working:u1" }])
 })

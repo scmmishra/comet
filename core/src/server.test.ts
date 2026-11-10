@@ -60,6 +60,17 @@ test("refuses a tab whose project is not a folder, and remembers a folder a tab 
   client.close()
 })
 
+test("follows a thread's history with its rows", async () => {
+  const client = await connect()
+  await client.next("recent")
+  client.send({ type: "tabs.save", tabs: [tab(tempFolder("rows"))] })
+  await client.next("recent")
+  client.send({ type: "thread.clear", tabId: "t1" })
+  expect(await client.next("session.history")).toMatchObject({ tabId: "t1", items: [] })
+  expect(await client.next("session.rows")).toEqual({ type: "session.rows", tabId: "t1", rows: [] })
+  client.close()
+})
+
 test("clears the effort when the app sends null", async () => {
   const client = await connect()
   await client.next("settings")

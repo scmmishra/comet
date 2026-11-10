@@ -1,4 +1,4 @@
-import type { BackgroundTask, ContextReading, FileChange, FollowUp, ImageAttachment, PermissionAnswer, QueuedMessage, ReviewScope, Subagent, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
+import type { BackgroundTask, ContextReading, FileChange, FollowUp, ImageAttachment, PermissionAnswer, QueuedMessage, ReviewScope, Subagent, ThreadEvent, ThreadItem, ThreadRow, ThreadSummary } from "@desk/protocol"
 import { createEffect, createMemo, createRoot, on } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { core } from "./core"
@@ -11,6 +11,8 @@ export type Item = ThreadItem & { arrivedAt?: number }
 /** What a tab's thread shows. The core sends it; nothing here is saved. */
 export interface Thread {
   items: Item[]
+  /** The items laid out as rows, as the core sends them. */
+  rows: readonly ThreadRow[]
   busy: boolean
   /** The model that ran, as the session reported it. */
   model?: string
@@ -34,14 +36,14 @@ export interface Thread {
 }
 
 /** What a tab with no thread yet shows. A tab that gets a thread gets a record of its own. */
-const EMPTY: Thread = Object.freeze({ items: Object.freeze([]) as unknown as Item[], busy: false })
+const EMPTY: Thread = Object.freeze({ items: Object.freeze([]) as unknown as Item[], rows: Object.freeze([]), busy: false })
 
 const [threads, setThreads] = createStore<Record<string, Thread>>({})
 
 export const threadOf = (tabId: string): Thread => threads[tabId] ?? EMPTY
 
 /** Starts a tab's thread record the first time something arrives for it. */
-const ensure = (tabId: string) => setThreads(tabId, (thread) => thread ?? { items: [], busy: false })
+const ensure = (tabId: string) => setThreads(tabId, (thread) => thread ?? { items: [], rows: [], busy: false })
 
 /** Sends a message in a tab. While Claude works, `followUp` says whether it steers the turn or waits. A tab with no name takes it from the message's text. */
 export function send(tabId: string, text: string, images: readonly ImageAttachment[] = [], followUp?: FollowUp) {
@@ -147,7 +149,12 @@ function apply(tabId: string, event: ThreadEvent, arrivedAt?: number) {
 
 core.listen((message) => {
   if (message.type === "session.event") apply(message.tabId, message.event, performance.now())
-  else if (message.type === "session.history") setThreads(message.tabId, { items: [...message.items], busy: false, context: message.context })
+  // The rows that follow keep the old ones until they arrive, so the thread does not blink empty.
+  else if (message.type === "session.history") setThreads(message.tabId, { items: [...message.items], rows: threadOf(message.tabId).rows, busy: false, context: message.context })
+  else if (message.type === "session.rows") {
+    ensure(message.tabId)
+    setThreads(message.tabId, "rows", message.rows)
+  }
   else if (message.type === "thread.branch") {
     ensure(message.tabId)
     setThreads(message.tabId, "branch", message.branch)

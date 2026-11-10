@@ -7,7 +7,7 @@ import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEffect, createMemo, createSignal, For, Index, Match, on, Show, Switch } from "solid-js"
-import type { PermissionAnswer, TabInfo, ThreadItem } from "@desk/protocol"
+import { isStep, type PermissionAnswer, type TabInfo, type ThreadItem } from "@desk/protocol"
 import { imageUrl } from "./attachments"
 import { now } from "./clock"
 import { lineDiff } from "./diff"
@@ -16,10 +16,10 @@ import { COPIED_MS, formatDuration, formatMessageTime, formatTokens, plural } fr
 import { Chevron, Icon, type IconName } from "./icons"
 import { Markdown } from "./markdown"
 import { openFile } from "./file-tabs"
-import { threadRows, type Fold, type Group, type Row as ThreadRow, type Working } from "./thread-rows"
+import { resolveRows, type Fold, type Group, type Row as ThreadRow, type Working } from "./thread-rows"
 import { answerPermission, threadOf, type Item } from "./threads"
 import { openReview } from "./workspace"
-import { groupSummary, ICON_BY_KIND, isStep, stepKind, stepLabel, type Step } from "./work"
+import { groupSummary, ICON_BY_KIND, stepKind, stepLabel, type Step } from "./work"
 
 type ToolItem = Extract<Item, { type: "tool" }>
 type PermissionItem = Extract<Item, { type: "permission" }>
@@ -34,7 +34,7 @@ const firstItem = (row: Row): Item | undefined =>
 
 export function Thread(props: { tab: TabInfo }) {
   const thread = () => threadOf(props.tab.id)
-  const shown = createMemo(() => threadRows(thread().items, thread().busy))
+  const shown = createMemo(() => resolveRows(thread().rows, thread().items))
   // Only what arrives while the thread is on screen rises in. A tab switch, a reload or a restored
   // transcript shows the thread at once, so switching tabs never replays motion.
   const mountedAt = performance.now()

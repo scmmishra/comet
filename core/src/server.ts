@@ -16,6 +16,7 @@ import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { loadSettings, saveSettings, updateSettings } from "./settings"
 import { readSkills } from "./skills"
 import { readSpace } from "./space"
+import { ThreadRows } from "./thread-rows"
 import { Usage } from "./usage"
 import { Window } from "./window"
 
@@ -33,10 +34,19 @@ export interface CoreServer {
  */
 export function startCore({ token }: { readonly token: string }): CoreServer {
   const clients = new Set<ServerWebSocket>()
-  const broadcast: Send = (message) => {
+  // Every thread message passes through here on its way out, so each client gets the rows that follow it.
+  const rows = new ThreadRows()
+  const withRows =
+    (send: Send): Send =>
+    (message) => {
+      send(message)
+      const after = rows.after(message)
+      if (after) send(after)
+    }
+  const broadcast: Send = withRows((message) => {
     const data = JSON.stringify(message)
     for (const client of clients) client.send(data)
-  }
+  })
   const project = <K extends ProjectPart>(dir: string, part: K, value: ProjectParts[K]) => ({ type: "project", project: dir, part, value }) as CoreMessage
 
   let settings = loadSettings()
@@ -55,6 +65,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     compactIdle: () => settings.claude.compactIdle,
     rateLimit: (info) => usage.rateLimit(info),
     tabClosed: (tabId) => {
+      rows.forget(tabId)
       plugins.dropTab(tabId)
       layouts.dropTab(tabId)
     },
@@ -201,7 +212,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     websocket: {
       open(ws) {
         clients.add(ws)
-        const reply: Send = (message) => ws.send(JSON.stringify(message))
+        const reply: Send = withRows((message) => ws.send(JSON.stringify(message)))
         reply({ type: "settings", settings })
         plugins.resend()
         void window.greet(reply)
@@ -210,7 +221,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         clients.delete(ws)
       },
       message(ws, raw) {
-        const reply: Send = (message) => ws.send(JSON.stringify(message))
+        const reply: Send = withRows((message) => ws.send(JSON.stringify(message)))
         let message: ClientMessage
         try {
           message = JSON.parse(String(raw))

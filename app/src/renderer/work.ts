@@ -1,8 +1,7 @@
-import type { ThreadItem } from "@desk/protocol"
+import type { Step } from "@desk/protocol"
 import type { IconName } from "./icons"
 
-/** One step of Claude's work in a turn: a thought or a tool call. */
-export type Step = Extract<ThreadItem, { type: "thinking" | "tool" }>
+export type { Step }
 type Tool = Extract<Step, { type: "tool" }>
 
 export type StepKind = "thought" | "command" | "edit" | "read" | "search" | "web" | "other"
@@ -31,8 +30,6 @@ export const ICON_BY_KIND: Record<StepKind, IconName> = {
   web: "globe",
   other: "code-slash",
 }
-
-export const isStep = (item: ThreadItem): item is Step => item.type === "thinking" || item.type === "tool"
 
 export const stepKind = (step: Step): StepKind => (step.type === "thinking" ? "thought" : (KIND_BY_TOOL[step.name] ?? "other"))
 
