@@ -75,7 +75,18 @@ Still to do:
 
 ### Phase 4: The rest
 
-- The palette, cards, the minimap rail, plugin primitives, settings, meters and toasts.
+Done so far:
+
+- Toasts for the core's errors and notices, refused attachments and the first Escape's hint.
+- The command palette (⌘K), opened on threads by ⌘⇧O and on files by ⌘P.
+
+Still to do:
+
+- Cards beside the thread: the Space card, subagents and background tasks.
+- The minimap rail.
+- Plugin views: sidebars, panels, cards and setups, drawn from the core's primitives.
+- Settings, and the palette's theme and settings lists with them.
+- Meters: the context ring and the usage button.
 
 ### Phase 5: Switch
 
