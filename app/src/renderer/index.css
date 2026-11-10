@@ -431,14 +431,16 @@ body {
 
 /*
  * Code is highlighted once in both themes. Each token carries both colours, and the theme picks one.
- * Tokens keep the code block's background: Shiki sets its own inline, so the override needs !important.
+ * highlight.ts asks for @pierre/diffs' "highlights" engine, which names the colours --hls-dark and
+ * --hls-light, where Shiki names them --shiki-*. Tokens keep the code block's background: the
+ * highlighter sets its own inline, so the override needs !important.
  */
 .desk-code code span[style] {
   background-color: transparent !important;
-  color: var(--shiki-dark);
+  color: var(--hls-dark);
 }
 :root[data-color-scheme="light"] .desk-code code span[style] {
-  color: var(--shiki-light);
+  color: var(--hls-light);
 }
 
 /*
