@@ -1,4 +1,4 @@
-import type { ClientMessage, CoreMessage, ProjectPart, ProjectParts } from "@desk/protocol"
+import { REVIEW_SCOPES, type ClientMessage, type CoreMessage, type ProjectPart, type ProjectParts } from "@desk/protocol"
 import type { ServerWebSocket } from "bun"
 import { Agents } from "./agents/registry"
 import { discoverCommands } from "./command-sources"
@@ -79,7 +79,6 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     return found
   }
 
-  /** The file a message names, which must exist. */
   const requireFile = (dir: string, path: string) => {
     const file = openableFile(dir, path)
     if (!file) throw new Error(`Desk can only open a file that exists: ${path}`)
@@ -181,6 +180,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       case "thread.resume":
         return window.resume(message.tabId, message.agent, message.threadId, reply)
       case "review.get":
+        if (!REVIEW_SCOPES.includes(message.scope)) throw new Error(`Review has no scope called “${message.scope}”.`)
         return reply({ type: "review", tabId: message.tabId, scope: message.scope, files: await window.review(message.tabId, message.scope) })
       case "layout.get":
         return layouts.send(message.tabId)

@@ -10,7 +10,7 @@ const NAMED_KINDS = 2
 /** What a folded turn keeps in view: errors, compactions, and permission requests still waiting for the user. */
 const staysOut = (item: ThreadItem) => item.type === "error" || item.type === "compaction" || item.type === "permission"
 
-/** A message that only asks Claude Code to compact, such as `/compact` or `/compact keep the plan`. */
+/** A message that only asks the agent to compact, such as `/compact` or `/compact keep the plan`. */
 const COMPACT_COMMAND = /^\/compact(\s|$)/
 
 /**
@@ -107,7 +107,6 @@ export class ThreadRows {
     return this.rows(tabId, thread, false)
   }
 
-  /** Drops a closed tab's thread. */
   forget(tabId: string) {
     this.threads.delete(tabId)
   }

@@ -65,11 +65,11 @@ export interface ImageAttachment {
  * app never reads an agent's types or tool inputs. Items are told apart by id within their thread.
  */
 export type ThreadItem =
-  /** `at` is when it was sent, in milliseconds since the epoch, when that is known. */
   /**
-   * A message that starts a turn. `steered` marks one sent into a turn that was still running. `selfStarted`
-   * marks a turn the agent started itself: a background task finished, or a subagent or another session sent
-   * it a message. Its text says which.
+   * A message that starts a turn. `at` is when it was sent, in milliseconds since the epoch, when that is
+   * known. `steered` marks one sent into a turn that was still running. `selfStarted` marks a turn the
+   * agent started itself: a background task finished, or a subagent or another session sent it a message.
+   * Its text says which.
    */
   | { readonly type: "user"; readonly id: string; readonly text: string; readonly images?: readonly ImageAttachment[]; readonly at?: number; readonly steered?: boolean; readonly selfStarted?: boolean }
   /** Assistant text. `at` is when it finished. Text still streaming is not done and has none. */
@@ -264,7 +264,6 @@ export interface Space {
   }
 }
 
-/** One file a thread changed, with its unified diff. */
 /**
  * What Review compares the working tree with: the thread's first message, the last commit, where the
  * branch left the default branch, or the start of the last turn.
@@ -275,6 +274,7 @@ export type ReviewScope = (typeof REVIEW_SCOPES)[number]
 /** A file a turn changed, as the turn's summary lists it. */
 export type ChangedFile = Omit<FileChange, "patch">
 
+/** One changed file, with its unified diff. */
 export interface FileChange {
   readonly path: string
   readonly status: "added" | "modified" | "deleted" | "renamed"
@@ -458,7 +458,7 @@ export interface ThreadSettings {
 export const PROJECT_COLORS = ["orange", "yellow", "cyan", "green", "red", "pink", "blue", "purple", "gray"] as const
 export type ProjectColor = (typeof PROJECT_COLORS)[number]
 
-/** How a project shows in tabs and menus. Each is optional; without it, Desk uses the folder's. */
+/** How a project shows in tabs and menus. Each is optional. Without one, Desk uses the folder's. */
 export interface ProjectSettings {
   readonly name?: string
   readonly color?: ProjectColor
@@ -595,10 +595,6 @@ export interface ProjectParts {
 }
 export type ProjectPart = keyof ProjectParts
 
-/**
- * What the plugins on in a project let the user start from the palette, each named `<plugin>.<name>`,
- * such as `newrelic.dashboard`. Panels here need no parameters. A command with `input` runs on text typed in the palette.
- */
 /** A setup and the project it opens in. */
 export interface ProjectSetup {
   readonly project: string
@@ -606,6 +602,11 @@ export interface ProjectSetup {
   readonly title: string
 }
 
+/**
+ * What the plugins on in a project let the user start from the palette, each named `<plugin>.<name>`,
+ * such as `newrelic.dashboard`. Panels here need no parameters. A command with `input` runs on text
+ * typed in the palette.
+ */
 export interface PluginContributions {
   readonly panels: readonly { readonly id: string; readonly title: string }[]
   readonly setups: readonly { readonly id: string; readonly title: string }[]
@@ -769,11 +770,6 @@ export interface UiPrimitives {
 }
 export type UiPrimitive = keyof UiPrimitives
 
-/** A primitive's props as the app receives them. Each function the plugin passed is a handler id. */
-export type UiProps<T extends UiPrimitive> = {
-  readonly [K in keyof UiPrimitives[T]]: NonNullable<UiPrimitives[T][K]> extends (...args: never[]) => unknown ? { readonly handler: number } | undefined : UiPrimitives[T][K]
-}
-
 /**
  * One change to a plugin's UI tree, after the remote-DOM idea MCP-UI used: the plugin's code builds the
  * tree in the core, and the app draws each node with Desk's own component of that name. Node ids are
@@ -876,7 +872,7 @@ export type ClientMessage =
   /** Runs the commands that are not running, such as every command in a group. */
   | { readonly type: "commands.run"; readonly project: string; readonly ids: readonly string[] }
   | { readonly type: "commands.stop"; readonly project: string; readonly ids: readonly string[] }
-  /** The files a tab's thread changed since its first message. */
+  /** The files that changed in a tab's project over the span `scope` names. The core answers with `review`. */
   | { readonly type: "review.get"; readonly tabId: string; readonly scope: ReviewScope }
   /** Reopens the tab closed last, as ⌘⇧T asks. The core answers with `tab.reopened`. */
   | { readonly type: "tab.reopen" }

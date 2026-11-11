@@ -6,7 +6,6 @@ export function isProjectFolder(dir: string) {
   return isAbsolute(dir) && existsSync(dir) && statSync(dir).isDirectory()
 }
 
-/** Refuses a folder that cannot be a project, with a message the user reads. */
 export function requireProjectFolder(dir: string) {
   if (!isProjectFolder(dir)) throw new Error(`Desk cannot open ${dir}: it is not a folder.`)
 }

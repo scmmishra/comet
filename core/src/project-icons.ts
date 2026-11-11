@@ -21,8 +21,8 @@ const MAX_FILES = 60
 const MAX_ICON_BYTES = 1024 * 1024
 
 /**
- * Images in a project that look like its logo, for the icon picker. Favicons and logos near the root come first. A file listed
- * but deleted, or too large to be an icon, is left out.
+ * Images in a project that look like its logo, for the icon picker. Favicons and logos near the root
+ * come first. A file listed but deleted, or too large to be an icon, is left out.
  */
 export async function findIconFiles(dir: string): Promise<string[]> {
   return (await projectFiles(dir))

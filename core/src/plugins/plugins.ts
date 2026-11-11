@@ -44,7 +44,6 @@ const ownKey = (plugin: string, threadKey: string | undefined) => {
   return owner === plugin ? name : undefined
 }
 
-
 /**
  * The plugins in `~/.desk/plugins`, each in a worker of its own, so a slow plugin never stalls a session
  * or a terminal. A plugin starts the first time a project it is on is read, and stays up after. One
@@ -247,7 +246,7 @@ export class Plugins {
     if (!entry) throw new Error(`Desk found no plugin at ${folder}. A plugin starts from index.tsx or index.ts.`)
     // A Bun Worker starts with the environment the process started with, not what the core set since,
     // so it would lack the login shell's PATH. It gets a copy, so a plugin finds the user's tools, such as
-    // a CLI in ~/.local/bin. A copy, not a shared one, keeps a plugin's changes out of Claude's sessions.
+    // a CLI in ~/.local/bin. A copy, not a shared one, keeps a plugin's changes out of the agents' sessions.
     const env = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined))
     const generation = this.generation
     const worker = new Worker(await bundlePlugin(plugin, entry), { env })

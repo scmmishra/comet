@@ -98,7 +98,6 @@ export class Layouts {
     this.sendVisible()
   }
 
-  /** The window gained or lost focus. */
   windowFocus(focused: boolean) {
     this.focused = focused
     this.sendVisible()

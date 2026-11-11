@@ -1,5 +1,6 @@
 import { METHOD_NOT_FOUND } from "../agents/json-rpc"
 import { errorMessage } from "../errors"
+
 /**
  * A Model Context Protocol server over HTTP, as much of it as serving tools takes. Every agent Desk runs
  * connects to an MCP server at a URL, so this is how Desk offers them tools of its own. Each request is

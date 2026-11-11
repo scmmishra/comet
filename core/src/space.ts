@@ -68,7 +68,7 @@ async function readPullRequest(root: string): Promise<NonNullable<Space["pr"]>> 
   const pr = JSON.parse(json) as GhPullRequest
   const checks = { passed: 0, failed: 0, pending: 0 }
   for (const check of pr.statusCheckRollup ?? []) {
-    // Check runs report a conclusion; commit statuses report a state.
+    // Check runs report a conclusion. Commit statuses report a state.
     const outcome = (check.conclusion || check.state || "").toUpperCase()
     if (outcome === "SUCCESS" || outcome === "NEUTRAL" || outcome === "SKIPPED") checks.passed++
     else if (outcome === "FAILURE" || outcome === "ERROR" || outcome === "TIMED_OUT" || outcome === "CANCELLED" || outcome === "ACTION_REQUIRED") checks.failed++

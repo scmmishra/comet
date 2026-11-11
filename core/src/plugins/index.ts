@@ -34,7 +34,6 @@ export function startPlugins({ broadcast, openThread, store, report }: PluginHos
       plugins.reload()
       return layouts.redrawAll()
     },
-    /** Forgets a closed tab. */
     dropTab(tabId: string) {
       plugins.dropTab(tabId)
       layouts.dropTab(tabId)

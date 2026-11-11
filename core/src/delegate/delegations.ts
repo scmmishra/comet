@@ -154,7 +154,8 @@ export class Delegations {
   private ready(id: string): AgentInfo {
     const info = this.agents.all().some((agent) => agent.id === id) ? this.agents.info(id as AgentId) : undefined
     if (!info) throw new Error(`Desk runs no agent called "${id}". Call list_agents to see the agents it runs.`)
-    if (info.state !== "ready") throw new Error(`${info.name} is not ready: ${info.problem ?? info.state}. The user can set it up in Desk's Settings, under Providers.`)
+    // A problem may end in a full stop. The message adds its own after it.
+    if (info.state !== "ready") throw new Error(`${info.name} is not ready: ${(info.problem ?? info.state).replace(/\.$/, "")}. The user can set it up in Desk's Settings, under Providers.`)
     return info
   }
 }

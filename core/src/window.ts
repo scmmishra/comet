@@ -638,7 +638,6 @@ export class Window {
     })
   }
 
-  /** Moves folders to the front of the recent list. */
   private remember(projects: readonly string[]) {
     this.persist({ recent: [...new Set([...projects, ...this.recent()])].slice(0, MAX_RECENT) })
     this.hooks.broadcast({ type: "recent", projects: this.state.recent })
