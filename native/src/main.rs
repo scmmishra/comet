@@ -27,6 +27,7 @@ mod scenes;
 mod settings;
 mod shell;
 mod start_screen;
+mod tab_bar;
 mod theme;
 mod thread_view;
 mod terminal;

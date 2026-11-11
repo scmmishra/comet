@@ -307,7 +307,7 @@ fn input_view(s: &Desk, plugin: &str, id: u64, props: &Map<String, Value>, k: &K
             }
         });
     let field = if multiline { field } else { field.single_line() };
-    col().w_full().min_h(if multiline { 72.0 } else { 0.0 }).px(10.0).py(7.0).radius(8.0).fill(k.c.layer_01).border(1.0, k.c.border_base).child(field)
+    col().w_full().min_h(if multiline { 72.0 } else { 0.0 }).px(11.0).py(8.0).radius(8.0).fill(k.c.layer_01).border(1.0, k.c.border_base).child(field)
 }
 
 /// A conversation, oldest first, kept scrolled to its end.

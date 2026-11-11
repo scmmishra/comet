@@ -194,10 +194,6 @@ fn row_view(c: &Ctx, r: &ThreadRow) -> El {
     }
 }
 
-fn chevron(k: &Kit, open: bool, size: f32) -> El {
-    // Desk's chevron points right, and turns down while open.
-    icon(&ic::CHEVRON_DOWN, size).color(k.c.text_faint).rotate(if open { 0.0 } else { -std::f32::consts::FRAC_PI_2 }).motion(k.motion.control)
-}
 
 fn item_view(c: &Ctx, item: &ThreadItem) -> El {
     let k = c.k;
@@ -332,7 +328,7 @@ fn fold_view(c: &Ctx, id: &str, rows: &[ThreadRow], duration_ms: Option<f64>, st
         .role("button")
         .expanded(open)
         .child(c.small(label).color(k.c.text_faint).group_color(k.c.text_muted))
-        .child(chevron(k, open, 15.0))
+        .child(crate::icons::chevron(k, open, 15.0))
         .hover_group()
         .on_press_tx(c.toggle(id));
     col().w_full().gap(ROW_GAP).child(head).children(open.then(|| rows.iter().map(|inner| row_view(c, inner).key(inner.id().to_owned())).collect::<Vec<_>>()).into_iter().flatten())
@@ -367,7 +363,7 @@ fn group_view(c: &Ctx, id: &str, steps: &[String], live: bool, summary: &str) ->
     } else {
         row().gap(8.0).items_center().h(STEP_HEIGHT).child(icon(group_icon(c, steps), STEP_ICON).color(k.c.text_faint)).child(c.small(summary.to_owned()).color(k.c.text_muted).group_color(k.c.text_base).truncate())
     };
-    let head = head.child(chevron(k, open, 13.0)).key("group-head").role("button").expanded(open).hover_group().on_press_tx(c.toggle(id));
+    let head = head.child(crate::icons::chevron(k, open, 13.0)).key("group-head").role("button").expanded(open).hover_group().on_press_tx(c.toggle(id));
     let thought = (live && !open && matches!(latest, ThreadItem::Tool { .. }))
         .then(|| items.iter().rev().find_map(|i| match i {
             ThreadItem::Thinking { text: Some(_), label, .. } => Some(label.clone()),
@@ -418,7 +414,7 @@ fn step_view(c: &Ctx, item: &ThreadItem) -> El {
         .child(icon(kind_icon(kind), STEP_ICON).color(k.c.text_faint))
         .child(c.small(label.to_owned()).color(ink).truncate());
     if has_detail {
-        head = head.child(chevron(k, open, 13.0)).role("button").expanded(open).hover_group().on_press_tx(c.toggle(id));
+        head = head.child(crate::icons::chevron(k, open, 13.0)).role("button").expanded(open).hover_group().on_press_tx(c.toggle(id));
     }
     col().w_full().child(head).children(open.then(|| col().key("detail").w_full().pl(DETAIL_INDENT).mt(4.0).mb(8.0).child(step_detail(c, item))))
 }
@@ -441,6 +437,7 @@ fn step_detail(c: &Ctx, item: &ThreadItem) -> El {
                 .max_h(OUTPUT_MAX)
                 .radius(BOX_RADIUS)
                 .fill(k.c.bg_deep)
+                // The Electron app outlines it with a shadow, which takes no room.
                 .border(1.0, k.c.border_base)
                 .px(12.0)
                 .py(10.0)
@@ -468,18 +465,20 @@ fn edit_view(c: &Ctx, file: &str, edits: &[crate::protocol::TextEdit]) -> El {
         .child(icon(&ic::EDIT, 15.0).color(k.c.text_muted))
         .child(text(file.to_owned()).font(crate::theme::mono(12.0)).color(k.c.text_base).truncate().grow(1.0))
         .child(crate::ui::diff_changes(k, added as u32, removed as u32));
-    let body = col().w_full().max_h(EDIT_MAX).py(2.0).scroll(ScrollSpec { stick_bottom: false }).children(lines.iter().map(|(kind, line)| {
+    let line_font = crate::theme::mono(12.0).lh(20.0);
+    let body = col().w_full().max_h(EDIT_MAX).scroll(ScrollSpec { stick_bottom: false }).children(lines.iter().map(|(kind, line)| {
         let (mark, fill, ink) = match kind {
             LineKind::Add => ("+", Some(k.c.success.bg), k.c.success.fg),
             LineKind::Del => ("−", Some(k.c.danger.bg), k.c.danger.fg),
             LineKind::Same => (" ", None, k.c.text_muted),
         };
-        let line_row = row().w_full().px(10.0).child(text(mark).font(crate::theme::mono(12.0)).color(ink).w(16.0)).child(text((*line).to_owned()).font(crate::theme::mono(12.0)).color(k.c.text_muted).selectable(true));
+        let line_row = row().w_full().px(10.0).child(text(mark).font(line_font).color(ink).mr(8.0)).child(text((*line).to_owned()).font(line_font).color(k.c.text_base).selectable(true));
         match fill {
             Some(fill) => line_row.fill(fill),
             None => line_row,
         }
     }));
+    // The Electron app outlines it with a shadow, which takes no room.
     col().w_full().radius(BOX_RADIUS).clip_rounded(BOX_RADIUS).fill(k.c.bg_deep).border(1.0, k.c.border_base).child(head).child(body)
 }
 
@@ -526,7 +525,7 @@ fn changes_view(c: &Ctx, id: &str, files: &[crate::protocol::ChangedFile]) -> El
             )
             .child(crate::ui::diff_changes(k, f.additions, f.deletions))
     }));
-    col().w_full().radius(BOX_RADIUS).fill(k.c.layer_02).child(head).child(list)
+    col().w_full().radius(BOX_RADIUS).fill(theme::well(k.dark)).child(head).child(list)
 }
 
 /// A tool call waiting for approval, as a work row after T3 Code: what Claude would run or touch, why,

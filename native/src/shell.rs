@@ -11,9 +11,7 @@ use crate::threads::Threads;
 use crate::workspace::{NeedsFolder, Place, Workspace};
 use rune::{Color, Cx, El, FileDialogOptions, Tx, col, row, text};
 use std::time::Duration;
-use rune_kit::shell::{TabDragState, TabItem, TabOrientation, TabReorder, TabStrip, WindowTitlebar};
-use rune_kit::{ControlSize, IconButton, IconButtonVariant};
-use rune_theme_opencode::icons as ic;
+use rune_kit::shell::WindowTitlebar;
 
 /// The tab bar's height. The window's buttons sit centred in it.
 pub const TITLEBAR_HEIGHT: f32 = 44.0;
@@ -25,8 +23,9 @@ const PANEL_RADIUS: f32 = 12.0;
 const SIDEBAR_WIDTH: f32 = 320.0;
 /// The session's header, `h-[46px]`.
 const HEADER_HEIGHT: f32 = 46.0;
-/// The project mark in the session's header, `size-[18px]`.
-const HEADER_MARK: f32 = 18.0;
+/// A project's mark. `@opencode/ui`'s avatar is 16 points: its CSS, outside Tailwind's layers, beats the
+/// header's `size-[18px]`.
+const PROJECT_MARK: f32 = 16.0;
 
 #[derive(Debug, Default, PartialEq)]
 pub enum CoreState {
@@ -65,7 +64,7 @@ pub struct Desk {
     pub settings: crate::settings::SettingsUi,
     /// Whether ⌘ is held, so the new tab button opens its tab next to the active one.
     cmd_held: bool,
-    strip: TabDragState,
+    pub tab_bar: crate::tab_bar::TabBar,
 }
 
 impl Desk {
@@ -166,14 +165,21 @@ impl Desk {
     }
 
     /// Opens a tab, or asks for a folder when the window has no project yet.
-    fn new_tab(&mut self, place: Place, project: Option<String>, tx: &mut Tx) {
+    pub fn new_tab(&mut self, place: Place, project: Option<String>, tx: &mut Tx) {
         if let Err(NeedsFolder) = self.workspace.new_tab(place, project, &self.account, &self.core) {
             open_folder(tx);
         }
         self.sync_start();
     }
 
-    fn close_tab(&mut self, id: &str, tx: &mut Tx) {
+    /// Brings a tab to the front, reading what its start screen and pane show.
+    pub fn show_tab(&mut self, id: &str) {
+        self.workspace.show_tab(id, &self.core);
+        self.sync_start();
+        self.sync_panel();
+    }
+
+    pub fn close_tab(&mut self, id: &str, tx: &mut Tx) {
         if let Err(NeedsFolder) = self.workspace.close_tab(id, &self.account, &self.core) {
             open_folder(tx);
         }
@@ -332,44 +338,12 @@ pub fn modifiers(s: &mut Desk, mods: rune::Mods, _: &mut Tx) {
     s.cmd_held = mods.cmd;
 }
 
-fn select(s: &mut Desk, id: &str, _: &mut Tx) {
-    s.workspace.show_tab(id, &s.core);
-    s.sync_start();
-    s.sync_panel();
-}
-
-fn close(s: &mut Desk, id: &str, tx: &mut Tx) {
-    s.close_tab(id, tx);
-}
-
-fn reorder(s: &mut Desk, r: TabReorder, _: &mut Tx) {
-    s.workspace.move_tab(r.from, r.to, &s.core);
-}
-
 pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
     let k = theme::kit(s.dark(cx));
     let mut layer = Vec::new();
     let w = &s.workspace;
-    let plus = IconButton::new(&ic::PLUS)
-        .control_size(ControlSize::Large)
-        .variant(IconButtonVariant::GhostMuted)
-        .label("New tab")
-        .help("New tab. ⌘-click opens it next to this one.")
-        .on_press_tx(|s: &mut Desk, tx: &mut Tx| s.new_tab(if s.cmd_held { Place::Next } else { Place::End }, None, tx))
-        .build(k)
-        .key("new-tab");
-    let strip = TabStrip::new("tabs", TabOrientation::Horizontal)
-        .tabs(w.tabs.iter().map(|t| TabItem::new(t.id.as_str(), t.title.as_str())))
-        .active(w.active.as_deref())
-        .viewport_width(cx.layout_size("tabs").map(|size| size[0]))
-        .drag_state(&s.strip, |s: &mut Desk| &mut s.strip)
-        .close_icon(&ic::XMARK_SMALL)
-        .trailing_action(plus)
-        .on_select(select)
-        .on_close(close)
-        .on_reorder(reorder)
-        .build_layered(k, &mut layer);
-    let titlebar = WindowTitlebar::from_insets(cx.chrome_insets(), 1.0).tabs(strip);
+    // The Electron app's title bar: its tabs start 84 points in, past the window's buttons, and it ends 10 points in.
+    let titlebar = WindowTitlebar::from_insets(cx.chrome_insets(), 1.0).leading_padding(8.0).trailing_padding(10.0).gap(4.0).tabs(crate::tab_bar::tab_bar(s, k));
     let titlebar = match crate::meters::usage_button(s, k, &mut layer) {
         Some(usage) => titlebar.trailing(usage),
         None => titlebar,
@@ -379,7 +353,7 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
     let dark = s.dark(cx);
     let line = |words: String| text(words).font(crate::theme::text(13.0)).color(k.c.text_muted);
     // A card on the ground: the session, and the view pane beside it while open.
-    let card = |key: &str, child: El| col().key(key.to_owned()).w_frac(1.0).grow(1.0).shrink().min_w(0.0).h_full().min_h(0.0).fill(k.c.bg_base).radius(PANEL_RADIUS).clip_rounded(PANEL_RADIUS).border(1.0, k.c.border_muted).child(child);
+    let card = |key: &str, child: El| col().key(key.to_owned()).w_frac(1.0).grow(1.0).shrink().min_w(0.0).h_full().min_h(0.0).fill(k.c.bg_base).radius(PANEL_RADIUS).clip_rounded(PANEL_RADIUS).border(1.0, k.c.border_muted).padding(1.0).child(child);
     let cards = match (&s.status, w.active_tab()) {
         // Settings show in place of the tab, in the card the session fills.
         (CoreState::Ready, _) if s.workspace.settings_page.is_some() => row().w_full().grow(1.0).min_h(0.0).child(card("settings-card", crate::settings::screen(s, k, &mut layer))),
@@ -389,7 +363,7 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
             let pane = (tab.panel_open == Some(true)).then(|| card("panel-card", crate::panel::panel(s, tab, k, &mut layer)));
             // A plugin's sidebar sits before the session, as a card of its own.
             let sidebar = s.plugins.layouts.get(&tab.id).and_then(|l| l.sidebar.as_ref()).map(|view| {
-                col().key("sidebar").w(SIDEBAR_WIDTH).h_full().min_h(0.0).padding(8.0).radius(PANEL_RADIUS).clip_rounded(PANEL_RADIUS).fill(k.c.layer_01).border(1.0, k.c.border_muted).child(crate::plugins::view(s, view, &tab.project, k))
+                col().key("sidebar").w(SIDEBAR_WIDTH).h_full().min_h(0.0).padding(9.0).radius(PANEL_RADIUS).clip_rounded(PANEL_RADIUS).fill(k.c.layer_01).border(1.0, k.c.border_muted).child(crate::plugins::view(s, view, &tab.project, k))
             });
             row().w_full().grow(1.0).min_h(0.0).gap(PANEL_INSET).children(sidebar).child(card("session-card", session)).children(pane)
         }
@@ -463,19 +437,20 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, layer: &
     col().key(format!("session-{}", tab.id)).w_full().grow(1.0).min_h(0.0).child(header).child(body)
 }
 
-/// A project's mark: its initial on a small tile, in the colour Settings gave it. Without a colour,
-/// `@opencode/ui`'s avatar draws generated art, which the native app does not have, so the tile is plain.
+/// A project's mark, as `@opencode/ui`'s ProjectAvatar draws it: the initial on a tile in the colour
+/// Settings gave the project, gray without one, lit from the top.
 pub fn project_mark(account: &Account, project: &str, k: &rune_kit::Kit) -> El {
     let initial = account.project_label(project).chars().next().unwrap_or(' ').to_uppercase().to_string();
-    let tile = row().size(HEADER_MARK, HEADER_MARK).radius(4.0).center();
-    let (tile, ink) = match account.project_color(project) {
-        Some(color) => {
-            let theme = rune_theme_opencode::theme(k.dark);
-            (tile.fill(theme.color(&format!("v2-avatar-bg-{color}"))).border(0.5, theme.color(&format!("v2-avatar-border-{color}"))), theme.color("v2-avatar-fg"))
-        }
-        None => (tile.fill(k.c.layer_03).border(0.5, Color::WHITE.alpha(0.08)), k.c.text_base),
-    };
-    tile.child(text(initial).font(rune::TextStyle { size: 11.0, weight: 530.0, line_height: 11.0, ..k.ty.small }).color(ink))
+    let color = account.project_color(project).unwrap_or("gray");
+    let theme = rune_theme_opencode::theme(k.dark);
+    row()
+        .size(PROJECT_MARK, PROJECT_MARK)
+        .radius(4.0)
+        .center()
+        .fill(theme.color(&format!("v2-avatar-bg-{color}")))
+        .gradient(Color::WHITE.alpha(0.16), Color::WHITE.alpha(0.0))
+        .border(0.5, theme.color(&format!("v2-avatar-border-{color}")))
+        .child(text(initial).font(rune::TextStyle::new(11.0, 530.0).lh(11.0).tracking(0.05)).color(theme.color("v2-avatar-fg")))
 }
 
 #[cfg(test)]

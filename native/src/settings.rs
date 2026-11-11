@@ -159,7 +159,7 @@ fn section(k: &Kit, title: String, child: El) -> El {
 /// Rows on one raised surface, after OpenCode's SettingsList.
 fn list(k: &Kit, rows: Vec<El>) -> El {
     let count = rows.len();
-    col().w_full().radius(8.0).fill(k.c.layer_01).border(0.5, k.c.border_muted).px(20.0).children(rows.into_iter().enumerate().map(|(i, r)| {
+    col().w_full().radius(8.0).fill(k.c.layer_01).border(0.5, k.c.border_muted).px(20.5).py(0.5).children(rows.into_iter().enumerate().map(|(i, r)| {
         if i + 1 < count { r.border_sides([0.0, 0.0, 0.5, 0.0], k.c.border_base) } else { r }
     }))
 }

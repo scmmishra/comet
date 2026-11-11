@@ -393,6 +393,8 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, lane
         .clip_rounded(CARD_RADIUS)
         .fill(k.c.layer_01)
         .border(1.0, border)
+        // Rune's border takes no room, where CSS's sets the content in by its width.
+        .padding(1.0)
         .children(question.as_ref().map(|(request, questions)| question_panel(s, tab, request, questions, k)))
         .children(thumbs)
         .child(input)
@@ -463,6 +465,7 @@ fn suggestion_list(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
             .radius(10.0)
             .fill(k.c.layer_01)
             .border(1.0, k.c.border_base)
+            .padding(1.0)
             .role("listbox")
             .active_descendant(format!("suggestion-{active}"))
             .scroll(rune::ScrollSpec { stick_bottom: false })
@@ -600,7 +603,7 @@ fn question_panel(s: &Desk, tab: &str, request: &str, questions: &[Question], k:
                 .children(folded.then(|| small(current.question.clone(), k.c.text_muted).truncate())),
         )
         .children((questions.len() > 1).then(|| small(format!("{}/{}", draft.index + 1, questions.len()), k.c.text_faint)))
-        .child(icon(&ic::CHEVRON_DOWN, 13.0).color(k.c.text_faint).rotate(if folded { -std::f32::consts::FRAC_PI_2 } else { 0.0 }))
+        .child(crate::icons::chevron(k, !folded, 13.0))
         .child(IconButton::new(&ic::XMARK_SMALL).variant(IconButtonVariant::GhostMuted).control_size(ControlSize::Small).label("Dismiss question without answering").on_press(dismiss).build(k));
     let body = (!folded).then(|| {
         let options = current.options.iter().enumerate().map(|(i, option)| {
@@ -726,8 +729,9 @@ fn queued(s: &Desk, tab: &str, message: &QueuedMessage, k: &Kit) -> El {
         .radius(10.0)
         .border(1.0, k.c.text_faint.alpha(0.4))
         .border_dash(4.0, 3.0)
-        .px(12.0)
-        .py(8.0)
+        // 12 by 8 inside the border, which takes room in CSS and none in Rune.
+        .px(13.0)
+        .py(9.0)
         // The text shrinks and wraps inside the bubble's cap, as `max-w-[80%]` lays it out.
         .child(text(message.text.clone()).wrap_anywhere().shrink().min_w(0.0).font(theme::thread_text(k, s.account.text_size())).color(k.c.text_muted));
     let (send_tab, send_id) = ids();

@@ -122,7 +122,8 @@ pub fn card(s: &Desk, project: &str, k: &Kit, layer: &mut Vec<El>) -> Option<El>
         .child(icon(&ic::PLUS, 15.0).color(k.c.text_faint))
         .child(text("Add command").font(crate::theme::text(13.0)).color(k.c.text_faint));
     editor(s, k, layer);
-    Some(col().key("commands-card").w_full().padding(6.0).radius(12.0).fill(k.c.layer_01).border(1.0, k.c.border_muted).children(rows).child(add))
+    // Its 1 point border takes room, as in CSS: Rune's does not, so the padding adds it.
+    Some(col().key("commands-card").w_full().padding(7.0).radius(12.0).fill(k.c.layer_01).border(1.0, k.c.border_muted).children(rows).child(add))
 }
 
 /// A run's state as a dot: filled while running, red when failed, grey once exited, hollow when idle.
@@ -220,7 +221,7 @@ fn group_row(s: &Desk, project: &str, name: &str, members: &[&CommandInfo], k: &
                 })
                 .child(text(name.to_owned()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate())
                 .child(text(members.len().to_string()).font(crate::theme::text(13.0)).color(k.c.text_faint))
-                .child(icon(&ic::CHEVRON_DOWN, 13.0).color(k.c.text_faint).rotate(if open { 0.0 } else { -std::f32::consts::FRAC_PI_2 })),
+                .child(crate::icons::chevron(k, open, 13.0)),
         )
         .child(run_button(name, running > 0, project, ids, k));
     let owned: Vec<CommandInfo> = members.iter().map(|m| (*m).clone()).collect();

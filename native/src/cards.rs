@@ -8,7 +8,7 @@ use crate::protocol::{Space, Subagent, TabInfo, ThreadItem};
 use crate::shell::Desk;
 use crate::theme;
 use rune::{El, ScrollSpec, col, el, icon, row, text};
-use rune_kit::{Badge, Kit, Markdown, Placement, popover, scrim};
+use rune_kit::{Badge, BadgeVariant, Kit, Markdown, Placement, popover, scrim};
 use rune_theme_opencode::icons as ic;
 
 /// The rail's width, `w-[264px]`, and its distance from the session's edge.
@@ -78,12 +78,14 @@ fn plugin_cards(s: &Desk, tab: &TabInfo, k: &Kit) -> Vec<El> {
         .cards
         .iter()
         .filter(|view| !s.plugins.is_empty(view))
-        .map(|view| card(k).key(format!("card-{}", view.id)).padding(12.0).gap(4.0).child(text(view.title.clone()).font(crate::theme::text(12.0)).color(k.c.text_faint)).child(crate::plugins::view(s, view, &tab.project, k)))
+        .map(|view| card(k, 12.0).key(format!("card-{}", view.id)).gap(4.0).child(text(view.title.clone()).font(crate::theme::text(12.0)).color(k.c.text_faint)).child(crate::plugins::view(s, view, &tab.project, k)))
         .collect()
 }
 
-fn card(k: &Kit) -> El {
-    col().w_full().radius(12.0).fill(k.c.layer_01).border(1.0, k.c.border_muted)
+/// A card in the rail, `rounded-3xl border border-outline bg-card`, with `padding` inside its border.
+fn card(k: &Kit, padding: f32) -> El {
+    // Rune draws a border inside the box without taking room, where CSS sets the content in by its width, so the padding adds it.
+    col().w_full().radius(12.0).fill(k.c.layer_01).border(1.0, k.c.border_muted).padding(padding + 1.0)
 }
 
 /// One line of a card: an icon, the words, and quieter words at the end.
@@ -94,7 +96,7 @@ fn line(k: &Kit, mark: &'static rune::Icon, words: String, detail: Option<El>) -
         .items_center()
         .px(8.0)
         .py(7.0)
-        .radius(8.0)
+        .radius(7.0)
         .child(icon(mark, 15.0).color(k.c.text_muted))
         .child(text(words).font(crate::theme::text(13.0)).color(k.c.text_base).truncate().grow(1.0))
         .children(detail)
@@ -127,15 +129,14 @@ fn space_card(space: &Space, tab: &str, k: &Kit) -> El {
             (_, true) => ("Draft", false),
             _ => ("Ready", true),
         };
-        let badge = Badge::new(state).build(k);
-        let badge = if accent { badge.fill(k.c.bg_accent) } else { badge };
+        let badge = Badge::new(state).variant(if accent { BadgeVariant::Accent } else { BadgeVariant::Neutral }).build(k);
         let url = pr.url.clone();
         let head = row()
             .w_full()
             .gap(10.0)
             .px(8.0)
             .py(7.0)
-            .radius(8.0)
+            .radius(7.0)
             .hover(k.c.bg_base)
             .role("link")
             .on_press_tx(move |s: &mut Desk, tx| {
@@ -149,23 +150,25 @@ fn space_card(space: &Space, tab: &str, k: &Kit) -> El {
                     .grow(1.0)
                     .min_w(0.0)
                     .gap(2.0)
-                    .child(text(pr.title.clone()).font(crate::theme::text(13.0)).color(k.c.text_base).wrap())
-                    .child(row().w_full().items_center().child(text(format!("#{}", pr.number)).font(crate::theme::mono(12.0)).color(k.c.text_faint).grow(1.0)).child(badge)),
+                    // `leading-snug`, and the number in the card's 13 point text, set in mono.
+                    .child(text(pr.title.clone()).font(crate::theme::text(13.0).lh(17.875)).color(k.c.text_base).wrap())
+                    .child(row().w_full().items_center().child(text(format!("#{}", pr.number)).font(crate::theme::mono(13.0)).color(k.c.text_faint).grow(1.0)).child(badge)),
             );
         let total = pr.checks.passed + pr.checks.failed + pr.checks.pending;
         let checks = (total > 0).then(|| {
-            let (words, fg) = if pr.checks.failed > 0 {
-                (format!("{} failing", pr.checks.failed), k.c.danger.fg)
+            let badge = if pr.checks.failed > 0 {
+                crate::ui::tinted_badge(format!("{} failing", pr.checks.failed), k.c.danger.bg, k.c.danger.fg)
             } else if pr.checks.pending > 0 {
-                (format!("{} running", pr.checks.pending), k.c.text_muted)
+                Badge::new(format!("{} running", pr.checks.pending)).variant(BadgeVariant::Subtle).build(k)
             } else {
-                (format!("{} / {total}", pr.checks.passed), k.c.success.fg)
+                crate::ui::tinted_badge(format!("{} / {total}", pr.checks.passed), k.c.success.bg, k.c.success.fg)
             };
-            line(k, &ic::CHECK, "Checks".into(), Some(text(words).font(crate::theme::text(12.0)).color(fg)))
+            line(k, &ic::CHECK, "Checks".into(), Some(badge))
         });
-        col().w_full().padding(6.0).border_sides([1.0, 0.0, 0.0, 0.0], k.c.border_muted).child(head).children(checks)
+        // The top border takes a point of room in CSS, which Rune's does not.
+        col().w_full().padding(6.0).pt(7.0).border_sides([1.0, 0.0, 0.0, 0.0], k.c.border_muted).child(head).children(checks)
     });
-    card(k).key("space-card").child(local).children(pr)
+    card(k, 0.0).key("space-card").child(local).children(pr)
 }
 
 fn status(subagent: &Subagent) -> (&'static str, fn(&Kit) -> rune::Color) {
@@ -185,7 +188,8 @@ fn elapsed(subagent: &Subagent, now: f64) -> String {
 fn status_mark(subagent: &Subagent, k: &Kit) -> El {
     el().size(16.0, 16.0)
         .child(icon(&icons::CLAUDE, 16.0).color(theme::claude()))
-        .child(el().absolute(11.0, 11.0).size(7.0, 7.0).radius(3.5).fill((status(subagent).1)(k)).border(2.0, k.c.layer_01))
+        // A 7 point dot, `-bottom-0.5 -right-0.5`, with `ring-2` in the card's colour drawn outside it.
+        .child(row().absolute(9.0, 9.0).size(11.0, 11.0).radius(5.5).center().fill(k.c.layer_01).child(el().size(7.0, 7.0).radius(3.5).fill((status(subagent).1)(k))))
 }
 
 /// The subagents Claude started, at the top of the stack. The card shows while one runs, or while the turn
@@ -215,7 +219,7 @@ fn subagents_card(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Opti
             .items_center()
             .px(8.0)
             .py(7.0)
-            .radius(8.0)
+            .radius(7.0)
             .fill(if open { k.c.bg_base } else { rune::Color::TRANSPARENT })
             .hover(k.c.bg_base)
             .role("button")
@@ -224,9 +228,9 @@ fn subagents_card(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Opti
             .child(status_mark(subagent, k))
             .child(text(subagent.description.clone()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate().grow(1.0))
             .child(text(elapsed(subagent, now)).font(crate::theme::text(12.0)).color(k.c.text_faint))
-            .child(icon(&ic::CHEVRON_DOWN, 12.0).color(k.c.text_faint).rotate(-std::f32::consts::FRAC_PI_2))
+            .child(icon(&ic::CHEVRON_RIGHT, 12.0).color(k.c.text_faint))
     });
-    Some(card(k).key("subagents-card").padding(6.0).role("region").label("Subagents").child(text(heading).font(crate::theme::text(12.0)).color(k.c.text_faint).px(8.0).pb(4.0).pt(6.0)).children(rows.collect::<Vec<_>>()))
+    Some(card(k, 6.0).key("subagents-card").role("region").label("Subagents").child(text(heading).font(crate::theme::text(12.0)).color(k.c.text_faint).px(8.0).pb(4.0).pt(6.0)).children(rows.collect::<Vec<_>>()))
 }
 
 /// What a subagent was asked, how it stands, and its steps so far.

@@ -26,6 +26,10 @@ struct Colors {
     add: (&'static str, f32),
     del: (&'static str, f32),
     ready: &'static str,
+    /// The active tab, a tab under the pointer, and a quiet box inside the thread.
+    tab: &'static str,
+    tab_hover: (&'static str, f32),
+    well: &'static str,
 }
 
 const DARK: Colors = Colors {
@@ -44,6 +48,9 @@ const DARK: Colors = Colors {
     add: ("#62c28a", 0.09),
     del: ("#e8777e", 0.09),
     ready: "#3d5fe0",
+    tab: "#1c1d1f",
+    tab_hover: ("#0f1011", 1.0),
+    well: "#1c1d1f",
 };
 
 const LIGHT: Colors = Colors {
@@ -62,6 +69,9 @@ const LIGHT: Colors = Colors {
     add: ("#1f8a4c", 0.09),
     del: ("#cf3b45", 0.08),
     ready: "#3d5fe0",
+    tab: "#ffffff",
+    tab_hover: ("#000000", 0.04),
+    well: "#f5f6f8",
 };
 
 fn color(hex: &str) -> Color {
@@ -118,6 +128,30 @@ fn build(dark: bool, d: &Colors) -> Kit {
     c.text_strong = fg;
     c.text_weak = fg_3;
     k
+}
+
+/// Desk's `--color-tab`, `--color-tab-hover` and `--color-well`.
+pub fn tab(dark: bool) -> Color {
+    color(colors(dark).tab)
+}
+
+pub fn tab_hover(dark: bool) -> Color {
+    let (hex, alpha) = colors(dark).tab_hover;
+    color(hex).alpha(alpha)
+}
+
+pub fn well(dark: bool) -> Color {
+    color(colors(dark).well)
+}
+
+/// Desk's `--color-outline`.
+pub fn outline(dark: bool) -> Color {
+    let (hex, alpha) = colors(dark).outline;
+    color(hex).alpha(alpha)
+}
+
+fn colors(dark: bool) -> &'static Colors {
+    if dark { &DARK } else { &LIGHT }
 }
 
 /// Claude's mark, Desk's `--color-claude`.

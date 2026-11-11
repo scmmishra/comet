@@ -4,8 +4,8 @@
 use crate::format;
 use crate::protocol::{ClientMessage, ContextReading, PlanUsage, UsageWindow};
 use crate::shell::Desk;
-use rune::{El, col, icon, row, text};
-use rune_kit::{Kit, Placement, Progress, ProgressCircle, popover, scrim};
+use rune::{El, col, el, icon, row, text};
+use rune_kit::{Kit, Placement, Progress, popover, scrim};
 use std::time::{Duration, Instant};
 
 /// How often the app asks for plan usage. The core probes it at most once a minute.
@@ -60,13 +60,26 @@ pub fn usage_button(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
         .expanded(s.meters.open)
         .on_press(|s: &mut Desk| s.meters.open = !s.meters.open)
         .child(icon(&crate::icons::GAUGE, 15.0).color(k.c.text_muted))
-        .child(Progress::new(Some(fullest.percent as f32 / 100.0)).build(k).w(26.0))
+        .child(meter(fullest.percent as f32 / 100.0, k))
         .child(text(format!("{}%", fullest.percent.round())).font(crate::theme::text(12.0)).color(k.c.text_muted));
     if s.meters.open {
         layer.insert(0, scrim("usage-scrim", |s: &mut Desk| s.meters.open = false));
         layer.push(popover::anchored(k, popover::raised(k, usage_popover(usage, k), k.radius.md), "usage-button", Placement::BottomEnd, 8.0));
     }
     Some(button)
+}
+
+/// The title bar's small meter: `@opencode/ui`'s Progress, which the Electron app sets 26 by 5 points.
+fn meter(value: f32, k: &Kit) -> El {
+    row()
+        .w(26.0)
+        .h(5.0)
+        .radius(999.0)
+        .fill(k.c.layer_01)
+        .clip_rounded(2.5)
+        .role("progressbar")
+        .label("Plan usage")
+        .child(el().h_full().w_frac(value.clamp(0.0, 1.0)).radius(999.0).fill(k.c.text_muted))
 }
 
 fn usage_popover(usage: &PlanUsage, k: &Kit) -> El {
@@ -106,7 +119,7 @@ pub fn context_ring(reading: &ContextReading, k: &Kit) -> El {
         .items_center()
         .px(6.0)
         .help(help)
-        .child(ProgressCircle::new(reading.percent as f32 / 100.0).size(15.0).label("Context").build(k))
+        .child(crate::ui::progress_circle(k, reading.percent as f32 / 100.0, 15.0, "Context"))
         .child(text(format!("{}%", reading.percent.round())).font(crate::theme::text(13.0)).color(k.c.text_muted))
 }
 
