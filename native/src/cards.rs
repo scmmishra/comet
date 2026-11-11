@@ -48,12 +48,23 @@ impl Lane {
     }
 }
 
-/// The open subagent's detail, by id, and whether the pointer is on the header chip or the cards it shows.
+/// The open subagent's detail, by id, and whether the header chip's cards show: pinned open by a press on
+/// the chip, or while the pointer is on the chip or its cards.
 #[derive(Default)]
 pub struct Cards {
     open_subagent: Option<String>,
+    chip_pinned: bool,
     on_chip: bool,
     on_chip_cards: bool,
+}
+
+impl Desk {
+    /// Closes a subagent's detail or the chip's pinned cards, as Escape does. Whether one was open.
+    pub fn close_cards(&mut self) -> bool {
+        let closed = self.cards.open_subagent.take().is_some() || self.cards.chip_pinned;
+        self.cards.chip_pinned = false;
+        closed
+    }
 }
 
 /// The rail of cards for a tab, pinned to the session's top right.
@@ -78,12 +89,26 @@ pub fn rail(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
 pub fn space_chip(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let space = s.projects.get(&tab.project).and_then(|p| p.space.as_ref());
     let words = |w: String, color| text(w).font(crate::theme::text(12.0)).color(color);
-    let chip = row().key("space-chip").h(28.0).gap(8.0).items_center().radius(7.0).fill(k.c.layer_02).px(10.0).on_hover_change(|s: &mut Desk, on, _| s.cards.on_chip = on);
+    // A press pins the cards open, so the keyboard reaches them too. The Electron app opens them on focus,
+    // which Rune has no handler for.
+    let chip = row()
+        .key("space-chip")
+        .h(28.0)
+        .gap(8.0)
+        .items_center()
+        .radius(7.0)
+        .fill(k.c.layer_02)
+        .px(10.0)
+        .role("button")
+        .label("Project cards")
+        .expanded(s.cards.chip_pinned)
+        .on_press(|s: &mut Desk| s.cards.chip_pinned = !s.cards.chip_pinned)
+        .on_hover_change(|s: &mut Desk, on, _| s.cards.on_chip = on);
     let chip = match space {
         Some(space) => chip.child(icon(&ic::BRANCH, icons::SIZE).color(k.c.text_muted)).child(words(space.branch.clone(), k.c.text_base).truncate().max_w(160.0)).child(changes(space, k)),
         None => chip.child(words("Commands".into(), k.c.text_base)),
     };
-    if s.cards.on_chip || s.cards.on_chip_cards {
+    if s.cards.chip_pinned || s.cards.on_chip || s.cards.on_chip_cards {
         let cards = col()
             .key("space-chip-cards")
             .w(RAIL_WIDTH)

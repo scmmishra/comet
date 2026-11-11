@@ -101,6 +101,7 @@ fn main() {
         fonts: theme::FONTS,
         families: theme::FAMILIES,
         poll: Some(shell::poll),
+        on_key: Some(shell::key),
         setup: Some(|s: &mut Desk, waker| s.images.setup(waker)),
         scenes: scenes::SCENES,
         ..AppSpec::new("Desk", (1280.0, 820.0), Desk::default, shell::view)

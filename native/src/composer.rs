@@ -108,8 +108,10 @@ pub struct Drafts {
     all_queued: HashSet<String>,
     /// When a draft last changed, until it is saved.
     edited_at: Option<Instant>,
-    /// The highlighted row of the file and command list.
+    /// The highlighted row of the file and command list, and the trigger it was chosen in, by tab, start
+    /// and query. Under another trigger the top row is highlighted, so typing more starts from the top.
     active: usize,
+    listed: Option<(String, usize, String)>,
     /// The trigger the user closed with Escape, by tab and where it starts, so the list stays shut for it.
     dismissed: Option<(String, usize)>,
     /// The last file search sent, and the paths found for it: project, query and paths.
@@ -277,19 +279,33 @@ impl Desk {
         let (text, caret) = triggers::complete(&edit.text, trigger.start, edit.range().1, &inserted);
         edit.replace_text(text);
         edit.set_caret(caret);
-        self.drafts.active = 0;
     }
 
     /// Arrow keys move through the list, Enter and Tab pick, and Escape closes it. Other keys edit.
-    fn list_key(&mut self, tab: &str, key: &Key) -> bool {
+    /// The trigger the caret is in now, as `listed` records it.
+    fn listing(&self, tab: &str) -> Option<(String, usize, String)> {
+        self.trigger(tab).map(|t| (tab.to_owned(), t.start, t.query))
+    }
+
+    /// The highlighted row: the one chosen under this trigger, else the top.
+    fn active_row(&self, tab: &str) -> usize {
+        if self.drafts.listed == self.listing(tab) { self.drafts.active } else { 0 }
+    }
+
+    fn list_key(&mut self, tab: &str, key: &Key, tx: &mut rune::Tx) -> bool {
         let count = self.suggestions(tab).len();
         if count == 0 {
             return false;
         }
         match key {
-            Key::Down => self.drafts.active = (self.drafts.active + 1) % count,
-            Key::Up => self.drafts.active = (self.drafts.active + count - 1) % count,
-            Key::Enter | Key::Tab => self.pick_suggestion(tab, self.drafts.active.min(count - 1)),
+            Key::Down | Key::Up => {
+                let active = self.active_row(tab);
+                self.drafts.active = if *key == Key::Down { (active + 1) % count } else { (active + count - 1) % count };
+                self.drafts.listed = self.listing(tab);
+                // The list scrolls to keep the highlighted row in sight.
+                tx.scroll_into_view_in("suggestions", format!("suggestion-{}", self.drafts.active));
+            }
+            Key::Enter | Key::Tab => self.pick_suggestion(tab, self.active_row(tab).min(count - 1)),
             Key::Escape => self.drafts.dismissed = self.trigger(tab).map(|t| (tab.to_owned(), t.start)),
             _ => return false,
         }
@@ -350,18 +366,21 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &
             let alternate = s.cmd_held();
             s.submit(alternate);
         })
-        .on_input_key(|s: &mut Desk, key: &KeyEvent, _| {
+        .on_input_key(|s: &mut Desk, key: &KeyEvent, tx| {
             let Some(tab) = s.workspace.active.clone() else { return false };
             if key.mods.shift || key.mods.cmd || key.mods.alt {
                 return false;
             }
-            if s.list_key(&tab, &key.key) {
+            if s.list_key(&tab, &key.key, tx) {
                 return true;
             }
             if key.key != Key::Escape {
                 return false;
             }
-            s.escape(&tab);
+            // An open popover takes Escape before the turn does.
+            if !s.close_popover() {
+                s.escape(&tab);
+            }
             true
         });
     let input = col().w_full().px(16.0).pt(14.0).child(auto_grow(field, 2, MAX_LINES));
@@ -424,7 +443,7 @@ fn suggestion_list(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
     if rows.is_empty() {
         return None;
     }
-    let active = s.drafts.active.min(rows.len() - 1);
+    let active = s.active_row(tab).min(rows.len() - 1);
     let items = rows.iter().enumerate().map(|(i, row_data)| {
         let (mark, label, detail): (&'static rune::Icon, String, String) = match row_data {
             Suggestion::File(path) => {

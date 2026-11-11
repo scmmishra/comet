@@ -19,10 +19,22 @@ const DRAG_THRESHOLD: f32 = 4.0;
 /// The title fades out over its last fifth when it runs long, as `.desk-fade-end` masks it.
 const TITLE_FADE: f32 = 30.0;
 
-/// The tab being dragged, and the place it was pressed at.
+/// The tab being dragged, and the tab the strip last scrolled to.
 #[derive(Default)]
 pub struct TabBar {
     dragging: Option<String>,
+    shown: Option<String>,
+}
+
+/// Keeps the active tab in sight: a tab opened, reopened or chosen past the strip's edge scrolls in,
+/// as the Electron app's tab bar does.
+pub fn follow_active(s: &mut Desk, tx: &mut Tx) {
+    if s.workspace.active != s.tab_bar.shown {
+        s.tab_bar.shown = s.workspace.active.clone();
+        if let Some(id) = &s.tab_bar.shown {
+            tx.scroll_into_view_in("tabs", format!("tab-{id}"));
+        }
+    }
 }
 
 /// The strip of tabs and the new tab button, for the window's title bar.

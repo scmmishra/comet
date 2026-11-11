@@ -59,6 +59,11 @@ impl Desk {
         true
     }
 
+    /// Closes the picker, as Escape does. Whether it was open.
+    pub fn close_picker(&mut self) -> bool {
+        std::mem::take(&mut self.picker).open
+    }
+
     pub fn toggle_picker(&mut self) {
         let opening = !self.picker.open;
         // A pinned model shows only in the full list, so choosing one opens it that way.

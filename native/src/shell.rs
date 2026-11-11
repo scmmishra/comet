@@ -181,6 +181,12 @@ impl Desk {
         self.sync_start();
     }
 
+    /// Closes the popover Desk draws, if one is open, as Escape does: the model picker, the usage popover,
+    /// a subagent's detail or the header chip's cards. Rune's menus and selects close themselves.
+    pub fn close_popover(&mut self) -> bool {
+        self.close_picker() || self.close_usage() || self.close_cards()
+    }
+
     /// Brings a tab to the front, reading what its start screen and pane show.
     pub fn show_tab(&mut self, id: &str) {
         self.workspace.show_tab(id, &self.core);
@@ -308,6 +314,7 @@ pub mod commands {
 pub fn poll(s: &mut Desk, _: f64, tx: &mut Tx) -> bool {
     s.sync_palette();
     s.sync_plugin_inputs();
+    crate::tab_bar::follow_active(s, tx);
     let composed = composer::poll(s, tx) | copied_poll(s, tx) | toasts_poll(s, tx);
     if s.status == CoreState::Ready {
         let next = s.refresh_usage();
@@ -344,6 +351,11 @@ fn copied_poll(s: &mut Desk, tx: &mut Tx) -> bool {
     }
     tx.wake_after(COPIED - at.elapsed());
     false
+}
+
+/// Keys nothing focused took: Escape closes an open popover.
+pub fn key(s: &mut Desk, event: &rune::KeyEvent, _: &mut Tx) -> bool {
+    event.key == rune::Key::Escape && s.close_popover()
 }
 
 /// Hears the modifier keys held down each time they change.
@@ -396,7 +408,14 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
     crate::palette::palette(s, cx.layout_size("window").map_or(820.0, |size| size[1]), k, &mut layer);
     layer.extend(crate::toasts::region(s, k));
     // Coming back to the window is when files and usage most likely changed outside Desk.
-    let window = col().key("window").w_full().h_full().fill(k.c.bg_deep).child(titlebar).child(main).on_window_focus(|s: &mut Desk, focused, _| {
+    let window = col()
+        .key("window")
+        .w_full()
+        .h_full()
+        .fill(k.c.bg_deep)
+        .child(titlebar)
+        .child(main)
+        .on_window_focus(|s: &mut Desk, focused, _| {
         if focused && s.status == CoreState::Ready {
             s.refresh_outside();
         }

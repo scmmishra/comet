@@ -19,6 +19,11 @@ pub struct Meters {
 }
 
 impl Desk {
+    /// Closes the usage popover, as Escape does. Whether it was open.
+    pub fn close_usage(&mut self) -> bool {
+        std::mem::take(&mut self.meters.open)
+    }
+
     /// Asks for plan usage, and the active project's Space, as the window comes back: files and usage most
     /// likely changed outside Desk then.
     pub fn refresh_outside(&mut self) {
