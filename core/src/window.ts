@@ -208,8 +208,9 @@ export class Window {
     if (sessionId) this.fillContext(tabId, sessionId)
     // A queue whose turn ended while the thread was away sends its next message now.
     if (!running) this.sendNextQueued(tabId)
-    // A newer key that took the tab during the send has its own prompt, so this one goes unsaid.
-    else if (thread.prompt) await this.send(tabId, thread.prompt).catch((error: Error) => { if (error.message !== MOVED) throw error })
+    // A new thread starts with the plugin's prompt. A newer key that took the tab during the send has its
+    // own prompt, so this one goes unsaid.
+    if (!sessionId && thread.prompt) await this.send(tabId, thread.prompt).catch((error: Error) => { if (error.message !== MOVED) throw error })
   }
 
   /** Sends a queued message now: into the running turn, or as a turn of its own. */

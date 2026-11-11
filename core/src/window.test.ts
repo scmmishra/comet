@@ -104,6 +104,22 @@ test("keeps a plugin thread's queue with the thread when the tab switches to ano
   expect(saved().keyed).toEqual({ [`${project}\nconv-2`]: { key: "conv-2" } })
 })
 
+test("starts a plugin's new thread with its prompt, and leaves a thread it already started alone", async () => {
+  const project = tempFolder("plugin-prompt")
+  const { window } = open({ tabs: [tab("a", project)], threads: { a: {} }, keyed: { [`${project}\nconv-2`]: { key: "conv-2", sessionId: "s2" } }, recent: [] })
+  const said: string[] = []
+  window.send = async (_tabId, text) => void said.push(text)
+  // History for a started thread cannot be read here, which does not matter to what is sent.
+  window["history"] = async () => []
+  window["fillContext"] = () => {}
+
+  await window.openKey("a", { key: "conv-1", prompt: "Draft a reply" })
+  expect(said).toEqual(["Draft a reply"])
+
+  await window.openKey("a", { key: "conv-2", prompt: "Draft a reply" })
+  expect(said).toEqual(["Draft a reply"])
+})
+
 test("keeps a closed tab's plugin thread under its key, and gives it back when the tab reopens", async () => {
   const project = tempFolder("plugin-close")
   const { window } = open({ tabs: [tab("a", project), tab("b", project)], threads: { a: { key: "conv-1", sessionId: "s1" } }, recent: [] })
