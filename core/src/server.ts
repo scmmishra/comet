@@ -1,6 +1,5 @@
 import type { ClientMessage, CoreMessage, ProjectPart, ProjectParts } from "@desk/protocol"
 import type { ServerWebSocket } from "bun"
-import { readMcpServers, toggleMcpServer } from "./agents/claude/mcp"
 import { Agents } from "./agents/registry"
 import { discoverCommands } from "./command-sources"
 import { Commands } from "./commands"
@@ -102,7 +101,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     commandSources: (dir, reply) => discoverCommands(dir, new Set(commandsOf(dir).list().map((command) => command.command))).then(reply),
     threads: (dir, reply) => window.recentThreads(dir).then(reply),
     icons: (dir, reply) => findIconFiles(dir).then(reply),
-    mcp: (dir, reply) => readMcpServers(dir, reply),
+    mcp: (dir, reply) => agents.mcp().read(dir, reply),
     skills: (dir, reply) => agents.commands(dir).then(reply),
     plugins: (dir, reply) => plugins.contributions(dir).then(reply),
   }
@@ -120,7 +119,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       case "project.get":
         return read(message.project, message.part, reply)
       case "mcp.toggle":
-        return toggleMcpServer(message.project, message.name, message.enabled, (servers) => reply(project(message.project, "mcp", servers)))
+        return agents.mcp().toggle(message.project, message.name, message.enabled, (servers) => reply(project(message.project, "mcp", servers)))
       case "file.open":
         return openInEditor(requireFile(message.project, message.path), message.line)
       case "file.read":

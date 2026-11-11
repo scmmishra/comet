@@ -1,4 +1,4 @@
-import type { AgentFeature, AgentId, AgentInfo, ContextReading, ImageAttachment, PermissionAnswer, RunSettings, Skill, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
+import type { AgentFeature, AgentId, AgentInfo, ContextReading, ImageAttachment, McpServer, PermissionAnswer, RunSettings, Skill, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
 
 /**
  * What Desk needs from a coding agent, such as Claude Code or Codex. An agent runs conversations, keeps
@@ -25,6 +25,8 @@ export interface Agent {
   readonly threads: AgentThreads
   /** The slash commands the agent offers in a folder, grouped. Null when the agent could not be asked. An agent without slash commands has no such method. */
   commands?(dir: string): Promise<Skill[] | null>
+  /** The MCP servers the agent loads in a folder. An agent whose servers Desk does not show has none. */
+  readonly mcp?: AgentMcp
   /** Updates the agent with its own updater. It runs to its end, since stopping an updater midway can leave the agent broken. */
   update?(): Promise<void>
   /** Installs the agent on this Mac. It stops, and leaves the install as it was, once `signal` aborts. */
@@ -49,6 +51,16 @@ export interface AgentHost {
 }
 
 export type Emit = (event: ThreadEvent) => void
+
+/**
+ * The MCP servers an agent loads in a folder. Each call publishes the list as soon as there is one, and
+ * again each time it changes while servers connect. Null means the agent could not be asked.
+ */
+export interface AgentMcp {
+  read(dir: string, publish: (servers: McpServer[] | null) => void): Promise<void>
+  /** Turns a server on or off, then publishes the servers as they change. */
+  toggle(dir: string, name: string, enabled: boolean, publish: (servers: McpServer[] | null) => void): Promise<void>
+}
 
 /** Tools Desk offers a session over MCP, such as handing work to another agent. The agent adds the server to the session under `SERVER_NAME`. */
 export interface ToolServer {

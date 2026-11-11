@@ -1,17 +1,30 @@
 import { AGENTS, type AgentId, type AgentInfo, type CoreMessage, type Skill } from "@desk/protocol"
 import { errorMessage } from "../errors"
-import type { Agent, AgentHost, AgentReading } from "./agent"
+import type { Agent, AgentHost, AgentMcp, AgentReading } from "./agent"
 import { antigravityAgent } from "./antigravity"
 import { claudeAgent } from "./claude"
 import { codexAgent } from "./codex"
 
 type Send = (message: CoreMessage) => void
 
-/** How to make each agent Desk runs. Adding an agent means adding it to `AGENTS` in the protocol, and here. */
+/** How to make each agent Desk runs. AGENTS.md lists the steps to add one. */
 const MAKERS: Record<AgentId, (host: AgentHost) => Agent> = {
   claude: claudeAgent,
   codex: codexAgent,
   antigravity: antigravityAgent,
+}
+
+type AgentAction = "update" | "install" | "signIn"
+
+/**
+ * What each action is called when an agent lacks it, the state an agent shows while it runs, how it runs,
+ * and whether the user can stop it. An update runs to its end, since stopping an updater midway can leave
+ * the agent broken.
+ */
+const ACTIONS: Record<AgentAction, { readonly name: string; readonly state: AgentInfo["state"]; readonly stoppable: boolean; readonly run: (agent: Agent, signal: AbortSignal) => Promise<void> | undefined }> = {
+  update: { name: "updater", state: "updating", stoppable: false, run: (agent) => agent.update?.() },
+  install: { name: "installer", state: "installing", stoppable: true, run: (agent, signal) => agent.install?.(signal) },
+  signIn: { name: "sign-in", state: "signing-in", stoppable: true, run: (agent, signal) => agent.signIn?.(signal) },
 }
 
 /** What the core lends every agent, less where each reports what it learns. */
@@ -39,7 +52,6 @@ export class Agents {
     this.known = new Map(made.map((agent) => [agent.id, { id: agent.id, name: agent.name, state: "checking", models: [], features: agent.features }]))
   }
 
-  /** The agent a tab names. */
   get(id: AgentId): Agent {
     const agent = this.agents.get(id)
     if (!agent) throw new Error(`Desk does not run an agent called ${id}.`)
@@ -68,6 +80,13 @@ export class Agents {
   async commands(dir: string): Promise<Partial<Record<AgentId, Skill[] | null>>> {
     const read = await Promise.all(this.all().map(async (agent) => [agent.id, agent.commands ? await agent.commands(dir) : []] as const))
     return Object.fromEntries(read)
+  }
+
+  /** The MCP servers Desk shows: those of the agent that lists them. */
+  mcp(): AgentMcp {
+    const found = this.all().find((agent) => agent.mcp)?.mcp
+    if (!found) throw new Error("No agent Desk runs lists its MCP servers.")
+    return found
   }
 
   /** Reads every agent's plan usage again. */
@@ -99,10 +118,10 @@ export class Agents {
     }
   }
 
-  /** Stops an agent's install or sign-in. An update runs to its end. */
+  /** Stops what an agent does to itself, when that can be stopped. */
   cancel(id: AgentId) {
     const running = this.running.get(id)
-    if (running && running.action !== "update") running.abort.abort()
+    if (running && ACTIONS[running.action].stoppable) running.abort.abort()
   }
 
   close() {
@@ -115,22 +134,11 @@ export class Agents {
   }
 
   private learn(id: AgentId, reading: AgentReading) {
-    const before = this.known.get(id)
-    if (!before) return
-    this.known.set(id, { ...before, ...reading })
+    this.known.set(id, { ...this.known.get(id)!, ...reading })
     this.broadcast(this.message())
   }
 
   private message(): CoreMessage {
     return { type: "agents", agents: [...this.known.values()] }
   }
-}
-
-type AgentAction = "update" | "install" | "signIn"
-
-/** What each action is called when an agent lacks it, the state an agent shows while it runs, and how it runs. */
-const ACTIONS: Record<AgentAction, { readonly name: string; readonly state: AgentInfo["state"]; readonly run: (agent: Agent, signal: AbortSignal) => Promise<void> | undefined }> = {
-  update: { name: "updater", state: "updating", run: (agent) => agent.update?.() },
-  install: { name: "installer", state: "installing", run: (agent, signal) => agent.install?.(signal) },
-  signIn: { name: "sign-in", state: "signing-in", run: (agent, signal) => agent.signIn?.(signal) },
 }
