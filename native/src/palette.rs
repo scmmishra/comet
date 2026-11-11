@@ -318,6 +318,8 @@ impl Desk {
             self.palette.active = 0;
             // A fresh query drops the field's focus. The keys only work there, so it takes focus back.
             tx.focus("palette-input", false);
+            // A level opens whole, as the keyboard moves between them.
+            tx.instant();
             return;
         }
         self.palette = Palette::default();
@@ -381,6 +383,7 @@ impl Desk {
                 self.palette.pages.pop();
                 self.palette.query = TextEdit::new("");
                 self.palette.active = 0;
+                tx.instant();
             }
             Key::Escape => self.palette = Palette::default(),
             _ => return false,
@@ -406,6 +409,14 @@ impl Desk {
 }
 
 /// `window_height` places the palette, as the Electron app's Dialog sits 14vh down.
+/// A key for the level the palette shows. A page can hold a path, which a key must not, so it is hashed.
+fn level_key(pages: &[Page]) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    format!("{:?}", pages.last()).hash(&mut h);
+    format!("palette-level-{}-{:x}", pages.len(), h.finish())
+}
+
 pub fn palette(s: &Desk, window_height: f32, k: &Kit, layer: &mut Vec<El>) {
     if !s.palette.open {
         return;
@@ -433,8 +444,10 @@ pub fn palette(s: &Desk, window_height: f32, k: &Kit, layer: &mut Vec<El>) {
         .child(input);
     let matches = s.matches();
     let active = s.palette.active.min(matches.len().saturating_sub(1));
-    // Sections 16 points apart, their rows a point apart, under 26 point headers.
-    let mut list = col().w_full().px(8.0).pt(6.0).pb(8.0).gap(1.0);
+    // Sections 16 points apart, their rows a point apart, under 26 point headers. Each level is its own list:
+    // with one list for all, Rune would take a row of the last level for the row in its place in the next,
+    // and animate one into the other.
+    let mut list = col().key(level_key(&s.palette.pages)).w_full().px(8.0).pt(6.0).pb(8.0).gap(1.0);
     let mut section = None;
     for (i, entry) in matches.iter().enumerate() {
         let heading = s.palette.pages.last().map_or_else(|| entry.section.clone(), |p| p.title(&s.account));
