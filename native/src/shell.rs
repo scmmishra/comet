@@ -442,7 +442,8 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
     let main = col().key("main").w_full().grow(1.0).min_h(0.0).px(PANEL_INSET).pb(PANEL_INSET).child(cards).children(settings);
     crate::palette::palette(s, cx.layout_size("window").map_or(820.0, |size| size[1]), k, &mut layer);
     layer.extend(crate::toasts::region(s, k));
-    // Coming back to the window is when files and usage most likely changed outside Desk.
+    // Coming back to the window is when files and usage most likely changed outside Desk. Plugins hear of
+    // both gaining and losing focus, so they can pause work while Desk is in the background.
     let window = col()
         .key("window")
         .w_full()
@@ -451,8 +452,11 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
         .child(titlebar)
         .child(main)
         .on_window_focus(|s: &mut Desk, focused, _| {
-        if focused && s.status == CoreState::Ready {
-            s.refresh_outside();
+        if s.status == CoreState::Ready {
+            s.core.send(&ClientMessage::WindowFocus { focused });
+            if focused {
+                s.refresh_outside();
+            }
         }
     });
     // Popovers, menus, the palette and toasts leave with one quick fade.

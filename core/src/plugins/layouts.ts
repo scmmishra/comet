@@ -1,5 +1,5 @@
 import type { ViewRequest } from "@desk/plugin/host"
-import { panelInstanceId, splitContributionId, type CoreMessage, type DrawnView, type PanelParams, type PluginLayout, type TabLayout } from "@desk/protocol"
+import { panelInstanceId, splitContributionId, type CoreMessage, type DrawnView, type PanelParams, type PluginLayout, type TabInfo, type TabLayout } from "@desk/protocol"
 import type { Plugins } from "./plugins"
 
 /** Where a tab's project and saved layout live. The window keeps them with the tab. */
@@ -8,6 +8,8 @@ export interface LayoutStore {
   /** Undefined for a tab no plugin has laid out. */
   layout(tabId: string): PluginLayout | undefined
   setLayout(tabId: string, layout: PluginLayout): void
+  /** The tab the window shows, if any. */
+  activeTab(): TabInfo | undefined
 }
 
 /** A tab no plugin has laid out shows only cards. */
@@ -22,6 +24,13 @@ export class Layouts {
   private sends = new Map<string, number>()
   /** Cards that failed to draw in a tab. They stay out of it, so the user hears of each once. */
   private brokenCards = new Map<string, Set<string>>()
+  /** The layout last sent for each tab, which says what the tab draws. */
+  private shown = new Map<string, TabLayout>()
+  /**
+   * Whether Desk's window has focus, as the app last said. It starts true, since Desk opens in front.
+   * After the core restarts behind an unfocused window, it stays true until the window's focus next changes.
+   */
+  private focused = true
 
   constructor(
     private readonly plugins: Plugins,
@@ -82,7 +91,29 @@ export class Layouts {
         hiddenCards: saved.hiddenCards,
       })
     }
+    this.shown.set(tabId, layout)
     this.broadcast({ type: "layout", tabId, layout })
+    this.sendVisible()
+  }
+
+  /** The window gained or lost focus. */
+  windowFocus(focused: boolean) {
+    this.focused = focused
+    this.sendVisible()
+  }
+
+  /**
+   * Tells plugins which of their views are on screen. Those are the active tab's sidebar and cards, and
+   * its panel in front when the view pane is open. Nothing is on screen while the window lacks focus.
+   * The core calls it when the tabs, a layout or the window's focus change.
+   */
+  sendVisible() {
+    const tab = this.focused ? this.store.activeTab() : undefined
+    const layout = tab && this.shown.get(tab.id)
+    if (!tab || !layout) return this.plugins.visible(undefined, [])
+    const panel = tab.panelOpen === true ? layout.panels.find((found) => found.id === tab.panelActive) : undefined
+    const views = [layout.sidebar, panel, ...layout.cards].filter((view) => view !== undefined)
+    this.plugins.visible(tab.id, views.map((view) => view.id))
   }
 
   /** Opens a panel instance in a tab, or brings the open one to the front. */
@@ -123,6 +154,7 @@ export class Layouts {
   dropTab(tabId: string) {
     this.sends.delete(tabId)
     this.brokenCards.delete(tabId)
+    this.shown.delete(tabId)
   }
 
   private saved(tabId: string): PluginLayout {

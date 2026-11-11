@@ -789,6 +789,8 @@ export type ClientMessage =
   | { readonly type: "tab.reopen" }
   /** The window's tabs, in order, sent whenever they change. */
   | { readonly type: "tabs.save"; readonly tabs: readonly TabInfo[]; readonly active?: string }
+  /** Desk's window gained or lost focus. Plugins hear which of their views are on screen. */
+  | { readonly type: "window.focus"; readonly focused: boolean }
   /** Opens a file from the thread in the editor. A relative path is in the project. The core refuses anything that is not a file. */
   | { readonly type: "file.open"; readonly project: string; readonly path: string; readonly line?: number }
   /** Reads a file to show in the panel. `path` is relative to the project, absolute, or from ~/. The core answers with `file`. */

@@ -217,3 +217,35 @@ export default definePlugin((desk) => { desk.setup("focus", { title: "Focus" }) 
   ])
   plugins.stop()
 }, 20_000)
+
+/** A plugin that toasts each turn end it hears of, and one whose handler throws. */
+const LISTENER = `
+import { definePlugin } from "@desk/plugin"
+
+export default definePlugin((desk) => {
+  desk.onTurnEnd((turn) => desk.toast(turn.tabId + " " + turn.key + " " + turn.outcome))
+  desk.onTurnEnd(() => { throw new Error("handler failed") })
+  desk.command("late", { title: "Late", run: () => desk.onTurnEnd(() => {}) })
+})
+`
+
+test("tells a plugin when a turn ends in a thread it opened, under its own key, and no other plugin", async () => {
+  installPlugin("listener", LISTENER)
+  installPlugin("counter", COUNTER)
+  turnOn({ everywhere: ["listener", "counter"] })
+  const { plugins, project, sent, errors } = harness()
+  await plugins.offers(project)
+  const notices = () => sent.flatMap((message) => (message.type === "notice" ? [message.message] : []))
+
+  plugins.turnEnded("tab-1", "listener.cw-conv-7", "interrupted")
+  plugins.turnEnded("tab-1", "counter.k1", "done")
+  plugins.turnEnded("tab-1", "missing.k1", "done")
+  await until(() => notices().length > 0 && errors().length > 0)
+  expect(notices()).toEqual(["tab-1 cw-conv-7 interrupted"])
+  expect(errors()).toEqual(["listener: handler failed"])
+
+  await plugins.command("tab-1", project, "listener.late")
+  await until(() => errors().length > 1)
+  expect(errors().at(-1)).toContain("registers onTurnEnd while setup runs")
+  plugins.stop()
+}, 20_000)

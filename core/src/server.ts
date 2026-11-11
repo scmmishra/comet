@@ -69,6 +69,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       plugins.dropTab(tabId)
       layouts.dropTab(tabId)
     },
+    turnEnded: (tabId, threadKey, outcome) => plugins.turnEnded(tabId, threadKey, outcome),
   })
   const layouts = new Layouts(plugins, window, broadcast)
   // Each project's commands, made the first time the project is named. They run as long as the core.
@@ -137,7 +138,10 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       case "usage.get":
         return usage.refresh()
       case "tabs.save":
-        return window.save(message.tabs, message.active)
+        window.save(message.tabs, message.active)
+        return layouts.sendVisible()
+      case "window.focus":
+        return layouts.windowFocus(message.focused)
       case "tab.reopen":
         return window.reopenTab(reply)
       case "session.send":

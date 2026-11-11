@@ -1,4 +1,4 @@
-import { applyOps, type CoreMessage, type PluginLayout, type TabLayout, type UiNode } from "@desk/protocol"
+import { applyOps, type CoreMessage, type PluginLayout, type TabInfo, type TabLayout, type UiNode } from "@desk/protocol"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tempFolder } from "../test-support"
@@ -24,6 +24,8 @@ export function harness() {
   const sent: CoreMessage[] = []
   const threads: { tabId: string; key: string; title?: string; prompt?: string }[] = []
   const nodes: Record<string, Record<number, UiNode>> = {}
+  /** The tab the window shows. A test sets it, then calls `layouts.sendVisible()` as the core does on a save. */
+  const screen: { active?: TabInfo } = {}
   const broadcast = (message: CoreMessage) => {
     sent.push(message)
     if (message.type !== "plugin.ops") return
@@ -38,7 +40,7 @@ export function harness() {
     closePanel: (tabId, id) => void layouts.closePanel(tabId, id),
     stopped: () => void layouts.resendAll(),
   })
-  layouts = new Layouts(plugins, { projectOf: () => project, layout: (tabId) => saved[tabId], setLayout: (tabId, layout) => (saved[tabId] = layout) }, broadcast)
+  layouts = new Layouts(plugins, { projectOf: () => project, layout: (tabId) => saved[tabId], setLayout: (tabId, layout) => (saved[tabId] = layout), activeTab: () => screen.active }, broadcast)
 
   /** The last layout sent for a tab. */
   const layout = (tabId: string) => sent.findLast((message): message is Extract<CoreMessage, { type: "layout" }> => message.type === "layout" && message.tabId === tabId)?.layout
@@ -55,5 +57,5 @@ export function harness() {
   const errors = () => sent.flatMap((message) => (message.type === "error" ? [message.message] : []))
   const ids = (found: TabLayout | undefined) => ({ sidebar: found?.sidebar?.id, panels: found?.panels.map((panel) => panel.id), cards: found?.cards.map((card) => card.id) })
 
-  return { project, plugins, layouts, saved, sent, threads, nodes, layout, textOf, handler, errors, ids }
+  return { project, plugins, layouts, saved, sent, threads, nodes, screen, layout, textOf, handler, errors, ids }
 }

@@ -1,7 +1,7 @@
 import { panelInstanceId, type PanelParams, type PluginLayout, type UiOp, type UiValue } from "@desk/protocol"
 import { basename } from "node:path"
 import { createRoot as solidRoot, createSignal, type Accessor, type JSX, type Setter } from "solid-js"
-import type { Desk, PanelContext, PanelOptions, PluginDefinition, SetupOptions, TabContext } from "./index"
+import type { Desk, PanelContext, PanelOptions, PluginDefinition, SetupOptions, TabContext, TurnEnd, TurnOutcome, ViewContext } from "./index"
 import { callHandler, createRoot, createComponent, dispose, onOps, render, snapshot, type PluginNode } from "./renderer"
 
 export type ViewKind = "sidebar" | "panel" | "card"
@@ -44,6 +44,10 @@ export type ToPlugin =
   | { readonly type: "drop"; readonly tabId: string }
   | { readonly type: "event"; readonly handler: number; readonly args: readonly UiValue[] }
   | { readonly type: "snapshot" }
+  /** The views of this plugin on screen, all in the one tab named. No tab means none is on screen. */
+  | { readonly type: "visible"; readonly tabId?: string; readonly keys: readonly string[] }
+  /** A turn ended in a thread the plugin opened. `key` is the plugin's own, without its prefix. */
+  | { readonly type: "turnEnd"; readonly tabId: string; readonly key: string; readonly outcome: TurnOutcome }
 
 /** Messages from a plugin's worker to the core. */
 export type FromPlugin =
@@ -63,7 +67,7 @@ export type FromPlugin =
 
 declare const self: Worker
 
-type View = (ctx: TabContext) => JSX.Element
+type View = (ctx: ViewContext) => JSX.Element
 
 /** One tab as the plugin sees it: the panel instances open there, and the views drawn for it. */
 interface Tab {
@@ -86,6 +90,7 @@ export function startHost(plugin: PluginDefinition) {
   const cards = new Map<string, { title: string; view: View }>()
   const setups = new Map<string, SetupOptions>()
   const commands = new Map<string, { title: string; input?: string; run: (ctx: TabContext, input?: string) => void }>()
+  const turnEnds: ((turn: TurnEnd) => void | Promise<void>)[] = []
   let registering = true
   // Names are unique across kinds, because a sidebar, a card and a panel without parameters are drawn under their name.
   const names = new Set<string>()
@@ -104,6 +109,10 @@ export function startHost(plugin: PluginDefinition) {
     card: register("card", cards),
     setup: register("setup", setups),
     command: register("command", commands),
+    onTurnEnd: (handler) => {
+      if (!registering) throw new Error("A plugin registers onTurnEnd while setup runs, not later.")
+      turnEnds.push(handler)
+    },
     toast: (message) => post({ type: "toast", message }),
   }
   try {
@@ -115,6 +124,8 @@ export function startHost(plugin: PluginDefinition) {
   registering = false
 
   const tabs = new Map<string, Tab>()
+  // One signal for the whole plugin, since only one tab is on screen at a time.
+  const [onScreen, setOnScreen] = solidRoot(() => createSignal<{ readonly tabId?: string; readonly keys: ReadonlySet<string> }>({ keys: new Set() }))
   const tabOf = (tabId: string): Tab => {
     let found = tabs.get(tabId)
     if (!found) {
@@ -145,7 +156,13 @@ export function startHost(plugin: PluginDefinition) {
     const tab = tabOf(tabId)
     const found = tab.drawn.get(request.key)
     if (found) return { key: request.key, root: found.root.id, title: found.title }
-    const ctx = contextFor(tabId, project)
+    const ctx: ViewContext = {
+      ...contextFor(tabId, project),
+      visible: () => {
+        const shown = onScreen()
+        return shown.tabId === tabId && shown.keys.has(request.key)
+      },
+    }
     let view: () => JSX.Element
     let title: string
     if (request.kind === "panel") {
@@ -215,6 +232,13 @@ export function startHost(plugin: PluginDefinition) {
         for (const key of [...tab.drawn.keys()]) undraw(tab, key)
       } else if (message.type === "event") await callHandler(message.handler, message.args)
       else if (message.type === "snapshot") post({ type: "snapshot", ops: snapshot() })
+      else if (message.type === "visible") setOnScreen({ ...(message.tabId ? { tabId: message.tabId } : {}), keys: new Set(message.keys) })
+      else if (message.type === "turnEnd") {
+        const turn: TurnEnd = { key: message.key, tabId: message.tabId, outcome: message.outcome }
+        // One failing handler does not keep the others from running.
+        const results = await Promise.allSettled(turnEnds.map(async (handler) => handler(turn)))
+        for (const result of results) if (result.status === "rejected") post({ type: "error", message: messageOf(result.reason) })
+      }
     } catch (error) {
       post({ type: "error", message: messageOf(error) })
     }

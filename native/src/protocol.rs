@@ -876,6 +876,9 @@ pub enum ClientMessage {
     /// Stops commands Claude left running in the background in a tab.
     #[serde(rename = "tasks.stop", rename_all = "camelCase")]
     TasksStop { tab_id: String, ids: Vec<String> },
+    /// Desk's window gained or lost focus. Plugins hear which of their views are on screen.
+    #[serde(rename = "window.focus")]
+    WindowFocus { focused: bool },
     /// The window's tabs, in order, sent whenever they change.
     #[serde(rename = "tabs.save")]
     TabsSave {
@@ -985,6 +988,7 @@ mod tests {
             ClientMessage::ReviewGet { tab_id: "tab-1".into(), scope: "git".into() },
             ClientMessage::FileRead { project: "/Users/me/code/web".into(), path: "src/login.ts".into() },
             ClientMessage::FileOpen { project: "/Users/me/code/web".into(), path: "src/login.ts".into(), line: Some(12) },
+            ClientMessage::WindowFocus { focused: false },
         ];
         let encoded: Vec<Value> = ours.iter().map(|m| serde_json::to_value(m).unwrap()).collect();
         assert_eq!(encoded, fixtures("CLIENT_MESSAGES"));

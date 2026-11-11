@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { panelInstanceId } from "@desk/protocol"
+import { panelInstanceId, type TabInfo } from "@desk/protocol"
 import { until, useTempHome } from "../test-support"
 import { harness, installPlugin, turnOn } from "./test-plugins"
 
@@ -100,5 +100,53 @@ test("a panel that cannot be drawn is closed, and a card that cannot is left out
   await layouts.send("tab-1")
   expect(errors().filter((error) => error.includes("support.broken"))).toHaveLength(1)
   expect(errors().filter((error) => error.includes("support.faulty"))).toHaveLength(1)
+  plugins.stop()
+}, 20_000)
+
+/** A sidebar, two panels and a card that each draw whether they are on screen. */
+const WATCHER = `
+import { definePlugin, Text } from "@desk/plugin"
+
+export default definePlugin((desk) => {
+  const seen = (name, ctx) => <Text>{name} {ctx.visible() ? "on" : "off"}</Text>
+  desk.sidebar("side", { title: "Side", view: (ctx) => seen("side", ctx) })
+  desk.panel("one", { title: "One", view: (ctx) => seen("one", ctx) })
+  desk.panel("two", { title: "Two", view: (ctx) => seen("two", ctx) })
+  desk.card("card", { title: "Card", view: (ctx) => seen("card", ctx) })
+  desk.setup("watch", { title: "Watch", sidebar: "watcher.side", panels: ["watcher.one", "watcher.two"] })
+})
+`
+
+test("tells views whether they are on screen, as the active tab, its view pane and the window's focus change", async () => {
+  installPlugin("watcher", WATCHER)
+  turnOn({ everywhere: ["watcher"] })
+  const { plugins, layouts, layout, textOf, screen } = harness()
+  const tab = (id: string, panelActive?: string, panelOpen?: boolean): TabInfo => ({ id, title: id, project: "/p", terminals: [], model: "default", permissionMode: "default", ...(panelActive ? { panelActive } : {}), ...(panelOpen !== undefined ? { panelOpen } : {}) })
+  await layouts.openSetup("tab-1", "watcher.watch")
+  const shown = () => {
+    const found = layout("tab-1")!
+    return [found.sidebar!, ...found.panels, ...found.cards].map((view) => textOf("watcher", view.root)).join(", ")
+  }
+  const settle = (expected: string) => until(() => shown() === expected).then(() => expect(shown()).toBe(expected))
+
+  await settle("side off, one off, two off, card off")
+  screen.active = tab("tab-1", "watcher.two", true)
+  layouts.sendVisible()
+  await settle("side on, one off, two on, card on")
+
+  screen.active = tab("tab-1", "watcher.two", false)
+  layouts.sendVisible()
+  await settle("side on, one off, two off, card on")
+
+  screen.active = tab("tab-1", "watcher.one", true)
+  layouts.sendVisible()
+  layouts.windowFocus(false)
+  await settle("side off, one off, two off, card off")
+  layouts.windowFocus(true)
+  await settle("side on, one on, two off, card on")
+
+  screen.active = tab("tab-2")
+  layouts.sendVisible()
+  await settle("side off, one off, two off, card off")
   plugins.stop()
 }, 20_000)

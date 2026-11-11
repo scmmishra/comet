@@ -60,6 +60,7 @@ export default definePlugin((desk) => {
   desk.card(name, { title, view })
   desk.setup(name, { title, sidebar?, panels?, hideCards? })
   desk.command(name, { title, input?, run })
+  desk.onTurnEnd(({ key, tabId, outcome }) => { … })
 })
 ```
 
@@ -69,6 +70,8 @@ export default definePlugin((desk) => {
 - A panel with `single: true` has one instance per tab. Opening another replaces it in place, as the support inbox does with conversations.
 - A panel's `title` is a string, or a function of its parameters.
 - A command with `input` asks for text in the palette, and `run` gets it.
+- `desk.onTurnEnd` runs a handler each time a turn ends in a thread the plugin opened with `ctx.openThread`. `key` is the key the plugin passed. `outcome` is `done`, `error` or `interrupted`. A plugin can register more than one handler, during setup only. Turns in other threads, such as a tab's own thread, never reach the plugin.
+- A turn can end while a background task it started still runs. The handler runs when the turn ends, not when the task ends.
 - `desk.env` holds the core's environment, such as an API key. `desk.toast` shows a short message.
 
 ### View context
@@ -84,7 +87,17 @@ Each view and command gets a `ctx` for its tab:
 | `ctx.openThread({ key, title?, prompt? })` | Opens or resumes the tab's Claude thread for `key`. Keys belong to the plugin, so two plugins never share a thread. |
 | `ctx.toast(message)` | Shows a short message. |
 
-A panel's context also has `ctx.params` and `ctx.close()`.
+A view's context also has `ctx.visible()`. It is true while the view is on screen: its tab is the active tab and Desk's window has focus. A panel must also be the panel in front, with the view pane open. It updates as that changes, so an effect can start work when the view shows and stop it when the view hides:
+
+```tsx
+createEffect(() => {
+  if (!ctx.visible()) return
+  const timer = setInterval(refresh, 60_000)
+  onCleanup(() => clearInterval(timer))
+})
+```
+
+A panel's context also has `ctx.params` and `ctx.close()`. A command's context has no `visible()`, since a command draws nothing.
 
 ## Who owns what
 
@@ -104,6 +117,7 @@ A panel's context also has `ctx.params` and `ctx.close()`.
 | `setup.open` | Lays out a saved tab as a setup says. |
 | `plugin.command` | Runs a command for a tab. |
 | `plugin.event` | Runs a handler a plugin's node holds. |
+| `window.focus` | Says Desk's window gained or lost focus. With `tabs.save`, it decides which views are on screen. |
 
 | From the core | Carries |
 |---|---|
@@ -120,6 +134,8 @@ A panel's context also has `ctx.params` and `ctx.close()`.
 - Each view is drawn once per tab and kept while the tab shows it. On every layout change the core tells each plugin the full set of its views a tab shows, and the plugin draws what it lacks and disposes the rest.
 - A sidebar or panel that cannot be drawn is closed. A card that cannot be drawn is left out of the tab. The user is told once.
 - A plugin that fails to start, or stops, is reported once and stays off until Desk restarts. Its views leave every tab.
+- The core works out which views are on screen when the tabs, a layout or the window's focus change. It tells each plugin only of its own views, and only when they change.
+- The core tells a plugin when a turn ends in one of its threads, even when the plugin moved the tab to another thread while the turn ran.
 - UI crosses to the app as operations: `create`, `text`, `set`, `insert`, `remove`.
 - `protocol` lists the UI primitives and their props once. The plugin package builds its components from that list, and the app draws each one.
 

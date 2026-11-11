@@ -228,4 +228,5 @@ export const CLIENT_MESSAGES = [
   { type: "review.get", tabId: "tab-1", scope: "git" },
   { type: "file.read", project: "/Users/me/code/web", path: "src/login.ts" },
   { type: "file.open", project: "/Users/me/code/web", path: "src/login.ts", line: 12 },
+  { type: "window.focus", focused: false },
 ] satisfies ClientMessage[]

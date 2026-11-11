@@ -1,3 +1,4 @@
+import type { TurnOutcome } from "@desk/plugin"
 import type { FromPlugin, Offers, ToPlugin, ViewRequest, ViewResult } from "@desk/plugin/host"
 import { contributionId, splitContributionId, type CoreMessage, type PanelParams, type PluginContributions, type ProjectSetup, type UiValue } from "@desk/protocol"
 import { isProjectFolder } from "../project-path"
@@ -46,6 +47,8 @@ const pluginsFolder = () => join(deskHome(), "plugins")
 export class Plugins {
   private running = new Map<string, Promise<Running>>()
   private failed = new Map<string, Error>()
+  /** The last `visible` message each plugin was sent, as JSON, so an unchanged screen sends nothing. */
+  private visibleSent = new Map<string, string>()
   private seq = 0
 
   constructor(private readonly hooks: PluginHooks) {}
@@ -142,6 +145,27 @@ export class Plugins {
     this.post(running, { type: "event", handler, args })
   }
 
+  /**
+   * Tells every running plugin which of its views are on screen: `keys` in tab `tabId`, or none without
+   * a tab. A plugin hears only of its own views, and only when they change.
+   */
+  visible(tabId: string | undefined, keys: readonly string[]) {
+    for (const [plugin, running] of this.running) {
+      const mine = keys.filter((key) => splitContributionId(key).plugin === plugin)
+      const message: ToPlugin = { type: "visible", ...(tabId && mine.length ? { tabId } : {}), keys: mine }
+      const json = JSON.stringify(message)
+      if (this.visibleSent.get(plugin) === json) continue
+      this.visibleSent.set(plugin, json)
+      void running.then((found) => this.post(found, message)).catch(() => undefined)
+    }
+  }
+
+  /** Tells the plugin that owns a thread's key that a turn ended in it. A key no running plugin owns is ignored. */
+  turnEnded(tabId: string, threadKey: string, outcome: TurnOutcome) {
+    const { plugin, name } = splitContributionId(threadKey)
+    void this.running.get(plugin)?.then((found) => this.post(found, { type: "turnEnd", tabId, key: name, outcome })).catch(() => undefined)
+  }
+
   /** A closed tab's views and plugin state go. */
   dropTab(tabId: string) {
     for (const running of this.running.values()) void running.then((found) => this.post(found, { type: "drop", tabId }))
@@ -171,6 +195,7 @@ export class Plugins {
   /** Turns a plugin off until Desk restarts, and tells the user once. */
   private fail(plugin: string, error: Error, what: string) {
     this.running.delete(plugin)
+    this.visibleSent.delete(plugin)
     this.failed.set(plugin, error)
     this.hooks.broadcast({ type: "error", message: `The ${plugin} plugin ${what}: ${error.message}` })
   }

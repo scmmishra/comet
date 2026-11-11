@@ -1,4 +1,5 @@
 import type { SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
+import type { TurnOutcome } from "@desk/plugin"
 import { followUpFor, type ChangedFile, type CoreMessage, type FileChange, type FollowUp, type ImageAttachment, type PermissionAnswer, type PluginLayout, type QueuedMessage, type ReviewScope, type TabInfo, type ThreadEvent, type ThreadItem } from "@desk/protocol"
 import { branchBase, capture, changesSince, checkpointChanges, headTree, keepCheckpoints } from "./checkpoints"
 import { git } from "./git"
@@ -13,6 +14,16 @@ type Send = (message: CoreMessage) => void
 
 /** Enough recent folders to pick from. */
 const MAX_RECENT = 20
+/** How a turn that ends with no result ended, such as one whose session failed to start. */
+const NO_RESULT: TurnOutcome = "error"
+
+/** How a running turn ends so far, after one of its events. A result says how it ended, and a later error overrides it. */
+export function outcomeAfter(outcome: TurnOutcome, event: ThreadEvent): TurnOutcome {
+  if (event.kind !== "item") return outcome
+  if (event.item.type === "result") return event.item.stopped ? "interrupted" : event.item.isError ? "error" : "done"
+  if (event.item.type === "error") return "error"
+  return outcome
+}
 
 interface WindowHooks {
   /** Sends to every client. */
@@ -22,6 +33,8 @@ interface WindowHooks {
   readonly rateLimit: (info: SDKRateLimitInfo) => void
   /** A tab closed, so what runs for it can stop. */
   readonly tabClosed: (tabId: string) => void
+  /** A turn ended in a plugin's thread, named by its full key, even while the thread was away from its tab. */
+  readonly turnEnded: (tabId: string, threadKey: string, outcome: TurnOutcome) => void
 }
 
 /**
@@ -356,6 +369,10 @@ export class Window {
     this.terminals.resize(id, cols, rows)
   }
 
+  activeTab(): TabInfo | undefined {
+    return this.state.tabs.find((tab) => tab.id === this.state.active)
+  }
+
   /** The folder a saved tab works in. */
   projectOf(tabId: string): string {
     return this.tab(tabId).project
@@ -401,7 +418,14 @@ export class Window {
       // The message the running turn answers, which names the turn's summary, and the summary being made.
       let lastMessage: string | undefined
       let summary: Promise<void> = Promise.resolve()
+      // How the running turn ends, for the plugin that owns the thread.
+      let outcome: TurnOutcome = NO_RESULT
       const emit = (event: ThreadEvent) => {
+        outcome = outcomeAfter(outcome, event)
+        if (event.kind === "status" && !event.busy) {
+          if (key) this.hooks.turnEnded(tab.id, key, outcome)
+          outcome = NO_RESULT
+        }
         if (!current()) {
           // A parked session's turn ended while its thread was away. Nothing shows it, so it closes. Its transcript keeps the turn.
           if (event.kind === "status" && !event.busy) this.closeParked(created)

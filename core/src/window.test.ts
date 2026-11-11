@@ -3,7 +3,7 @@ import type { CoreMessage, TabInfo } from "@desk/protocol"
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { gitRepo, tempFolder, useTempHome } from "./test-support"
-import { Window } from "./window"
+import { outcomeAfter, Window } from "./window"
 
 useTempHome()
 
@@ -14,7 +14,7 @@ const saved = () => JSON.parse(readFileSync(join(process.env.DESK_HOME!, "window
 function open(state: object) {
   writeFileSync(join(process.env.DESK_HOME!, "window.json"), JSON.stringify(state))
   const sent: CoreMessage[] = []
-  const window = new Window({ broadcast: (message) => sent.push(message), compactIdle: () => false, rateLimit: () => {}, tabClosed: () => {} })
+  const window = new Window({ broadcast: (message) => sent.push(message), compactIdle: () => false, rateLimit: () => {}, tabClosed: () => {}, turnEnded: () => {} })
   return { window, sent }
 }
 
@@ -128,4 +128,15 @@ test("keeps a closed tab's plugin thread under its key, and gives it back when t
   await window.reopenTab(() => {})
   expect(saved().keyed).toEqual({})
   expect(saved().threads.a).toEqual({ key: "conv-1", sessionId: "s1" })
+})
+
+test("tells how a turn ended from its result, and counts a turn with an error or no result as failed", () => {
+  const result = (fields: { isError?: boolean; stopped?: boolean }) => ({ kind: "item" as const, item: { type: "result" as const, id: "r", durationMs: 1, isError: false, ...fields } })
+  const busy = { kind: "status" as const, busy: true }
+  expect(outcomeAfter("error", busy)).toBe("error")
+  expect(outcomeAfter("error", result({}))).toBe("done")
+  expect(outcomeAfter("error", result({ stopped: true }))).toBe("interrupted")
+  expect(outcomeAfter("error", result({ isError: true }))).toBe("error")
+  expect(outcomeAfter("done", { kind: "item", item: { type: "error", id: "e", message: "lost" } })).toBe("error")
+  expect(outcomeAfter("done", busy)).toBe("done")
 })

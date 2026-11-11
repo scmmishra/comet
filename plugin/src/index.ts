@@ -29,8 +29,17 @@ export interface TabContext {
   toast(message: string): void
 }
 
-/** What a panel's view gets: its tab's context, its parameters, and a way to close itself. */
-export interface PanelContext<P extends PanelParams = PanelParams> extends TabContext {
+/** What a view gets: its tab's context, and whether the view is on screen. */
+export interface ViewContext extends TabContext {
+  /**
+   * Whether the view is on screen: its tab is the active tab and Desk has focus. A panel must also be the
+   * panel in front, with the view pane open. It updates as that changes, so an effect can start and stop work.
+   */
+  visible(): boolean
+}
+
+/** What a panel's view gets: its view context, its parameters, and a way to close itself. */
+export interface PanelContext<P extends PanelParams = PanelParams> extends ViewContext {
   readonly params: P
   close(): void
 }
@@ -42,6 +51,16 @@ export interface PanelOptions<P extends PanelParams> {
   /** A tab shows one instance of this panel. Opening another replaces it in place, such as the next conversation. */
   readonly single?: boolean
   readonly view: (ctx: PanelContext<P>) => JSX.Element
+}
+
+/** How a turn ended: it finished, it failed, or the user stopped it. */
+export type TurnOutcome = "done" | "error" | "interrupted"
+
+/** A turn that ended in a thread the plugin opened. `key` is the key the plugin passed to `openThread`. */
+export interface TurnEnd {
+  readonly key: string
+  readonly tabId: string
+  readonly outcome: TurnOutcome
 }
 
 /** A layout for a new tab: a sidebar and panels, each named `<plugin>.<name>`. A name that is not on is skipped. */
@@ -58,13 +77,18 @@ export interface Desk {
   /** The core's environment, such as an API key. */
   readonly env: Readonly<Record<string, string | undefined>>
   /** A view for the column beside the thread, such as an inbox. */
-  sidebar(name: string, options: { readonly title: string; readonly view: (ctx: TabContext) => JSX.Element }): void
+  sidebar(name: string, options: { readonly title: string; readonly view: (ctx: ViewContext) => JSX.Element }): void
   panel<P extends PanelParams = PanelParams>(name: string, options: PanelOptions<P>): void
   /** A view for the card stack. A card that draws nothing is left out. */
-  card(name: string, options: { readonly title: string; readonly view: (ctx: TabContext) => JSX.Element }): void
+  card(name: string, options: { readonly title: string; readonly view: (ctx: ViewContext) => JSX.Element }): void
   setup(name: string, options: SetupOptions): void
   /** A palette command. With `input`, the palette asks for text, using it as the placeholder. */
   command(name: string, options: { readonly title: string; readonly input?: string; readonly run: (ctx: TabContext, input?: string) => void }): void
+  /**
+   * Runs `handler` each time a turn ends in a thread the plugin opened, in any tab. A turn the user
+   * stopped and a turn that failed count too. Turns in other threads never reach the plugin.
+   */
+  onTurnEnd(handler: (turn: TurnEnd) => void | Promise<void>): void
   /** Shows a short message. */
   toast(message: string): void
 }
