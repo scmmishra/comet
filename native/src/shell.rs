@@ -20,6 +20,9 @@ const PANEL_INSET: f32 = 8.0;
 /// The panel toggle's place in the session's corner: the Electron app's `right-2.5 top-[9px]` from the
 /// outside of the card, less the card's border.
 const TOGGLE_INSET: (f32, f32) = (8.0, 9.0);
+/// How fast Rune's animations run: 1.5 plays every entry, exit and fade in two thirds of its time.
+/// Scrolling and growing lists keep their own pace.
+const ANIMATION_SPEED: f32 = 1.5;
 /// The main panel's corners, Desk's `rounded-3xl`.
 const PANEL_RADIUS: f32 = 12.0;
 /// A plugin's sidebar, `w-[320px]`.
@@ -346,6 +349,7 @@ pub fn modifiers(s: &mut Desk, mods: rune::Mods, _: &mut Tx) {
 }
 
 pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
+    cx.time_scale(ANIMATION_SPEED);
     let k = theme::kit(s.dark(cx));
     let mut layer = Vec::new();
     let w = &s.workspace;
