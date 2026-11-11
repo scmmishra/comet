@@ -807,12 +807,19 @@ fn queued(s: &Desk, tab: &str, message: &QueuedMessage, k: &Kit) -> El {
         // 12 by 8 inside the border, which takes room in CSS and none in Rune.
         .px(13.0)
         .py(9.0)
-        // The text shrinks and wraps inside the bubble's cap, as `max-w-[80%]` lays it out.
-        .child(text(message.text.clone()).wrap_anywhere().shrink().min_w(0.0).font(theme::composer_text(k, s.account.text_size())).color(k.c.text_muted));
+        .child(
+            col()
+                .min_w(0.0)
+                .gap(6.5)
+                // `size-8 rounded-md`: the message's images as small tiles above its text.
+                .children((!message.images.is_empty()).then(|| row().gap(3.25).wrap().children(message.images.iter().map(|image| queued_image(s, image, k)))))
+                // The text shrinks and wraps inside the bubble's cap, as `max-w-[80%]` lays it out.
+                .children((!message.text.is_empty()).then(|| text(message.text.clone()).wrap_anywhere().shrink().min_w(0.0).font(theme::composer_text(k, s.account.text_size())).color(k.c.text_muted))),
+        );
     let (send_tab, send_id) = ids();
     let (edit_tab, edit_id) = ids();
     let (remove_tab, remove_id) = ids();
-    let text_for_edit = message.text.clone();
+    let message_for_edit = message.clone();
     let actions = row()
         .gap(2.0)
         .items_center()
@@ -830,7 +837,7 @@ fn queued(s: &Desk, tab: &str, message: &QueuedMessage, k: &Kit) -> El {
                 .control_size(ControlSize::Small)
                 .label("Edit queued message")
                 .help("Edit in the composer")
-                .on_press(move |s: &mut Desk| s.edit_queued(&edit_tab, &edit_id, &text_for_edit))
+                .on_press(move |s: &mut Desk| s.edit_queued(&edit_tab, &edit_id, &message_for_edit))
                 .build(k),
         )
         .child(
@@ -845,13 +852,26 @@ fn queued(s: &Desk, tab: &str, message: &QueuedMessage, k: &Kit) -> El {
     col().key(message.id.clone()).w_full().items_end().gap(4.0).child(bubble).child(actions)
 }
 
+/// A queued message's image, a 26 point tile. It shows grey until it is decoded.
+fn queued_image(s: &Desk, image: &crate::protocol::ImageAttachment, k: &Kit) -> El {
+    const SIZE: f32 = 26.0;
+    const RADIUS: f32 = 4.875;
+    let tile = el().size(SIZE, SIZE).radius(RADIUS).clip_rounded(RADIUS).border(1.0, k.c.border_base);
+    match s.images.get(image) {
+        Some(decoded) => tile.pixels_fit(decoded.pixels(), rune::SurfaceFit::Fill),
+        None => tile.fill(k.c.layer_02),
+    }
+}
+
 impl Desk {
-    /// Takes a queued message back into the composer to edit, after anything already typed.
-    fn edit_queued(&mut self, tab: &str, id: &str, words: &str) {
+    /// Takes a queued message back into the composer to edit, after anything already typed, with its images.
+    fn edit_queued(&mut self, tab: &str, id: &str, message: &QueuedMessage) {
         self.core.send(&ClientMessage::QueueRemove { tab_id: tab.to_owned(), id: id.to_owned() });
         let edit = self.drafts.edit(tab);
+        let words = &message.text;
         let joined = if edit.text.trim().is_empty() { words.to_owned() } else { format!("{}\n\n{words}", edit.text) };
         edit.replace_text(joined);
+        self.drafts.images.entry(tab.to_owned()).or_default().extend(message.images.iter().cloned());
     }
 }
 
@@ -931,6 +951,18 @@ mod tests {
         assert!(!s.composer_appeared(), "the palette keeps the keyboard");
         s.palette = crate::palette::Palette::default();
         assert!(s.composer_appeared(), "once it closes, the tab it showed takes focus");
+    }
+
+    #[test]
+    fn editing_a_queued_message_takes_back_its_text_and_images() {
+        let mut s = desk();
+        let image = crate::protocol::ImageAttachment { media_type: "image/png".into(), data: "iVBORw==".into() };
+        let message = QueuedMessage { id: "m1".into(), text: "Then this".into(), images: vec![image.clone()] };
+        type_text(&mut s, "First");
+        s.edit_queued("t", "m1", &message);
+        assert_eq!(s.drafts.text("t"), "First\n\nThen this");
+        assert_eq!(s.drafts.images["t"], [image]);
+        assert!(s.core.sent().iter().any(|m| m["type"] == "queue.remove"));
     }
 
     #[test]
