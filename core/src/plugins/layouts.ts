@@ -8,6 +8,8 @@ export interface LayoutStore {
   /** Undefined for a tab no plugin has laid out. */
   layout(tabId: string): PluginLayout | undefined
   setLayout(tabId: string, layout: PluginLayout): void
+  /** The full key of the plugin thread the tab shows, if any. */
+  threadKeyOf(tabId: string): string | undefined
   /** The tab the window shows, if any. */
   activeTab(): TabInfo | undefined
 }
@@ -60,7 +62,7 @@ export class Layouts {
     const panels = saved.panels.filter((open) => on(offered.panels, open.panel)).map((open) => view("panel", open.panel, open.params))
     const cards = offered.cards.filter((card) => !saved.hiddenCards.includes(card.id) && !broken.has(card.id)).map((card) => view("card", card.id))
     const views = [...(sidebar ? [sidebar] : []), ...panels, ...cards]
-    const results = await this.plugins.show(tabId, project, views, panels.map((panel) => panel.key))
+    const results = await this.plugins.show(tabId, project, views, panels.map((panel) => panel.key), this.store.threadKeyOf(tabId))
     if (this.sends.get(tabId) !== send) return
 
     const drawn = (request: ViewRequest): DrawnView | undefined => {

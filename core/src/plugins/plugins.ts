@@ -37,6 +37,13 @@ type ProjectOffers = { readonly [K in keyof Offers]: readonly (Omit<Offers[K][nu
 
 const pluginsFolder = () => join(deskHome(), "plugins")
 
+/** A full thread key as `plugin` named it, without its prefix, or undefined for no key or another plugin's. */
+const ownKey = (plugin: string, threadKey: string | undefined) => {
+  if (!threadKey) return undefined
+  const { plugin: owner, name } = splitContributionId(threadKey)
+  return owner === plugin ? name : undefined
+}
+
 
 /**
  * The plugins in `~/.desk/plugins`, each in a worker of its own, so a slow plugin never stalls a session
@@ -79,10 +86,11 @@ export class Plugins {
   }
 
   /**
-   * Tells every running plugin which of its views a tab shows, and which panel instances are open
-   * there. Each draws what it lacks and disposes the rest. Answers the views drawn, by key.
+   * Tells every running plugin which of its views a tab shows, which panel instances are open there,
+   * and which of its threads the tab shows. Each draws what it lacks and disposes the rest. Answers the
+   * views drawn, by key.
    */
-  async show(tabId: string, project: string, views: readonly ViewRequest[], open: readonly string[]): Promise<Map<string, ViewResult>> {
+  async show(tabId: string, project: string, views: readonly ViewRequest[], open: readonly string[], threadKey?: string): Promise<Map<string, ViewResult>> {
     const byPlugin = new Map<string, ViewRequest[]>()
     for (const view of views) {
       const { plugin } = splitContributionId(view.key)
@@ -95,7 +103,8 @@ export class Plugins {
         const seq = ++this.seq
         const { promise, resolve, reject } = Promise.withResolvers<readonly ViewResult[]>()
         running.showing.set(seq, { resolve, reject })
-        this.post(running, { type: "show", seq, tabId, project, views: byPlugin.get(plugin) ?? [], open })
+        const thread = ownKey(plugin, threadKey)
+        this.post(running, { type: "show", seq, tabId, project, views: byPlugin.get(plugin) ?? [], open, ...(thread ? { thread } : {}) })
         return promise.catch((error: Error) => (byPlugin.get(plugin) ?? []).map((view) => ({ key: view.key, error: error.message })))
       }),
     )
@@ -164,6 +173,14 @@ export class Plugins {
   turnEnded(tabId: string, threadKey: string, outcome: TurnOutcome) {
     const { plugin, name } = splitContributionId(threadKey)
     void this.running.get(plugin)?.then((found) => this.post(found, { type: "turnEnd", tabId, key: name, outcome })).catch(() => undefined)
+  }
+
+  /** Tells every running plugin which of its threads a tab now shows, if any, so its views can follow. */
+  threadShown(tabId: string, threadKey: string | undefined) {
+    for (const [plugin, running] of this.running) {
+      const key = ownKey(plugin, threadKey)
+      void running.then((found) => this.post(found, { type: "threadShown", tabId, ...(key ? { key } : {}) })).catch(() => undefined)
+    }
   }
 
   /** A closed tab's views and plugin state go. */

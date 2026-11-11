@@ -97,7 +97,16 @@ createEffect(() => {
 })
 ```
 
-A panel's context also has `ctx.params` and `ctx.close()`. A command's context has no `visible()`, since a command draws nothing.
+A view's context also has `ctx.thread()`. It is the key of the plugin's thread the tab shows, as the plugin passed it to `ctx.openThread`. It is undefined while the tab shows its own thread or another plugin's. It updates as the tab moves between threads. A card about the open conversation reads it to know which conversation to show:
+
+```tsx
+desk.card("conversation", {
+  title: "Conversation",
+  view: (ctx) => <Show when={conversationOf(ctx.thread())}>{(id) => <Text>#{id()}</Text>}</Show>,
+})
+```
+
+A panel's context also has `ctx.params` and `ctx.close()`. A command's context has no `visible()` or `thread()`, since a command draws nothing.
 
 ## Who owns what
 
@@ -135,6 +144,7 @@ A panel's context also has `ctx.params` and `ctx.close()`. A command's context h
 - A sidebar or panel that cannot be drawn is closed. A card that cannot be drawn is left out of the tab. The user is told once.
 - A plugin that fails to start, or stops, is reported once and stays off until Desk restarts. Its views leave every tab.
 - The core works out which views are on screen when the tabs, a layout or the window's focus change. It tells each plugin only of its own views, and only when they change.
+- The core tells a plugin which of its threads a tab shows, with each `show` and each time the tab moves to another thread.
 - The core tells a plugin when a turn ends in one of its threads, even when the plugin moved the tab to another thread while the turn ran.
 - UI crosses to the app as operations: `create`, `text`, `set`, `insert`, `remove`.
 - `protocol` lists the UI primitives and their props once. The plugin package builds its components from that list, and the app draws each one.

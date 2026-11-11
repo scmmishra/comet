@@ -70,6 +70,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       layouts.dropTab(tabId)
     },
     turnEnded: (tabId, threadKey, outcome) => plugins.turnEnded(tabId, threadKey, outcome),
+    threadShown: (tabId, threadKey) => plugins.threadShown(tabId, threadKey),
   })
   const layouts = new Layouts(plugins, window, broadcast)
   // Each project's commands, made the first time the project is named. They run as long as the core.

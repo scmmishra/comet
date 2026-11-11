@@ -150,3 +150,32 @@ test("tells views whether they are on screen, as the active tab, its view pane a
   await settle("side off, one off, two off, card off")
   plugins.stop()
 }, 20_000)
+
+/** A card that draws the key of its plugin's thread the tab shows. */
+const FOLLOWER = `
+import { definePlugin, Text } from "@desk/plugin"
+
+export default definePlugin((desk) => {
+  desk.card("thread", { title: "Thread", view: (ctx) => <Text>{ctx.thread() ?? "none"}</Text> })
+})
+`
+
+test("tells a card which of its plugin's threads the tab shows, from its first draw and as the tab moves", async () => {
+  installPlugin("follower", FOLLOWER)
+  turnOn({ everywhere: ["follower"] })
+  const { plugins, layouts, layout, textOf, showThread } = harness()
+  showThread("tab-1", "follower.conv-1")
+  await layouts.send("tab-1")
+  const shown = () => textOf("follower", layout("tab-1")!.cards[0]!.root)
+  const settle = (expected: string) => until(() => shown() === expected).then(() => expect(shown()).toBe(expected))
+
+  await settle("conv-1")
+  showThread("tab-1", "follower.conv-2")
+  await settle("conv-2")
+  showThread("tab-1", "other.conv-3")
+  await settle("none")
+  showThread("tab-1", undefined)
+  showThread("tab-1", "follower.conv-1")
+  await settle("conv-1")
+  plugins.stop()
+}, 20_000)

@@ -35,6 +35,8 @@ interface WindowHooks {
   readonly tabClosed: (tabId: string) => void
   /** A turn ended in a plugin's thread, named by its full key, even while the thread was away from its tab. */
   readonly turnEnded: (tabId: string, threadKey: string, outcome: TurnOutcome) => void
+  /** A tab moved to another thread. `threadKey` is the full key of a plugin's thread, or undefined for the tab's own. */
+  readonly threadShown: (tabId: string, threadKey: string | undefined) => void
 }
 
 /**
@@ -382,6 +384,11 @@ export class Window {
     return this.state.layouts[tabId]
   }
 
+  /** The full key of the plugin thread a tab shows, or undefined while it shows its own thread. */
+  threadKeyOf(tabId: string): string | undefined {
+    return this.thread(tabId).key
+  }
+
   setLayout(tabId: string, layout: PluginLayout) {
     this.tab(tabId)
     this.persist({ layouts: { ...this.state.layouts, [tabId]: layout } })
@@ -544,6 +551,7 @@ export class Window {
     // Its queue follows the thread too, so a message queued in one thread never shows in another.
     if (thread.queue !== before?.queue || !!thread.queueHeld !== !!before?.queueHeld) this.hooks.broadcast({ type: "queue", tabId, messages: thread.queue ?? [], held: !!thread.queueHeld })
     this.persist({ threads: { ...this.state.threads, [tabId]: thread } })
+    if (thread.key !== before?.key) this.hooks.threadShown(tabId, thread.key)
   }
 
   private persist(change: Partial<WindowState>) {

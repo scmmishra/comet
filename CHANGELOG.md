@@ -6,6 +6,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 - An error toast shows its cause in full, under a one-line summary, such as why a plugin could not start. The toast held the whole error on one cut-off line, above an empty box.
 - Settings open as a card that slides up over the tab. The tab stays behind it, pushed back and dimmed, so going back shows it at once.
+- A plugin's view knows which of the plugin's threads its tab shows, through `ctx.thread()`. A card can show what belongs to the open conversation, and follows the tab as it moves to another.
 - Plugins can keep their views up to date. `desk.onTurnEnd` tells a plugin when a turn ends in a thread it opened, so it can read again what Claude may have changed. A view's `ctx.visible()` says whether the view is on screen, so it can refresh when it shows and poll only while it does.
 - Desk is now a native app, built in Rust with Rune, in place of Electron. It talks to the same core, so tabs, threads, settings and plugins carry over. It is about half the size, at 207 MB. `desk <folder>` opens a folder in the running Desk through a `desk://` link.
 - Desk opened from the Dock or Finder finds your tools, such as gh, cargo or your editor, including those your .zshrc adds. Claude's commands ran with macOS's short default PATH, so a command like `gh` failed with "command not found" though it worked in a terminal. Desk reads your shell's environment once and keeps it, so later starts do not wait for your shell.

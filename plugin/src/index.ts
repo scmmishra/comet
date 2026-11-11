@@ -36,6 +36,11 @@ export interface ViewContext extends TabContext {
    * panel in front, with the view pane open. It updates as that changes, so an effect can start and stop work.
    */
   visible(): boolean
+  /**
+   * The key of this plugin's thread the tab shows, as the plugin passed it to `openThread`. Undefined
+   * while the tab shows another thread. It updates as the tab moves between threads.
+   */
+  thread(): string | undefined
 }
 
 /** What a panel's view gets: its view context, its parameters, and a way to close itself. */

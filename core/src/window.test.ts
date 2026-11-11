@@ -10,12 +10,20 @@ useTempHome()
 const tab = (id: string, project: string): TabInfo => ({ id, title: "New session", project, terminals: [], model: "default", permissionMode: "default" })
 const saved = () => JSON.parse(readFileSync(join(process.env.DESK_HOME!, "window.json"), "utf8"))
 
-/** A window whose saved file holds `state`, and the messages it sends. */
+/** A window whose saved file holds `state`, the messages it sends, and each thread a tab moved to. */
 function open(state: object) {
   writeFileSync(join(process.env.DESK_HOME!, "window.json"), JSON.stringify(state))
   const sent: CoreMessage[] = []
-  const window = new Window({ broadcast: (message) => sent.push(message), compactIdle: () => false, rateLimit: () => {}, tabClosed: () => {}, turnEnded: () => {} })
-  return { window, sent }
+  const shown: [string, string | undefined][] = []
+  const window = new Window({
+    broadcast: (message) => sent.push(message),
+    compactIdle: () => false,
+    rateLimit: () => {},
+    tabClosed: () => {},
+    turnEnded: () => {},
+    threadShown: (tabId, threadKey) => shown.push([tabId, threadKey]),
+  })
+  return { window, sent, shown }
 }
 
 test("refuses to move a tab whose thread has started, and moves one that has not", () => {
@@ -102,6 +110,18 @@ test("keeps a plugin thread's queue with the thread when the tab switches to ano
   expect(sent).toContainEqual({ type: "queue", tabId: "a", messages: [queued], held: true })
   expect(saved().threads.a).toEqual({ key: "conv-1", queue: [queued], queueHeld: true })
   expect(saved().keyed).toEqual({ [`${project}\nconv-2`]: { key: "conv-2" } })
+})
+
+test("tells plugins when a tab moves to another key, and not when it opens the key it shows", async () => {
+  const project = tempFolder("plugin")
+  const { window, shown } = open({ tabs: [tab("a", project)], threads: { a: { key: "inbox.conv-1" } }, recent: [] })
+  expect(window.threadKeyOf("a")).toBe("inbox.conv-1")
+
+  await window.openKey("a", { key: "inbox.conv-1" })
+  expect(shown).toEqual([])
+  await window.openKey("a", { key: "inbox.conv-2" })
+  expect(shown).toEqual([["a", "inbox.conv-2"]])
+  expect(window.threadKeyOf("a")).toBe("inbox.conv-2")
 })
 
 test("starts a plugin's new thread with its prompt, and leaves a thread it already started alone", async () => {

@@ -35,10 +35,11 @@ export type ViewResult = { readonly key: string; readonly root: number; readonly
 /** Messages from the core to a plugin's worker. */
 export type ToPlugin =
   /**
-   * Every view of this plugin a tab shows, and the panel instances open there for `isOpen`. The worker
-   * draws what it lacks and disposes the rest. `seq` pairs the answer with the ask.
+   * Every view of this plugin a tab shows, the panel instances open there for `isOpen`, and the key of
+   * the plugin's thread the tab shows for `thread`. The worker draws what it lacks and disposes the rest.
+   * `seq` pairs the answer with the ask.
    */
-  | { readonly type: "show"; readonly seq: number; readonly tabId: string; readonly project: string; readonly views: readonly ViewRequest[]; readonly open: readonly string[] }
+  | { readonly type: "show"; readonly seq: number; readonly tabId: string; readonly project: string; readonly views: readonly ViewRequest[]; readonly open: readonly string[]; readonly thread?: string }
   | { readonly type: "command"; readonly tabId: string; readonly project: string; readonly name: string; readonly input?: string }
   /** A tab closed. Its views and state go. */
   | { readonly type: "drop"; readonly tabId: string }
@@ -46,6 +47,8 @@ export type ToPlugin =
   | { readonly type: "snapshot" }
   /** The views of this plugin on screen, all in the one tab named. No tab means none is on screen. */
   | { readonly type: "visible"; readonly tabId?: string; readonly keys: readonly string[] }
+  /** A tab moved to another thread. `key` is the plugin's own, or absent for a thread the plugin did not open. */
+  | { readonly type: "threadShown"; readonly tabId: string; readonly key?: string }
   /** A turn ended in a thread the plugin opened. `key` is the plugin's own, without its prefix. */
   | { readonly type: "turnEnd"; readonly tabId: string; readonly key: string; readonly outcome: TurnOutcome }
 
@@ -69,10 +72,13 @@ declare const self: Worker
 
 type View = (ctx: ViewContext) => JSX.Element
 
-/** One tab as the plugin sees it: the panel instances open there, and the views drawn for it. */
+/** One tab as the plugin sees it: the panel instances open there, its thread, and the views drawn for it. */
 interface Tab {
   readonly open: Accessor<ReadonlySet<string>>
   readonly setOpen: Setter<ReadonlySet<string>>
+  /** The key of the plugin's thread the tab shows. */
+  readonly thread: Accessor<string | undefined>
+  readonly setThread: Setter<string | undefined>
   readonly drawn: Map<string, { readonly root: PluginNode; readonly title: string; readonly dispose: () => void }>
 }
 
@@ -130,7 +136,8 @@ export function startHost(plugin: PluginDefinition) {
     let found = tabs.get(tabId)
     if (!found) {
       const [open, setOpen] = solidRoot(() => createSignal<ReadonlySet<string>>(new Set()))
-      found = { open, setOpen, drawn: new Map() }
+      const [thread, setThread] = solidRoot(() => createSignal<string | undefined>())
+      found = { open, setOpen, thread, setThread, drawn: new Map() }
       tabs.set(tabId, found)
     }
     return found
@@ -162,6 +169,7 @@ export function startHost(plugin: PluginDefinition) {
         const shown = onScreen()
         return shown.tabId === tabId && shown.keys.has(request.key)
       },
+      thread: tab.thread,
     }
     let view: () => JSX.Element
     let title: string
@@ -193,6 +201,7 @@ export function startHost(plugin: PluginDefinition) {
     const wanted = new Set(message.views.map((view) => view.key))
     for (const key of [...tab.drawn.keys()]) if (!wanted.has(key)) undraw(tab, key)
     tab.setOpen(new Set(message.open))
+    tab.setThread(message.thread)
     post({ type: "shown", seq: message.seq, views: message.views.map((view) => draw(message.tabId, message.project, view)) })
   }
 
@@ -232,6 +241,8 @@ export function startHost(plugin: PluginDefinition) {
         for (const key of [...tab.drawn.keys()]) undraw(tab, key)
       } else if (message.type === "event") await callHandler(message.handler, message.args)
       else if (message.type === "snapshot") post({ type: "snapshot", ops: snapshot() })
+      // A tab the plugin has drawn nothing for hears its thread with its first `show`.
+      else if (message.type === "threadShown") tabs.get(message.tabId)?.setThread(message.key)
       else if (message.type === "visible") setOnScreen({ ...(message.tabId ? { tabId: message.tabId } : {}), keys: new Set(message.keys) })
       else if (message.type === "turnEnd") {
         const turn: TurnEnd = { key: message.key, tabId: message.tabId, outcome: message.outcome }

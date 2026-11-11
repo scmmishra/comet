@@ -26,6 +26,8 @@ export function harness() {
   const nodes: Record<string, Record<number, UiNode>> = {}
   /** The tab the window shows. A test sets it, then calls `layouts.sendVisible()` as the core does on a save. */
   const screen: { active?: TabInfo } = {}
+  /** The full key of the plugin thread each tab shows. `showThread` moves a tab, as the window does. */
+  const shownThreads: Record<string, string | undefined> = {}
   const broadcast = (message: CoreMessage) => {
     sent.push(message)
     if (message.type !== "plugin.ops") return
@@ -40,7 +42,11 @@ export function harness() {
     closePanel: (tabId, id) => void layouts.closePanel(tabId, id),
     stopped: () => void layouts.resendAll(),
   })
-  layouts = new Layouts(plugins, { projectOf: () => project, layout: (tabId) => saved[tabId], setLayout: (tabId, layout) => (saved[tabId] = layout), activeTab: () => screen.active }, broadcast)
+  layouts = new Layouts(plugins, { projectOf: () => project, layout: (tabId) => saved[tabId], setLayout: (tabId, layout) => (saved[tabId] = layout), activeTab: () => screen.active, threadKeyOf: (tabId) => shownThreads[tabId] }, broadcast)
+  const showThread = (tabId: string, threadKey: string | undefined) => {
+    shownThreads[tabId] = threadKey
+    plugins.threadShown(tabId, threadKey)
+  }
 
   /** The last layout sent for a tab. */
   const layout = (tabId: string) => sent.findLast((message): message is Extract<CoreMessage, { type: "layout" }> => message.type === "layout" && message.tabId === tabId)?.layout
@@ -58,5 +64,5 @@ export function harness() {
   const errors = () => sent.flatMap((message) => (message.type === "error" ? [[message.message, message.detail].filter(Boolean).join(": ")] : []))
   const ids = (found: TabLayout | undefined) => ({ sidebar: found?.sidebar?.id, panels: found?.panels.map((panel) => panel.id), cards: found?.cards.map((card) => card.id) })
 
-  return { project, plugins, layouts, saved, sent, threads, nodes, screen, layout, textOf, handler, errors, ids }
+  return { project, plugins, layouts, saved, sent, threads, nodes, screen, showThread, layout, textOf, handler, errors, ids }
 }
