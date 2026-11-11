@@ -450,7 +450,7 @@ fn suggestion_list(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
         let (mark, label, detail): (&'static rune::Icon, String, String) = match row_data {
             Suggestion::File(path) => {
                 let (dir, name) = path.rsplit_once('/').map_or(("", path.as_str()), |(d, n)| (d, n));
-                (rune_theme_opencode::file_icons::file(path), name.to_owned(), if dir.is_empty() { String::new() } else { format!("{dir}/") })
+                (crate::icons::file_icon(path), name.to_owned(), if dir.is_empty() { String::new() } else { format!("{dir}/") })
             }
             Suggestion::Desk(name, description) => (&ic::SETTINGS_GEAR, format!("/{name}"), (*description).to_owned()),
             Suggestion::Skill(skill) => (

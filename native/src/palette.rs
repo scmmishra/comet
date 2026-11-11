@@ -209,7 +209,7 @@ impl Desk {
                         let (dir, name) = path.rsplit_once('/').map_or(("", path.as_str()), |(d, n)| (d, n));
                         let mut entry = Entry::new(&self.account.project_label(project), name, Action::File(project.clone(), path.clone()));
                         entry.detail = (!dir.is_empty()).then(|| format!("{dir}/"));
-                        entry.file_icon = Some(rune_theme_opencode::file_icons::file(path));
+                        entry.file_icon = Some(crate::icons::file_icon(path));
                         entry
                     })
                     .collect(),

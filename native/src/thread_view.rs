@@ -539,7 +539,7 @@ fn changes_view(c: &Ctx, id: &str, files: &[crate::protocol::ChangedFile]) -> El
             .hover(k.c.hover)
             .role("button")
             .on_press(move |s: &mut Desk| s.open_file(&tab, &path))
-            .child(icon(rune_theme_opencode::file_icons::file(&f.path), 13.0))
+            .child(icon(crate::icons::file_icon(&f.path), 13.0))
             .child(
                 row()
                     .grow(1.0)

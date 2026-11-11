@@ -1,5 +1,5 @@
 //! Glyphs `@opencode/ui` has no icon for, drawn on a 16-unit grid, as `app/src/renderer/icons.tsx` draws
-//! them, and Desk's disclosure chevron. Everything else comes from the OpenCode catalog.
+//! them, Desk's file icons and its disclosure chevron. Everything else comes from the OpenCode catalog.
 
 use rune::Icon;
 
@@ -39,6 +39,13 @@ pub static PANEL_OPEN: Icon = Icon {
     body: r#"<rect x="2" y="2.5" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/><path d="M10 2.5v11" fill="none" stroke="currentColor" stroke-width="1.25"/><rect x="10" y="2.5" width="4" height="11" fill="currentColor"/>"#,
 };
 
+/// A file's icon from the OpenCode catalog, with the Electron app's one swap: a README is a Markdown file,
+/// so it takes the Markdown mark, not the catalog's info badge.
+pub fn file_icon(path: &str) -> &'static Icon {
+    let icon = rune_theme_opencode::file_icons::file(path);
+    if icon.name == "readme" { rune_theme_opencode::file_icons::file("file.md") } else { icon }
+}
+
 /// The size every `<Icon>` draws at in the Electron app. `Icon` adds `size-[15px]`, which wins over the size
 /// classes its callers add, so an icon asked for at 12, 13 or 14 points draws at 15 there too.
 pub const SIZE: f32 = 15.0;
@@ -46,4 +53,13 @@ pub const SIZE: f32 = 15.0;
 /// Desk's disclosure chevron, `<Chevron>` in `icons.tsx`: it points right, and turns down while open.
 pub fn chevron(k: &rune_kit::Kit, open: bool) -> rune::El {
     rune::icon(&rune_theme_opencode::icons::CHEVRON_RIGHT, SIZE).color(k.c.text_faint).rotate(if open { std::f32::consts::FRAC_PI_2 } else { 0.0 }).motion(k.motion.control)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_readme_takes_the_markdown_mark() {
+        assert_eq!(super::file_icon("README.md").name, super::file_icon("notes.md").name);
+        assert_ne!(super::file_icon("README.md").name, "readme");
+    }
 }

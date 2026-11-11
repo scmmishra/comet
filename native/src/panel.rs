@@ -256,7 +256,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .build(k);
         tab_button(
             format!("panel-{}", file.id),
-            row().gap(7.0).items_center().child(icon(rune_theme_opencode::file_icons::file(&file.path), 14.0)).child(text(name).font(crate::theme::medium(13.0)).color(if active { k.c.text_base } else { k.c.text_muted })),
+            row().gap(7.0).items_center().child(icon(crate::icons::file_icon(&file.path), 14.0)).child(text(name).font(crate::theme::medium(13.0)).color(if active { k.c.text_base } else { k.c.text_muted })),
             active,
             close,
         )
@@ -437,7 +437,7 @@ fn file_header(tab: String, dark: bool) -> impl Fn(&Desk, usize, bool) -> El + '
                 }
             })
             .child(crate::icons::chevron(k, !collapsed))
-            .child(icon(rune_theme_opencode::file_icons::file(&path), crate::icons::SIZE))
+            .child(icon(crate::icons::file_icon(&path), crate::icons::SIZE))
             .child(
                 row()
                     .min_w(0.0)
