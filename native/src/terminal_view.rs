@@ -1,12 +1,12 @@
-//! A terminal in the view pane: its rows on a fixed grid of cells, the cursor, keys and scrolling. The
-//! screen comes from `terminal.rs`, and the shell runs in the core.
+//! A terminal in the view pane: its rows on a fixed grid of cells, the cursor, keys, scrolling, and
+//! selecting text to copy. The screen comes from `terminal.rs`, and the shell runs in the core.
 
 use crate::protocol::ClientMessage;
 use crate::shell::Desk;
-use crate::terminal::{FOREGROUND, Row, Screen, Size, key_bytes, paste_bytes};
+use crate::terminal::{FOREGROUND, Row, Screen, Size, Spot, key_bytes, paste_bytes};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::vte::ansi::Rgb;
-use rune::{Color, El, Key, KeyEvent, Span, TextStyle, Tx, col, el, memo, text};
+use rune::{Color, Drag, El, Key, KeyEvent, Phase, Span, TextStyle, Tx, col, el, memo, text};
 use rune_kit::Kit;
 use std::collections::{HashMap, HashSet};
 
@@ -41,6 +41,13 @@ impl Terminals {
             let (w, _) = rune::text::measure(&"M".repeat(1000), &[], f, None);
             (w / 1000.0, f.line_height)
         })
+    }
+
+    /// The spot on screen under a point of the terminal's own layout.
+    fn spot(&mut self, x: f32, y: f32) -> Spot {
+        let (cw, ch) = self.cell();
+        let across = ((x - PAD) / cw).max(0.0);
+        Spot { col: across as usize, row: (y / ch).max(0.0) as usize, right: across.fract() >= 0.5 }
     }
 }
 
@@ -94,10 +101,29 @@ impl Desk {
         }
     }
 
+    /// A press and drag selects text: by characters, or by words and lines after a double or triple click.
+    fn terminal_drag(&mut self, id: &str, phase: Phase, x: f32, y: f32, clicks: u32) {
+        let spot = self.terminals.spot(x, y);
+        let Some(screen) = self.terminals.screens.get_mut(id) else { return };
+        match phase {
+            Phase::Down => screen.select_from(spot, clicks),
+            Phase::Move => screen.select_to(spot),
+            Phase::Up => screen.drop_empty_selection(),
+        }
+    }
+
     fn terminal_key(&mut self, id: &str, event: &KeyEvent, tx: &mut Tx) -> bool {
         let mods = event.mods;
         if mods.cmd && !mods.ctrl {
             return match &event.key {
+                // ⌘C copies the selection. Without one, the key goes on, as in Terminal.app.
+                Key::Command('c') => match self.terminals.screens.get(id).and_then(Screen::selected_text) {
+                    Some(text) => {
+                        tx.copy(text);
+                        true
+                    }
+                    None => false,
+                },
                 // ⌘V pastes, bracketed when the program asks for it.
                 Key::Command('v') => {
                     let id = id.to_owned();
@@ -136,13 +162,15 @@ pub fn terminal(s: &Desk, id: &str, k: &Kit) -> El {
     let f = font();
     let (cw, ch) = s.terminals.cell.unwrap_or((7.2, f.line_height));
     let ink = k.c.text_base;
+    let tint = crate::theme::accent_soft(k.dark);
+    let selection = screen.selection.iter().map(|&(row, from, to)| el().absolute(PAD + from as f32 * cw, row as f32 * ch).size((to + 1 - from) as f32 * cw, ch).fill(tint));
     let rows = screen.rows.iter().enumerate().map(|(y, row)| {
         let version = (screen.versions[y], k.dark);
         memo(format!("term-{id}-{y}"), version, || row_view(row, f, (cw, ch), ink))
     });
     let grid = col().absolute(PAD, 0.0).w(screen.size.cols as f32 * cw).children(rows);
     let cursor = screen.cursor.map(|(x, y)| el().absolute(PAD + x as f32 * cw, y as f32 * ch).size(1.5, ch).fill(ink));
-    let (resize_id, key_id, wheel_id) = (id.to_owned(), id.to_owned(), id.to_owned());
+    let (resize_id, key_id, wheel_id, drag_id) = (id.to_owned(), id.to_owned(), id.to_owned(), id.to_owned());
     el()
         .key(format!("terminal-{id}"))
         .w_full()
@@ -154,6 +182,7 @@ pub fn terminal(s: &Desk, id: &str, k: &Kit) -> El {
         .label("Terminal")
         .on_layout(move |s: &mut Desk, r| s.resize_terminal(&resize_id, r[2], r[3]))
         .on_key(move |s: &mut Desk, event: &KeyEvent, tx| s.terminal_key(&key_id, event, tx))
+        .on_drag(move |s: &mut Desk, d: &mut Drag, _| s.terminal_drag(&drag_id, d.phase, d.x, d.y, d.clicks))
         .on_wheel(move |s: &mut Desk, e, _| {
             let (_, ch) = s.terminals.cell.unwrap_or((7.2, 15.0));
             s.terminals.wheel += e.dy;
@@ -167,6 +196,8 @@ pub fn terminal(s: &Desk, id: &str, k: &Kit) -> El {
             true
         })
         .child(grid)
+        // Over the cells' own backgrounds, faint enough to read the text through.
+        .children(selection)
         .children(cursor)
 }
 

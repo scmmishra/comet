@@ -3,8 +3,10 @@
 
 use alacritty_terminal::event::{Event as TermEvent, EventListener};
 use alacritty_terminal::grid::{Dimensions, Scroll};
+use alacritty_terminal::index::{Column, Point, Side};
+use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::term::cell::Flags;
-use alacritty_terminal::term::{Config, Term, TermMode};
+use alacritty_terminal::term::{Config, Term, TermMode, viewport_to_point};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor, Rgb};
 use rune::Key;
 use std::sync::{Arc, Mutex};
@@ -75,14 +77,25 @@ pub struct Screen {
     pub versions: Vec<u64>,
     /// The cursor's cell, when it shows on screen.
     pub cursor: Option<(usize, usize)>,
+    /// The selected cells on screen, by row: the row, then its first and last selected column.
+    pub selection: Vec<(usize, usize, usize)>,
     pub size: Size,
+}
+
+/// A point on the screen: its cell, and which half of the cell it is in, which decides whether a
+/// selection takes that cell.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Spot {
+    pub col: usize,
+    pub row: usize,
+    pub right: bool,
 }
 
 impl Screen {
     pub fn new(size: Size) -> Screen {
         let replies = Replies::default();
         let config = Config { scrolling_history: SCROLLBACK, ..Config::default() };
-        let mut screen = Screen { term: Term::new(config, &size, replies.clone()), parser: Processor::new(), replies, rows: Vec::new(), versions: Vec::new(), cursor: None, size };
+        let mut screen = Screen { term: Term::new(config, &size, replies.clone()), parser: Processor::new(), replies, rows: Vec::new(), versions: Vec::new(), cursor: None, selection: Vec::new(), size };
         screen.refresh();
         screen
     }
@@ -110,6 +123,65 @@ impl Screen {
 
     pub fn mode(&self) -> TermMode {
         *self.term.mode()
+    }
+
+    /// Starts a selection at `spot`: by characters, or by words on a double click and lines on a triple.
+    pub fn select_from(&mut self, spot: Spot, clicks: u32) {
+        let kind = match clicks {
+            2 => SelectionType::Semantic,
+            3.. => SelectionType::Lines,
+            _ => SelectionType::Simple,
+        };
+        let (point, side) = self.point(spot);
+        self.term.selection = Some(Selection::new(kind, point, side));
+        self.read_selection();
+    }
+
+    /// Moves the selection's end to `spot`.
+    pub fn select_to(&mut self, spot: Spot) {
+        let (point, side) = self.point(spot);
+        if let Some(selection) = &mut self.term.selection {
+            selection.update(point, side);
+        }
+        self.read_selection();
+    }
+
+    /// Drops a selection that holds no text, as a click without a drag leaves.
+    pub fn drop_empty_selection(&mut self) {
+        if self.term.selection.as_ref().is_some_and(Selection::is_empty) {
+            self.term.selection = None;
+            self.read_selection();
+        }
+    }
+
+    pub fn selected_text(&self) -> Option<String> {
+        self.term.selection_to_string().filter(|t| !t.is_empty())
+    }
+
+    /// The grid point under a spot on screen, counting the lines scrolled back.
+    fn point(&self, spot: Spot) -> (Point, Side) {
+        let at = Point::new(spot.row.min(self.size.rows - 1), Column(spot.col.min(self.size.cols - 1)));
+        (viewport_to_point(self.term.grid().display_offset(), at), if spot.right { Side::Right } else { Side::Left })
+    }
+
+    /// Reads which cells on screen are selected. Output and resizes move or drop the selection in the terminal.
+    fn read_selection(&mut self) {
+        self.selection.clear();
+        let Some(range) = self.term.selection.as_ref().and_then(|s| s.to_range(&self.term)) else { return };
+        let offset = self.term.grid().display_offset() as i32;
+        let last = self.size.cols - 1;
+        for row in 0..self.size.rows {
+            let line = row as i32 - offset;
+            if line < range.start.line.0 || line > range.end.line.0 {
+                continue;
+            }
+            let (from, to) = if range.is_block {
+                (range.start.column.0, range.end.column.0)
+            } else {
+                (if line == range.start.line.0 { range.start.column.0 } else { 0 }, if line == range.end.line.0 { range.end.column.0 } else { last })
+            };
+            self.selection.push((row, from.min(last), to.min(last)));
+        }
     }
 
     /// Reads the screen into rows, and bumps the version of each row that changed.
@@ -170,6 +242,7 @@ impl Screen {
             }
         }
         self.rows = rows;
+        self.read_selection();
     }
 }
 
@@ -291,6 +364,29 @@ mod tests {
         screen.feed(b"c");
         assert_eq!(screen.versions[0], before[0]);
         assert!(screen.versions[1] > before[1]);
+    }
+
+    #[test]
+    fn a_drag_selects_text_and_a_double_click_a_word() {
+        let mut screen = Screen::new(Size { cols: 20, rows: 3 });
+        screen.feed(b"one two\r\nthree four");
+        let at = |col, row| Spot { col, row, right: false };
+        screen.select_from(at(4, 0), 1);
+        screen.select_to(at(5, 1));
+        assert_eq!(screen.selected_text().as_deref(), Some("two\nthree"));
+        assert_eq!(screen.selection, [(0, 4, 19), (1, 0, 4)]);
+        screen.select_from(at(7, 1), 2);
+        assert_eq!(screen.selected_text().as_deref(), Some("four"));
+    }
+
+    #[test]
+    fn a_click_without_a_drag_leaves_no_selection() {
+        let mut screen = Screen::new(Size { cols: 10, rows: 2 });
+        screen.feed(b"hello");
+        screen.select_from(Spot { col: 2, row: 0, right: false }, 1);
+        screen.drop_empty_selection();
+        assert_eq!(screen.selected_text(), None);
+        assert!(screen.selection.is_empty());
     }
 
     #[test]

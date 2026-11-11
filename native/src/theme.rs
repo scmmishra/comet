@@ -176,6 +176,11 @@ pub fn well(dark: bool) -> Color {
     color(colors(dark).well)
 }
 
+/// Desk's `--color-accent-soft`: the accent, faint, as the terminal's selection.
+pub fn accent_soft(dark: bool) -> Color {
+    color(colors(dark).accent).alpha(if dark { 0.14 } else { 0.10 })
+}
+
 /// Desk's `--color-outline`.
 pub fn outline(dark: bool) -> Color {
     let (hex, alpha) = colors(dark).outline;
