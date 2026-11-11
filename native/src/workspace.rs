@@ -53,6 +53,11 @@ impl Workspace {
         self.active_tab().map(|t| t.project.clone()).or_else(|| self.recent.first().cloned())
     }
 
+    /// Whether the saved tabs have arrived from the core.
+    pub fn restored(&self) -> bool {
+        self.restored
+    }
+
     /// Takes the saved tabs. An empty window opens a tab, or needs a folder for one.
     pub fn restore(&mut self, tabs: Vec<TabInfo>, active: Option<String>, account: &Account, core: &Core) -> Result<(), NeedsFolder> {
         self.active = active.filter(|id| tabs.iter().any(|t| &t.id == id)).or_else(|| tabs.first().map(|t| t.id.clone()));

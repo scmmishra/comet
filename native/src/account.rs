@@ -50,8 +50,9 @@ impl Account {
         self.settings.as_ref()?.projects.get(dir)
     }
 
+    /// The chosen theme. Until the core sends the settings, Desk follows macOS, so a light Mac does not open dark.
     pub fn theme(&self) -> ThemeChoice {
-        self.settings.as_ref().map_or_else(ThemeChoice::default, |s| s.appearance.theme)
+        self.settings.as_ref().map_or(ThemeChoice::Auto, |s| s.appearance.theme)
     }
 
     /// The thread's text size, Desk's `--desk-text-size`.

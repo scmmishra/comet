@@ -408,6 +408,8 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
             let words = match status {
                 CoreState::Starting => line("Starting…".into()),
                 CoreState::Failed(reason) => text(reason.clone()).font(crate::theme::text(13.0)).color(k.c.danger.fg),
+                // The core is up before it sends the saved tabs. Until they arrive, the card waits empty.
+                CoreState::Ready if !s.workspace.restored() => rune::el(),
                 CoreState::Ready => line("No tabs".into()),
             };
             row().w_full().grow(1.0).min_h(0.0).child(card("body", col().w_full().h_full().center().child(words.key("status"))))
