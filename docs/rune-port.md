@@ -110,3 +110,17 @@ Left out, for now:
 - Markdown messages are their own selection group, so a drag stops at a message's end. `.selection_group(false)` works around it.
 - `Collapsible` builds its content even when closed.
 - `DiffView` scrolls on its own, so it needs a height inside a thread row.
+- `DiffView` draws its own file headers and syntax colours. Review's headers (chevron, file icon, muted folder, lowercase status, `+N -N`) and pierre's code colours differ from the Electron app until Rune lets an app set them.
+- Markdown block margins are fixed in rune-kit: 12 points where the Electron app sets 10.4.
+- Rune has no left-start placement, so a subagent's detail centres beside its row.
+
+## Matching the Electron app
+
+The native app compares against the Electron app on the same data. Desk Dev can run in a throwaway home (`DESK_HOME=/tmp/… DESK_DEBUG_PORT=9333 mise run dev`), and its renderer takes core messages from `import("/core.ts")`. The native `file` scene reads the same messages from `DESK_SCENE_FILE`.
+
+Look, icons and type should match. Small spacing differences are fine. A few rules the Electron app follows that are easy to miss:
+
+- Desk's own text is weight 400 on a 1.5 line. Only `@opencode/ui` components use the kit's 440 and 530.
+- Every `<Icon>` draws at 15 points, whatever size class it is given (`icons::SIZE`).
+- A CSS border takes room. Rune's does not, so a native element copying one adds the width to its padding. Outlines the Electron app draws as shadows do not.
+- rem values shrink by Desk's 13 pixel root: `@opencode/ui`'s popover radius is 4.875 points, not 6.
