@@ -333,9 +333,11 @@ fn messages_view(props: &Map<String, Value>, k: &Kit) -> El {
         };
         let column = col().w_full().gap(4.0);
         let column = if incoming { column.items_start() } else { column.items_end() };
-        column
-            .child(text(meta).font(crate::theme::text(12.0)).color(k.c.text_faint))
-            .child(el().max_w(420.0).min_w(0.0).radius(10.0).fill(fill).px(12.0).py(8.0).child(text(words).font(crate::theme::text(13.0)).color(k.c.text_base).wrap().shrink().min_w(0.0)))
+        let bubble = el().shrink().min_w(0.0).radius(10.0).fill(fill).px(12.0).py(8.0).child(text(words).font(crate::theme::text(13.0)).color(k.c.text_base).wrap().shrink().min_w(0.0));
+        // `max-w-[90%]`: a spacer keeps a tenth of the row, so the bubble wraps within the rest of the panel.
+        let room = el().w_frac(0.1);
+        let line = if incoming { row().w_full().child(bubble).child(room) } else { row().w_full().justify_end().child(room).child(bubble) };
+        column.child(text(meta).font(crate::theme::text(12.0)).color(k.c.text_faint)).child(line)
     });
     col().w_full().grow(1.0).min_h(0.0).gap(12.0).scroll(ScrollSpec { stick_bottom: true }).children(rows.collect::<Vec<_>>())
 }

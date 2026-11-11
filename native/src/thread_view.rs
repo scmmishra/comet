@@ -26,8 +26,8 @@ const ROW_GAP: f32 = 14.0;
 const LANE_TOP: f32 = 10.0;
 /// A first guess at a row's height, before it is measured.
 const ROW_ESTIMATE: f32 = 64.0;
-/// A message's bubble takes at most 80% of the lane, `max-w-[80%]`.
-pub const BUBBLE_MAX: f32 = (COLUMN - 2.0 * LANE_PADDING) * 0.8;
+/// A message's bubble takes at most this share of the row, `max-w-[80%]`.
+const BUBBLE_SHARE: f32 = 0.8;
 /// A message's bubble's padding on each side, `px-3.5`.
 const BUBBLE_PAD_X: f32 = 14.0;
 /// Rows of steps: `h-6`.
@@ -73,6 +73,9 @@ struct Ctx<'a> {
     k: &'a Kit,
     /// The thread's text size, from Appearance.
     size: f32,
+    /// The widest a message's bubble grows: 80% of the row inside the lane, so a narrow session's bubble
+    /// stays in its lane.
+    bubble_max: f32,
 }
 
 impl Ctx<'_> {
@@ -165,7 +168,8 @@ fn active_thread(s: &Desk) -> Option<&Thread> {
 fn lane_row(s: &Desk, i: usize, dark: bool, lane: Option<Lane>) -> El {
     let (Some(tab), Some(thread)) = (s.workspace.active.as_deref(), active_thread(s)) else { return el() };
     let k = theme::kit(dark);
-    let c = Ctx { s, tab, thread, k, size: s.account.text_size() };
+    let row_width = lane.map_or(COLUMN, |l| l.width.min(COLUMN)) - 2.0 * LANE_PADDING;
+    let c = Ctx { s, tab, thread, k, size: s.account.text_size(), bubble_max: row_width.max(0.0) * BUBBLE_SHARE };
     let r = &thread.rows[i];
     let mut h = DefaultHasher::new();
     (version(&c, r), lane.map(|l| (l.left.to_bits(), l.width.to_bits()))).hash(&mut h);
@@ -246,7 +250,7 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
                 row().gap(4.0).items_center().child(icon(&ic::ARROW_UP_RIGHT, crate::icons::SIZE).color(k.c.text_faint)).child(text("Steered").font(crate::theme::text(12.0)).color(k.c.text_faint))
             });
             // The text shrinks and wraps inside the bubble's cap, as `w-fit max-w-[80%]` lays it out.
-            let bubble = el().max_w(BUBBLE_MAX).min_w(0.0).fill(k.c.layer_02).radius(BUBBLE_RADIUS).px(BUBBLE_PAD_X).py(9.0).child(
+            let bubble = el().max_w(c.bubble_max).min_w(0.0).fill(k.c.layer_02).radius(BUBBLE_RADIUS).px(BUBBLE_PAD_X).py(9.0).child(
                 text(words.clone())
                     .wrap_anywhere()
                     .shrink()
@@ -256,7 +260,7 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
                     .selectable(true)
                     .selection_color(k.selection()),
             );
-            let pictures = (!images.is_empty()).then(|| row().gap(8.0).wrap().justify_end().max_w(BUBBLE_MAX).children(images.iter().map(|image| message_image(c, image))));
+            let pictures = (!images.is_empty()).then(|| row().gap(8.0).wrap().justify_end().max_w(c.bubble_max).children(images.iter().map(|image| message_image(c, image))));
             col()
                 .w_full()
                 .items_end()
