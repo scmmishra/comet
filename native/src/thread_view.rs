@@ -643,6 +643,7 @@ fn permission_view(c: &Ctx, request_id: &str, kind: &str, detail: &str, reason: 
         .w_full()
         .gap(4.0)
         .role("group")
-        .child(row().gap(8.0).child(row().h(20.0).items_center().child(icon(mark, STEP_ICON).color(k.c.text_faint))).child(text(detail.to_owned()).font(crate::theme::mono(12.0).lh(20.0)).color(k.c.text_base).wrap_anywhere().selectable(true).max_h(160.0)))
+        // The command wraps in the lane: a row grows to its text unless it is held to the lane and the text may shrink.
+        .child(row().w_full().gap(8.0).child(row().h(20.0).items_center().child(icon(mark, STEP_ICON).color(k.c.text_faint))).child(text(detail.to_owned()).font(crate::theme::mono(12.0).lh(20.0)).color(k.c.text_base).wrap_anywhere().selectable(true).max_h(160.0).shrink().min_w(0.0)))
         .child(col().pl(DETAIL_INDENT).gap(4.0).children(reason.map(|r| text(r.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint).wrap_anywhere().selectable(true))).child(answers))
 }
