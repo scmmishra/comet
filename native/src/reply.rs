@@ -1,10 +1,13 @@
 //! Claude's Markdown as Desk shows it, after the Electron app's `markdown.tsx`: a single newline breaks
 //! the line, as Claude Code shows it, inline code that names a file opens the file, and each code block
 //! has a header with its language and a Copy button.
+//!
+//! A file link draws as the Electron app's `.desk-file` chip, without its icon: rune-kit's Markdown puts
+//! icons only before links to web pages.
 
 use crate::shell::Desk;
 use crate::theme;
-use rune::{Tx, col, row, text};
+use rune::{LinkPaint, Span, Tx, col, row, text};
 use rune_kit::{Kit, Markdown};
 
 /// The scheme of a link `prepare` makes for a file, which the thread opens in the view pane.
@@ -165,7 +168,13 @@ pub fn interactive(markdown: Markdown, tab: &str, id: &str, copied: Option<&str>
     let hover = k.c.hover;
     let text_base = k.c.text_base;
     let surface = theme::code_fill(k.dark);
+    let accent = k.c.text_accent;
+    let soft = theme::accent_soft(k.dark);
     markdown
+        // `.desk-file`: the accent at weight 500, on `accent-soft` under the pointer.
+        .link_style(move |url| url.starts_with(FILE_SCHEME).then(|| (Span::new(0, 0).color(accent).weight(500.0), LinkPaint::new().color(accent).bg(soft))))
+        // The chip's title: the file's path and line, as the reply named it.
+        .link_help(|url| url.strip_prefix(FILE_SCHEME).map(str::to_owned))
         .on_link_tx(move |s: &mut Desk, url: &str, tx: &mut Tx| match url.strip_prefix(FILE_SCHEME) {
             Some(target) => {
                 let (path, line) = split_position(target);
