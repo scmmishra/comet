@@ -198,8 +198,10 @@ impl Desk {
             Some(Page::Threads(project)) => threads(project),
             Some(Page::Themes) => themes(),
             Some(Page::Settings) => settings(),
+            // The last answer shows until the next one arrives, so the list doesn't empty between keys
+            // and the palette doesn't shrink and grow back as the query changes.
             Some(Page::Files(project)) => match &self.palette.found {
-                Some((p, q, paths)) if p == project && *q == self.palette.query.text => paths
+                Some((p, _, paths)) if p == project => paths
                     .iter()
                     .map(|path| {
                         let (dir, name) = path.rsplit_once('/').map_or(("", path.as_str()), |(d, n)| (d, n));
@@ -549,5 +551,20 @@ mod tests {
         assert!(s.core.sent().iter().any(|m| m["type"] == "files.search" && m["query"] == "log"));
         s.found_files("/code/web".into(), "log".into(), vec!["src/login.ts".into()]);
         assert_eq!(titles(&s), ["login.ts"]);
+    }
+
+    #[test]
+    fn the_files_list_keeps_its_last_answer_until_the_next_arrives() {
+        let mut s = desk();
+        s.show_palette(vec![Page::Files("/code/web".into())]);
+        s.palette.query = TextEdit::new("log");
+        s.sync_palette();
+        s.found_files("/code/web".into(), "log".into(), vec!["src/login.ts".into()]);
+        // A key typed before the core answers keeps the list, so the palette doesn't shrink and grow back.
+        s.palette.query = TextEdit::new("logi");
+        s.sync_palette();
+        assert_eq!(titles(&s), ["login.ts"]);
+        s.found_files("/code/web".into(), "logi".into(), vec![]);
+        assert!(titles(&s).is_empty());
     }
 }
