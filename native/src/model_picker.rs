@@ -76,7 +76,7 @@ pub fn model_picker(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
         .children(effort.map(|e| faint(effort_label(&e).to_owned())))
         // Supervised is the plain case. Any other mode shows, so a thread never runs looser than you think.
         .children((tab.permission_mode != "default").then(|| row().gap(8.0).child(faint("·".into())).child(faint(permission(&tab.permission_mode).0.to_owned()))))
-        .child(icon(&ic::CHEVRON_DOWN, 12.0).color(k.c.text_faint));
+        .child(icon(&ic::CHEVRON_DOWN, crate::icons::SIZE).color(k.c.text_faint));
     if !s.picker.open {
         return trigger;
     }
@@ -196,7 +196,7 @@ fn permission_menu(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &
         .on_press(|s: &mut Desk| s.picker.modes_open = !s.picker.modes_open)
         .child(icon(mark, 15.0).color(k.c.text_muted))
         .child(text(label).font(crate::theme::text(13.0)).color(k.c.text_muted))
-        .child(icon(&ic::CHEVRON_DOWN, 12.0).color(k.c.text_faint));
+        .child(icon(&ic::CHEVRON_DOWN, crate::icons::SIZE).color(k.c.text_faint));
     let mut menu = Menu::new("permission-menu").trigger(trigger).open(s.picker.modes_open).placement(Placement::TopEnd).min_width(320.0).on_close(|s: &mut Desk| s.picker.modes_open = false);
     for mode in permission_modes(selected) {
         let (label, description, mark) = permission(mode);

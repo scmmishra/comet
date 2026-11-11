@@ -5,7 +5,7 @@ use crate::composer;
 use crate::format;
 use crate::protocol::{ClientMessage, TabInfo, ThreadSummary};
 use crate::shell::{self, Desk};
-use crate::thread_view::COLUMN;
+use crate::cards::Lane;
 use crate::workspace::Place;
 use rune::{El, ScrollSpec, col, icon, row, text};
 use rune_kit::{Kit, Menu, MenuItem, Placement};
@@ -13,8 +13,10 @@ use rune_theme_opencode::icons as ic;
 
 /// Threads the start screen offers to pick up again.
 const RECENT_THREADS: usize = 8;
-/// The wordmark's size, Desk's `clamp(120px, 20vw, 240px)` on a typical window.
-const WORDMARK_SIZE: f32 = 200.0;
+/// The wordmark is a fifth of the window's width, from 120 to 240 points, `clamp(120px, 20vw, 240px)`.
+const WORDMARK_SIZES: (f32, f32) = (120.0, 240.0);
+/// The screen starts 6% of the window's height down, `pt-[6vh]`.
+const TOP: f32 = 0.06;
 /// How strongly the wordmark shows over the panel, `color-mix(… 9.6%)`.
 const WORDMARK_ALPHA: f32 = 0.096;
 
@@ -40,12 +42,15 @@ impl Desk {
     }
 }
 
-pub fn start_screen(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
+/// A new tab, on the thread's lane: the wordmark, the composer, the project and branch it works in, and threads to pick up again.
+pub fn start_screen(s: &Desk, tab: &TabInfo, lane: Option<Lane>, window: Option<[f32; 2]>, k: &Kit, layer: &mut Vec<El>) -> El {
+    let [width, height] = window.unwrap_or([1280.0, 820.0]);
+    let size = (width * 0.2).clamp(WORDMARK_SIZES.0, WORDMARK_SIZES.1);
     let wordmark = text("desk")
-        .font(rune::TextStyle { size: WORDMARK_SIZE, weight: 600.0, line_height: WORDMARK_SIZE, tracking: -0.06 * WORDMARK_SIZE, ..k.ty.body })
+        .font(rune::TextStyle { size, weight: 600.0, line_height: size, tracking: -0.06 * size, ..k.ty.body })
         .color(k.c.text_base.alpha(WORDMARK_ALPHA))
         .a11y_hidden()
-        .mb(-18.0 - 0.26 * WORDMARK_SIZE);
+        .mb(-18.0 - 0.26 * size);
     let project = s.projects.get(&tab.project);
     let branch = project.and_then(|p| p.space.as_ref()).map(|space| {
         row()
@@ -55,15 +60,14 @@ pub fn start_screen(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
             .child(row().gap(6.0).items_center().px(6.0).child(icon(&ic::BRANCH, 15.0).color(k.c.text_muted)).child(text(space.branch.clone()).font(crate::theme::text(13.0)).color(k.c.text_muted)))
     });
     let place = row().gap(4.0).items_center().px(2.0).child(project_switcher(s, tab, k, layer)).children(branch);
-    let lane = col()
+    let content = col()
         .w_full()
-        .max_w(COLUMN)
         .gap(18.0)
         .child(row().w_full().justify_center().child(wordmark))
-        .child(composer::composer(s, tab, composer::ListAt::Below, None, k, layer))
+        .child(composer::composer(s, tab, composer::ListAt::Below, k, layer))
         .child(place)
         .children(recent_threads(s, tab, k));
-    col().key(format!("start-{}", tab.id)).w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).child(col().w_full().items_center().pt(48.0).pb(24.0).child(lane))
+    col().key(format!("start-{}", tab.id)).w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).pt(TOP * height).pb(24.0).child(crate::thread_view::in_lane(content, lane))
 }
 
 /// Moves this tab to another project. Its thread has not started, so nothing is lost.
@@ -81,7 +85,7 @@ fn project_switcher(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
         .on_press(|s: &mut Desk| s.start.project_menu = !s.start.project_menu)
         .child(shell::project_mark(&s.account, &tab.project, k))
         .child(text(name).font(crate::theme::text(13.0)).color(k.c.text_muted))
-        .child(icon(&ic::CHEVRON_DOWN, 12.0).color(k.c.text_faint));
+        .child(icon(&ic::CHEVRON_DOWN, crate::icons::SIZE).color(k.c.text_faint));
     let mut menu = Menu::new("project-menu").trigger(trigger).open(s.start.project_menu).placement(Placement::BottomStart).gutter(8.0).min_width(280.0).group_label("Projects").on_close(|s: &mut Desk| s.start.project_menu = false);
     for project in &s.workspace.recent {
         let (id, dir) = (tab.id.clone(), project.clone());
@@ -120,7 +124,7 @@ fn recent_threads(s: &Desk, tab: &TabInfo, k: &Kit) -> Option<El> {
     let rows = closed.into_iter().map(|thread| {
         // A thread's branch shows when it differs from the branch the project is on now.
         let other = thread.branch.as_deref().filter(|b| Some(*b) != current).map(|b| {
-            row().gap(4.0).items_center().child(icon(&ic::BRANCH, 13.0).color(k.c.text_faint)).child(text(b.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint))
+            row().gap(4.0).items_center().child(icon(&ic::BRANCH, crate::icons::SIZE).color(k.c.text_faint)).child(text(b.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint))
         });
         let (summary, dir) = (thread.clone(), tab.project.clone());
         row()

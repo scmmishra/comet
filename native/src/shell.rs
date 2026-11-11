@@ -360,7 +360,8 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
         (CoreState::Ready, Some(tab)) => {
             // The room inside the card's border, which the lane and the rail are placed in.
             let size = cx.layout_size("session-body");
-            let session = col().key("session-body").w_full().h_full().min_h(0.0).child(session(s, tab, dark, size, &mut layer));
+            let window = cx.layout_size("window");
+            let session = col().key("session-body").w_full().h_full().min_h(0.0).child(session(s, tab, dark, size, window, &mut layer));
             let pane = (tab.panel_open == Some(true)).then(|| card("panel-card", crate::panel::panel(s, tab, k, &mut layer)));
             // A plugin's sidebar sits before the session, as a card of its own.
             let sidebar = s.plugins.layouts.get(&tab.id).and_then(|l| l.sidebar.as_ref()).map(|view| {
@@ -390,7 +391,8 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
 }
 
 /// A tab's session: its header and its thread.
-fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, layer: &mut Vec<El>) -> El {
+/// `size` is the room inside the session card, and `window` the window's, which the start screen scales by.
+fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, window: Option<[f32; 2]>, layer: &mut Vec<El>) -> El {
     let width = size.map(|size| size[0]);
     let k = theme::kit(dark);
     let name = s.account.project_label(&tab.project);
@@ -414,7 +416,7 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, layer: &
     let lane = width.map(|w| crate::cards::Lane::for_session(w, thread_view::COLUMN));
     let sidebar = s.plugins.layouts.get(&tab.id).is_some_and(|l| l.sidebar.is_some());
     let body = if started {
-        col().w_full().grow(1.0).min_h(0.0).child(thread_view::thread(s, &tab.id, dark, lane)).child(composer::composer(s, tab, composer::ListAt::Above, lane, k, layer))
+        col().w_full().grow(1.0).min_h(0.0).child(thread_view::thread(s, &tab.id, dark, lane)).child(thread_composer(s, tab, lane, k, layer))
     } else if sidebar {
         // A tab with a plugin sidebar, before the sidebar opens a thread: the composer, under a line on how to start.
         col()
@@ -422,9 +424,9 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, layer: &
             .grow(1.0)
             .min_h(0.0)
             .child(col().w_full().grow(1.0).center().px(24.0).child(text("Pick something in the sidebar to open its thread.").font(crate::theme::text(13.0)).color(k.c.text_faint)))
-            .child(composer::composer(s, tab, composer::ListAt::Above, lane, k, layer))
+            .child(thread_composer(s, tab, lane, k, layer))
     } else {
-        crate::start_screen::start_screen(s, tab, k, layer)
+        crate::start_screen::start_screen(s, tab, lane, window, k, layer)
     };
     // The cards show beside the lane once the session is wide enough.
     let rail = width.filter(|w| crate::cards::Lane::rail(*w)).map(|_| crate::cards::rail(s, tab, k, layer));
@@ -436,6 +438,11 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, layer: &
     crate::thread_view::approval_menu(s, &tab.id, k, layer);
     let body = col().w_full().grow(1.0).min_h(0.0).child(body).children(rail).children(minimap);
     col().key(format!("session-{}", tab.id)).w_full().grow(1.0).min_h(0.0).child(header).child(body)
+}
+
+/// The composer under a thread, on its lane, `desk-lane pb-4 pt-1.5`.
+fn thread_composer(s: &Desk, tab: &TabInfo, lane: Option<crate::cards::Lane>, k: &rune_kit::Kit, layer: &mut Vec<El>) -> El {
+    thread_view::in_lane(col().w_full().pt(6.0).pb(16.0).child(composer::composer(s, tab, composer::ListAt::Above, k, layer)), lane)
 }
 
 /// A project's mark, as `@opencode/ui`'s ProjectAvatar draws it: the initial on a tile in the colour

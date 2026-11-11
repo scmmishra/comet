@@ -228,7 +228,7 @@ fn subagents_card(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Opti
             .child(status_mark(subagent, k))
             .child(text(subagent.description.clone()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate().grow(1.0))
             .child(text(elapsed(subagent, now)).font(crate::theme::text(12.0)).color(k.c.text_faint))
-            .child(icon(&ic::CHEVRON_RIGHT, 12.0).color(k.c.text_faint))
+            .child(icon(&ic::CHEVRON_RIGHT, icons::SIZE).color(k.c.text_faint))
     });
     Some(card(k, 6.0).key("subagents-card").role("region").label("Subagents").child(text(heading).font(crate::theme::text(12.0)).color(k.c.text_faint).px(8.0).pb(4.0).pt(6.0)).children(rows.collect::<Vec<_>>()))
 }

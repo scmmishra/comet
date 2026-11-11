@@ -26,6 +26,8 @@ pub struct Thread {
     pub subagents: Vec<Subagent>,
     /// The commands Claude left running in the background.
     pub background: Vec<crate::protocol::BackgroundTask>,
+    /// Whether the end of the thread is out of view, which shows the Scroll to end pill.
+    pub away_from_end: bool,
     /// The folds, groups and steps the user opened, by row or item id.
     pub open: HashSet<String>,
 }

@@ -38,7 +38,11 @@ pub static PANEL_OPEN: Icon = Icon {
     body: r#"<rect x="2" y="2.5" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/><path d="M10 2.5v11" fill="none" stroke="currentColor" stroke-width="1.25"/><rect x="10" y="2.5" width="4" height="11" fill="currentColor"/>"#,
 };
 
+/// The size every `<Icon>` draws at in the Electron app. `Icon` adds `size-[15px]`, which wins over the size
+/// classes its callers add, so an icon asked for at 12, 13 or 14 points draws at 15 there too.
+pub const SIZE: f32 = 15.0;
+
 /// Desk's disclosure chevron, `<Chevron>` in `icons.tsx`: it points right, and turns down while open.
-pub fn chevron(k: &rune_kit::Kit, open: bool, size: f32) -> rune::El {
-    rune::icon(&rune_theme_opencode::icons::CHEVRON_RIGHT, size).color(k.c.text_faint).rotate(if open { std::f32::consts::FRAC_PI_2 } else { 0.0 }).motion(k.motion.control)
+pub fn chevron(k: &rune_kit::Kit, open: bool) -> rune::El {
+    rune::icon(&rune_theme_opencode::icons::CHEVRON_RIGHT, SIZE).color(k.c.text_faint).rotate(if open { std::f32::consts::FRAC_PI_2 } else { 0.0 }).motion(k.motion.control)
 }

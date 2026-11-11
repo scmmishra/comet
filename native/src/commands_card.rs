@@ -221,7 +221,7 @@ fn group_row(s: &Desk, project: &str, name: &str, members: &[&CommandInfo], k: &
                 })
                 .child(text(name.to_owned()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate())
                 .child(text(members.len().to_string()).font(crate::theme::text(13.0)).color(k.c.text_faint))
-                .child(crate::icons::chevron(k, open, 13.0)),
+                .child(crate::icons::chevron(k, open)),
         )
         .child(run_button(name, running > 0, project, ids, k));
     let owned: Vec<CommandInfo> = members.iter().map(|m| (*m).clone()).collect();

@@ -32,8 +32,10 @@ pub const BUBBLE_MAX: f32 = (COLUMN - 2.0 * LANE_PADDING) * 0.8;
 const BUBBLE_PAD_X: f32 = 14.0;
 /// Rows of steps: `h-6`.
 const STEP_HEIGHT: f32 = 24.0;
-/// Icons beside steps, `size-[14px]`.
-const STEP_ICON: f32 = 14.0;
+/// Icons beside steps, which ask for `size-[14px]` and draw at Desk's 15 points.
+const STEP_ICON: f32 = crate::icons::SIZE;
+/// The working head's spinner, `size-[14px]`. It is a Spinner, not an `<Icon>`, so its size class holds.
+const SPINNER: f32 = 14.0;
 /// A step's detail sits under its label, past the icon: `pl-[22px]`.
 const DETAIL_INDENT: f32 = 22.0;
 /// A step list scrolls past this height, `max-h-[min(18rem,50dvh)]`.
@@ -110,7 +112,30 @@ pub fn thread(s: &Desk, tab: &str, dark: bool, lane: Option<Lane>) -> El {
             s.minimap.visible = rows;
             changed
         });
-    col().key(format!("thread-{tab}")).w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: true }).child(list)
+    let key = format!("thread-{tab}");
+    let at_tab = tab.to_owned();
+    let scroll = col().key(key.clone()).w_full().h_full().scroll(ScrollSpec { stick_bottom: true }).on_at_bottom(move |s: &mut Desk, at| s.threads.get_mut(&at_tab).away_from_end = !at).child(list);
+    let k = theme::kit(dark);
+    col().w_full().grow(1.0).min_h(0.0).child(scroll).children(thread.away_from_end.then(|| scroll_to_end(&key, k)))
+}
+
+/// After T3 Code: a pill above the composer once the end of the thread is out of view.
+fn scroll_to_end(thread_key: &str, k: &Kit) -> El {
+    let key = thread_key.to_owned();
+    let pill = row()
+        .key("scroll-to-end")
+        .h(28.0)
+        .gap(6.0)
+        .items_center()
+        .px(12.0)
+        .radius(14.0)
+        .fill(k.c.layer_01.alpha(0.9))
+        .border(1.0, k.c.border_base)
+        .role("button")
+        .on_press_tx(move |_: &mut Desk, tx| tx.scroll_to_bottom(key.clone()))
+        .child(icon(&ic::CHEVRON_DOWN, crate::icons::SIZE).color(k.c.text_muted))
+        .child(text("Scroll to end").font(crate::theme::text(12.0)).color(k.c.text_muted));
+    row().pin(Some(0.0), None, Some(0.0), Some(8.0)).justify_center().child(k.elevate(pill, &k.elevation.md))
 }
 
 /// Places `content` in the thread's lane: where the session's width puts it, or centred before the width is known.
@@ -206,7 +231,7 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
             .child(c.small(words.clone()).color(k.c.text_faint).truncate()),
         ThreadItem::User { text: words, steered, images, at, .. } => {
             let steered = steered.then(|| {
-                row().gap(4.0).items_center().child(icon(&ic::ARROW_UP_RIGHT, 12.0).color(k.c.text_faint)).child(text("Steered").font(crate::theme::text(12.0)).color(k.c.text_faint))
+                row().gap(4.0).items_center().child(icon(&ic::ARROW_UP_RIGHT, crate::icons::SIZE).color(k.c.text_faint)).child(text("Steered").font(crate::theme::text(12.0)).color(k.c.text_faint))
             });
             // The text shrinks and wraps inside the bubble's cap, as `w-fit max-w-[80%]` lays it out.
             let bubble = el().max_w(BUBBLE_MAX).min_w(0.0).fill(k.c.layer_02).radius(BUBBLE_RADIUS).px(BUBBLE_PAD_X).py(9.0).child(
@@ -288,7 +313,7 @@ fn working_view(c: &Ctx, since: Option<f64>) -> El {
         Some(since) => format!("Working for {}", format::duration(working_seconds(c.s.now_ms, since) as f64 * 1000.0)),
         None => "Working…".to_owned(),
     };
-    row().gap(8.0).items_center().child(Spinner::new().size(STEP_ICON).build(c.k)).child(c.small(label).color(c.k.c.text_faint))
+    row().gap(8.0).items_center().child(Spinner::new().size(SPINNER).build(c.k)).child(c.small(label).color(c.k.c.text_faint))
 }
 
 /// Where Claude Code compacted the context, as a line across the thread.
@@ -304,7 +329,7 @@ fn compaction_view(c: &Ctx, status: &str, pre: Option<f64>, post: Option<f64>, e
     };
     let ink = if failed { k.c.danger.fg } else { k.c.text_faint };
     let line = || el().h(1.0).grow(1.0).fill(if failed { k.c.danger.fg.alpha(0.3) } else { k.c.border_base });
-    let mark = icon(if failed { &ic::CIRCLE_EXCLAMATION } else { &ic::COLLAPSE }, 12.0).color(ink);
+    let mark = icon(if failed { &ic::CIRCLE_EXCLAMATION } else { &ic::COLLAPSE }, crate::icons::SIZE).color(ink);
     let words = row().gap(6.0).items_center().child(mark).child(text(label.clone()).font(crate::theme::text(12.0)).color(ink)).children(
         error.map(|e| text(format!("· {e}")).font(crate::theme::text(12.0)).color(ink.alpha(0.8)).truncate()),
     );
@@ -328,7 +353,7 @@ fn fold_view(c: &Ctx, id: &str, rows: &[ThreadRow], duration_ms: Option<f64>, st
         .role("button")
         .expanded(open)
         .child(c.small(label).color(k.c.text_faint).group_color(k.c.text_muted))
-        .child(crate::icons::chevron(k, open, 15.0))
+        .child(crate::icons::chevron(k, open))
         .hover_group()
         .on_press_tx(c.toggle(id));
     col().w_full().gap(ROW_GAP).child(head).children(open.then(|| rows.iter().map(|inner| row_view(c, inner).key(inner.id().to_owned())).collect::<Vec<_>>()).into_iter().flatten())
@@ -363,7 +388,7 @@ fn group_view(c: &Ctx, id: &str, steps: &[String], live: bool, summary: &str) ->
     } else {
         row().gap(8.0).items_center().h(STEP_HEIGHT).child(icon(group_icon(c, steps), STEP_ICON).color(k.c.text_faint)).child(c.small(summary.to_owned()).color(k.c.text_muted).group_color(k.c.text_base).truncate())
     };
-    let head = head.child(crate::icons::chevron(k, open, 13.0)).key("group-head").role("button").expanded(open).hover_group().on_press_tx(c.toggle(id));
+    let head = head.child(crate::icons::chevron(k, open)).key("group-head").role("button").expanded(open).hover_group().on_press_tx(c.toggle(id));
     let thought = (live && !open && matches!(latest, ThreadItem::Tool { .. }))
         .then(|| items.iter().rev().find_map(|i| match i {
             ThreadItem::Thinking { text: Some(_), label, .. } => Some(label.clone()),
@@ -414,7 +439,7 @@ fn step_view(c: &Ctx, item: &ThreadItem) -> El {
         .child(icon(kind_icon(kind), STEP_ICON).color(k.c.text_faint))
         .child(c.small(label.to_owned()).color(ink).truncate());
     if has_detail {
-        head = head.child(crate::icons::chevron(k, open, 13.0)).role("button").expanded(open).hover_group().on_press_tx(c.toggle(id));
+        head = head.child(crate::icons::chevron(k, open)).role("button").expanded(open).hover_group().on_press_tx(c.toggle(id));
     }
     col().w_full().child(head).children(open.then(|| col().key("detail").w_full().pl(DETAIL_INDENT).mt(4.0).mb(8.0).child(step_detail(c, item))))
 }
@@ -581,7 +606,7 @@ fn permission_view(c: &Ctx, request_id: &str, kind: &str, detail: &str, reason: 
         .on_press(move |s: &mut Desk| s.threads.approval_menu = if open { None } else { Some((tab.clone(), request.clone())) })
         .build(k)
         .label("More approval options");
-    let waiting = row().gap(4.0).items_center().child(icon(&ic::LOCK, 12.0).color(k.c.warning.fg)).child(text("Waiting for approval").font(crate::theme::text(12.0)).color(k.c.warning.fg));
+    let waiting = row().gap(4.0).items_center().child(icon(&ic::LOCK, crate::icons::SIZE).color(k.c.warning.fg)).child(text("Waiting for approval").font(crate::theme::text(12.0)).color(k.c.warning.fg));
     let answers = row()
         .gap(6.0)
         .items_center()

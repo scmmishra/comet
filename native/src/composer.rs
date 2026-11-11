@@ -326,7 +326,7 @@ pub enum ListAt {
     Below,
 }
 
-pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, lane: Option<crate::cards::Lane>, k: &Kit, layer: &mut Vec<El>) -> El {
+pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &Kit, layer: &mut Vec<El>) -> El {
     let tab = info.id.as_str();
     if let Some(list) = suggestion_list(s, tab, k) {
         let placement = if list_at == ListAt::Above { Placement::TopStart } else { Placement::BottomStart };
@@ -399,7 +399,7 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, lane
         .child(input)
         .child(actions)
         .on_drop_files(|s: &mut Desk, paths: &[std::path::PathBuf], _| s.attach(paths));
-    crate::thread_view::in_lane(col().w_full().pt(6.0).pb(16.0).children(background_row(s, tab, k)).children(queue_view(s, tab, k)).child(card), lane)
+    col().w_full().children(background_row(s, tab, k)).children(queue_view(s, tab, k)).child(card)
 }
 
 fn suggestion_name(s: &Suggestion) -> &str {
@@ -451,7 +451,7 @@ fn suggestion_list(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
             .role("option")
             .position_in_set(i + 1, rows.len())
             .on_press(move |s: &mut Desk| s.pick_suggestion(&tab, i))
-            .child(icon(mark, 14.0).color(k.c.text_faint))
+            .child(icon(mark, crate::icons::SIZE).color(k.c.text_faint))
             .child(text(label).font(crate::theme::text(13.0)).color(k.c.text_base))
             .child(text(detail).font(crate::theme::text(13.0)).color(k.c.text_faint).truncate().grow(1.0))
     });
@@ -602,7 +602,7 @@ fn question_panel(s: &Desk, tab: &str, request: &str, questions: &[Question], k:
                 .children(folded.then(|| small(current.question.clone(), k.c.text_muted).truncate())),
         )
         .children((questions.len() > 1).then(|| small(format!("{}/{}", draft.index + 1, questions.len()), k.c.text_faint)))
-        .child(crate::icons::chevron(k, !folded, 13.0))
+        .child(crate::icons::chevron(k, !folded))
         .child(IconButton::new(&ic::XMARK_SMALL).variant(IconButtonVariant::GhostMuted).control_size(ControlSize::Small).label("Dismiss question without answering").on_press(dismiss).build(k));
     let body = (!folded).then(|| {
         let options = current.options.iter().enumerate().map(|(i, option)| {
@@ -649,7 +649,7 @@ fn option_mark(checked: bool, multiple: bool, k: &Kit) -> El {
     if !checked {
         return mark;
     }
-    let inside = if multiple { icon(&ic::CHECK, 12.0).color(k.c.layer_01) } else { el().size(6.0, 6.0).radius(3.0).fill(k.c.layer_01) };
+    let inside = if multiple { icon(&ic::CHECK, crate::icons::SIZE).color(k.c.layer_01) } else { el().size(6.0, 6.0).radius(3.0).fill(k.c.layer_01) };
     mark.fill(k.c.text_base).child(inside)
 }
 
@@ -688,7 +688,7 @@ fn background_row(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
             .mb(8.0)
             .label("Background commands")
             .help(labels.join("\n"))
-            .child(icon(&ic::OUTLINE_CONSOLE, 14.0).color(k.c.text_faint))
+            .child(icon(&ic::OUTLINE_CONSOLE, crate::icons::SIZE).color(k.c.text_faint))
             .child(text(words).font(crate::theme::text(13.0)).color(k.c.text_faint).truncate().grow(1.0).min_w(0.0))
             .children(since.map(|d| text(d).font(crate::theme::text(13.0)).color(k.c.text_faint)))
             .child(stop),
