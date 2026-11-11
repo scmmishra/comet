@@ -195,11 +195,6 @@ pub fn claude() -> Color {
     color("#d97757")
 }
 
-/// Antigravity's mark, in Google's blue.
-pub fn antigravity() -> Color {
-    color("#4c8df6")
-}
-
 /// Fast mode's bolt, Desk's `--color-fast`.
 pub fn fast(dark: bool) -> Color {
     color(if dark { "#f5c542" } else { "#c98a00" })

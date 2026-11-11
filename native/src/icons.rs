@@ -26,11 +26,22 @@ pub static CLAUDE: Icon = Icon {
 };
 
 
-/// Antigravity's mark: an arch that lifts off its base line. The OpenCode catalog has no mark for it.
+/// Antigravity's mark, the arch Google draws for it, in its own colours: blue, warming to green, orange
+/// and red at the top. The path is the logo the Antigravity app ships. The OpenCode catalog has no mark for it.
 pub static ANTIGRAVITY: Icon = Icon {
     name: "antigravity",
-    view: 16.0,
-    body: r#"<path d="M2.6 13.2C4.4 13.2 5.1 3 8 3s3.6 10.2 5.4 10.2M5.6 9.4c1.5-.9 3.3-.9 4.8 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>"#,
+    view: 180.0,
+    body: concat!(
+        r##"<defs>"##,
+        r##"<radialGradient id="agy-green" gradientUnits="userSpaceOnUse" cx="62" cy="78" r="46"><stop offset="0" stop-color="#8fc94a"/><stop offset="1" stop-color="#8fc94a" stop-opacity="0"/></radialGradient>"##,
+        r##"<radialGradient id="agy-red" gradientUnits="userSpaceOnUse" cx="122" cy="76" r="46"><stop offset="0" stop-color="#ee5a52"/><stop offset="1" stop-color="#ee5a52" stop-opacity="0"/></radialGradient>"##,
+        r##"<radialGradient id="agy-orange" gradientUnits="userSpaceOnUse" cx="92" cy="34" r="44"><stop offset="0" stop-color="#f6892c"/><stop offset="1" stop-color="#f6892c" stop-opacity="0"/></radialGradient>"##,
+        r##"</defs>"##,
+        r##"<path d="M144.248 149.062C151.748 154.688 162.998 150.938 152.685 140.625C121.748 110.625 128.31 28.125 89.8727 28.125C51.4352 28.125 57.9977 110.625 27.0602 140.625C15.8102 151.875 27.9977 154.688 35.4977 149.062C64.5602 129.375 62.6852 94.6875 89.8727 94.6875C117.06 94.6875 115.185 129.375 144.248 149.062Z" fill="#3b8bff"/>"##,
+        r##"<path d="M144.248 149.062C151.748 154.688 162.998 150.938 152.685 140.625C121.748 110.625 128.31 28.125 89.8727 28.125C51.4352 28.125 57.9977 110.625 27.0602 140.625C15.8102 151.875 27.9977 154.688 35.4977 149.062C64.5602 129.375 62.6852 94.6875 89.8727 94.6875C117.06 94.6875 115.185 129.375 144.248 149.062Z" fill="url(#agy-green)"/>"##,
+        r##"<path d="M144.248 149.062C151.748 154.688 162.998 150.938 152.685 140.625C121.748 110.625 128.31 28.125 89.8727 28.125C51.4352 28.125 57.9977 110.625 27.0602 140.625C15.8102 151.875 27.9977 154.688 35.4977 149.062C64.5602 129.375 62.6852 94.6875 89.8727 94.6875C117.06 94.6875 115.185 129.375 144.248 149.062Z" fill="url(#agy-red)"/>"##,
+        r##"<path d="M144.248 149.062C151.748 154.688 162.998 150.938 152.685 140.625C121.748 110.625 128.31 28.125 89.8727 28.125C51.4352 28.125 57.9977 110.625 27.0602 140.625C15.8102 151.875 27.9977 154.688 35.4977 149.062C64.5602 129.375 62.6852 94.6875 89.8727 94.6875C117.06 94.6875 115.185 129.375 144.248 149.062Z" fill="url(#agy-orange)"/>"##,
+    ),
 };
 
 /// The panel toggle: a window with its right side marked, filled while the panel is open.

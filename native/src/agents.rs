@@ -35,11 +35,11 @@ fn glyph(agent: &str) -> &'static Icon {
     }
 }
 
-/// The colour an agent's mark draws in. Codex's mark is black or white, as OpenAI draws it.
+/// The colour an agent's mark draws in. Codex's mark is black or white, as OpenAI draws it. Antigravity's
+/// mark carries its own colours, so this one does not reach it.
 fn tint(agent: &str, k: &Kit) -> Color {
     match agent {
         "claude" => theme::claude(),
-        "antigravity" => theme::antigravity(),
         _ => k.c.text_base,
     }
 }
