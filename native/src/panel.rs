@@ -4,7 +4,7 @@
 use crate::format;
 use crate::protocol::{ClientMessage, FileChange, FileView, TabInfo};
 use crate::shell::Desk;
-use rune::{El, ScrollSpec, col, el, icon, row, text};
+use rune::{El, ScrollSpec, Tx, col, el, icon, row, text};
 use crate::diff_view::{DiffMode, DiffState, DiffView, FileStatus, parse};
 use rune_kit::{ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Select};
 use rune_theme_opencode::icons as ic;
@@ -191,9 +191,11 @@ impl Desk {
         self.sync_panel();
     }
 
-    fn show_panel_tab(&mut self, tab: &str, panel: Option<String>) {
+    /// Shows a tab of the pane at once, with no fade of its parts, as a tab bar switches.
+    fn show_panel_tab(&mut self, tab: &str, panel: Option<String>, tx: &mut Tx) {
         self.workspace.show_panel_tab(tab, panel, &self.core);
         self.sync_panel();
+        tx.instant();
     }
 
     fn set_split(&mut self, split: bool) {
@@ -244,7 +246,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
         el(),
     )
     .role("tab")
-    .on_press(move |s: &mut Desk| s.show_panel_tab(&review_id, None));
+    .on_press_tx(move |s: &mut Desk, tx| s.show_panel_tab(&review_id, None, tx));
     let files = tab.files.iter().map(|file| {
         let active = shown.is_some_and(|f| f.id == file.id);
         let name = file.path.rsplit('/').next().unwrap_or(&file.path).to_owned();
@@ -253,9 +255,10 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .variant(IconButtonVariant::GhostMuted)
             .control_size(ControlSize::Small)
             .label(format!("Close {name}"))
-            .on_press(move |s: &mut Desk| {
+            .on_press_tx(move |s: &mut Desk, tx| {
                 s.workspace.close_file_tab(&close_tab, &close_id, &s.core);
                 s.sync_panel();
+                tx.instant();
             })
             .build(k);
         tab_button(
@@ -265,7 +268,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             close,
         )
         .role("tab")
-        .on_press(move |s: &mut Desk| s.show_panel_tab(&show_tab, Some(show_id.clone())))
+        .on_press_tx(move |s: &mut Desk, tx| s.show_panel_tab(&show_tab, Some(show_id.clone()), tx))
     });
     let terminals = tab.terminals.iter().map(|t| {
         let active = terminal.is_some_and(|x| x.id == t.id);
@@ -274,9 +277,10 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .variant(IconButtonVariant::GhostMuted)
             .control_size(ControlSize::Small)
             .label("Close terminal")
-            .on_press(move |s: &mut Desk| {
+            .on_press_tx(move |s: &mut Desk, tx| {
                 s.workspace.close_terminal(&close_tab, &close_id, &s.core);
                 s.sync_panel();
+                tx.instant();
             })
             .build(k);
         tab_button(
@@ -286,7 +290,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             close,
         )
         .role("tab")
-        .on_press(move |s: &mut Desk| s.show_panel_tab(&show_tab, Some(show_id.clone())))
+        .on_press_tx(move |s: &mut Desk, tx| s.show_panel_tab(&show_tab, Some(show_id.clone()), tx))
     });
     // Plugin panels sit at the front, in the order they opened.
     let plugin_tabs = plugin_panels.iter().map(|p| {
@@ -300,7 +304,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .build(k);
         tab_button(format!("panel-{}", p.id), text(p.title.clone()).font(crate::theme::medium(13.0)).color(if active { k.c.text_base } else { k.c.text_muted }), active, close)
             .role("tab")
-            .on_press(move |s: &mut Desk| s.show_panel_tab(&show_tab, Some(show_id.clone())))
+            .on_press_tx(move |s: &mut Desk, tx| s.show_panel_tab(&show_tab, Some(show_id.clone()), tx))
     });
     let new_terminal = IconButton::new(&ic::PLUS).variant(IconButtonVariant::GhostMuted).control_size(ControlSize::Large).label("New terminal").help("New terminal").on_press(|s: &mut Desk| s.new_terminal()).build(k);
     let header = row()
@@ -320,12 +324,16 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
         .child(new_terminal)
         // The Electron app pins the toggle to the pane's corner, 11 points past the new terminal button.
         .child(toggle(true, k).ml(7.0));
+    // Each tab of the pane is its own element, which swaps in at once: unkeyed, Rune would morph one tab's
+    // parts into the next one's, and keyed with its default fade, it would crossfade them.
+    let body_key = format!("panel-body-{}", tab.panel_active.as_deref().unwrap_or("review"));
     let body = match (terminal, shown) {
         _ if plugin_panel.is_some() => col().w_full().grow(1.0).min_h(0.0).px(12.0).pb(12.0).child(crate::plugins::view(s, plugin_panel.expect("checked"), &tab.project, k)),
         (Some(t), _) => crate::terminal_view::terminal(s, &t.id, k),
         (None, Some(file)) => file_view(s, tab, &file.path, file.line, k),
         (None, None) => review_view(s, tab, k, layer),
     };
+    let body = col().key(body_key).transition(rune::Transition::none()).w_full().grow(1.0).min_h(0.0).child(body);
     col().key("panel").w_full().h_full().min_h(0.0).child(header).child(body)
 }
 
