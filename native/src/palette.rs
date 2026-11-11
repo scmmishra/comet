@@ -101,6 +101,9 @@ pub struct Palette {
     start: usize,
     pages: Vec<Page>,
     query: TextEdit,
+    /// The query as it stood when the list was last lined up. A new query highlights the top row again.
+    /// Rune calls `on_edit` for every key the field sees, the arrows too, so the reset can't sit there.
+    typed: String,
     active: usize,
     /// The file search last sent, by project and query, and what the core found for it.
     asked: Option<(String, String)>,
@@ -357,8 +360,11 @@ impl Desk {
     fn palette_key(&mut self, event: &KeyEvent, tx: &mut Tx) -> bool {
         let count = self.matches().len();
         match event.key {
-            Key::Down if count > 0 => self.palette.active = (self.palette.active + 1) % count,
-            Key::Up if count > 0 => self.palette.active = (self.palette.active + count - 1) % count,
+            Key::Down | Key::Up if count > 0 => {
+                self.palette.active = if event.key == Key::Down { (self.palette.active + 1) % count } else { (self.palette.active + count - 1) % count };
+                // The list scrolls to keep the highlighted row in sight.
+                tx.scroll_into_view_in("palette", format!("palette-{}", self.palette.active));
+            }
             Key::Enter => {
                 if let Some(entry) = self.matches().into_iter().nth(self.palette.active) {
                     self.select(entry, tx);
@@ -375,8 +381,13 @@ impl Desk {
         true
     }
 
-    /// Asks the core for files as the query changes, on the files list.
+    /// Lines the list up with the query: a new query highlights the top row again, and on the files
+    /// list asks the core for files.
     pub fn sync_palette(&mut self) {
+        if self.palette.query.text != self.palette.typed {
+            self.palette.typed = self.palette.query.text.clone();
+            self.palette.active = 0;
+        }
         if let Some(Page::Files(project)) = self.palette.pages.last().cloned() {
             let wanted = (project, self.palette.query.text.clone());
             if self.palette.asked.as_ref() != Some(&wanted) {
@@ -400,10 +411,7 @@ pub fn palette(s: &Desk, window_height: f32, k: &Kit, layer: &mut Vec<El>) {
         .color(k.c.text_base)
         .placeholder(placeholder, k.c.text_faint)
         .caret(k.c.text_base, k.selection())
-        .on_edit(|s: &mut Desk| {
-            s.palette.active = 0;
-            &mut s.palette.query
-        })
+        .on_edit(|s: &mut Desk| &mut s.palette.query)
         .on_input_key(|s: &mut Desk, event: &KeyEvent, tx| s.palette_key(event, tx));
     // A 40 point field, 6 and 8 points in, over a border that takes a point of room in CSS and none in Rune.
     let field = row()
