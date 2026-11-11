@@ -17,9 +17,38 @@ const STOP_GRACE: Duration = Duration::from_secs(1);
 /// How long the socket thread waits for a core message before it sends what the app queued. A
 /// message the app sends waits at most this long.
 const SEND_WAIT: Duration = Duration::from_millis(4);
-/// The core keeps the native app's window and plugin builds in `~/.desk/native`, apart from the
-/// Electron Desk's, while both exist.
-pub const INSTANCE: &str = "native";
+/// A Desk run from the repo keeps its window and plugin builds in `~/.desk/native`, apart from the
+/// installed Desk's and from the Electron Desk Dev's `~/.desk/dev`.
+const DEV_INSTANCE: &str = "native";
+
+/// Where the core runs from, and which Desk it serves.
+#[derive(Debug, PartialEq)]
+pub struct Setup {
+    pub bun: PathBuf,
+    /// The folder holding `core/src/main.ts`.
+    pub dir: PathBuf,
+    /// The instance's folder name under `~/.desk`. None is the installed Desk, which keeps `~/.desk` itself.
+    pub instance: Option<&'static str>,
+}
+
+/// This Desk's setup: the core in its bundle when it runs as `Desk.app`, else in the repo it was built from.
+pub fn setup() -> Setup {
+    let exe = std::env::current_exe().unwrap_or_default();
+    setup_for(&exe, std::env::var_os("DESK_BUN"))
+}
+
+/// A bundled Desk carries the core's source, its packages and Bun in `Contents/Resources`, as
+/// `scripts/package.sh` lays them out. Run from the repo, Desk takes `bun` from PATH, or `DESK_BUN`.
+fn setup_for(exe: &Path, bun: Option<std::ffi::OsString>) -> Setup {
+    let contents = exe.parent().filter(|dir| dir.ends_with("Contents/MacOS")).and_then(Path::parent);
+    match contents {
+        Some(contents) => {
+            let resources = contents.join("Resources");
+            Setup { bun: resources.join("bun"), dir: resources.join("core"), instance: None }
+        }
+        None => Setup { bun: bun.map_or_else(|| "bun".into(), PathBuf::from), dir: repo(), instance: Some(DEV_INSTANCE) },
+    }
+}
 
 /// What the core tells the app, in order: one `Ready` or `Failed`, then messages until it stops.
 /// Each event moves once, from the socket thread to the app, so its size costs nothing worth boxing.
@@ -75,9 +104,13 @@ impl Core {
     pub fn start(&self, on_event: impl Fn(Event) + Send + 'static) {
         let process = self.process.clone();
         let Some(queued) = self.queued.lock().unwrap().take() else { return };
-        // Only tests change the command, to point the core at their own Desk folder.
-        #[cfg_attr(not(test), expect(unused_mut))]
-        let mut command = Command::new(std::env::var("DESK_BUN").unwrap_or_else(|_| "bun".into()));
+        let setup = setup();
+        let mut command = Command::new(&setup.bun);
+        command.arg("core/src/main.ts").current_dir(&setup.dir);
+        if let Some(instance) = setup.instance {
+            command.env("DESK_INSTANCE", instance);
+        }
+        // Only tests point the core at a Desk folder of their own.
         #[cfg(test)]
         if let Some(home) = &self.home {
             command.env("DESK_HOME", home);
@@ -108,7 +141,7 @@ impl Core {
     }
 }
 
-/// The repo the core runs from. A packaged Desk will carry the core in its bundle instead.
+/// The repo this Desk was built from, which a Desk run from the repo starts the core in.
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
 }
@@ -117,10 +150,7 @@ fn run(mut command: Command, process: &Mutex<Option<(Child, ChildStdin)>>, queue
     let token = ids::hex::<24>();
     let bun = command.get_program().to_string_lossy().into_owned();
     let mut child = command
-        .arg("core/src/main.ts")
-        .current_dir(repo())
         .env("DESK_TOKEN", &token)
-        .env("DESK_INSTANCE", INSTANCE)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
@@ -181,16 +211,26 @@ mod tests {
     use super::*;
     use crate::protocol::{ClientMessage, CoreMessage};
 
+    #[test]
+    fn a_bundled_desk_runs_the_core_in_its_resources_and_one_from_the_repo_runs_its_own() {
+        let bundled = setup_for(Path::new("/Applications/Desk.app/Contents/MacOS/Desk"), Some("/opt/bun".into()));
+        let resources = Path::new("/Applications/Desk.app/Contents/Resources");
+        assert_eq!(bundled, Setup { bun: resources.join("bun"), dir: resources.join("core"), instance: None }, "a bundle ignores DESK_BUN and serves ~/.desk");
+        let dev = setup_for(Path::new("/code/desk/native/target/debug/desk"), None);
+        assert_eq!(dev, Setup { bun: "bun".into(), dir: repo(), instance: Some(DEV_INSTANCE) });
+        assert_eq!(setup_for(Path::new("/code/desk/native/target/debug/desk"), Some("/opt/bun".into())).bun, Path::new("/opt/bun"));
+    }
+
     /// A Desk folder of the test's own, with a saved window of two tabs in the native instance.
     fn seeded_home(test: &str) -> PathBuf {
         let home = std::env::temp_dir().join(format!("desk-native-{test}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         let project = home.join("project");
-        std::fs::create_dir_all(home.join(INSTANCE)).unwrap();
+        std::fs::create_dir_all(home.join(DEV_INSTANCE)).unwrap();
         std::fs::create_dir_all(&project).unwrap();
         let tab = |id: &str, title: &str| serde_json::json!({ "id": id, "title": title, "project": project, "terminals": [], "model": "default", "permissionMode": "auto" });
         let window = serde_json::json!({ "tabs": [tab("a", "First"), tab("b", "Second")], "active": "b", "threads": {}, "recent": [], "keyed": {}, "layouts": {}, "closed": [] });
-        std::fs::write(home.join(INSTANCE).join("window.json"), window.to_string()).unwrap();
+        std::fs::write(home.join(DEV_INSTANCE).join("window.json"), window.to_string()).unwrap();
         home
     }
 
@@ -342,7 +382,7 @@ mod tests {
         let mut reversed = tabs.0;
         reversed.reverse();
         core.send(&ClientMessage::TabsSave { tabs: reversed, active: Some("a".into()) });
-        let file = home.join(INSTANCE).join("window.json");
+        let file = home.join(DEV_INSTANCE).join("window.json");
         let saved = |deadline: Instant| loop {
             let window: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
             if window["active"] == "a" || Instant::now() > deadline {

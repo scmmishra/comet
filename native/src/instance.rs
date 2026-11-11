@@ -1,7 +1,6 @@
 //! One native Desk runs at a time: its core saves the window's tabs in one file, which a second
 //! Desk would overwrite. Rune's `single_instance` covers only Windows, so the Mac takes a file lock.
 
-use crate::core::INSTANCE;
 use std::fs::File;
 use std::path::PathBuf;
 
@@ -15,7 +14,10 @@ fn desk_home() -> PathBuf {
 
 /// Where this Desk keeps what only it may write, as the core names it (`instanceHome`).
 pub fn home() -> PathBuf {
-    desk_home().join(INSTANCE)
+    match crate::core::setup().instance {
+        Some(instance) => desk_home().join(instance),
+        None => desk_home(),
+    }
 }
 
 /// Takes the lock, which holds while the file stays open. None when another Desk holds it.
