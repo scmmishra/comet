@@ -23,6 +23,9 @@ const TOGGLE_INSET: (f32, f32) = (8.0, 9.0);
 /// How fast Rune's animations run: 1.5 plays every entry, exit and fade in two thirds of its time.
 /// Scrolling and growing lists keep their own pace.
 const ANIMATION_SPEED: f32 = 1.5;
+/// How long an overlay takes to fade out when it closes, as a spring's response, before
+/// `ANIMATION_SPEED` scales it.
+const OVERLAY_EXIT: rune::Spring = rune::Spring::new(0.12, 0.0);
 /// The main panel's corners, Desk's `rounded-3xl`.
 const PANEL_RADIUS: f32 = 12.0;
 /// A plugin's sidebar, `w-[320px]`.
@@ -398,7 +401,9 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
             s.refresh_outside();
         }
     });
-    rune_kit::root(window, layer)
+    // Popovers, menus, the palette and toasts leave with one quick fade, so closing feels as fast as
+    // opening. Rune's overlays otherwise fade out over a 0.25 spring.
+    rune_kit::root(window, layer).child_exit(rune::Transition::opacity().springs(rune::SpringPair::new(OVERLAY_EXIT, OVERLAY_EXIT)))
 }
 
 /// A tab's session: its header and its thread.
