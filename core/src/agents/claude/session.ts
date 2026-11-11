@@ -236,6 +236,7 @@ export class ClaudeSession implements AgentSession {
         // Full access needs this at start. Passing it always lets a thread switch to Full access later.
         // It allows the mode and does not set it.
         allowDangerouslySkipPermissions: true,
+        ...(this.options.ephemeral ? { persistSession: false } : {}),
         ...(this.sessionId ? { resume: this.sessionId } : {}),
         ...(this.sessionId && this.resumeAt ? { resumeSessionAt: this.resumeAt } : {}),
         // Claude Code keeps a copy of each file before its tools edit it, so a rewind can restore them.

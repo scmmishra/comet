@@ -1,6 +1,6 @@
 import { afterAll } from "bun:test"
-import type { AgentFeature, AgentId } from "@desk/protocol"
-import type { Agent, AgentHost, AgentSession } from "./agents/agent"
+import type { AgentFeature, AgentId, ThreadEvent } from "@desk/protocol"
+import type { Agent, AgentHost, AgentSession, SessionOptions } from "./agents/agent"
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
@@ -71,11 +71,12 @@ export type FakeCalls = string[]
 /**
  * An agent that runs no program, for tests of what the core does around agents. Its sessions record what
  * they are asked, start a session called `<id>-session` on the first message, and stay busy until
- * `finish` ends the turn. `threads` lists what the agent has saved, and its optional parts are those `features` names.
+ * `finish` ends the turn or a stop does. `threads` lists what the agent has saved, and its optional parts are those `features` names.
  */
 export function fakeAgent(id: AgentId, features: readonly AgentFeature[] = [], threads: readonly { readonly id: string; readonly title: string; readonly updatedAt: number }[] = []) {
   const calls: FakeCalls = []
-  const sessions: { finish(): void }[] = []
+  /** Each session opened, in order: what it was opened with, a way to add to its thread, and a way to end its turn. */
+  const sessions: { readonly dir: string; readonly options: SessionOptions; emit(event: ThreadEvent): void; finish(): void }[] = []
   const has = (feature: AgentFeature) => features.includes(feature)
   const make = (host: AgentHost): Agent => ({
     id,
@@ -83,7 +84,7 @@ export function fakeAgent(id: AgentId, features: readonly AgentFeature[] = [], t
     features,
     inspect: async () => host.publish({ state: "ready", models: [{ value: "default", label: "Default", description: "", efforts: [], fast: false, permissionModes: ["default"] }] }),
     refreshUsage: async () => host.publish({ usage: { windows: [{ id: "week", label: "This week", percent: 10 }] } }),
-    open(_dir, emit, options): AgentSession {
+    open(dir, emit, options): AgentSession {
       let busy = false
       const turn = (verb: string, text: string) => {
         calls.push(`${verb} ${text}`)
@@ -93,6 +94,9 @@ export function fakeAgent(id: AgentId, features: readonly AgentFeature[] = [], t
         emit({ kind: "status", busy: true })
       }
       sessions.push({
+        dir,
+        options,
+        emit,
         finish() {
           busy = false
           emit({ kind: "item", item: { type: "result", id: `r${calls.length}`, durationMs: 1, isError: false } })
@@ -105,7 +109,13 @@ export function fakeAgent(id: AgentId, features: readonly AgentFeature[] = [], t
         },
         send: (text) => turn("send", text),
         steer: (text) => turn("steer", text),
-        interrupt: async () => void calls.push("interrupt"),
+        interrupt: async () => {
+          calls.push("interrupt")
+          if (!busy) return
+          busy = false
+          emit({ kind: "item", item: { type: "result", id: `r${calls.length}`, durationMs: 1, isError: false, stopped: true } })
+          emit({ kind: "status", busy: false })
+        },
         forceStop: () => false,
         configure: async (settings) => void calls.push(`configure ${settings.model}`),
         answerPermission: (requestId, answer) => void calls.push(`permission ${requestId} ${answer}`),

@@ -69,6 +69,8 @@ export interface SessionOptions {
   /** Called when the agent names the session, so it can be resumed later. */
   readonly onSessionId: (id: string) => void
   readonly tools?: ToolServer
+  /** Whether the session leaves no saved thread, such as work one agent hands another. Its transcript is not listed or resumed. */
+  readonly ephemeral?: boolean
 }
 
 /**

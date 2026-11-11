@@ -5,6 +5,8 @@ import { readSkills } from "./agents/claude/skills"
 import { Agents } from "./agents/registry"
 import { discoverCommands } from "./command-sources"
 import { Commands } from "./commands"
+import { Delegations } from "./delegate/delegations"
+import { serveMcp } from "./delegate/mcp"
 import { openableFile, openInEditor, readForView } from "./files"
 import { checkImages } from "./images"
 import { Layouts } from "./plugins/layouts"
@@ -18,6 +20,9 @@ import { ThreadRows } from "./thread-rows"
 import { Window } from "./window"
 
 type Send = (message: CoreMessage) => void
+
+/** Where agents reach Desk's own tools, over MCP. */
+const MCP_PATH = "/mcp"
 
 export interface CoreServer {
   readonly port: number
@@ -56,9 +61,13 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     closePanel: (tabId, id) => void layouts.closePanel(tabId, id).catch(report),
     stopped: () => void layouts.resendAll().catch(report),
   })
+  // An agent reaches Desk's tools at the server's own port, which is known once it listens.
+  let toolsUrl = ""
+  const delegations = new Delegations(agents, { tab: (tabId) => window.running(tabId), emit: (tabId, event) => broadcast({ type: "session.event", tabId, event }) }, () => toolsUrl)
   const window = new Window({
     broadcast,
     agents,
+    delegations,
     tabClosed: (tabId) => {
       rows.forget(tabId)
       plugins.dropTab(tabId)
@@ -211,6 +220,12 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     port: 0,
     fetch(request, server) {
       const url = new URL(request.url)
+      // An agent's session calls Desk's tools here, under the token Desk gave that session. A call runs
+      // another agent's whole task, so it may stay open far longer than Bun lets an idle request.
+      if (url.pathname === MCP_PATH) {
+        server.timeout(request, 0)
+        return serveMcp(request, (authorization) => delegations.toolsFor(authorization))
+      }
       if (url.searchParams.get("token") !== token) return new Response("Forbidden", { status: 403 })
       // A project's icon, for its avatar. Only an image inside a project folder is served.
       if (url.pathname === "/project-icon") {
@@ -244,6 +259,8 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       },
     },
   })
+
+  toolsUrl = `http://127.0.0.1:${server.port}${MCP_PATH}`
 
   return {
     port: server.port!,

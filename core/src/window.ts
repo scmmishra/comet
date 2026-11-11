@@ -2,6 +2,7 @@ import type { TurnOutcome } from "@desk/plugin"
 import { followUpFor, type AgentId, type ChangedFile, type CoreMessage, type FileChange, type FollowUp, type ImageAttachment, type PermissionAnswer, type PluginLayout, type QueuedMessage, type ReviewScope, type RunSettings, type TabInfo, type ThreadEvent, type ThreadItem, type ThreadSummary } from "@desk/protocol"
 import { requireFeature, type Agent, type AgentSession } from "./agents/agent"
 import type { Agents } from "./agents/registry"
+import type { Delegations } from "./delegate/delegations"
 import { branchBase, capture, changesSince, checkpointChanges, headTree, keepCheckpoints } from "./checkpoints"
 import { git } from "./git"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
@@ -29,6 +30,8 @@ interface WindowHooks {
   readonly broadcast: Send
   /** The agents that run the tabs' threads. */
   readonly agents: Agents
+  /** Work a tab's agent hands another agent. Without it, sessions get no tools of Desk's. */
+  readonly delegations?: Pick<Delegations, "server" | "answerPermission" | "answerQuestion" | "stop" | "drop">
   /** A tab closed, so what runs for it can stop. */
   readonly tabClosed: (tabId: string) => void
   /** A turn ended in a plugin's thread, named by its full key, even while the thread was away from its tab. */
@@ -264,7 +267,9 @@ export class Window {
     this.updateThread(tabId, { queue, queueHeld: held && queue.length > 0 })
   }
 
+  /** Asks a tab's turn to stop, and with it the work its agent handed to others. */
   interrupt(tabId: string) {
+    this.hooks.delegations?.stop(tabId)
     return this.sessions.get(tabId)?.interrupt()
   }
 
@@ -303,12 +308,13 @@ export class Window {
     if (this.sessions.get(tabId)?.forceStop()) this.closeSession(tabId)
   }
 
+  /** Answers a request in a tab's thread. A request of work handed to another agent goes to that agent. */
   answerPermission(tabId: string, requestId: string, answer: PermissionAnswer) {
-    this.sessions.get(tabId)?.answerPermission(requestId, answer)
+    if (!this.hooks.delegations?.answerPermission(tabId, requestId, answer)) this.sessions.get(tabId)?.answerPermission(requestId, answer)
   }
 
   answerQuestion(tabId: string, requestId: string, answers: Readonly<Record<string, string>> | undefined) {
-    this.sessions.get(tabId)?.answerQuestion(requestId, answers)
+    if (!this.hooks.delegations?.answerQuestion(tabId, requestId, answers)) this.sessions.get(tabId)?.answerQuestion(requestId, answers)
   }
 
   /**
@@ -327,6 +333,7 @@ export class Window {
   closeSession(tabId: string) {
     this.sessions.get(tabId)?.close()
     this.sessions.delete(tabId)
+    this.hooks.delegations?.drop(tabId)
   }
 
   /** Starts a fresh session in a tab, as /clear asks. The tab keeps its plugin key and its queue, and its thread starts empty. */
@@ -463,6 +470,12 @@ export class Window {
     return this.tab(tabId).project
   }
 
+  /** A tab's folder and how its thread runs, or nothing for a tab that is gone. */
+  running(tabId: string): { readonly project: string; readonly settings: RunSettings } | undefined {
+    const tab = this.state.tabs.find((found) => found.id === tabId)
+    return tab && { project: tab.project, settings: tab }
+  }
+
   layout(tabId: string): PluginLayout | undefined {
     return this.state.layouts[tabId]
   }
@@ -549,6 +562,7 @@ export class Window {
         resume: this.thread(tab.id).sessionId,
         ...(rewind ? { resumeAt: rewind.at, onResumedAt: () => current() && this.updateThread(tab.id, { rewind: undefined }) } : {}),
         settings: tab,
+        ...(this.hooks.delegations ? { tools: this.hooks.delegations.server(tab.id) } : {}),
         onSessionId: (sessionId) => {
           // The thread belongs to the agent that started it from here on.
           if (current()) return this.updateThread(tab.id, { sessionId, agent: agent.id })
