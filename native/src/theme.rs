@@ -3,6 +3,7 @@
 //! draw in Desk's colours. Desk's colours stay the source.
 
 use rune::{Color, TextStyle};
+use rune_kit::syntax::SyntaxTheme;
 #[allow(deprecated)]
 use rune_kit::{Button, ButtonSize, Kit, MarkdownStyle};
 use std::sync::OnceLock;
@@ -232,6 +233,19 @@ pub fn markdown(k: &Kit, size: f32) -> MarkdownStyle {
         .link(k.c.text_accent)
         // A code block is one flat surface, with no outline.
         .code_block(color(d.code), Color::TRANSPARENT)
+        .syntax_theme(code_colors(k.dark))
+}
+
+/// The Electron app highlights code with @pierre/diffs' pierre-dark and pierre-light themes. Their
+/// colours, by the kinds rune-kit's highlighter tells apart.
+fn code_colors(dark: bool) -> SyntaxTheme {
+    use rune_kit::syntax::Syntax::*;
+    let colors: [(rune_kit::syntax::Syntax, &str); 15] = if dark {
+        [(Keyword, "#ff678d"), (String, "#5ecc71"), (Number, "#68cdf2"), (Comment, "#737373"), (Type, "#d568ea"), (Function, "#9d6afb"), (Property, "#ffa359"), (Punctuation, "#636363"), (Operator, "#08c0ef"), (Variable, "#ffa359"), (Parameter, "#a3a3a3"), (Heading, "#ff855e"), (Link, "#009fff"), (Regex, "#64d1db"), (Attribute, "#60d199")]
+    } else {
+        [(Keyword, "#d32a61"), (String, "#199f43"), (Number, "#1ca1c7"), (Comment, "#737373"), (Type, "#a631be"), (Function, "#693acf"), (Property, "#d47628"), (Punctuation, "#636363"), (Operator, "#08c0ef"), (Variable, "#d47628"), (Parameter, "#636363"), (Heading, "#d5512f"), (Link, "#009fff"), (Regex, "#17a5af"), (Attribute, "#18a46c")]
+    };
+    colors.into_iter().fold(SyntaxTheme::from_kit(kit(dark)), |theme, (kind, hex)| theme.with(kind, color(hex)))
 }
 
 /// Desk's typefaces, Geist and Geist Mono, as the Electron app loads them. Variable fonts, so every
