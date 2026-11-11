@@ -273,7 +273,7 @@ impl Desk {
                 _ => Vec::new(),
             },
             TriggerKind::Command => {
-                let skills = self.projects.get(&info.project).and_then(|p| p.skills.as_deref()).unwrap_or(&[]);
+                let skills = self.projects.get(&info.project).and_then(|p| p.skills_of(&info.agent)).unwrap_or(&[]);
                 let all: Vec<Suggestion> = DESK_COMMANDS.iter().map(|(n, d)| Suggestion::Desk(n, d)).chain(skills.iter().cloned().map(Suggestion::Skill)).collect();
                 triggers::match_commands(&all, &trigger.query, suggestion_name, suggestion_description).into_iter().cloned().collect()
             }
@@ -562,7 +562,7 @@ fn sync(s: &mut Desk) -> Option<std::time::Duration> {
                     s.drafts.asked = Some(wanted);
                 }
             }
-            // Claude Code's commands are read once per project, when / first opens the list.
+            // The agents' commands are read once per project, when / first opens the list.
             TriggerKind::Command => {
                 if s.drafts.skills_asked.insert(tab.project.clone()) {
                     s.core.send(&ClientMessage::ProjectGet { project: tab.project.clone(), part: "skills".into() });

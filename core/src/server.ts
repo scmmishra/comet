@@ -1,7 +1,6 @@
 import type { ClientMessage, CoreMessage, ProjectPart, ProjectParts } from "@desk/protocol"
 import type { ServerWebSocket } from "bun"
 import { readMcpServers, toggleMcpServer } from "./agents/claude/mcp"
-import { readSkills } from "./agents/claude/skills"
 import { Agents } from "./agents/registry"
 import { discoverCommands } from "./command-sources"
 import { Commands } from "./commands"
@@ -103,7 +102,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     threads: (dir, reply) => window.recentThreads(dir).then(reply),
     icons: (dir, reply) => findIconFiles(dir).then(reply),
     mcp: (dir, reply) => readMcpServers(dir, reply),
-    skills: (dir, reply) => readSkills(dir).then(reply),
+    skills: (dir, reply) => agents.commands(dir).then(reply),
     plugins: (dir, reply) => plugins.contributions(dir).then(reply),
   }
   const read = <K extends ProjectPart>(dir: string, part: K, reply: Send) => readers[part](dir, (value) => reply(project(dir, part, value)))

@@ -637,12 +637,15 @@ fn mcps(s: &Desk, k: &Kit) -> El {
 }
 
 fn skills(s: &Desk, k: &Kit) -> El {
-    let project = s.workspace.active_tab().map(|t| t.project.clone());
-    let skills = project.as_ref().and_then(|p| s.projects.get(p)).and_then(|p| p.skills.clone());
+    // The page lists the commands of the active tab's agent, since those are the ones `/` offers there.
+    let tab = s.workspace.active_tab();
+    let agent = tab.map_or(s.account.default_agent(), |t| t.agent.as_str());
+    let project = tab.and_then(|t| s.projects.get(&t.project));
     let faint = |words: &str| text(words.to_owned()).font(crate::theme::text(13.0)).color(k.c.text_faint).wrap();
-    let content = match skills {
+    let content = match project.and_then(|p| p.skills.as_ref()) {
         None => vec![faint("Reading skills…")],
-        Some(skills) => {
+        Some(_) => {
+            let skills = project.and_then(|p| p.skills_of(agent)).unwrap_or(&[]);
             let rows: Vec<El> = skills
                 .iter()
                 .filter(|x| !x.builtin)
@@ -651,7 +654,7 @@ fn skills(s: &Desk, k: &Kit) -> El {
             if rows.is_empty() { vec![faint("No skills are available.")] } else { vec![list(k, rows)] }
         }
     };
-    col().w_full().child(header(k, "Skills", "The skills and commands Claude Code offers. Type / in a thread to use one.")).child(body(content))
+    col().w_full().child(header(k, "Skills", &format!("The skills and commands {} offers in this tab's project. Type / in a thread to use one.", s.agent_name(agent)))).child(body(content))
 }
 
 #[cfg(test)]

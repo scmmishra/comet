@@ -1,4 +1,4 @@
-import type { AgentFeature, AgentId, AgentInfo, ContextReading, ImageAttachment, PermissionAnswer, RunSettings, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
+import type { AgentFeature, AgentId, AgentInfo, ContextReading, ImageAttachment, PermissionAnswer, RunSettings, Skill, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
 
 /**
  * What Desk needs from a coding agent, such as Claude Code or Codex. An agent runs conversations, keeps
@@ -24,6 +24,8 @@ export interface Agent {
   open(dir: string, emit: Emit, options: SessionOptions): AgentSession
   /** The conversations the agent saved. */
   readonly threads: AgentThreads
+  /** The slash commands the agent offers in a folder, grouped. Null when the agent could not be asked. An agent without slash commands has no such method. */
+  commands?(dir: string): Promise<Skill[] | null>
   /** Updates the agent with its own updater. */
   update?(): Promise<void>
   /** Installs the agent on this Mac. */

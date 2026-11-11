@@ -10,8 +10,8 @@ pub struct Project {
     pub threads: Option<Vec<ThreadSummary>>,
     /// None until read or outside a Git repo.
     pub space: Option<Space>,
-    /// Claude Code's commands in the project. None until read.
-    pub skills: Option<Vec<Skill>>,
+    /// Each agent's slash commands in the project, by agent. None until read, and None for an agent that could not be asked.
+    pub skills: Option<HashMap<String, Option<Vec<Skill>>>>,
     /// The project's own commands, which the Commands card runs. None until read.
     pub commands: Option<Vec<CommandInfo>>,
     /// Commands the project's files define, for the command editor's import menu. None until read.
@@ -22,6 +22,13 @@ pub struct Project {
     pub icons: Option<Vec<String>>,
     /// The MCP servers Claude Code loads in the project. Some(None) when it could not be asked.
     pub mcp: Option<Option<Vec<McpServer>>>,
+}
+
+impl Project {
+    /// An agent's slash commands in the project. None until read, and when the agent could not be asked.
+    pub fn skills_of(&self, agent: &str) -> Option<&[Skill]> {
+        self.skills.as_ref()?.get(agent)?.as_deref()
+    }
 }
 
 #[derive(Default)]
@@ -67,5 +74,16 @@ mod tests {
         assert_eq!(projects.get("/a").unwrap().threads.as_ref().unwrap()[0].title, "T");
         assert_eq!(projects.get("/a").unwrap().space.as_ref().unwrap().branch, "main");
         assert!(projects.get("/b").unwrap().space.is_none());
+    }
+
+    #[test]
+    fn keeps_each_agents_commands_apart_and_none_for_an_agent_that_could_not_be_asked() {
+        let mut projects = Projects::default();
+        assert!(Project::default().skills_of("claude").is_none());
+        projects.read("/a".into(), "skills", serde_json::json!({ "claude": [{ "name": "pdf", "description": "Reads PDFs", "ownProject": false, "group": "User" }], "codex": [], "antigravity": null }));
+        let project = projects.get("/a").unwrap();
+        assert_eq!(project.skills_of("claude").unwrap().iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), ["pdf"]);
+        assert!(project.skills_of("codex").unwrap().is_empty());
+        assert!(project.skills_of("antigravity").is_none());
     }
 }

@@ -132,10 +132,14 @@ export const CORE_MESSAGES = [
     type: "project",
     project: "/Users/me/code/web",
     part: "skills",
-    value: [
-      { name: "compact", description: "Compact the context", builtin: true, ownProject: false, group: "Claude Code" },
-      { name: "pdf", description: "Read PDFs", argumentHint: "<file>", ownProject: false, group: "User" },
-    ],
+    value: {
+      claude: [
+        { name: "compact", description: "Compact the context", builtin: true, ownProject: false, group: "Claude Code" },
+        { name: "pdf", description: "Read PDFs", argumentHint: "<file>", ownProject: false, group: "User" },
+      ],
+      codex: [],
+      antigravity: null,
+    },
   },
   {
     type: "review",

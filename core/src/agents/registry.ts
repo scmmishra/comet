@@ -1,4 +1,4 @@
-import { AGENTS, type AgentId, type AgentInfo, type CoreMessage } from "@desk/protocol"
+import { AGENTS, type AgentId, type AgentInfo, type CoreMessage, type Skill } from "@desk/protocol"
 import type { Agent, AgentHost, AgentReading } from "./agent"
 import { claudeAgent } from "./claude"
 
@@ -55,6 +55,12 @@ export class Agents {
     if (this.inspected) return
     this.inspected = true
     for (const agent of this.agents.values()) void this.inspect(agent)
+  }
+
+  /** Each agent's slash commands in a folder, by agent. An agent without any lists none. */
+  async commands(dir: string): Promise<Partial<Record<AgentId, Skill[] | null>>> {
+    const read = await Promise.all(this.all().map(async (agent) => [agent.id, agent.commands ? await agent.commands(dir) : []] as const))
+    return Object.fromEntries(read)
   }
 
   /** Reads every agent's plan usage again. */

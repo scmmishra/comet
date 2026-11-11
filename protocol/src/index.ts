@@ -481,8 +481,8 @@ export interface McpServer {
 }
 
 /**
- * A command Claude Code offers in a project: one of its own, a skill or a custom command. The core lists
- * them grouped by `group`, in order, with Claude Code's own first.
+ * A command an agent offers in a project: one of its own, a skill or a custom command. The core lists
+ * them grouped by `group`, in order, with the agent's own first.
  */
 export interface Skill {
   /** What follows the slash, such as "pdf" or "figma:figma-use". */
@@ -490,7 +490,7 @@ export interface Skill {
   readonly description: string
   /** What the command takes after its name, such as "<file>". */
   readonly argumentHint?: string
-  /** Whether it is Claude Code's own command, such as /compact, rather than a skill. */
+  /** Whether it is the agent's own command, such as /compact, rather than a skill. */
   readonly builtin?: boolean
   /** Whether it lives in this project, rather than being available to every project. */
   readonly ownProject: boolean
@@ -586,8 +586,8 @@ export interface ProjectParts {
   readonly icons: readonly string[]
   /** Null when Claude Code could not be asked. Reading starts the servers, so it takes a few seconds. */
   readonly mcp: readonly McpServer[] | null
-  /** Skills and custom commands. Null when Claude Code could not be asked. */
-  readonly skills: readonly Skill[] | null
+  /** Each agent's skills and custom commands, by agent. Null when the agent could not be asked. An agent with no slash commands lists none. */
+  readonly skills: Readonly<Partial<Record<AgentId, readonly Skill[] | null>>>
   /** What the plugins on in the project let the user start. Reading starts those plugins. */
   readonly plugins: PluginContributions
 }

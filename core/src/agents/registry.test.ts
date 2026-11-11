@@ -53,6 +53,13 @@ test("an agent that cannot be read says why in its own row, and the others still
   expect(row(last(sent), "claude").state).toBe("ready")
 })
 
+test("reads each agent's slash commands, and none from an agent that has none", async () => {
+  const claude = fakeAgent("claude")
+  const skill = { name: "pdf", description: "Reads a PDF", ownProject: false, group: "User" }
+  const agents = new Agents(() => {}, settings, { claude: (host) => ({ ...claude.make(host), commands: async () => [skill] }), codex: fakeAgent("codex").make })
+  expect(await agents.commands("/work/app")).toEqual({ claude: [skill], codex: [] })
+})
+
 test("runs what an agent can do to itself, reads it again, and refuses what it cannot do", async () => {
   const codex = fakeAgent("codex", ["sign-in"])
   const sent: CoreMessage[] = []

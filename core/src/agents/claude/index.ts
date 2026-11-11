@@ -4,6 +4,7 @@ import { claudeCodePath, NO_CLAUDE_CODE } from "./executable"
 import { claudeAccount, defaultEfforts, modelOptions } from "./models"
 import { probe } from "./probe"
 import { ClaudeSession } from "./session"
+import { readSkills } from "./skills"
 import { claudeThreads } from "./threads"
 import { Usage } from "./usage"
 import { claudeCodeVersion, updateClaudeCode } from "./version"
@@ -22,6 +23,7 @@ export function claudeAgent(host: AgentHost): Agent {
     name: "Claude Code",
     features: ["steer", "rewind", "restore-files", "fork", "rename", "delete", "compact-idle"],
     threads: claudeThreads,
+    commands: readSkills,
 
     /** The models come as soon as the probe starts, then again with each model's default effort, which takes seconds to read. */
     async inspect() {
