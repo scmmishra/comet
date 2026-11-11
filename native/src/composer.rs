@@ -9,7 +9,7 @@ use crate::shell::Desk;
 use crate::theme;
 use crate::thread_view::COLUMN;
 use rune::{El, Key, KeyEvent, TextEdit, auto_grow, col, el, icon, row, text, text_input};
-use rune_kit::{Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Keybind, Kit, Markdown, Placement, popover};
+use rune_kit::{ButtonVariant, ControlSize, IconButton, IconButtonVariant, Keybind, Kit, Markdown, Placement, popover};
 use std::collections::HashSet;
 use rune_theme_opencode::icons as ic;
 use std::collections::HashMap;
@@ -451,8 +451,8 @@ fn suggestion_list(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
             .position_in_set(i + 1, rows.len())
             .on_press(move |s: &mut Desk| s.pick_suggestion(&tab, i))
             .child(icon(mark, 14.0).color(k.c.text_faint))
-            .child(text(label).font(k.ty.text_small).color(k.c.text_base))
-            .child(text(detail).font(k.ty.text_small).color(k.c.text_faint).truncate().grow(1.0))
+            .child(text(label).font(crate::theme::text(13.0)).color(k.c.text_base))
+            .child(text(detail).font(crate::theme::text(13.0)).color(k.c.text_faint).truncate().grow(1.0))
     });
     let list = col().w_full().padding(6.0).children(items);
     Some(
@@ -555,7 +555,7 @@ fn answer_button(s: &Desk, tab: &str, request: &str, questions: &[Question], emp
         "Submit answer"
     };
     let (tab, request, questions) = (tab.to_owned(), request.to_owned(), questions.to_vec());
-    Button::new(label)
+    crate::theme::button(label)
         .variant(ButtonVariant::Contrast)
         .disabled(!answered)
         .on_press(move |s: &mut Desk| s.advance_question(&tab, &request, &questions))
@@ -582,7 +582,7 @@ fn question_panel(s: &Desk, tab: &str, request: &str, questions: &[Question], k:
         let (tab, request) = (tab.to_owned(), request.to_owned());
         move |s: &mut Desk| s.core.send(&ClientMessage::QuestionAnswer { tab_id: tab.clone(), request_id: request.clone(), answers: None })
     };
-    let small = |words: String, color| text(words).font(k.ty.text_xsmall).color(color);
+    let small = |words: String, color| text(words).font(crate::theme::text(12.0)).color(color);
     let head = row()
         .w_full()
         .gap(8.0)
@@ -622,7 +622,7 @@ fn question_panel(s: &Desk, tab: &str, request: &str, questions: &[Question], k:
                         .grow(1.0)
                         .min_w(0.0)
                         .gap(2.0)
-                        .child(text(option.label.clone()).font(k.ty.text_small_medium).color(if picked { k.c.text_base } else { k.c.text_muted }))
+                        .child(text(option.label.clone()).font(crate::theme::medium(13.0)).color(if picked { k.c.text_base } else { k.c.text_muted }))
                         .children(option.description.clone().map(|d| small(d, k.c.text_faint).wrap())),
                 )
                 .children((i < NUMBERED_OPTIONS).then(|| Keybind::new(&[(i + 1).to_string()]).build(k)))
@@ -668,8 +668,7 @@ fn background_row(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
         _ => None,
     };
     let (tab, ids) = (tab.to_owned(), tasks.iter().map(|t| t.id.clone()).collect::<Vec<_>>());
-    let stop = Button::new("Stop")
-        .control_size(ControlSize::Small)
+    let stop = crate::theme::small_button("Stop")
         .variant(ButtonVariant::Ghost)
         .on_press(move |s: &mut Desk| s.core.send(&ClientMessage::TasksStop { tab_id: tab.clone(), ids: ids.clone() }))
         .build(k);
@@ -684,8 +683,8 @@ fn background_row(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
             .label("Background commands")
             .help(labels.join("\n"))
             .child(icon(&ic::OUTLINE_CONSOLE, 14.0).color(k.c.text_faint))
-            .child(text(words).font(k.ty.ui).color(k.c.text_faint).truncate().grow(1.0).min_w(0.0))
-            .children(since.map(|d| text(d).font(k.ty.ui).color(k.c.text_faint)))
+            .child(text(words).font(crate::theme::text(13.0)).color(k.c.text_faint).truncate().grow(1.0).min_w(0.0))
+            .children(since.map(|d| text(d).font(crate::theme::text(13.0)).color(k.c.text_faint)))
             .child(stop),
     )
 }
@@ -697,20 +696,20 @@ fn queue_view(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
     }
     let all = s.drafts.all_queued.contains(tab);
     let shown = if all { thread.queue.len() } else { QUEUE_SHOWN.min(thread.queue.len()) };
-    let small = |words: &str| text(words.to_owned()).font(k.ty.text_xsmall).color(k.c.text_faint);
+    let small = |words: &str| text(words.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint);
     let held = thread.queue_held.then(|| {
         let tab = tab.to_owned();
         row()
             .gap(8.0)
             .items_center()
             .child(small("The queue paused when the turn stopped."))
-            .child(Button::new("Resume").control_size(ControlSize::Small).on_press(move |s: &mut Desk| s.core.send(&ClientMessage::QueueResume { tab_id: tab.clone() })).build(k))
+            .child(crate::theme::small_button("Resume").on_press(move |s: &mut Desk| s.core.send(&ClientMessage::QueueResume { tab_id: tab.clone() })).build(k))
     });
     let messages = thread.queue[..shown].iter().map(|message| queued(s, tab, message, k));
     let more = (thread.queue.len() > QUEUE_SHOWN).then(|| {
         let tab = tab.to_owned();
         let words = if all { "Show fewer".to_owned() } else { format!("Show all {} queued", thread.queue.len()) };
-        text(words).font(k.ty.text_xsmall).color(k.c.text_faint).role("button").on_press(move |s: &mut Desk| {
+        text(words).font(crate::theme::text(12.0)).color(k.c.text_faint).role("button").on_press(move |s: &mut Desk| {
             if !s.drafts.all_queued.remove(&tab) {
                 s.drafts.all_queued.insert(tab.clone());
             }
@@ -740,8 +739,7 @@ fn queued(s: &Desk, tab: &str, message: &QueuedMessage, k: &Kit) -> El {
         .items_center()
         .pr(4.0)
         .child(
-            Button::new("Send now")
-                .control_size(ControlSize::Small)
+            crate::theme::small_button("Send now")
                 .variant(ButtonVariant::GhostMuted)
                 .icon(&ic::ARROW_UP)
                 .on_press(move |s: &mut Desk| s.core.send(&ClientMessage::QueueSend { tab_id: send_tab.clone(), id: send_id.clone() }))

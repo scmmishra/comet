@@ -7,7 +7,7 @@ use crate::protocol::{ClientMessage, DrawnView, TabLayout, UiOp};
 use crate::shell::Desk;
 use crate::theme;
 use rune::{El, ScrollSpec, TextEdit, col, el, row, text, text_input};
-use rune_kit::{Badge, Button, ButtonVariant, Kit, Markdown};
+use rune_kit::{Badge, ButtonVariant, Kit, Markdown};
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
 
@@ -208,7 +208,7 @@ fn node_view(s: &Desk, plugin: &str, id: u64, project: &str, k: &Kit) -> El {
     let props = &node.props;
     let plugin_owned = plugin.to_owned();
     match node.kind.as_str() {
-        TEXT_NODE => text(node.text.clone().unwrap_or_default()).font(k.ty.ui).color(k.c.text_base).wrap(),
+        TEXT_NODE => text(node.text.clone().unwrap_or_default()).font(crate::theme::text(13.0)).color(k.c.text_base).wrap(),
         ROOT_NODE => col().w_full().grow(1.0).min_h(0.0).children(children(s, plugin, node, project, k)),
         "stack" => {
             let row_direction = prop(props, "direction") == Some("row");
@@ -219,9 +219,9 @@ fn node_view(s: &Desk, plugin: &str, id: u64, project: &str, k: &Kit) -> El {
         }
         "text" => {
             let (font, color) = match prop(props, "tone") {
-                Some("muted") => (k.ty.ui, k.c.text_faint),
-                Some("strong") => (k.ty.ui_medium, k.c.text_base),
-                _ => (k.ty.ui, k.c.text_base),
+                Some("muted") => (crate::theme::text(13.0), k.c.text_faint),
+                Some("strong") => (crate::theme::medium(13.0), k.c.text_base),
+                _ => (crate::theme::text(13.0), k.c.text_base),
             };
             let words: String = node.children.iter().filter_map(|c| s.plugins.node(plugin, *c)?.text.clone()).collect();
             text(words).font(font).color(color).wrap()
@@ -235,7 +235,7 @@ fn node_view(s: &Desk, plugin: &str, id: u64, project: &str, k: &Kit) -> El {
                 _ => ButtonVariant::Neutral,
             };
             let on_click = handler(props, "onClick");
-            Button::new(prop(props, "label").unwrap_or(""))
+            crate::theme::button(prop(props, "label").unwrap_or(""))
                 .variant(variant)
                 .disabled(props.get("disabled").and_then(Value::as_bool) == Some(true))
                 .on_press(move |s: &mut Desk| s.fire(&plugin_owned, on_click, Vec::new()))
@@ -248,7 +248,7 @@ fn node_view(s: &Desk, plugin: &str, id: u64, project: &str, k: &Kit) -> El {
             .min_h(0.0)
             .scroll(ScrollSpec { stick_bottom: false })
             .child(Markdown::new(prop(props, "text").unwrap_or("")).style(theme::markdown(k, s.account.text_size())).build(k)),
-        other => text(format!("{other} is not a Desk element.")).font(k.ty.ui).color(k.c.text_faint),
+        other => text(format!("{other} is not a Desk element.")).font(crate::theme::text(13.0)).color(k.c.text_faint),
     }
 }
 
@@ -256,7 +256,7 @@ fn node_view(s: &Desk, plugin: &str, id: u64, project: &str, k: &Kit) -> El {
 fn item_view(props: &Map<String, Value>, plugin: String, k: &Kit) -> El {
     let selected = props.get("selected").and_then(Value::as_bool) == Some(true);
     let on_select = handler(props, "onSelect");
-    let line = |name: &str| prop(props, name).map(|t| text(t.to_owned()).font(k.ty.text_xsmall).color(k.c.text_faint).truncate());
+    let line = |name: &str| prop(props, name).map(|t| text(t.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate());
     let badge = props.get("badge").map(|b| {
         let words = b.get("text").and_then(Value::as_str).unwrap_or("");
         let (fill, ink) = match b.get("tint").and_then(Value::as_str) {
@@ -268,7 +268,7 @@ fn item_view(props: &Map<String, Value>, plugin: String, k: &Kit) -> El {
         };
         Badge::new(words).build(k).fill(fill).color(ink)
     });
-    let head = row().w_full().gap(8.0).items_center().child(text(prop(props, "title").unwrap_or("").to_owned()).font(k.ty.ui).color(k.c.text_base).truncate().grow(1.0)).children(badge);
+    let head = row().w_full().gap(8.0).items_center().child(text(prop(props, "title").unwrap_or("").to_owned()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate().grow(1.0)).children(badge);
     let item = col()
         .w_full()
         .gap(2.0)
@@ -293,7 +293,7 @@ fn input_view(s: &Desk, plugin: &str, id: u64, props: &Map<String, Value>, k: &K
     let on_submit = handler(props, "onSubmit");
     let initial = prop(props, "value").unwrap_or("").to_owned();
     let (edit_key, submit_plugin) = (key.clone(), plugin.to_owned());
-    let field = text_input(&edit, k.ty.ui)
+    let field = text_input(&edit, crate::theme::text(13.0))
         .w_full()
         .color(k.c.text_base)
         .placeholder(prop(props, "placeholder").unwrap_or("").to_owned(), k.c.text_faint)
@@ -318,7 +318,7 @@ fn messages_view(props: &Map<String, Value>, k: &Kit) -> El {
         let at = m.get("at").and_then(Value::as_f64).map(|at| format!(" · {}", format::message_time(at, format::now_ms()))).unwrap_or_default();
         let words = get("text").unwrap_or("").to_owned();
         if get("kind") == Some("activity") {
-            return row().w_full().justify_center().child(text(format!("{words}{at}")).font(k.ty.text_xsmall).color(k.c.text_faint));
+            return row().w_full().justify_center().child(text(format!("{words}{at}")).font(crate::theme::text(12.0)).color(k.c.text_faint));
         }
         let incoming = m.get("incoming").and_then(Value::as_bool) == Some(true);
         let note = get("kind") == Some("note");
@@ -333,8 +333,8 @@ fn messages_view(props: &Map<String, Value>, k: &Kit) -> El {
         let column = col().w_full().gap(4.0);
         let column = if incoming { column.items_start() } else { column.items_end() };
         column
-            .child(text(meta).font(k.ty.text_xsmall).color(k.c.text_faint))
-            .child(el().max_w(420.0).min_w(0.0).radius(10.0).fill(fill).px(12.0).py(8.0).child(text(words).font(k.ty.ui).color(k.c.text_base).wrap().shrink().min_w(0.0)))
+            .child(text(meta).font(crate::theme::text(12.0)).color(k.c.text_faint))
+            .child(el().max_w(420.0).min_w(0.0).radius(10.0).fill(fill).px(12.0).py(8.0).child(text(words).font(crate::theme::text(13.0)).color(k.c.text_base).wrap().shrink().min_w(0.0)))
     });
     col().w_full().grow(1.0).min_h(0.0).gap(12.0).scroll(ScrollSpec { stick_bottom: true }).children(rows.collect::<Vec<_>>())
 }

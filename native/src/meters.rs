@@ -61,7 +61,7 @@ pub fn usage_button(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
         .on_press(|s: &mut Desk| s.meters.open = !s.meters.open)
         .child(icon(&crate::icons::GAUGE, 15.0).color(k.c.text_muted))
         .child(Progress::new(Some(fullest.percent as f32 / 100.0)).build(k).w(26.0))
-        .child(text(format!("{}%", fullest.percent.round())).font(k.ty.text_xsmall).color(k.c.text_muted));
+        .child(text(format!("{}%", fullest.percent.round())).font(crate::theme::text(12.0)).color(k.c.text_muted));
     if s.meters.open {
         layer.insert(0, scrim("usage-scrim", |s: &mut Desk| s.meters.open = false));
         layer.push(popover::anchored(k, popover::raised(k, usage_popover(usage, k), k.radius.md), "usage-button", Placement::BottomEnd, 8.0));
@@ -75,11 +75,11 @@ fn usage_popover(usage: &PlanUsage, k: &Kit) -> El {
 }
 
 fn usage_row(window: &UsageWindow, k: &Kit) -> El {
-    let reset = window.resets_at.as_deref().and_then(format::iso_ms).map(|at| text(reset_label(at, format::now_ms())).font(k.ty.text_xsmall).color(k.c.text_faint));
+    let reset = window.resets_at.as_deref().and_then(format::iso_ms).map(|at| text(reset_label(at, format::now_ms())).font(crate::theme::text(12.0)).color(k.c.text_faint));
     col()
         .w_full()
         .gap(5.0)
-        .child(row().w_full().child(text(window.label.clone()).font(k.ty.ui).color(k.c.text_base).grow(1.0)).child(text(format!("{}%", window.percent.round())).font(k.ty.ui).color(k.c.text_muted)))
+        .child(row().w_full().child(text(window.label.clone()).font(crate::theme::text(13.0)).color(k.c.text_base).grow(1.0)).child(text(format!("{}%", window.percent.round())).font(crate::theme::text(13.0)).color(k.c.text_muted)))
         .child(Progress::new(Some(window.percent as f32 / 100.0)).build(k))
         .children(reset)
 }
@@ -107,7 +107,7 @@ pub fn context_ring(reading: &ContextReading, k: &Kit) -> El {
         .px(6.0)
         .help(help)
         .child(ProgressCircle::new(reading.percent as f32 / 100.0).size(15.0).label("Context").build(k))
-        .child(text(format!("{}%", reading.percent.round())).font(k.ty.ui).color(k.c.text_muted))
+        .child(text(format!("{}%", reading.percent.round())).font(crate::theme::text(13.0)).color(k.c.text_muted))
 }
 
 #[cfg(test)]

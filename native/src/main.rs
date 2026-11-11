@@ -100,6 +100,8 @@ fn main() {
         ..AppSpec::new("Desk", (1280.0, 820.0), Desk::default, shell::view)
     })
     .init(move || Desk::new(state.clone()))
+    // The Electron app draws with `-webkit-font-smoothing: antialiased`, which is Rune's Off.
+    .font_smoothing(rune::FontSmoothing::Off)
     .on_modifiers(shell::modifiers)
     .titlebar(Titlebar::new(shell::TITLEBAR_HEIGHT));
     for &(title, keys, menu, action) in COMMANDS {

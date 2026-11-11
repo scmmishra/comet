@@ -51,8 +51,8 @@ pub fn start_screen(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
         row()
             .gap(4.0)
             .items_center()
-            .child(text("/").font(k.ty.ui).color(k.c.text_faint))
-            .child(row().gap(6.0).items_center().px(6.0).child(icon(&ic::BRANCH, 15.0).color(k.c.text_muted)).child(text(space.branch.clone()).font(k.ty.ui).color(k.c.text_muted)))
+            .child(text("/").font(crate::theme::text(13.0)).color(k.c.text_faint))
+            .child(row().gap(6.0).items_center().px(6.0).child(icon(&ic::BRANCH, 15.0).color(k.c.text_muted)).child(text(space.branch.clone()).font(crate::theme::text(13.0)).color(k.c.text_muted)))
     });
     let place = row().gap(4.0).items_center().px(2.0).child(project_switcher(s, tab, k, layer)).children(branch);
     let lane = col()
@@ -80,7 +80,7 @@ fn project_switcher(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
         .role("button")
         .on_press(|s: &mut Desk| s.start.project_menu = !s.start.project_menu)
         .child(shell::project_mark(&s.account, &tab.project, k))
-        .child(text(name).font(k.ty.ui).color(k.c.text_muted))
+        .child(text(name).font(crate::theme::text(13.0)).color(k.c.text_muted))
         .child(icon(&ic::CHEVRON_DOWN, 12.0).color(k.c.text_faint));
     let mut menu = Menu::new("project-menu").trigger(trigger).open(s.start.project_menu).placement(Placement::BottomStart).gutter(8.0).min_width(280.0).group_label("Projects").on_close(|s: &mut Desk| s.start.project_menu = false);
     for project in &s.workspace.recent {
@@ -120,7 +120,7 @@ fn recent_threads(s: &Desk, tab: &TabInfo, k: &Kit) -> Option<El> {
     let rows = closed.into_iter().map(|thread| {
         // A thread's branch shows when it differs from the branch the project is on now.
         let other = thread.branch.as_deref().filter(|b| Some(*b) != current).map(|b| {
-            row().gap(4.0).items_center().child(icon(&ic::BRANCH, 13.0).color(k.c.text_faint)).child(text(b.to_owned()).font(k.ty.text_xsmall).color(k.c.text_faint))
+            row().gap(4.0).items_center().child(icon(&ic::BRANCH, 13.0).color(k.c.text_faint)).child(text(b.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint))
         });
         let (summary, dir) = (thread.clone(), tab.project.clone());
         row()
@@ -135,11 +135,11 @@ fn recent_threads(s: &Desk, tab: &TabInfo, k: &Kit) -> Option<El> {
             .hover_group()
             .role("button")
             .on_press_tx(move |s: &mut Desk, tx| s.open_thread(&summary, &dir, tx))
-            .child(text(thread.title.clone()).font(k.ty.ui).color(k.c.text_muted).group_color(k.c.text_base).truncate().grow(1.0))
+            .child(text(thread.title.clone()).font(crate::theme::text(13.0)).color(k.c.text_muted).group_color(k.c.text_base).truncate().grow(1.0))
             .children(other)
-            .child(text(format::ago(thread.updated_at, now)).font(k.ty.text_xsmall).color(k.c.text_faint).w(48.0))
+            .child(text(format::ago(thread.updated_at, now)).font(crate::theme::text(12.0)).color(k.c.text_faint).w(48.0))
     });
-    Some(col().w_full().gap(4.0).pt(8.0).child(text("Recent threads").font(k.ty.text_xsmall).color(k.c.text_faint).px(8.0).pb(4.0)).children(rows))
+    Some(col().w_full().gap(4.0).pt(8.0).child(text("Recent threads").font(crate::theme::text(12.0)).color(k.c.text_faint).px(8.0).pb(4.0)).children(rows))
 }
 
 /// What the start screen has open.

@@ -387,7 +387,7 @@ pub fn palette(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
         return;
     }
     let placeholder = s.palette.pages.last().map_or_else(|| "Search actions, tabs and threads".to_owned(), |p| format!("{}…", p.title(&s.account)));
-    let input = text_input(&s.palette.query, k.ty.ui)
+    let input = text_input(&s.palette.query, crate::theme::text(13.0))
         .key("palette-input")
         .single_line()
         .w_full()
@@ -407,17 +407,17 @@ pub fn palette(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
     for (i, entry) in matches.iter().enumerate() {
         let heading = s.palette.pages.last().map_or_else(|| entry.section.clone(), |p| p.title(&s.account));
         if section.as_ref() != Some(&heading) {
-            list = list.child(text(heading.clone()).font(k.ty.text_xsmall).color(k.c.text_faint).px(10.0).pt(8.0).pb(4.0));
+            list = list.child(text(heading.clone()).font(crate::theme::text(12.0)).color(k.c.text_faint).px(10.0).pt(8.0).pb(4.0));
             section = Some(heading);
         }
         list = list.child(entry_row(s, entry, i, i == active, k));
     }
     let empty = matches.is_empty().then(|| {
         let words = if s.palette.query.text.is_empty() { "Nothing to show yet." } else { "Nothing matches." };
-        col().w_full().py(24.0).center().child(text(words).font(k.ty.ui).color(k.c.text_faint))
+        col().w_full().py(24.0).center().child(text(words).font(crate::theme::text(13.0)).color(k.c.text_faint))
     });
     let back = s.palette.pages.len() > s.palette.start;
-    let hint = |keys: &[&str], label: &str| row().gap(6.0).items_center().child(Keybind::new(keys).build(k)).child(text(label.to_owned()).font(k.ty.text_xsmall).color(k.c.text_faint));
+    let hint = |keys: &[&str], label: &str| row().gap(6.0).items_center().child(Keybind::new(keys).build(k)).child(text(label.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint));
     let footer = row()
         .w_full()
         .gap(16.0)
@@ -460,8 +460,8 @@ fn entry_row(s: &Desk, entry: &Entry, index: usize, active: bool, k: &Kit) -> El
         .role("option")
         .on_press_tx(move |s: &mut Desk, tx| s.select(picked.clone(), tx))
         .children(lead)
-        .child(text(entry.title.clone()).font(k.ty.ui).color(k.c.text_base).truncate())
-        .children(entry.detail.clone().map(|d| text(d).font(k.ty.text_xsmall).color(k.c.text_faint).truncate()))
+        .child(text(entry.title.clone()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate())
+        .children(entry.detail.clone().map(|d| text(d).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate()))
         .child(row().grow(1.0))
         .children(entry.shortcut.map(|keys| Keybind::new(keys).build(k)))
         .children(entry.checked.then(|| icon(&ic::CHECK, 15.0).color(k.c.text_base)))

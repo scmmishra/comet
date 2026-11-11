@@ -377,7 +377,7 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
     .build(k);
 
     let dark = s.dark(cx);
-    let line = |words: String| text(words).font(k.ty.ui).color(k.c.text_muted);
+    let line = |words: String| text(words).font(crate::theme::text(13.0)).color(k.c.text_muted);
     // A card on the ground: the session, and the view pane beside it while open.
     let card = |key: &str, child: El| col().key(key.to_owned()).w_frac(1.0).grow(1.0).shrink().min_w(0.0).h_full().min_h(0.0).fill(k.c.bg_base).radius(PANEL_RADIUS).clip_rounded(PANEL_RADIUS).border(1.0, k.c.border_muted).child(child);
     let cards = match (&s.status, w.active_tab()) {
@@ -396,7 +396,7 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
         (status, _) => {
             let words = match status {
                 CoreState::Starting => line("Starting…".into()),
-                CoreState::Failed(reason) => text(reason.clone()).font(k.ty.ui).color(k.c.danger.fg),
+                CoreState::Failed(reason) => text(reason.clone()).font(crate::theme::text(13.0)).color(k.c.danger.fg),
                 CoreState::Ready => line("No tabs".into()),
             };
             row().w_full().grow(1.0).min_h(0.0).child(card("body", col().w_full().h_full().center().child(words.key("status"))))
@@ -428,9 +428,9 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, layer: &
         .pr(10.0)
         .gap(7.0)
         .child(project_mark(&s.account, &tab.project, k))
-        .child(text(name).font(k.ty.ui).color(k.c.text_muted))
-        .child(text("/").font(k.ty.ui).color(k.c.text_faint))
-        .child(text(tab.title.clone()).font(k.ty.ui_medium).color(k.c.text_base).truncate())
+        .child(text(name).font(crate::theme::text(13.0)).color(k.c.text_muted))
+        .child(text("/").font(crate::theme::text(13.0)).color(k.c.text_faint))
+        .child(text(tab.title.clone()).font(crate::theme::medium(13.0)).color(k.c.text_base).truncate())
         .child(row().grow(1.0))
         // While the pane is open, its own header holds the toggle, in the window's corner.
         .children(s.threads.get(&tab.id).and_then(|t| t.context.as_ref()).map(|reading| crate::meters::context_ring(reading, k)))
@@ -446,7 +446,7 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, layer: &
             .w_full()
             .grow(1.0)
             .min_h(0.0)
-            .child(col().w_full().grow(1.0).center().px(24.0).child(text("Pick something in the sidebar to open its thread.").font(k.ty.ui).color(k.c.text_faint)))
+            .child(col().w_full().grow(1.0).center().px(24.0).child(text("Pick something in the sidebar to open its thread.").font(crate::theme::text(13.0)).color(k.c.text_faint)))
             .child(composer::composer(s, tab, composer::ListAt::Above, lane, k, layer))
     } else {
         crate::start_screen::start_screen(s, tab, k, layer)

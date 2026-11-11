@@ -78,7 +78,7 @@ fn plugin_cards(s: &Desk, tab: &TabInfo, k: &Kit) -> Vec<El> {
         .cards
         .iter()
         .filter(|view| !s.plugins.is_empty(view))
-        .map(|view| card(k).key(format!("card-{}", view.id)).padding(12.0).gap(4.0).child(text(view.title.clone()).font(k.ty.text_xsmall).color(k.c.text_faint)).child(crate::plugins::view(s, view, &tab.project, k)))
+        .map(|view| card(k).key(format!("card-{}", view.id)).padding(12.0).gap(4.0).child(text(view.title.clone()).font(crate::theme::text(12.0)).color(k.c.text_faint)).child(crate::plugins::view(s, view, &tab.project, k)))
         .collect()
 }
 
@@ -96,14 +96,14 @@ fn line(k: &Kit, mark: &'static rune::Icon, words: String, detail: Option<El>) -
         .py(7.0)
         .radius(8.0)
         .child(icon(mark, 15.0).color(k.c.text_muted))
-        .child(text(words).font(k.ty.ui).color(k.c.text_base).truncate().grow(1.0))
+        .child(text(words).font(crate::theme::text(13.0)).color(k.c.text_base).truncate().grow(1.0))
         .children(detail)
 }
 
 /// The Space card: where the session runs and what has changed there. GitHub's pull request and checks sit
 /// below a line, when the branch has one.
 fn space_card(space: &Space, tab: &str, k: &Kit) -> El {
-    let faint = |words: String| text(words).font(k.ty.ui).color(k.c.text_faint);
+    let faint = |words: String| text(words).font(crate::theme::text(13.0)).color(k.c.text_faint);
     let upstream = space.upstream.as_ref().and_then(|u| {
         let parts: Vec<String> = [(u.ahead, "↑"), (u.behind, "↓")].iter().filter(|(n, _)| *n > 0).map(|(n, a)| format!("{a}{n}")).collect();
         (!parts.is_empty()).then(|| faint(parts.join(" ")))
@@ -114,7 +114,7 @@ fn space_card(space: &Space, tab: &str, k: &Kit) -> El {
     } else if c.additions == 0 && c.deletions == 0 {
         faint(format::plural(c.files as usize, "file"))
     } else {
-        row().gap(6.0).child(text(format!("+{}", c.additions)).font(k.ty.text_xsmall).color(k.c.success.fg)).child(text(format!("−{}", c.deletions)).font(k.ty.text_xsmall).color(k.c.danger.fg))
+        row().gap(6.0).child(text(format!("+{}", c.additions)).font(crate::theme::text(12.0)).color(k.c.success.fg)).child(text(format!("−{}", c.deletions)).font(crate::theme::text(12.0)).color(k.c.danger.fg))
     };
     let tab = tab.to_owned();
     // The card counts uncommitted work, so it opens Review on the same changes.
@@ -149,8 +149,8 @@ fn space_card(space: &Space, tab: &str, k: &Kit) -> El {
                     .grow(1.0)
                     .min_w(0.0)
                     .gap(2.0)
-                    .child(text(pr.title.clone()).font(k.ty.ui).color(k.c.text_base).wrap())
-                    .child(row().w_full().items_center().child(text(format!("#{}", pr.number)).font(k.ty.mono).color(k.c.text_faint).grow(1.0)).child(badge)),
+                    .child(text(pr.title.clone()).font(crate::theme::text(13.0)).color(k.c.text_base).wrap())
+                    .child(row().w_full().items_center().child(text(format!("#{}", pr.number)).font(crate::theme::mono(12.0)).color(k.c.text_faint).grow(1.0)).child(badge)),
             );
         let total = pr.checks.passed + pr.checks.failed + pr.checks.pending;
         let checks = (total > 0).then(|| {
@@ -161,7 +161,7 @@ fn space_card(space: &Space, tab: &str, k: &Kit) -> El {
             } else {
                 (format!("{} / {total}", pr.checks.passed), k.c.success.fg)
             };
-            line(k, &ic::CHECK, "Checks".into(), Some(text(words).font(k.ty.text_xsmall).color(fg)))
+            line(k, &ic::CHECK, "Checks".into(), Some(text(words).font(crate::theme::text(12.0)).color(fg)))
         });
         col().w_full().padding(6.0).border_sides([1.0, 0.0, 0.0, 0.0], k.c.border_muted).child(head).children(checks)
     });
@@ -222,11 +222,11 @@ fn subagents_card(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Opti
             .expanded(open)
             .on_press(move |s: &mut Desk| s.cards.open_subagent = if s.cards.open_subagent.as_deref() == Some(id.as_str()) { None } else { Some(id.clone()) })
             .child(status_mark(subagent, k))
-            .child(text(subagent.description.clone()).font(k.ty.text_small).color(k.c.text_base).truncate().grow(1.0))
-            .child(text(elapsed(subagent, now)).font(k.ty.text_xsmall).color(k.c.text_faint))
+            .child(text(subagent.description.clone()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate().grow(1.0))
+            .child(text(elapsed(subagent, now)).font(crate::theme::text(12.0)).color(k.c.text_faint))
             .child(icon(&ic::CHEVRON_DOWN, 12.0).color(k.c.text_faint).rotate(-std::f32::consts::FRAC_PI_2))
     });
-    Some(card(k).key("subagents-card").padding(6.0).role("region").label("Subagents").child(text(heading).font(k.ty.text_xsmall).color(k.c.text_faint).px(8.0).pb(4.0).pt(6.0)).children(rows.collect::<Vec<_>>()))
+    Some(card(k).key("subagents-card").padding(6.0).role("region").label("Subagents").child(text(heading).font(crate::theme::text(12.0)).color(k.c.text_faint).px(8.0).pb(4.0).pt(6.0)).children(rows.collect::<Vec<_>>()))
 }
 
 /// What a subagent was asked, how it stands, and its steps so far.
@@ -237,15 +237,15 @@ fn subagent_detail(subagent: &Subagent, now: f64, k: &Kit) -> El {
         .px(16.0)
         .py(12.0)
         .border_sides([0.0, 0.0, 1.0, 0.0], k.c.border_muted)
-        .child(row().gap(8.0).items_center().child(status_mark(subagent, k)).child(text(subagent.description.clone()).font(k.ty.text_small_medium).color(k.c.text_base).truncate()))
-        .child(text(facts.join(" · ")).font(k.ty.text_xsmall).color(k.c.text_faint).mt(4.0))
-        .children(subagent.summary.clone().map(|summary| text(summary).font(k.ty.text_small).color(k.c.text_muted).wrap().mt(6.0)));
+        .child(row().gap(8.0).items_center().child(status_mark(subagent, k)).child(text(subagent.description.clone()).font(crate::theme::medium(13.0)).color(k.c.text_base).truncate()))
+        .child(text(facts.join(" · ")).font(crate::theme::text(12.0)).color(k.c.text_faint).mt(4.0))
+        .children(subagent.summary.clone().map(|summary| text(summary).font(crate::theme::text(13.0)).color(k.c.text_muted).wrap().mt(6.0)));
     let steps = subagent.items.iter().map(|item| match item {
-        ThreadItem::Tool { label, .. } | ThreadItem::Thinking { label, .. } => text(label.clone()).font(k.ty.text_small).color(k.c.text_muted).truncate().h(24.0),
+        ThreadItem::Tool { label, .. } | ThreadItem::Thinking { label, .. } => text(label.clone()).font(crate::theme::text(13.0)).color(k.c.text_muted).truncate().h(24.0),
         ThreadItem::Text { text: words, .. } => Markdown::new(words.as_str()).style(theme::markdown(k, 13.0)).build(k).my(4.0),
         _ => el(),
     });
-    let empty = subagent.items.is_empty().then(|| text("No steps yet.").font(k.ty.text_small).color(k.c.text_faint));
+    let empty = subagent.items.is_empty().then(|| text("No steps yet.").font(crate::theme::text(13.0)).color(k.c.text_faint));
     let body = col()
         .w_full()
         .px(16.0)
@@ -253,7 +253,7 @@ fn subagent_detail(subagent: &Subagent, now: f64, k: &Kit) -> El {
         .shrink()
         .min_h(0.0)
         .scroll(ScrollSpec { stick_bottom: true })
-        .children(subagent.prompt.clone().map(|p| text(p).font(k.ty.text_xsmall).color(k.c.text_faint).wrap().max_lines(3).mb(8.0)))
+        .children(subagent.prompt.clone().map(|p| text(p).font(crate::theme::text(12.0)).color(k.c.text_faint).wrap().max_lines(3).mb(8.0)))
         .children(steps.collect::<Vec<_>>())
         .children(empty);
     col().key("subagent-detail").w(DETAIL_WIDTH).max_h(560.0).child(header).child(body)

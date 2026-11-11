@@ -58,7 +58,7 @@ pub fn model_picker(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
     let ran = s.threads.get(&tab.id).and_then(|t| t.model.as_deref());
     let name = selected.map(option_label).or_else(|| ran.map(models::model_label)).unwrap_or_else(|| "Claude Code".into());
     let effort = tab.effort.clone().or_else(|| selected.and_then(|o| o.default_effort.clone()));
-    let faint = |words: String| text(words).font(k.ty.text_small).color(k.c.text_faint);
+    let faint = |words: String| text(words).font(crate::theme::text(13.0)).color(k.c.text_faint);
     let trigger = row()
         .key("model-picker")
         .h(32.0)
@@ -72,7 +72,7 @@ pub fn model_picker(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
         .expanded(s.picker.open)
         .on_press(|s: &mut Desk| s.toggle_picker())
         .child(claude_mark(tab.fast == Some(true), k))
-        .child(text(name).font(k.ty.text_small).color(k.c.text_base))
+        .child(text(name).font(crate::theme::text(13.0)).color(k.c.text_base))
         .children(effort.map(|e| faint(effort_label(&e).to_owned())))
         // Supervised is the plain case. Any other mode shows, so a thread never runs looser than you think.
         .children((tab.permission_mode != "default").then(|| row().gap(8.0).child(faint("·".into())).child(faint(permission(&tab.permission_mode).0.to_owned()))))
@@ -98,7 +98,7 @@ fn popover_body(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &Kit
     let models = &s.account.models;
     let aliases: Vec<&ModelOption> = models.iter().filter(|o| is_alias(o)).collect();
     let shown: Vec<&ModelOption> = if s.picker.show_all { models.iter().collect() } else { aliases.clone() };
-    let heading = |words: &str| row().h(36.0).items_center().px(14.0).pt(6.0).child(text(words.to_owned()).font(k.ty.text_xsmall).color(k.c.text_faint));
+    let heading = |words: &str| row().h(36.0).items_center().px(14.0).pt(6.0).child(text(words.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint));
     let check = || icon(&ic::CHECK, 15.0).color(k.c.text_base);
     let rows = shown.iter().map(|option| {
         let picked = option.value == tab.model;
@@ -114,19 +114,19 @@ fn popover_body(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &Kit
             .hover(k.c.hover)
             .role("button")
             .on_press(move |s: &mut Desk| s.pick_model(&id, &value))
-            .child(text(option.label.clone()).font(k.ty.text_small).color(k.c.text_base))
-            .child(text(option.description.clone()).font(k.ty.text_xsmall).color(k.c.text_faint).truncate().grow(1.0))
+            .child(text(option.label.clone()).font(crate::theme::text(13.0)).color(k.c.text_base))
+            .child(text(option.description.clone()).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate().grow(1.0))
             .children(picked.then(check))
     });
     let older = (!s.picker.show_all && models.len() > aliases.len()).then(|| {
-        row().h(ROW_HEIGHT).items_center().px(10.0).radius(8.0).role("button").on_press(|s: &mut Desk| s.picker.show_all = true).child(text("Show older models").font(k.ty.text_small).color(k.c.text_faint))
+        row().h(ROW_HEIGHT).items_center().px(10.0).radius(8.0).role("button").on_press(|s: &mut Desk| s.picker.show_all = true).child(text("Show older models").font(crate::theme::text(13.0)).color(k.c.text_faint))
     });
-    let loading = models.is_empty().then(|| row().px(10.0).py(8.0).child(text("Loading models…").font(k.ty.text_small).color(k.c.text_faint)));
+    let loading = models.is_empty().then(|| row().px(10.0).py(8.0).child(text("Loading models…").font(crate::theme::text(13.0)).color(k.c.text_faint)));
     let list = col().w_full().gap(1.0).padding(6.0).children(loading).children(rows).children(older);
     let model_column = col().grow(1.0).min_w(0.0).child(heading("Model")).child(col().w_full().shrink().min_h(0.0).scroll(rune::ScrollSpec { stick_bottom: false }).child(list));
 
     let efforts = match selected.filter(|o| !o.efforts.is_empty()) {
-        None => col().px(8.0).py(8.0).child(text("This model has no effort levels.").font(k.ty.text_xsmall).color(k.c.text_faint).wrap()),
+        None => col().px(8.0).py(8.0).child(text("This model has no effort levels.").font(crate::theme::text(12.0)).color(k.c.text_faint).wrap()),
         Some(option) => col().w_full().gap(1.0).padding(6.0).children(std::iter::once(None).chain(option.efforts.iter().map(Some)).map(|effort| {
             let picked = effort.cloned() == tab.effort;
             let words = effort.map_or("Default", |e| effort_label(e)).to_owned();
@@ -145,7 +145,7 @@ fn popover_body(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &Kit
                     let value = value.clone();
                     s.workspace.change_tab(&id, |t| t.effort = value, &s.core);
                 })
-                .child(row().grow(1.0).gap(6.0).child(text(words).font(k.ty.text_small).color(if picked { k.c.text_base } else { k.c.text_muted })).children(default.map(|d| text(d.to_owned()).font(k.ty.text_small).color(k.c.text_faint))))
+                .child(row().grow(1.0).gap(6.0).child(text(words).font(crate::theme::text(13.0)).color(if picked { k.c.text_base } else { k.c.text_muted })).children(default.map(|d| text(d.to_owned()).font(crate::theme::text(13.0)).color(k.c.text_faint))))
                 .children(picked.then(check))
         })),
     };
@@ -155,8 +155,8 @@ fn popover_body(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &Kit
         .px(14.0)
         .pt(6.0)
         .gap(8.0)
-        .child(text("Effort").font(k.ty.text_xsmall).color(k.c.text_faint).grow(1.0))
-        .children(selected.map(|o| text(option_label(o)).font(k.ty.text_xsmall).color(k.c.text_faint).truncate()));
+        .child(text("Effort").font(crate::theme::text(12.0)).color(k.c.text_faint).grow(1.0))
+        .children(selected.map(|o| text(option_label(o)).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate()));
     let effort_column = col().w(EFFORT_WIDTH).border_sides([0.0, 0.0, 0.0, 1.0], k.c.border_muted).child(effort_heading).child(efforts);
 
     // Fast mode is only offered on a model that has it.
@@ -195,7 +195,7 @@ fn permission_menu(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &
         .role("button")
         .on_press(|s: &mut Desk| s.picker.modes_open = !s.picker.modes_open)
         .child(icon(mark, 15.0).color(k.c.text_muted))
-        .child(text(label).font(k.ty.text_small).color(k.c.text_muted))
+        .child(text(label).font(crate::theme::text(13.0)).color(k.c.text_muted))
         .child(icon(&ic::CHEVRON_DOWN, 12.0).color(k.c.text_faint));
     let mut menu = Menu::new("permission-menu").trigger(trigger).open(s.picker.modes_open).placement(Placement::TopEnd).min_width(320.0).on_close(|s: &mut Desk| s.picker.modes_open = false);
     for mode in permission_modes(selected) {

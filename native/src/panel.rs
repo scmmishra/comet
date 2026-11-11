@@ -6,7 +6,7 @@ use crate::protocol::{ClientMessage, FileChange, FileView, TabInfo};
 use crate::shell::Desk;
 use rune::{El, ScrollSpec, col, el, icon, row, text};
 use rune_kit::diff::{DiffMode, DiffState, DiffView, parse};
-use rune_kit::{Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, SegmentedControl, Select};
+use rune_kit::{ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, SegmentedControl, Select};
 use rune_theme_opencode::icons as ic;
 use std::collections::HashMap;
 
@@ -196,7 +196,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let on_review = shown.is_none() && terminal.is_none() && plugin_panel.is_none();
     let review = tab_button(
         "panel-review".into(),
-        row().gap(7.0).items_center().child(icon(&ic::REVIEW, 15.0).color(k.c.text_muted)).child(text("Review").font(k.ty.ui).color(if on_review { k.c.text_base } else { k.c.text_muted })),
+        row().gap(7.0).items_center().child(icon(&ic::REVIEW, 15.0).color(k.c.text_muted)).child(text("Review").font(crate::theme::text(13.0)).color(if on_review { k.c.text_base } else { k.c.text_muted })),
         on_review,
         el(),
     )
@@ -217,7 +217,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .build(k);
         tab_button(
             format!("panel-{}", file.id),
-            row().gap(7.0).items_center().child(icon(rune_theme_opencode::file_icons::file(&file.path), 14.0)).child(text(name).font(k.ty.ui).color(if active { k.c.text_base } else { k.c.text_muted })),
+            row().gap(7.0).items_center().child(icon(rune_theme_opencode::file_icons::file(&file.path), 14.0)).child(text(name).font(crate::theme::text(13.0)).color(if active { k.c.text_base } else { k.c.text_muted })),
             active,
             close,
         )
@@ -238,7 +238,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .build(k);
         tab_button(
             format!("panel-{}", t.id),
-            row().gap(7.0).items_center().child(icon(&ic::TERMINAL, 15.0).color(k.c.text_muted)).child(text(t.title.clone()).font(k.ty.ui).color(if active { k.c.text_base } else { k.c.text_muted })),
+            row().gap(7.0).items_center().child(icon(&ic::TERMINAL, 15.0).color(k.c.text_muted)).child(text(t.title.clone()).font(crate::theme::text(13.0)).color(if active { k.c.text_base } else { k.c.text_muted })),
             active,
             close,
         )
@@ -255,7 +255,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .label("Close panel")
             .on_press(move |s: &mut Desk| s.core.send(&ClientMessage::PanelClose { tab_id: close_tab.clone(), id: close_id.clone() }))
             .build(k);
-        tab_button(format!("panel-{}", p.id), text(p.title.clone()).font(k.ty.ui).color(if active { k.c.text_base } else { k.c.text_muted }), active, close)
+        tab_button(format!("panel-{}", p.id), text(p.title.clone()).font(crate::theme::text(13.0)).color(if active { k.c.text_base } else { k.c.text_muted }), active, close)
             .role("tab")
             .on_press(move |s: &mut Desk| s.show_panel_tab(&show_tab, Some(show_id.clone())))
     });
@@ -307,9 +307,9 @@ fn review_view(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
         row()
             .gap(8.0)
             .items_center()
-            .child(text(format::plural(r.files.len(), "file")).font(k.ty.ui).color(k.c.text_faint))
-            .child(text(format!("+{added}")).font(k.ty.text_xsmall).color(k.c.success.fg))
-            .child(text(format!("−{removed}")).font(k.ty.text_xsmall).color(k.c.danger.fg))
+            .child(text(format::plural(r.files.len(), "file")).font(crate::theme::text(13.0)).color(k.c.text_faint))
+            .child(text(format!("+{added}")).font(crate::theme::text(12.0)).color(k.c.success.fg))
+            .child(text(format!("−{removed}")).font(crate::theme::text(12.0)).color(k.c.danger.fg))
     });
     let style = SegmentedControl::new(&["Unified", "Split"], Some(usize::from(s.panel.split))).label("Diff view").on_pick(|s: &mut Desk, i, _| s.set_split(i == 1)).build(k);
     let controls = row().w_full().gap(8.0).items_center().px(12.0).pb(8.0).pt(2.0).child(select).children(counts).child(row().grow(1.0)).child(style);
@@ -329,7 +329,7 @@ fn review_view(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
 }
 
 fn centred(k: &Kit, words: &str) -> El {
-    col().w_full().grow(1.0).center().px(24.0).child(text(words.to_owned()).font(k.ty.ui).color(k.c.text_faint).wrap())
+    col().w_full().grow(1.0).center().px(24.0).child(text(words.to_owned()).font(crate::theme::text(13.0)).color(k.c.text_faint).wrap())
 }
 
 /// A file open in the panel, after OpenCode: its path, a button to open it in the editor, then its lines.
@@ -342,10 +342,9 @@ fn file_view(s: &Desk, tab: &TabInfo, path: &str, line: Option<u32>, k: &Kit) ->
         .px(12.0)
         .pb(8.0)
         .pt(2.0)
-        .child(text(path.to_owned()).font(k.ty.text_xsmall).color(k.c.text_faint).truncate().grow(1.0))
+        .child(text(path.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate().grow(1.0))
         .child(
-            Button::new("Open in editor")
-                .control_size(ControlSize::Small)
+            crate::theme::small_button("Open in editor")
                 .variant(ButtonVariant::Ghost)
                 .on_press(move |s: &mut Desk| s.core.send(&ClientMessage::FileOpen { project: project.clone(), path: open_path.clone(), line }))
                 .build(k),
@@ -362,12 +361,12 @@ fn file_view(s: &Desk, tab: &TabInfo, path: &str, line: Option<u32>, k: &Kit) ->
 fn code(tab: &TabInfo, path: &str, file: &FileView, line: Option<u32>, k: &Kit) -> El {
     let lines: Vec<String> = file.text.as_deref().unwrap_or("").lines().map(str::to_owned).collect();
     let width = (lines.len().max(1).to_string().len() as f32) * 8.0 + 16.0;
-    let truncated = file.truncated.then(|| text("The file is long, so only its first megabyte shows.").font(k.ty.text_xsmall).color(k.c.text_faint).px(12.0).pb(8.0));
+    let truncated = file.truncated.then(|| text("The file is long, so only its first megabyte shows.").font(crate::theme::text(12.0)).color(k.c.text_faint).px(12.0).pb(8.0));
     let count = lines.len();
     // The line a file opened at, Desk's `--color-accent-soft`.
     let mark = k.c.text_accent.alpha(0.14);
     let (dim, ink) = (k.c.text_faint, k.c.text_muted);
-    let mono = k.ty.mono;
+    let mono = crate::theme::mono(12.0);
     let rows = col().w_full().virtual_rows(
         count,
         LINE_HEIGHT,

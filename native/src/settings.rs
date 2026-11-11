@@ -6,7 +6,7 @@ use crate::models::{effort_label, permission, permission_for, permission_modes};
 use crate::protocol::{ClientMessage, ProjectSettings, ThemeChoice};
 use crate::shell::Desk;
 use rune::{El, Key, KeyEvent, ScrollSpec, TextEdit, col, el, icon, row, text};
-use rune_kit::{Badge, BadgeVariant, Button, ButtonVariant, ControlSize, Kit, Select, Switch, TextInput};
+use rune_kit::{Badge, BadgeVariant, ButtonVariant, Kit, Select, Switch, TextInput};
 use rune_theme_opencode::icons as ic;
 use serde_json::json;
 
@@ -94,7 +94,7 @@ pub fn screen(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
         .role("button")
         .on_press(|s: &mut Desk| s.close_settings())
         .child(icon(&ic::OUTLINE_ARROW_LEFT, 15.0).color(k.c.text_muted))
-        .child(text("Back to app").font(k.ty.ui).color(k.c.text_muted));
+        .child(text("Back to app").font(crate::theme::text(13.0)).color(k.c.text_muted));
     let nav = PAGES.iter().map(|(id, title, mark)| {
         let selected = *id == page;
         let id = *id;
@@ -111,7 +111,7 @@ pub fn screen(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
             .role("tab")
             .on_press(move |s: &mut Desk| s.open_settings(id))
             .child(icon(mark, 15.0).color(if selected { k.c.text_base } else { k.c.text_muted }))
-            .child(text(*title).font(k.ty.ui).color(if selected { k.c.text_base } else { k.c.text_muted }))
+            .child(text(*title).font(crate::theme::text(13.0)).color(if selected { k.c.text_base } else { k.c.text_muted }))
     });
     let sidebar = col().w(280.0).h_full().pt(40.0).pl(24.0).pr(40.0).gap(2.0).child(back).children(nav.collect::<Vec<_>>());
     let content = match page {
@@ -144,8 +144,8 @@ fn header(k: &Kit, title: &str, description: &str) -> El {
         .gap(4.0)
         .pt(40.0)
         .px(40.0)
-        .child(text(title.to_owned()).font(rune::TextStyle { size: 15.0, weight: 640.0, ..k.ty.ui }).color(k.c.text_base))
-        .child(text(description.to_owned()).font(k.ty.text_xsmall).color(k.c.text_muted).wrap())
+        .child(text(title.to_owned()).font(rune::TextStyle { size: 15.0, weight: 640.0, ..crate::theme::text(13.0) }).color(k.c.text_base))
+        .child(text(description.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_muted).wrap())
 }
 
 fn body(children: Vec<El>) -> El {
@@ -153,7 +153,7 @@ fn body(children: Vec<El>) -> El {
 }
 
 fn section(k: &Kit, title: String, child: El) -> El {
-    col().w_full().gap(12.0).child(text(title).font(k.ty.ui_medium).color(k.c.text_base)).child(child)
+    col().w_full().gap(12.0).child(text(title).font(crate::theme::medium(13.0)).color(k.c.text_base)).child(child)
 }
 
 /// Rows on one raised surface, after OpenCode's SettingsList.
@@ -171,12 +171,12 @@ fn setting(k: &Kit, title: El, description: Option<String>, control: Option<El>)
         .gap(16.0)
         .items_center()
         .py(18.0)
-        .child(col().grow(1.0).min_w(0.0).gap(6.0).child(title).children(description.map(|d| text(d).font(k.ty.text_small).color(k.c.text_muted).wrap())))
+        .child(col().grow(1.0).min_w(0.0).gap(6.0).child(title).children(description.map(|d| text(d).font(crate::theme::text(13.0)).color(k.c.text_muted).wrap())))
         .children(control)
 }
 
 fn title(k: &Kit, words: &str) -> El {
-    text(words.to_owned()).font(k.ty.ui_medium).color(k.c.text_base)
+    text(words.to_owned()).font(crate::theme::medium(13.0)).color(k.c.text_base)
 }
 
 /// A text setting that saves on Enter, so typing does not save each letter. `key` names its draft.
@@ -245,8 +245,7 @@ fn providers(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
         },
     };
     let update = account.claude_code.as_ref().filter(|v| v.update_available && v.updatable).map(|_| {
-        Button::new(if account.updating { "Updating…" } else { "Update" })
-            .control_size(ControlSize::Small)
+        crate::theme::small_button(if account.updating { "Updating…" } else { "Update" })
             .variant(ButtonVariant::Contrast)
             .disabled(account.updating)
             .on_press(|s: &mut Desk| {
@@ -310,7 +309,7 @@ fn providers(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
             col()
                 .w_full()
                 .gap(5.0)
-                .child(row().w_full().child(text(w.label.clone()).font(k.ty.ui).color(k.c.text_base).grow(1.0)).child(text(format!("{}%", w.percent.round())).font(k.ty.ui).color(k.c.text_muted)))
+                .child(row().w_full().child(text(w.label.clone()).font(crate::theme::text(13.0)).color(k.c.text_base).grow(1.0)).child(text(format!("{}%", w.percent.round())).font(crate::theme::text(13.0)).color(k.c.text_muted)))
                 .child(rune_kit::Progress::new(Some(w.percent as f32 / 100.0)).build(k))
         }));
         sections.push(section(k, "Subscription".into(), list(k, vec![setting(k, title(k, &plan), Some("Your plan's usage limits, as Claude Code reports them.".into()), Some(windows))])));
@@ -399,7 +398,7 @@ fn projects(s: &Desk, k: &Kit, _layer: &mut Vec<El>) -> El {
 fn mcps(s: &Desk, k: &Kit) -> El {
     let project = s.workspace.active_tab().map(|t| t.project.clone());
     let servers = project.as_ref().and_then(|p| s.projects.get(p)).and_then(|p| p.mcp.clone());
-    let faint = |words: &str| text(words.to_owned()).font(k.ty.ui).color(k.c.text_faint).wrap();
+    let faint = |words: &str| text(words.to_owned()).font(crate::theme::text(13.0)).color(k.c.text_faint).wrap();
     let content = match (project, servers) {
         (None, _) => vec![faint("Open a tab in a project to see its servers.")],
         (Some(_), None) => vec![faint("Starting the servers to read them…")],
@@ -436,14 +435,14 @@ fn mcps(s: &Desk, k: &Kit) -> El {
 fn skills(s: &Desk, k: &Kit) -> El {
     let project = s.workspace.active_tab().map(|t| t.project.clone());
     let skills = project.as_ref().and_then(|p| s.projects.get(p)).and_then(|p| p.skills.clone());
-    let faint = |words: &str| text(words.to_owned()).font(k.ty.ui).color(k.c.text_faint).wrap();
+    let faint = |words: &str| text(words.to_owned()).font(crate::theme::text(13.0)).color(k.c.text_faint).wrap();
     let content = match skills {
         None => vec![faint("Reading skills…")],
         Some(skills) => {
             let rows: Vec<El> = skills
                 .iter()
                 .filter(|x| !x.builtin)
-                .map(|skill| setting(k, text(format!("/{}", skill.name)).font(k.ty.mono).color(k.c.text_base), Some(skill.description.clone()), None))
+                .map(|skill| setting(k, text(format!("/{}", skill.name)).font(crate::theme::mono(12.0)).color(k.c.text_base), Some(skill.description.clone()), None))
                 .collect();
             if rows.is_empty() { vec![faint("No skills are available.")] } else { vec![list(k, rows)] }
         }

@@ -9,7 +9,7 @@ use crate::theme;
 use crate::cards::Lane;
 use crate::threads::Thread;
 use rune::{El, GrowthSpec, Icon, ScrollSpec, col, el, icon, memo, row, text};
-use rune_kit::{Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Markdown, Spinner};
+use rune_kit::{ButtonVariant, IconButton, IconButtonVariant, Kit, Markdown, Spinner};
 use rune_theme_opencode::icons as ic;
 use std::borrow::Cow;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -84,7 +84,7 @@ impl Ctx<'_> {
     }
 
     fn small(&self, words: impl Into<String>) -> El {
-        text(words).font(self.k.ty.text_small)
+        text(words).font(crate::theme::text(13.0))
     }
 }
 
@@ -208,7 +208,7 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
             .child(c.small(words.clone()).color(k.c.text_faint).truncate()),
         ThreadItem::User { text: words, steered, images, at, .. } => {
             let steered = steered.then(|| {
-                row().gap(4.0).items_center().child(icon(&ic::ARROW_UP_RIGHT, 12.0).color(k.c.text_faint)).child(text("Steered").font(k.ty.text_xsmall).color(k.c.text_faint))
+                row().gap(4.0).items_center().child(icon(&ic::ARROW_UP_RIGHT, 12.0).color(k.c.text_faint)).child(text("Steered").font(crate::theme::text(12.0)).color(k.c.text_faint))
             });
             // The text shrinks and wraps inside the bubble's cap, as `w-fit max-w-[80%]` lays it out.
             let bubble = el().max_w(BUBBLE_MAX).min_w(0.0).fill(k.c.layer_02).radius(BUBBLE_RADIUS).px(BUBBLE_PAD_X).py(9.0).child(
@@ -269,7 +269,7 @@ fn message_meta(c: &Ctx, id: &str, words: &str, at: Option<f64>) -> El {
             s.copied = Some((id.clone(), std::time::Instant::now()));
         })
         .build(k);
-    let time = at.map(|at| text(format::message_time(at, format::now_ms())).font(k.ty.text_xsmall).color(k.c.text_faint));
+    let time = at.map(|at| text(format::message_time(at, format::now_ms())).font(crate::theme::text(12.0)).color(k.c.text_faint));
     row().h(24.0).gap(6.0).items_center().group_opacity(0.0, 1.0).child(copy).children(time)
 }
 
@@ -307,8 +307,8 @@ fn compaction_view(c: &Ctx, status: &str, pre: Option<f64>, post: Option<f64>, e
     let ink = if failed { k.c.danger.fg } else { k.c.text_faint };
     let line = || el().h(1.0).grow(1.0).fill(if failed { k.c.danger.fg.alpha(0.3) } else { k.c.border_base });
     let mark = icon(if failed { &ic::CIRCLE_EXCLAMATION } else { &ic::COLLAPSE }, 12.0).color(ink);
-    let words = row().gap(6.0).items_center().child(mark).child(text(label.clone()).font(k.ty.text_xsmall).color(ink)).children(
-        error.map(|e| text(format!("· {e}")).font(k.ty.text_xsmall).color(ink.alpha(0.8)).truncate()),
+    let words = row().gap(6.0).items_center().child(mark).child(text(label.clone()).font(crate::theme::text(12.0)).color(ink)).children(
+        error.map(|e| text(format!("· {e}")).font(crate::theme::text(12.0)).color(ink.alpha(0.8)).truncate()),
     );
     row().w_full().gap(12.0).items_center().py(4.0).role("separator").label(label).child(line()).child(words).child(line())
 }
@@ -428,7 +428,7 @@ fn step_detail(c: &Ctx, item: &ThreadItem) -> El {
         ThreadItem::Tool { file, edits: Some(edits), .. } if !edits.is_empty() => edit_view(c, file.as_deref().unwrap_or(""), edits),
         ThreadItem::Tool { summary, kind, result, .. } => {
             // The label names only the program, so a command's detail starts with the command in full.
-            let command = (*kind == StepKind::Command).then(|| text(format!("$ {summary}")).font(k.ty.mono).color(k.c.text_base).wrap_anywhere());
+            let command = (*kind == StepKind::Command).then(|| text(format!("$ {summary}")).font(crate::theme::mono(12.0)).color(k.c.text_base).wrap_anywhere());
             let output = match result {
                 Some(r) if r.output.is_empty() => "(no output)".to_owned(),
                 Some(r) => r.output.clone(),
@@ -444,7 +444,7 @@ fn step_detail(c: &Ctx, item: &ThreadItem) -> El {
                 .py(10.0)
                 .scroll(ScrollSpec { stick_bottom: false })
                 .children(command)
-                .child(text(output).font(k.ty.mono).color(k.c.text_muted).wrap_anywhere().selectable(true))
+                .child(text(output).font(crate::theme::mono(12.0)).color(k.c.text_muted).wrap_anywhere().selectable(true))
         }
         _ => el(),
     }
@@ -464,7 +464,7 @@ fn edit_view(c: &Ctx, file: &str, edits: &[crate::protocol::TextEdit]) -> El {
         .px(12.0)
         .py(7.0)
         .child(icon(&ic::EDIT, 15.0).color(k.c.text_muted))
-        .child(text(file.to_owned()).font(k.ty.mono).color(k.c.text_base).truncate().grow(1.0))
+        .child(text(file.to_owned()).font(crate::theme::mono(12.0)).color(k.c.text_base).truncate().grow(1.0))
         .child(counts(k, added, removed));
     let body = col().w_full().max_h(EDIT_MAX).py(2.0).scroll(ScrollSpec { stick_bottom: false }).children(lines.iter().map(|(kind, line)| {
         let (mark, fill, ink) = match kind {
@@ -472,7 +472,7 @@ fn edit_view(c: &Ctx, file: &str, edits: &[crate::protocol::TextEdit]) -> El {
             LineKind::Del => ("−", Some(k.c.danger.bg), k.c.danger.fg),
             LineKind::Same => (" ", None, k.c.text_muted),
         };
-        let line_row = row().w_full().px(10.0).child(text(mark).font(k.ty.mono).color(ink).w(16.0)).child(text((*line).to_owned()).font(k.ty.mono).color(k.c.text_muted).selectable(true));
+        let line_row = row().w_full().px(10.0).child(text(mark).font(crate::theme::mono(12.0)).color(ink).w(16.0)).child(text((*line).to_owned()).font(crate::theme::mono(12.0)).color(k.c.text_muted).selectable(true));
         match fill {
             Some(fill) => line_row.fill(fill),
             None => line_row,
@@ -483,7 +483,7 @@ fn edit_view(c: &Ctx, file: &str, edits: &[crate::protocol::TextEdit]) -> El {
 
 /// `+3 −1`, in the add and remove colours.
 fn counts(k: &Kit, added: usize, removed: usize) -> El {
-    row().gap(6.0).child(text(format!("+{added}")).font(k.ty.text_xsmall).color(k.c.success.fg)).child(text(format!("−{removed}")).font(k.ty.text_xsmall).color(k.c.danger.fg))
+    row().gap(6.0).child(text(format!("+{added}")).font(crate::theme::text(12.0)).color(k.c.success.fg)).child(text(format!("−{removed}")).font(crate::theme::text(12.0)).color(k.c.danger.fg))
 }
 
 /// The files a turn changed, under its answer: one quiet box with a count, the line totals and the files.
@@ -496,7 +496,7 @@ fn changes_view(c: &Ctx, files: &[crate::protocol::ChangedFile]) -> El {
         .px(12.0)
         .pt(8.0)
         .pb(4.0)
-        .child(text(format::plural(files.len(), "changed file")).font(k.ty.text_xsmall_medium).color(k.c.text_base))
+        .child(text(format::plural(files.len(), "changed file")).font(crate::theme::medium(12.0)).color(k.c.text_base))
         .child(counts(k, added, removed));
     let list = col().w_full().px(6.0).pb(6.0).children(files.iter().map(|f| {
         let (dir, name) = f.path.rsplit_once('/').map_or(("", f.path.as_str()), |(d, n)| (d, n));
@@ -517,8 +517,8 @@ fn changes_view(c: &Ctx, files: &[crate::protocol::ChangedFile]) -> El {
                     .grow(1.0)
                     .min_w(0.0)
                     .gap(6.0)
-                    .child(text(name.to_owned()).font(k.ty.text_xsmall).color(k.c.text_base))
-                    .children((!dir.is_empty()).then(|| text(dir.to_owned()).font(k.ty.text_xsmall).color(k.c.text_faint).truncate())),
+                    .child(text(name.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_base))
+                    .children((!dir.is_empty()).then(|| text(dir.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate())),
             )
             .child(counts(k, f.additions as usize, f.deletions as usize))
     }));
@@ -538,15 +538,15 @@ fn permission_view(c: &Ctx, request_id: &str, kind: &str, detail: &str, reason: 
     };
     let answer = |label: &str, value: &'static str, variant: ButtonVariant| {
         let (tab, request) = (c.tab.to_owned(), request_id.to_owned());
-        Button::new(label).control_size(ControlSize::Small).variant(variant).on_press(move |s: &mut Desk| s.answer_permission(&tab, &request, value)).build(k).key(value)
+        crate::theme::small_button(label).variant(variant).on_press(move |s: &mut Desk| s.answer_permission(&tab, &request, value)).build(k).key(value)
     };
-    let waiting = row().gap(4.0).items_center().child(icon(&ic::LOCK, 12.0).color(k.c.warning.fg)).child(text("Waiting for approval").font(k.ty.text_xsmall).color(k.c.warning.fg));
+    let waiting = row().gap(4.0).items_center().child(icon(&ic::LOCK, 12.0).color(k.c.warning.fg)).child(text("Waiting for approval").font(crate::theme::text(12.0)).color(k.c.warning.fg));
     let answers = row()
         .gap(6.0)
         .items_center()
         .wrap()
         .child(waiting)
-        .child(text("·").font(k.ty.text_xsmall).color(k.c.text_faint))
+        .child(text("·").font(crate::theme::text(12.0)).color(k.c.text_faint))
         .child(answer("Decline", "decline", ButtonVariant::GhostMuted))
         .child(answer("Approve", "allow", ButtonVariant::Contrast))
         .children(allow_session.then(|| answer("Always allow this session", "allow-session", ButtonVariant::GhostMuted)))
@@ -555,6 +555,6 @@ fn permission_view(c: &Ctx, request_id: &str, kind: &str, detail: &str, reason: 
         .w_full()
         .gap(4.0)
         .role("group")
-        .child(row().gap(8.0).child(icon(mark, STEP_ICON).color(k.c.text_faint).mt(3.0)).child(text(detail.to_owned()).font(k.ty.mono).color(k.c.text_base).wrap_anywhere().selectable(true).max_h(160.0)))
-        .child(col().pl(DETAIL_INDENT).gap(4.0).children(reason.map(|r| text(r.to_owned()).font(k.ty.text_xsmall).color(k.c.text_faint).wrap_anywhere().selectable(true))).child(answers))
+        .child(row().gap(8.0).child(icon(mark, STEP_ICON).color(k.c.text_faint).mt(3.0)).child(text(detail.to_owned()).font(crate::theme::mono(12.0)).color(k.c.text_base).wrap_anywhere().selectable(true).max_h(160.0)))
+        .child(col().pl(DETAIL_INDENT).gap(4.0).children(reason.map(|r| text(r.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint).wrap_anywhere().selectable(true))).child(answers))
 }

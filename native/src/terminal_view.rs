@@ -29,15 +29,15 @@ pub struct Terminals {
     cell: Option<(f32, f32)>,
 }
 
-fn font(k: &Kit) -> TextStyle {
-    TextStyle { size: FONT_SIZE, line_height: (FONT_SIZE * 1.25).ceil(), ..k.ty.mono }
+fn font() -> TextStyle {
+    TextStyle { size: FONT_SIZE, line_height: (FONT_SIZE * 1.25).ceil(), ..crate::theme::mono(12.0) }
 }
 
 impl Terminals {
     /// One cell's width and height. A long run gives the true advance, since one glyph rounds to whole points.
-    fn cell(&mut self, k: &Kit) -> (f32, f32) {
+    fn cell(&mut self) -> (f32, f32) {
         *self.cell.get_or_insert_with(|| {
-            let f = font(k);
+            let f = font();
             let (w, _) = rune::text::measure(&"M".repeat(1000), &[], f, None);
             (w / 1000.0, f.line_height)
         })
@@ -84,8 +84,8 @@ impl Desk {
         self.core.send(&ClientMessage::TerminalInput { id: id.to_owned(), data });
     }
 
-    fn resize_terminal(&mut self, id: &str, width: f32, height: f32, k: &Kit) {
-        let (cw, ch) = self.terminals.cell(k);
+    fn resize_terminal(&mut self, id: &str, width: f32, height: f32) {
+        let (cw, ch) = self.terminals.cell();
         let size = Size { cols: (((width - 2.0 * PAD) / cw).floor() as usize).max(2), rows: (((height - PAD) / ch).floor() as usize).max(1) };
         let Some(screen) = self.terminals.screens.get_mut(id) else { return };
         if screen.size != size {
@@ -133,7 +133,7 @@ fn rgb(c: Rgb) -> Color {
 /// A terminal's screen, filling the pane, sized to whole cells.
 pub fn terminal(s: &Desk, id: &str, k: &Kit) -> El {
     let Some(screen) = s.terminals.screens.get(id) else { return el().grow(1.0) };
-    let f = font(k);
+    let f = font();
     let (cw, ch) = s.terminals.cell.unwrap_or((7.2, f.line_height));
     let ink = k.c.text_base;
     let rows = screen.rows.iter().enumerate().map(|(y, row)| {
@@ -143,7 +143,6 @@ pub fn terminal(s: &Desk, id: &str, k: &Kit) -> El {
     let grid = col().absolute(PAD, 0.0).w(screen.size.cols as f32 * cw).children(rows);
     let cursor = screen.cursor.map(|(x, y)| el().absolute(PAD + x as f32 * cw, y as f32 * ch).size(1.5, ch).fill(ink));
     let (resize_id, key_id, wheel_id) = (id.to_owned(), id.to_owned(), id.to_owned());
-    let dark = k.dark;
     el()
         .key(format!("terminal-{id}"))
         .w_full()
@@ -153,7 +152,7 @@ pub fn terminal(s: &Desk, id: &str, k: &Kit) -> El {
         .focusable(true)
         .role("textbox")
         .label("Terminal")
-        .on_layout(move |s: &mut Desk, r| s.resize_terminal(&resize_id, r[2], r[3], crate::theme::kit(dark)))
+        .on_layout(move |s: &mut Desk, r| s.resize_terminal(&resize_id, r[2], r[3]))
         .on_key(move |s: &mut Desk, event: &KeyEvent, tx| s.terminal_key(&key_id, event, tx))
         .on_wheel(move |s: &mut Desk, e, _| {
             let (_, ch) = s.terminals.cell.unwrap_or((7.2, 15.0));

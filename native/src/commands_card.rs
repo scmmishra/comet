@@ -5,7 +5,7 @@
 use crate::protocol::{ClientMessage, CommandInfo, CommandProcess, CommandRun};
 use crate::shell::Desk;
 use rune::{El, PointerPress, TextEdit, col, el, icon, row, text};
-use rune_kit::{Button, ButtonVariant, ControlSize, Dialog, IconButton, IconButtonVariant, Kit, MenuItem, TextInput, context_menu};
+use rune_kit::{ButtonVariant, ControlSize, Dialog, IconButton, IconButtonVariant, Kit, MenuItem, TextInput, context_menu};
 use rune_theme_opencode::icons as ic;
 use std::collections::HashSet;
 
@@ -120,7 +120,7 @@ pub fn card(s: &Desk, project: &str, k: &Kit, layer: &mut Vec<El>) -> Option<El>
         .role("button")
         .on_press(move |s: &mut Desk| s.edit_commands(&dir, None, &[]))
         .child(icon(&ic::PLUS, 15.0).color(k.c.text_faint))
-        .child(text("Add command").font(k.ty.ui).color(k.c.text_faint));
+        .child(text("Add command").font(crate::theme::text(13.0)).color(k.c.text_faint));
     editor(s, k, layer);
     Some(col().key("commands-card").w_full().padding(6.0).radius(12.0).fill(k.c.layer_01).border(1.0, k.c.border_muted).children(rows).child(add))
 }
@@ -190,7 +190,7 @@ fn command_row(s: &Desk, project: &str, command: &CommandInfo, k: &Kit, layer: &
     let content = line(k)
         .key(format!("command-{}", command.id))
         .child(run_dot(&command.run, k))
-        .child(text(command.name.clone()).font(k.ty.ui).color(k.c.text_base).truncate().grow(1.0))
+        .child(text(command.name.clone()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate().grow(1.0))
         .child(run_button(&command.name, command.run.state == "running", project, vec![command.id.clone()], k));
     let target = Target { project: project.to_owned(), name: command.name.clone(), members: vec![command.clone()] };
     with_menu(s, format!("command-{}", command.id), target, content, k, layer)
@@ -218,8 +218,8 @@ fn group_row(s: &Desk, project: &str, name: &str, members: &[&CommandInfo], k: &
                         s.commands_card.open_groups.insert(toggle.clone());
                     }
                 })
-                .child(text(name.to_owned()).font(k.ty.ui).color(k.c.text_base).truncate())
-                .child(text(members.len().to_string()).font(k.ty.ui).color(k.c.text_faint))
+                .child(text(name.to_owned()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate())
+                .child(text(members.len().to_string()).font(crate::theme::text(13.0)).color(k.c.text_faint))
                 .child(icon(&ic::CHEVRON_DOWN, 13.0).color(k.c.text_faint).rotate(if open { 0.0 } else { -std::f32::consts::FRAC_PI_2 })),
         )
         .child(run_button(name, running > 0, project, ids, k));
@@ -239,7 +239,7 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
         (true, false) => "Edit command",
         _ => "Add command",
     };
-    let field = |label: &str, input: El| col().w_full().gap(6.0).child(text(label.to_owned()).font(k.ty.text_xsmall_medium).color(k.c.text_muted)).child(input);
+    let field = |label: &str, input: El| col().w_full().gap(6.0).child(text(label.to_owned()).font(crate::theme::medium(12.0)).color(k.c.text_muted)).child(input);
     let name = TextInput::new(&draft.name).placeholder("Dev server").on_edit(|s: &mut Desk| &mut s.commands_card.draft.as_mut().expect("the editor is open").name).build(k);
     let processes = draft.processes.iter().enumerate().map(|(i, (_, process, command))| {
         let process_name = draft.grouped.then(|| {
@@ -248,7 +248,7 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
         let command = TextInput::new(command)
             .placeholder("bun run dev")
             .label("Command")
-            .text_style(k.ty.mono)
+            .text_style(crate::theme::mono(12.0))
             .on_edit(move |s: &mut Desk| &mut s.commands_card.draft.as_mut().expect("the editor is open").processes[i].2)
             .build(k)
             .grow(1.0);
@@ -267,7 +267,7 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
         });
         row().key(format!("process-{i}")).w_full().gap(6.0).items_center().children(process_name).child(command).children(remove)
     });
-    let add = Button::new("Add process")
+    let add = crate::theme::button("Add process")
         .variant(ButtonVariant::Ghost)
         .icon(&ic::PLUS)
         .on_press(|s: &mut Desk| {
@@ -280,7 +280,7 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
     let ready = !draft.name.text.trim().is_empty() && draft.processes.iter().any(|(_, _, c)| !c.text.trim().is_empty());
     let delete = editing.then(|| {
         let (project, ids) = (draft.project.clone(), draft.original.clone());
-        Button::new(if draft.grouped { "Delete group" } else { "Delete" })
+        crate::theme::button(if draft.grouped { "Delete group" } else { "Delete" })
             .variant(ButtonVariant::Danger)
             .on_press(move |s: &mut Desk| {
                 s.core.send(&ClientMessage::CommandsRemove { project: project.clone(), ids: ids.clone() });
@@ -294,15 +294,15 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
         .items_center()
         .children(delete)
         .child(row().grow(1.0))
-        .child(Button::new("Cancel").variant(ButtonVariant::Ghost).on_press(|s: &mut Desk| s.commands_card.draft = None).build(k))
-        .child(Button::new("Save").variant(ButtonVariant::Submit).disabled(!ready).on_press(|s: &mut Desk| s.save_commands()).build(k));
+        .child(crate::theme::button("Cancel").variant(ButtonVariant::Ghost).on_press(|s: &mut Desk| s.commands_card.draft = None).build(k))
+        .child(crate::theme::button("Save").variant(ButtonVariant::Submit).disabled(!ready).on_press(|s: &mut Desk| s.save_commands()).build(k));
     let body = col()
         .w_full()
         .gap(12.0)
         .px(16.0)
         .pb(16.0)
         .child(field(if draft.grouped { "Group name" } else { "Name" }, name))
-        .child(col().w_full().gap(6.0).child(text("Processes").font(k.ty.text_xsmall_medium).color(k.c.text_muted)).children(processes.collect::<Vec<_>>()).child(add))
+        .child(col().w_full().gap(6.0).child(text("Processes").font(crate::theme::medium(12.0)).color(k.c.text_muted)).children(processes.collect::<Vec<_>>()).child(add))
         .child(footer);
     Dialog::new("command-editor", title)
         .description("Runs in the background in the project's folder.")

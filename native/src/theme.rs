@@ -3,7 +3,8 @@
 //! draw in Desk's colours. Desk's colours stay the source.
 
 use rune::{Color, TextStyle};
-use rune_kit::{Kit, MarkdownStyle};
+#[allow(deprecated)]
+use rune_kit::{Button, ButtonSize, Kit, MarkdownStyle};
 use std::sync::OnceLock;
 
 /// Desk's colours for one appearance, named as in `index.css`.
@@ -127,6 +128,36 @@ pub fn claude() -> Color {
 /// Fast mode's bolt, Desk's `--color-fast`.
 pub fn fast(dark: bool) -> Color {
     color(if dark { "#f5c542" } else { "#c98a00" })
+}
+
+/// `@opencode/ui`'s small Button, as Desk's Electron app draws it: 24 points tall, padded 9, radius 4.
+/// rune-kit's `ControlSize` sizes follow AppKit's instead, so this keeps its `@opencode/ui` size, which
+/// it marks deprecated.
+#[allow(deprecated)]
+pub fn small_button(label: impl Into<String>) -> Button {
+    Button::new(label).size(ButtonSize::Small)
+}
+
+/// `@opencode/ui`'s Button at its default size: 28 points tall, padded 11.
+#[allow(deprecated)]
+pub fn button(label: impl Into<String>) -> Button {
+    Button::new(label).size(ButtonSize::Normal)
+}
+
+/// Desk's own text, as the Electron app sets it: Geist at weight 400, line height 1.5, no tracking.
+/// `@opencode/ui`'s components, such as buttons and tags, keep the kit's styles.
+pub const fn text(size: f32) -> TextStyle {
+    TextStyle::new(size, 400.0).lh(size * 1.5)
+}
+
+/// Desk's `font-medium`. `@opencode/ui`'s theme sets the weight to 530.
+pub const fn medium(size: f32) -> TextStyle {
+    TextStyle::new(size, 530.0).lh(size * 1.5)
+}
+
+/// Desk's code text, Geist Mono at weight 400.
+pub const fn mono(size: f32) -> TextStyle {
+    TextStyle::new(size, 400.0).mono().lh(size * 1.5)
 }
 
 /// The thread's text at `size` points, with Desk's line height.
