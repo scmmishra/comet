@@ -13,13 +13,13 @@ import type { AcpFlavor } from "./flavor"
 import { CANCELLED, permissionItem, permissionResponse, questionItem, questionResponse } from "./permissions"
 import { promptContent, takesInstructions } from "./prompt"
 import { AUTH_REQUIRED, type ConfigOption, type McpServer, type PermissionRequest, type PermissionResponse, type SessionNotification, type StopReason } from "./protocol"
-import { ThreadRecord } from "./thread-record"
+import type { AcpThreadStore, ThreadRecord } from "./thread-record"
 import { UpdateMapper } from "./updates"
 
 /** Stop reasons that mean the turn did not finish its work. */
 const ERROR_STOPS: ReadonlySet<StopReason> = new Set(["max_tokens", "max_turn_requests", "refusal"])
 
-/** A running agent process with its session open. `mode` is the mode the session is in. */
+/** A running agent process with its session open. */
 interface Live {
   readonly connection: AcpConnection
   readonly sessionId: string
@@ -63,8 +63,9 @@ export class AcpSession implements AgentSession {
     emit: Emit,
     private readonly options: SessionOptions,
     private readonly flavor: AcpFlavor,
+    threads: AcpThreadStore,
   ) {
-    if (!options.ephemeral) this.record = new ThreadRecord(flavor.threadsFolder(), dir, options.resume)
+    if (!options.ephemeral) this.record = threads.record(dir, options.resume)
     // Every item the tab sees is kept, so the thread can be read back later.
     this.emit = (event) => {
       if (event.kind === "item") this.record?.add(event.item)
@@ -173,7 +174,7 @@ export class AcpSession implements AgentSession {
           process.close()
         },
       },
-      { clientInfo: this.flavor.clientInfo, ...(this.flavor.authMethod ? { authMethod: this.flavor.authMethod } : {}) },
+      this.flavor.connect,
     )
     try {
       const meta = this.flavor.sessionMeta?.(connection.agent)
@@ -260,11 +261,9 @@ export class AcpSession implements AgentSession {
     if (this.turn !== turn) return
     const signIn = this.signInNeeded || (error instanceof RpcError && error.code === AUTH_REQUIRED)
     this.signInNeeded = false
-    if (signIn) {
-      this.flavor.signedOut()
-      this.process?.close()
-    }
-    this.emit({ kind: "item", item: errorItem(signIn ? this.flavor.signInProblem : this.explain(error)) })
+    const message = signIn ? this.flavor.signedOut() : this.explain(error)
+    if (signIn) this.process?.close()
+    this.emit({ kind: "item", item: errorItem(message) })
     this.endTurn(turn)
   }
 

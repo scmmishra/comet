@@ -1,11 +1,9 @@
-import { DEFAULT_MODEL, type Effort, type ModelOption, type PermissionMode } from "@desk/protocol"
+import { DEFAULT_MODEL, type Effort, type ModelOption } from "@desk/protocol"
 import { existsSync, readFileSync } from "node:fs"
 import { writeJsonFile } from "../../data-files"
 import { choices, modelOption, thoughtOption } from "../acp/config-options"
 import type { ConfigOption, SelectChoice } from "../acp/protocol"
-
-/** The modes Antigravity has: it asks, it accepts edits, or it never asks. It has no reviewer for Auto. */
-export const ANTIGRAVITY_MODES: readonly PermissionMode[] = ["default", "acceptEdits", "bypassPermissions"]
+import { ANTIGRAVITY_MODES } from "./modes"
 
 /** The models a session last reported, the one it ran by default, and the thinking levels of each model seen selected. */
 interface CachedModels {
@@ -48,7 +46,7 @@ export class ModelCache {
 }
 
 /** The cached models as Desk lists them. "Default" names the model the account runs by default. */
-export function modelOptions({ current, models, efforts }: CachedModels): ModelOption[] {
+function modelOptions({ current, models, efforts }: CachedModels): ModelOption[] {
   const option = (value: string, label: string, description: string): ModelOption => ({ value, label, description, efforts: efforts[value] ?? [], fast: false, permissionModes: ANTIGRAVITY_MODES })
   const runs = models.find((model) => model.value === current)?.name
   return [

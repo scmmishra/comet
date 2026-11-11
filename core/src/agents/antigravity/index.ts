@@ -2,13 +2,13 @@ import { existsSync, mkdirSync } from "node:fs"
 import { spawn } from "../../environment"
 import type { Agent, AgentHost } from "../agent"
 import { AcpSession } from "../acp/session"
-import { acpThreads } from "../acp/thread-record"
+import { AcpThreadStore } from "../acp/thread-record"
 import type { Process } from "../process"
-import { antigravityFlavor, INSTALL_PROBLEM, SIGN_IN_PROBLEM } from "./flavor"
+import { antigravityFlavor, INSTALL_PROBLEM, launchAntigravity, SIGN_IN_PROBLEM } from "./flavor"
 import { modelsPath, signInFolder, threadsFolder, tokenPath } from "./home"
 import { installRuntime } from "./install"
 import { ModelCache } from "./models"
-import { clearRuntimeTemp, launch, resolveRuntime } from "./runtime"
+import { clearRuntimeTemp, resolveRuntime } from "./runtime"
 import { signInWithGoogle } from "./sign-in"
 
 /**
@@ -19,6 +19,7 @@ import { signInWithGoogle } from "./sign-in"
 export function antigravityAgent(host: AgentHost): Agent {
   const models = new ModelCache(modelsPath)
   const flavor = antigravityFlavor(host, models)
+  const threads = new AcpThreadStore(threadsFolder)
   /** The process of a sign-in that runs, which closing Desk ends. */
   let signingIn: Process | undefined
   void clearRuntimeTemp()
@@ -26,13 +27,14 @@ export function antigravityAgent(host: AgentHost): Agent {
     id: "antigravity",
     name: "Antigravity",
     features: ["delete", "install", "sign-in"],
-    threads: acpThreads(threadsFolder),
+    threads,
 
     /** Reads only files: the runtime, and the token the agent writes once signed in. */
     async inspect() {
       const runtime = resolveRuntime()
       if (!runtime) return host.publish({ state: "missing", problem: INSTALL_PROBLEM })
-      const version = { ...(runtime.version ? { installed: runtime.version } : {}), updateAvailable: false, updatable: false }
+      const installed = runtime.kind === "server" ? runtime.version : undefined
+      const version = { ...(installed ? { installed } : {}), updateAvailable: false, updatable: false }
       if (!existsSync(tokenPath())) return host.publish({ state: "signed-out", problem: SIGN_IN_PROBLEM, version })
       host.publish({ state: "ready", problem: undefined, version, models: models.options() })
     },
@@ -40,21 +42,19 @@ export function antigravityAgent(host: AgentHost): Agent {
     /** Antigravity's ACP server reports no plan usage. */
     refreshUsage: async () => {},
 
-    open: (dir, emit, options) => new AcpSession(dir, emit, options, flavor),
+    open: (dir, emit, options) => new AcpSession(dir, emit, options, flavor, threads),
 
-    install: (signal) => installRuntime(undefined, undefined, signal),
+    install: (signal) => installRuntime({ signal }),
 
     async signIn(signal) {
-      const runtime = resolveRuntime()
-      if (!runtime) throw new Error(`Antigravity is not installed. ${INSTALL_PROBLEM}`)
       mkdirSync(signInFolder(), { recursive: true })
-      signingIn = launch(runtime, signInFolder())
+      signingIn = launchAntigravity(signInFolder())
       try {
         const open = (link: string) => {
           void spawn(["open", link])
           host.publish({ signInLink: link })
         }
-        await signInWithGoogle(signingIn, { clientInfo: flavor.clientInfo, cwd: signInFolder(), open, learn: flavor.learn, signal })
+        await signInWithGoogle(signingIn, { connect: flavor.connect, cwd: signInFolder(), open, learn: flavor.learn, signal })
       } finally {
         signingIn = undefined
       }

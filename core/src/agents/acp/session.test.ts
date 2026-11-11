@@ -2,42 +2,45 @@ import { expect, test } from "bun:test"
 import type { RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
 import { tempFolder, until } from "../../test-support"
 import type { SessionOptions } from "../agent"
-import { fakeAcpAgent } from "./test-agent"
+import { FAKE_OPTIONS, fakeAcpAgent } from "./test-agent"
 import type { AcpFlavor } from "./flavor"
 import type { ConfigOption } from "./protocol"
 import { AcpSession } from "./session"
-import { acpThreads } from "./thread-record"
+import { AcpThreadStore } from "./thread-record"
 import { acpToolReader } from "./tools"
 
 const SETTINGS: RunSettings = { agent: "antigravity", model: "claude-sonnet", effort: "low", permissionMode: "bypassPermissions" }
 const TOOLS = { url: "http://127.0.0.1:9/mcp", authorization: "Bearer t", instructions: "Hand work to other agents." }
+const SIGN_IN_LINE = "SIGN IN https://example.com/sign-in"
+const SIGN_IN_TO_SEND = "Sign in, then send again."
 
 /** A session on a fake agent, with what it emitted, the session ids it reported and what its flavor heard. */
 function start(options: Partial<SessionOptions> = {}, handlers: Parameters<typeof fakeAcpAgent>[0] = {}) {
   const agents = [fakeAcpAgent(handlers)]
   const events: ThreadEvent[] = []
   const ids: string[] = []
-  const learned: (readonly ConfigOption[])[] = []
+  const learned: { readonly options: readonly ConfigOption[]; readonly opened: boolean }[] = []
   const folder = tempFolder("acp-session")
+  const threads = new AcpThreadStore(() => folder)
   let signedOut = 0
   const flavor: AcpFlavor = {
     // Each start takes the newest fake, so a test can replace one that died.
     launch: () => agents.at(-1)!.process,
-    clientInfo: { name: "zed", version: "0.0.0" },
-    authMethod: "oauth-personal",
-    modeId: (mode) => (mode === "bypassPermissions" ? "yolo" : "default"),
+    connect: { clientInfo: { name: "fake-client", version: "1.0.0" }, authMethod: "fake-auth" },
+    modeId: (mode) => (mode === "bypassPermissions" ? "never-ask" : "default"),
     tools: acpToolReader,
-    isQuestion: (request) => request.toolCall.toolCallId.startsWith("interaction_"),
-    needsSignIn: (line) => line.startsWith("Open the following link"),
-    signInProblem: "Sign in, then send again.",
-    signedOut: () => void signedOut++,
-    learn: (found) => void learned.push(found),
-    threadsFolder: () => folder,
+    isQuestion: (request) => request.toolCall.toolCallId.startsWith("question_"),
+    needsSignIn: (line) => line.startsWith("SIGN IN "),
+    signedOut: () => {
+      signedOut++
+      return SIGN_IN_TO_SEND
+    },
+    learn: (found, opened) => void learned.push({ options: found, opened }),
   }
-  const session = new AcpSession("/repo", (event) => void events.push(event), { settings: SETTINGS, onSessionId: (id) => void ids.push(id), ...options }, flavor)
+  const session = new AcpSession("/repo", (event) => void events.push(event), { settings: SETTINGS, onSessionId: (id) => void ids.push(id), ...options }, flavor, threads)
   const items = () => events.flatMap((event) => (event.kind === "item" ? [event.item] : []))
   const last = <T extends ThreadItem["type"]>(type: T) => items().findLast((item): item is Extract<ThreadItem, { type: T }> => item.type === type)
-  return { session, agents, agent: () => agents.at(-1)!, events, items, last, ids, learned, folder, signedOut: () => signedOut }
+  return { session, agents, agent: () => agents.at(-1)!, events, items, last, ids, learned, threads, signedOut: () => signedOut }
 }
 
 test("runs a turn: starts the session in the tab's settings, sends the message and streams the reply", async () => {
@@ -50,7 +53,7 @@ test("runs a turn: starts the session in the tab's settings, sends the message a
 
   expect(agent.written.map((message) => message.method)).toEqual(["initialize", "authenticate", "session/new", "session/set_mode", "session/set_config_option", "session/set_config_option", "session/prompt"])
   expect(agent.sent("session/new")[0]).toEqual({ cwd: "/repo", mcpServers: [{ type: "http", name: "desk", url: TOOLS.url, headers: [{ name: "Authorization", value: "Bearer t" }] }] })
-  expect(agent.sent("session/set_mode")[0]).toEqual({ sessionId: "s1", modeId: "yolo" })
+  expect(agent.sent("session/set_mode")[0]).toEqual({ sessionId: "s1", modeId: "never-ask" })
   expect(agent.sent("session/set_config_option")).toEqual([
     { sessionId: "s1", configId: "model", value: "claude-sonnet" },
     { sessionId: "s1", configId: "thinking", value: "low" },
@@ -64,7 +67,10 @@ test("runs a turn: starts the session in the tab's settings, sends the message a
   })
   expect(run.ids).toEqual(["s1"])
   expect(run.events).toContainEqual({ kind: "init", model: "Claude Sonnet" })
-  expect(run.learned.length).toBe(3)
+  // The flavor learns the new session's settings as the account's default, then each change Desk made.
+  expect(run.learned[0]).toEqual({ options: FAKE_OPTIONS, opened: true })
+  expect(run.learned.at(-1)?.opened).toBe(false)
+  expect(run.learned.at(-1)?.options.map((option) => option.currentValue)).toEqual(["claude-sonnet", "low"])
 
   agent.update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Done" } })
   agent.update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "." } })
@@ -78,7 +84,7 @@ test("runs a turn: starts the session in the tab's settings, sends the message a
   expect(run.last("result")).toMatchObject({ id: `result:${user.id}`, isError: false })
   expect(run.last("result")?.stopped).toBeUndefined()
   expect(run.events.at(-1)).toEqual({ kind: "status", busy: false })
-  expect((await acpThreads(() => run.folder).history("/repo", "s1")).map((item) => item.type)).toEqual(["user", "text", "result"])
+  expect((await run.threads.history("/repo", "s1")).map((item) => item.type)).toEqual(["user", "text", "result"])
 
   // The instructions go only with the session's first message.
   run.session.send("Again")
@@ -94,7 +100,7 @@ test("leaves no saved thread for an ephemeral session", async () => {
   run.agent().endTurn()
   await until(() => !run.session.busy)
   expect(run.ids).toEqual(["s1"])
-  expect(await acpThreads(() => run.folder).list("/repo")).toEqual([])
+  expect(await run.threads.list("/repo")).toEqual([])
 })
 
 test("changes the mode and model of a running session, and leaves the agent's default model alone", async () => {
@@ -104,7 +110,7 @@ test("changes the mode and model of a running session, and leaves the agent's de
   expect(run.agent().sent("session/set_mode")).toEqual([])
   expect(run.agent().sent("session/set_config_option")).toEqual([])
   await run.session.configure({ ...SETTINGS, effort: "high" })
-  expect(run.agent().sent("session/set_mode")).toEqual([{ sessionId: "s1", modeId: "yolo" }])
+  expect(run.agent().sent("session/set_mode")).toEqual([{ sessionId: "s1", modeId: "never-ask" }])
   expect(run.agent().sent("session/set_config_option")).toEqual([{ sessionId: "s1", configId: "model", value: "claude-sonnet" }])
   await run.session.configure({ ...SETTINGS, effort: "low" })
   expect(run.agent().sent("session/set_config_option").at(-1)).toEqual({ sessionId: "s1", configId: "thinking", value: "low" })
@@ -139,9 +145,9 @@ test("asks for permission, answers with the chosen option, and cancels open requ
   expect(await allowed).toEqual({ outcome: { outcome: "selected", optionId: "always" } })
   expect(run.last("permission")?.answered).toBe(true)
 
-  const asked = run.agent().request("session/request_permission", { sessionId: "s1", toolCall: { toolCallId: "interaction_1", title: "Which one?" }, options: options.slice(0, 2) })
+  const asked = run.agent().request("session/request_permission", { sessionId: "s1", toolCall: { toolCallId: "question_1", title: "Which one?" }, options: options.slice(0, 2) })
   await until(() => !!run.last("question"))
-  run.session.answerQuestion("interaction_1", { "Which one?": "Always" })
+  run.session.answerQuestion("question_1", { "Which one?": "Always" })
   expect(await asked).toEqual({ outcome: { outcome: "selected", optionId: "always" } })
 
   const open = run.agent().request("session/request_permission", { sessionId: "s1", toolCall: { toolCallId: "t2", title: "Edit", kind: "edit" }, options })
@@ -154,7 +160,7 @@ test("fails the turn with the sign-in problem when the agent needs a sign-in, an
   const run = start({}, { authenticate: () => Promise.reject({ code: -32000, message: "Authentication required" }) })
   run.session.send("Hello")
   await until(() => !run.session.busy)
-  expect(run.last("error")?.message).toBe("Sign in, then send again.")
+  expect(run.last("error")?.message).toBe(SIGN_IN_TO_SEND)
   expect(run.signedOut()).toBe(1)
 })
 
@@ -162,9 +168,9 @@ test("fails the turn when the agent prints a sign-in link instead of answering",
   const run = start({}, { authenticate: () => new Promise(() => {}) })
   run.session.send("Hello")
   await until(() => run.agent().sent("authenticate").length === 1)
-  run.agent().print("Open the following link to authenticate the ACP server: https://accounts.google.com/o/oauth2/v2/auth")
+  run.agent().print(SIGN_IN_LINE)
   await until(() => !run.session.busy)
-  expect(run.last("error")?.message).toBe("Sign in, then send again.")
+  expect(run.last("error")?.message).toBe(SIGN_IN_TO_SEND)
   expect(run.signedOut()).toBe(1)
 })
 

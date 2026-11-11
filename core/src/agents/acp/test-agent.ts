@@ -45,7 +45,7 @@ export function fakeAcpAgent(handlers: Record<string, Handler> = {}) {
     exit(1)
   }
   const defaults: Record<string, Handler> = {
-    initialize: () => ({ protocolVersion: 1, agentCapabilities: { sessionCapabilities: { resume: {} } }, agentInfo: { name: "fake-acp", version: "1.4.5" } }),
+    initialize: () => ({ protocolVersion: 1, agentCapabilities: { sessionCapabilities: { resume: {} } }, agentInfo: { name: "fake-acp", version: "1.0.0" } }),
     authenticate: () => ({}),
     "session/new": () => ({ sessionId: "s1", configOptions: options, modes: { currentModeId: "default" } }),
     "session/resume": () => ({ configOptions: options, modes: { currentModeId: "default" } }),

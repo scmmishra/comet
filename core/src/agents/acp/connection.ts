@@ -24,6 +24,7 @@ export interface AcpClient {
   readonly stray?: (line: string) => void
 }
 
+/** How the client connects: who it says it is, and how it authenticates. */
 export interface ConnectOptions {
   readonly clientInfo: ClientInfo
   /** The method to authenticate with right after `initialize`. Without it, Desk relies on the agent's own sign-in. */
@@ -31,7 +32,7 @@ export interface ConnectOptions {
 }
 
 /** What a session is opened with. `meta` is the agent's own extension of the request. */
-export interface SessionParams {
+interface SessionParams {
   readonly cwd: string
   readonly mcpServers: readonly McpServer[]
   readonly meta?: Record<string, unknown>
