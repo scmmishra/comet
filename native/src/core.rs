@@ -345,7 +345,7 @@ mod tests {
             match receive.recv_timeout(deadline.saturating_duration_since(Instant::now())).expect("the core sends the new settings in time") {
                 Event::Failed(reason) => panic!("{reason}"),
                 Event::Message(CoreMessage::Settings { settings }) if settings.projects.contains_key(&project) => break settings,
-                Event::Message(CoreMessage::Error { message }) => panic!("{message}"),
+                Event::Message(CoreMessage::Error { message, detail }) => panic!("{message}: {detail:?}"),
                 _ => {}
             }
         };

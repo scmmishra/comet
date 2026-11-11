@@ -876,7 +876,10 @@ export type CoreMessage =
   | { readonly type: "panel.show"; readonly tabId: string; readonly id: string }
   /** A plugin opened a thread in a tab under this name. */
   | { readonly type: "tab.title"; readonly tabId: string; readonly title: string }
-  /** Something the user asked for failed. The app shows the message. */
-  | { readonly type: "error"; readonly message: string }
+  /**
+   * Something failed. `message` says what failed, in one line. `detail` holds the cause, such as the
+   * error a plugin threw, which can run to several lines. The app shows both.
+   */
+  | { readonly type: "error"; readonly message: string; readonly detail?: string }
   /** A short message for the user, such as a plugin's toast. */
   | { readonly type: "notice"; readonly message: string }

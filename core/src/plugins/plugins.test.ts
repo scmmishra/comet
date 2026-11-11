@@ -242,7 +242,7 @@ test("tells a plugin when a turn ends in a thread it opened, under its own key, 
   plugins.turnEnded("tab-1", "missing.k1", "done")
   await until(() => notices().length > 0 && errors().length > 0)
   expect(notices()).toEqual(["tab-1 cw-conv-7 interrupted"])
-  expect(errors()).toEqual(["listener: handler failed"])
+  expect(errors()).toEqual(["Something in the listener plugin failed: handler failed"])
 
   await plugins.command("tab-1", project, "listener.late")
   await until(() => errors().length > 1)

@@ -67,7 +67,7 @@ export class Layouts {
       const result = results.get(request.key)
       if (!result) return undefined
       if ("root" in result) return { id: request.key, title: result.title, plugin: splitContributionId(request.key).plugin, root: result.root }
-      this.broadcast({ type: "error", message: `${request.key} could not be drawn, so it was ${request.kind === "card" ? "left out" : "closed"}: ${result.error}` })
+      this.broadcast({ type: "error", message: `${request.key} could not be drawn, so it was ${request.kind === "card" ? "left out" : "closed"}`, detail: result.error })
       return undefined
     }
     const shownSidebar = sidebar && drawn(sidebar)

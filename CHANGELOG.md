@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- An error toast shows its cause in full, under a one-line summary, such as why a plugin could not start. The toast held the whole error on one cut-off line, above an empty box.
 - Settings open as a card that slides up over the tab. The tab stays behind it, pushed back and dimmed, so going back shows it at once.
 - Plugins can keep their views up to date. `desk.onTurnEnd` tells a plugin when a turn ends in a thread it opened, so it can read again what Claude may have changed. A view's `ctx.visible()` says whether the view is on screen, so it can refresh when it shows and poll only while it does.
 - Desk is now a native app, built in Rust with Rune, in place of Electron. It talks to the same core, so tabs, threads, settings and plugins carry over. It is about half the size, at 207 MB. `desk <folder>` opens a folder in the running Desk through a `desk://` link.

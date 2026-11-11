@@ -743,9 +743,13 @@ pub enum CoreMessage {
         messages: Vec<QueuedMessage>,
         held: bool,
     },
-    /// Something the user asked for failed.
+    /// Something failed. `message` says what in one line, and `detail`, when given, holds the cause.
     #[serde(rename = "error")]
-    Error { message: String },
+    Error {
+        message: String,
+        #[serde(default)]
+        detail: Option<String>,
+    },
     /// A short message for the user, such as a plugin's toast.
     #[serde(rename = "notice")]
     Notice { message: String },

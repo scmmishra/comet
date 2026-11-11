@@ -145,7 +145,7 @@ export class Window {
         this.sessions
           .get(tab.id)
           ?.configure(tab)
-          .catch((error) => this.hooks.broadcast({ type: "error", message: `Desk could not change how the thread runs: ${message(error)}` }))
+          .catch((error) => this.hooks.broadcast({ type: "error", message: "Desk could not change how the thread runs", detail: message(error) }))
     }
     for (const id of before.keys()) {
       if (tabs.some((tab) => tab.id === id)) continue
@@ -253,7 +253,7 @@ export class Window {
     const [next, ...rest] = thread.queue ?? []
     if (!next || thread.queueHeld || this.sessions.get(tabId)?.busy) return
     this.setQueue(tabId, rest)
-    this.send(tabId, next.text, next.images).catch((error) => this.hooks.broadcast({ type: "error", message: `Desk could not send a queued message: ${message(error)}` }))
+    this.send(tabId, next.text, next.images).catch((error) => this.hooks.broadcast({ type: "error", message: "Desk could not send a queued message", detail: message(error) }))
   }
 
   private setQueue(tabId: string, queue: readonly QueuedMessage[], held = this.thread(tabId).queueHeld ?? false) {
@@ -504,7 +504,7 @@ export class Window {
   /** A restored thread, with each turn's saved summary after its result. A thread that cannot be read shows empty, and the user is told. */
   private async history(tab: TabInfo, sessionId: string): Promise<ThreadItem[]> {
     const items = await threadHistory(tab.project, sessionId).catch((error) => {
-      this.hooks.broadcast({ type: "error", message: `Desk could not read the thread in “${tab.title}”: ${message(error)}` })
+      this.hooks.broadcast({ type: "error", message: `Desk could not read the thread in “${tab.title}”`, detail: message(error) })
       return []
     })
     const saved = this.thread(tab.id).turnChanges ?? {}

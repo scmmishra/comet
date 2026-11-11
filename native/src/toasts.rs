@@ -13,6 +13,8 @@ const SHOWN_FOR: Duration = Duration::from_secs(5);
 struct Item {
     id: u64,
     message: String,
+    /// The cause under the message. It wraps, where the message keeps to one line.
+    detail: Option<String>,
     error: bool,
     at: Instant,
 }
@@ -26,8 +28,17 @@ pub struct Toasts {
 impl Toasts {
     /// Shows `message`. An error draws with the danger mark.
     pub fn show(&mut self, message: impl Into<String>, error: bool) {
+        self.push(message.into(), None, error);
+    }
+
+    /// Shows an error the core reported: what failed, and its cause under it.
+    pub fn error(&mut self, message: String, detail: Option<String>) {
+        self.push(message, detail, true);
+    }
+
+    fn push(&mut self, message: String, detail: Option<String>, error: bool) {
         self.next += 1;
-        self.items.push(Item { id: self.next, message: message.into(), error, at: Instant::now() });
+        self.items.push(Item { id: self.next, message, detail, error, at: Instant::now() });
     }
 
     #[cfg(test)]
@@ -52,6 +63,10 @@ pub fn region(s: &Desk, k: &Kit) -> Option<El> {
         let id = t.id;
         let toast = Toast::new(format!("toast-{id}"), t.message.clone()).closable().on_close(move |s: &mut Desk| s.toasts.items.retain(|x| x.id != id));
         let toast = if t.error { toast.lead(icon(&ic::CIRCLE_EXCLAMATION, 16.0).color(k.c.danger.fg)) } else { toast };
+        let toast = match &t.detail {
+            Some(detail) => toast.description(detail.clone()),
+            None => toast,
+        };
         toast.build(k)
     });
     Some(toasts.fold(ToastRegion::new(), |region, t| region.toast(t)).build(k))

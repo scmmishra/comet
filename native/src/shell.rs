@@ -162,10 +162,10 @@ impl Desk {
             }
             CoreMessage::PanelShow { tab_id, id } => self.panel_shown(&tab_id, &id),
             CoreMessage::Setups { setups } => self.plugins.setups = setups,
-            CoreMessage::Error { message } => {
+            CoreMessage::Error { message, detail } => {
                 // A failed update reaches the app only as an error, so the Update button comes back.
                 self.account.updating = false;
-                self.toasts.show(message, true);
+                self.toasts.error(message, detail);
             }
             CoreMessage::Notice { message } => self.toasts.show(message, false),
             CoreMessage::Other => {}

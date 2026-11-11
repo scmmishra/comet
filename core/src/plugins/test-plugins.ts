@@ -54,7 +54,8 @@ export function harness() {
     const node = Object.values(nodes[plugin] ?? {}).find((found) => found.type === type && (title === undefined || found.props.title === title))
     return (node?.props[prop] as { handler: number } | undefined)?.handler
   }
-  const errors = () => sent.flatMap((message) => (message.type === "error" ? [message.message] : []))
+  /** Each error the user was shown, its message and its detail on one line. */
+  const errors = () => sent.flatMap((message) => (message.type === "error" ? [[message.message, message.detail].filter(Boolean).join(": ")] : []))
   const ids = (found: TabLayout | undefined) => ({ sidebar: found?.sidebar?.id, panels: found?.panels.map((panel) => panel.id), cards: found?.cards.map((card) => card.id) })
 
   return { project, plugins, layouts, saved, sent, threads, nodes, screen, layout, textOf, handler, errors, ids }

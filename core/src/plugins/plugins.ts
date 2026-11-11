@@ -197,7 +197,7 @@ export class Plugins {
     this.running.delete(plugin)
     this.visibleSent.delete(plugin)
     this.failed.set(plugin, error)
-    this.hooks.broadcast({ type: "error", message: `The ${plugin} plugin ${what}: ${error.message}` })
+    this.hooks.broadcast({ type: "error", message: `The ${plugin} plugin ${what}`, detail: error.message })
   }
 
   private async launch(plugin: string): Promise<Running> {
@@ -244,7 +244,7 @@ export class Plugins {
     } else if (message.type === "open") this.hooks.openPanel(message.tabId, message.panel, message.params ?? {})
     else if (message.type === "close") this.hooks.closePanel(message.tabId, message.id)
     else if (message.type === "toast") this.hooks.broadcast({ type: "notice", message: message.message })
-    else if (message.type === "error") this.hooks.broadcast({ type: "error", message: `${plugin}: ${message.message}` })
+    else if (message.type === "error") this.hooks.broadcast({ type: "error", message: `Something in the ${plugin} plugin failed`, detail: message.message })
   }
 
   private post(running: Running, message: ToPlugin) {

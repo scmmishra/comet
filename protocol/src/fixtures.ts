@@ -136,6 +136,7 @@ export const CORE_MESSAGES = [
   { type: "files.found", project: "/Users/me/code/web", query: "login", paths: ["src/login.ts", "test/login.test.ts"] },
   { type: "queue", tabId: "tab-1", messages: [{ id: "m1", text: "Then add a test" }], held: true },
   { type: "error", message: "The folder does not exist." },
+  { type: "error", message: "The support plugin could not start", detail: "desk.onTurnEnd is not a function." },
   { type: "notice", message: "Copied the link." },
   { type: "claude.version", version: { installed: "2.5.1", latest: "2.5.3", updateAvailable: true, updatable: true } },
   { type: "account", account: { email: "me@example.com", organization: "Example", plan: "max", apiProvider: "firstParty" } },
