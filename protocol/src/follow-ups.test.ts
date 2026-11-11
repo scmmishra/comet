@@ -1,5 +1,5 @@
-import { followUpFor } from "@desk/protocol"
 import { expect, test } from "bun:test"
+import { followUpFor } from "."
 
 test("a slash command sent while the agent works waits in the queue, and other messages follow the choice", () => {
   expect(followUpFor("/rename Contact Import Review", "steer")).toBe("queue")

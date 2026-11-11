@@ -42,7 +42,7 @@ Build the UI from `rune-kit`. Its components match `@opencode/ui` by name, varia
 - One Desk runs at a time, with one window. Its tabs are saved in `~/.desk/window.json`.
 - `mise run dev` runs Desk from the repo with `cargo run`. It keeps its tabs and plugin builds in `~/.desk/native`, so it runs beside the installed Desk. Settings, commands and plugins are shared. `DESK_DIR=<folder> mise run dev` opens a folder in it.
 - A Desk run from the repo starts the core with `bun` from `PATH`. Set `DESK_BUN` to use another binary. The core needs Bun 1.4 or newer.
-- `mise run test` runs the core and native tests. `mise run check` typechecks, lints and runs every test.
+- `mise run test` runs the core, protocol and native tests. `mise run check` typechecks, lints and runs every test.
 - `assets/logo.svg` and `assets/logo-dark.svg` are the logo in light and dark. `mise run icons` renders them into `native/assets/Desk.icon`. Commit what it writes.
 
 ## Release
