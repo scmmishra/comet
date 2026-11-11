@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- A plugin finds the tools on your shell's PATH, such as a CLI in ~/.local/bin. Plugins ran with the PATH Desk started with, so the Chatwoot inbox showed "command not found: chatwoot" in Desk opened from the Dock.
 - An error toast shows its cause in full, under a one-line summary, such as why a plugin could not start. The toast held the whole error on one cut-off line, above an empty box.
 - Settings open as a card that slides up over the tab. The tab stays behind it, pushed back and dimmed, so going back shows it at once.
 - A plugin's list items can show an icon from the catalog or an image the plugin ships, such as a logo, and can open a link in the browser.

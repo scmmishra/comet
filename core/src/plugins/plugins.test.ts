@@ -249,3 +249,29 @@ test("tells a plugin when a turn ends in a thread it opened, under its own key, 
   expect(errors().at(-1)).toContain("registers onTurnEnd while setup runs")
   plugins.stop()
 }, 20_000)
+
+/** A card that draws a variable from its environment. */
+const ENVIRONMENT = `
+import { definePlugin, Text } from "@desk/plugin"
+
+export default definePlugin((desk) => {
+  desk.card("env", { title: "Env", view: () => <Text>{process.env.DESK_TEST_TOOL ?? "missing"}</Text> })
+})
+`
+
+test("starts a plugin with the environment the core set, such as the login shell's PATH", async () => {
+  // The core sets the login shell's variables after it starts, as this test does.
+  process.env.DESK_TEST_TOOL = "found"
+  installPlugin("environment", ENVIRONMENT)
+  turnOn({ everywhere: ["environment"] })
+  const { plugins, layouts, layout, textOf } = harness()
+  await layouts.send("tab-1")
+  const shown = () => {
+    const card = layout("tab-1")?.cards[0]
+    return card ? textOf("environment", card.root) : ""
+  }
+  await until(() => shown() !== "")
+  expect(shown()).toBe("found")
+  delete process.env.DESK_TEST_TOOL
+  plugins.stop()
+}, 20_000)
