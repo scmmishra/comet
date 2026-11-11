@@ -84,6 +84,7 @@ export class ClaudeSession implements AgentSession {
     private readonly dir: string,
     private readonly emit: Emit,
     private readonly options: ClaudeSessionOptions,
+    private readonly runQuery: typeof query = query,
   ) {
     this.sessionId = options.resume
     this.resumeAt = options.resumeAt
@@ -131,24 +132,17 @@ export class ClaudeSession implements AgentSession {
     this.inbox!.push({ type: "user", message: { role: "user", content: userContent(text, images) }, parent_tool_use_id: null, priority: "now", uuid })
   }
 
-  /** Stops commands running in the background. Claude Code reports each as stopped once it ends. */
+  /** Claude Code reports each command as stopped once it ends. */
   async stopTasks(ids: readonly string[]) {
     await Promise.all(ids.map((id) => this.query?.stopTask(id)))
   }
 
-  /**
-   * Asks the turn to stop. If Claude Code has not stopped in time, the tab says so and offers Force
-   * stop, after T3 Code.
-   */
   async interrupt() {
     if (!this.query || !this.stop.begin()) return
     await this.query.interrupt()
   }
 
-  /**
-   * Ends a turn that did not stop when asked, as stopped. The window then closes the session, which ends
-   * Claude Code, and the next message starts a new one on the same thread. Says whether there was a stop to force.
-   */
+  /** After a forced stop, the window closes the session, which ends Claude Code. The next message starts a new one on the same thread. */
   forceStop(): boolean {
     if (!this.stop.pending) return false
     this.emit({ kind: "item", item: forcedStop() })
@@ -156,7 +150,6 @@ export class ClaudeSession implements AgentSession {
     return true
   }
 
-  /** What a turn's end resets, and the status that tells the tab. */
   private endTurn() {
     this.stop.clear()
     this.running = false
@@ -210,7 +203,7 @@ export class ClaudeSession implements AgentSession {
     } catch (error) {
       return this.fail(error)
     }
-    this.query = query({
+    this.query = this.runQuery({
       prompt: inbox,
       options: {
         pathToClaudeCodeExecutable: executable,

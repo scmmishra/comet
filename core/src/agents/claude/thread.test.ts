@@ -45,6 +45,15 @@ test("shapes an edit with its file relative to the project, and other calls by t
   expect(toolItem(DIR, "t4", "Skill", { skill: "chatwoot-cli" }).summary).toBe("chatwoot-cli")
 })
 
+test("describes a call of Desk's own tools by what it does, and another server's tool by its name and input", () => {
+  expect(toolItem(DIR, "t1", "mcp__desk__delegate", { agent: "antigravity", task: "Check the build." })).toMatchObject({
+    summary: "antigravity: Check the build.",
+    label: "Handing a task to antigravity: Check the build.",
+  })
+  expect(toolItem(DIR, "t2", "mcp__desk__list_agents", {})).toMatchObject({ summary: "", label: "Listing the agents" })
+  expect(toolItem(DIR, "t3", "mcp__github__search", { q: "x" }).label).toBe('mcp__github__search {"q":"x"}')
+})
+
 test("rebuilds a thread from a stored transcript, timing each turn and hiding Claude Code's own messages", () => {
   const items = new ThreadMapper(DIR).history([
     { type: "user", uuid: "u1", session_id: "s", parent_tool_use_id: null, timestamp: "2026-11-09T10:00:00.000Z", message: { role: "user", content: "List files" } },

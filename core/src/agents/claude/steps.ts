@@ -6,6 +6,9 @@ import { ASK_USER_QUESTION } from "./requests"
 type Tool = Extract<Step, { type: "tool" }>
 type BareTool = Extract<BareStep, { type: "tool" }>
 
+/** How Claude Code names a tool of Desk's own MCP server, such as `mcp__desk__delegate`. */
+export const DESK_TOOL = `mcp__${SERVER_NAME}__`
+
 /** What each of Claude Code's tools does, which picks its icon. Others are plain tools. */
 const KIND_BY_TOOL: Record<string, StepKind> = {
   Bash: "command",
@@ -57,9 +60,6 @@ function label(step: BareTool): string {
     }
   }
 }
-
-/** How Claude Code names a tool of Desk's own MCP server, such as `mcp__desk__delegate`. */
-export const DESK_TOOL = `mcp__${SERVER_NAME}__`
 
 /** The tool of Desk's that a tool name stands for, or undefined for any other tool. */
 export const deskTool = (name: string) => (name.startsWith(DESK_TOOL) ? name.slice(DESK_TOOL.length) : undefined)

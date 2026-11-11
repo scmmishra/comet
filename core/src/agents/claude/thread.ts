@@ -16,6 +16,15 @@ const COMPACT_SUMMARY = /^This session is being continued from a previous conver
 /** Inputs that say in short what a tool call does, in the order a summary prefers them. */
 const SUMMARY_FIELDS = ["command", "file_path", "pattern", "path", "url", "query", "description", "skill"]
 
+/** Why an API request failed, in a few words, for the retry notice. */
+const RETRY_REASONS: Partial<Record<SDKAPIRetryMessage["error"], string>> = {
+  rate_limit: "Rate limited",
+  overloaded: "The API is overloaded",
+  server_error: "The API had an error",
+  authentication_failed: "Authentication failed",
+  billing_error: "A billing problem",
+}
+
 type ToolItem = Extract<ThreadItem, { type: "tool" }>
 
 /**
@@ -246,23 +255,14 @@ function taskSummary(content: unknown): string | undefined {
   return /<summary>([\s\S]*?)<\/summary>/.exec(text)?.[1]?.trim() || "A background task finished."
 }
 
-/**
- * The text the user typed, without any images, or undefined for a tool result. Claude Code also
- * stores messages it writes itself, such as command output and reminders. They start with a tag and stay hidden.
- */
-/** Why an API request failed, in a few words, for the retry notice. */
-const RETRY_REASONS: Partial<Record<SDKAPIRetryMessage["error"], string>> = {
-  rate_limit: "Rate limited",
-  overloaded: "The API is overloaded",
-  server_error: "The API had an error",
-  authentication_failed: "Authentication failed",
-  billing_error: "A billing problem",
-}
-
 function retryReason(error: SDKAPIRetryMessage["error"], status: number | null): string {
   return RETRY_REASONS[error] ?? (status ? `The API answered ${status}` : "The request failed")
 }
 
+/**
+ * The text the user typed, without any images, or undefined for a tool result. Claude Code also
+ * stores messages it writes itself, such as command output and reminders. They start with a tag and stay hidden.
+ */
 function userText(content: unknown): string | undefined {
   const text =
     typeof content === "string"
