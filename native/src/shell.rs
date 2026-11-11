@@ -79,6 +79,7 @@ pub struct Desk {
     cmd_held: bool,
     pub tab_bar: crate::tab_bar::TabBar,
     pub session_menu: crate::session_menu::SessionMenu,
+    pub rewind: crate::rewind::Rewind,
 }
 
 impl Desk {
@@ -482,6 +483,7 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, window: 
         .child(text("/").font(crate::theme::text(13.0)).color(k.c.text_faint))
         .child(text(tab.title.clone()).font(crate::theme::medium(13.0)).color(k.c.text_base).truncate())
         .children(crate::session_menu::button(s, tab, k, layer));
+    crate::rewind::dialog(s, &tab.id, k, layer);
     let end = row()
         .gap(4.0)
         .items_center()

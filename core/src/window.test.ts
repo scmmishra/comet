@@ -1,9 +1,9 @@
-import { listSessions } from "@anthropic-ai/claude-agent-sdk"
+import { getSessionMessages, listSessions } from "@anthropic-ai/claude-agent-sdk"
 import { expect, test } from "bun:test"
 import type { CoreMessage, TabInfo } from "@desk/protocol"
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
+import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { gitRepo, tempFolder, useTempHome } from "./test-support"
+import { claudeTranscript, gitRepo, tempFolder, type TranscriptEntry, useTempHome } from "./test-support"
 import { outcomeAfter, Window } from "./window"
 
 useTempHome()
@@ -166,16 +166,10 @@ test("tells how a turn ended from its result, and counts a turn with an error or
  * A project with one Claude transcript in it, kept in a temporary Claude config folder. The project's
  * path is resolved, as Claude Code names its folder after the real path.
  */
-function startedThread() {
-  process.env.CLAUDE_CONFIG_DIR ??= tempFolder("claude")
-  const project = realpathSync(tempFolder("sessions"))
-  const folder = join(process.env.CLAUDE_CONFIG_DIR, "projects", project.replace(/[^a-zA-Z0-9]/g, "-"))
-  mkdirSync(folder, { recursive: true })
-  const sessionId = crypto.randomUUID()
-  const message = { type: "user", uuid: crypto.randomUUID(), parentUuid: null, sessionId, cwd: project, timestamp: new Date().toISOString(), message: { role: "user", content: "Fix the login form" } }
-  writeFileSync(join(folder, `${sessionId}.jsonl`), `${JSON.stringify(message)}\n`)
+function startedThread(entries: readonly TranscriptEntry[] = [{ user: "Fix the login form" }]) {
+  const { project, sessionId, file, uuids } = claudeTranscript(entries)
   const opened = open({ tabs: [{ ...tab("a", project), title: "Fix the login form" }], threads: { a: { sessionId } }, recent: [] })
-  return { ...opened, project, sessionId, transcript: join(folder, `${sessionId}.jsonl`) }
+  return { ...opened, project, sessionId, transcript: file, uuids }
 }
 
 test("renames a tab and its session, without a turn", async () => {
@@ -211,4 +205,37 @@ test("refuses to rename, fork or delete a thread that has not started", async ()
   await expect(window.renameThread("a", "Name")).rejects.toThrow("not started")
   await expect(window.forkThread("a", () => {})).rejects.toThrow("not started")
   await expect(window.deleteThread("a")).rejects.toThrow("not started")
+})
+
+/** Two turns: the user's message and Claude's reply, twice. */
+const TWO_TURNS: readonly TranscriptEntry[] = [{ user: "Fix the login form" }, { assistant: "Fixed it." }, { user: "Now add a test" }, { assistant: "Added one." }]
+
+test("rewinds a thread to before a message: the thread hides it and what follows, and the next session resumes before it", async () => {
+  const { window, sent, uuids } = startedThread(TWO_TURNS)
+  await window.rewindThread("a", uuids[2]!, false)
+  expect(saved().threads.a.rewind).toEqual({ at: uuids[1], from: uuids[2] })
+  const history = sent.findLast((message): message is Extract<CoreMessage, { type: "session.history" }> => message.type === "session.history")!
+  expect(history.items.filter((item) => item.type === "user").map((item) => item.id)).toEqual([uuids[0]])
+})
+
+test("a rewind to the first message leaves the tab to start a new session", async () => {
+  const { window, sent, uuids } = startedThread(TWO_TURNS)
+  await window.rewindThread("a", uuids[0]!, false)
+  expect(saved().threads.a.sessionId).toBeUndefined()
+  expect(sent).toContainEqual({ type: "thread.session", tabId: "a" })
+  expect(sent).toContainEqual({ type: "session.history", tabId: "a", items: [] })
+})
+
+test("refuses to rewind to a message that is not one the user sent", async () => {
+  const { window, uuids } = startedThread(TWO_TURNS)
+  await expect(window.rewindThread("a", uuids[1]!, false)).rejects.toThrow("could not find that message")
+})
+
+test("forks a thread from a message: the copy ends with that message's turn", async () => {
+  const { window, project, uuids } = startedThread(TWO_TURNS)
+  const replies: CoreMessage[] = []
+  await window.forkThread("a", (message) => replies.push(message), uuids[0])
+  const forked = replies[0] as Extract<CoreMessage, { type: "thread.forked" }>
+  const copy = await getSessionMessages(forked.threadId, { dir: project })
+  expect(copy.map((message) => message.type)).toEqual(["user", "assistant"])
 })

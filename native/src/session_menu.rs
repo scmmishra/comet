@@ -40,7 +40,7 @@ pub fn button(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Option<E
         }))
         .item(MenuItem::new("Fork").icon(&ic::FORK).on_select(move |s: &mut Desk| {
             s.session_menu.open = false;
-            s.core.send(&ClientMessage::ThreadFork { tab_id: fork.clone() });
+            s.core.send(&ClientMessage::ThreadFork { tab_id: fork.clone(), message_id: None });
         }))
         .item(MenuItem::new("Copy session ID").icon(&ic::COPY).on_select_tx(move |s: &mut Desk, tx| {
             s.session_menu.open = false;

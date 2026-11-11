@@ -1,5 +1,5 @@
 import { afterAll } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 
@@ -36,4 +36,29 @@ export function gitRepo(files: Record<string, string>) {
   git("add", ".")
   git("commit", "-q", "-m", "init")
   return { dir, git, write }
+}
+
+/** One entry of a Claude transcript: a message the user sent, or Claude's text reply. */
+export type TranscriptEntry = { readonly user: string } | { readonly assistant: string }
+
+/**
+ * A Claude transcript in a new project, kept in a temporary Claude config folder for the file's tests.
+ * Each entry follows the one before it. The project's path is resolved, as Claude Code names its folder
+ * after the real path. Answers the project, the session, the transcript's file and each entry's uuid.
+ */
+export function claudeTranscript(entries: readonly TranscriptEntry[]) {
+  process.env.CLAUDE_CONFIG_DIR ??= tempFolder("claude")
+  const project = realpathSync(tempFolder("sessions"))
+  const folder = join(process.env.CLAUDE_CONFIG_DIR, "projects", project.replace(/[^a-zA-Z0-9]/g, "-"))
+  mkdirSync(folder, { recursive: true })
+  const sessionId = crypto.randomUUID()
+  const uuids = entries.map(() => crypto.randomUUID())
+  const lines = entries.map((entry, index) => {
+    const message = "user" in entry ? { role: "user", content: entry.user } : { role: "assistant", content: [{ type: "text", text: entry.assistant }] }
+    const type = "user" in entry ? "user" : "assistant"
+    return JSON.stringify({ type, uuid: uuids[index], parentUuid: uuids[index - 1] ?? null, sessionId, cwd: project, timestamp: new Date(Date.now() + index).toISOString(), message })
+  })
+  const file = join(folder, `${sessionId}.jsonl`)
+  writeFileSync(file, `${lines.join("\n")}\n`)
+  return { project, sessionId, file, uuids }
 }

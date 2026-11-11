@@ -865,11 +865,15 @@ impl Desk {
     /// Takes a queued message back into the composer to edit, after anything already typed, with its images.
     fn edit_queued(&mut self, tab: &str, id: &str, message: &QueuedMessage) {
         self.core.send(&ClientMessage::QueueRemove { tab_id: tab.to_owned(), id: id.to_owned() });
+        self.put_in_draft(tab, &message.text, &message.images);
+    }
+
+    /// Puts a message back in a tab's composer to change and send again. A draft already there stays, above it.
+    pub fn put_in_draft(&mut self, tab: &str, words: &str, images: &[crate::protocol::ImageAttachment]) {
         let edit = self.drafts.edit(tab);
-        let words = &message.text;
         let joined = if edit.text.trim().is_empty() { words.to_owned() } else { format!("{}\n\n{words}", edit.text) };
         edit.replace_text(joined);
-        self.drafts.images.entry(tab.to_owned()).or_default().extend(message.images.iter().cloned());
+        self.drafts.images.entry(tab.to_owned()).or_default().extend(images.iter().cloned());
     }
 }
 
@@ -961,6 +965,16 @@ mod tests {
         assert_eq!(s.drafts.text("t"), "First\n\nThen this");
         assert_eq!(s.drafts.images["t"], [image]);
         assert!(s.core.sent().iter().any(|m| m["type"] == "queue.remove"));
+    }
+
+    #[test]
+    fn a_message_put_back_in_the_composer_goes_under_the_draft() {
+        let mut s = desk();
+        type_text(&mut s, "A draft");
+        let image = crate::protocol::ImageAttachment { media_type: "image/png".into(), data: "iVBORw==".into() };
+        s.put_in_draft("t", "Now add a test", std::slice::from_ref(&image));
+        assert_eq!(s.drafts.text("t"), "A draft\n\nNow add a test");
+        assert_eq!(s.drafts.images["t"], [image]);
     }
 
     #[test]

@@ -1,4 +1,5 @@
 import { deleteSession, forkSession, renameSession, type SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
+import { Transcript } from "./rewind"
 import type { TurnOutcome } from "@desk/plugin"
 import { followUpFor, type ChangedFile, type CoreMessage, type FileChange, type FollowUp, type ImageAttachment, type PermissionAnswer, type PluginLayout, type QueuedMessage, type ReviewScope, type TabInfo, type ThreadEvent, type ThreadItem } from "@desk/protocol"
 import { branchBase, capture, changesSince, checkpointChanges, headTree, keepCheckpoints } from "./checkpoints"
@@ -345,12 +346,38 @@ export class Window {
     this.hooks.broadcast({ type: "tab.title", tabId, title: name })
   }
 
-  /** Copies a tab's session into a new one, under the tab's name, for the app to open beside it. */
-  async forkThread(tabId: string, reply: Send) {
+  /**
+   * Copies a tab's session into a new one, under the tab's name, for the app to open beside it. Given
+   * one of the user's messages, the copy ends with that message's turn.
+   */
+  async forkThread(tabId: string, reply: Send, messageId?: string) {
     const { project, sessionId } = this.started(tabId)
+    const end = messageId ? (await Transcript.read(project, sessionId)).turnEnd(messageId) : undefined
     const title = `${this.tab(tabId).title} (fork)`
-    const forked = await forkSession(sessionId, { dir: project, title })
+    const forked = await forkSession(sessionId, { dir: project, title, ...(end ? { upToMessageId: end } : {}) })
     reply({ type: "thread.forked", tabId, threadId: forked.sessionId, title })
+  }
+
+  /**
+   * Takes a tab's thread back to before one of the user's messages, so the user can send it again,
+   * changed. Claude forgets that message and what followed. With `restoreFiles`, the files Claude's
+   * tools changed since go back as they were. The transcript keeps the old messages until the next
+   * turn runs, so the thread hides them until then.
+   */
+  async rewindThread(tabId: string, messageId: string, restoreFiles: boolean) {
+    const tab = this.tab(tabId)
+    const { sessionId } = this.started(tabId)
+    if (this.sessions.get(tabId)?.busy) throw new Error("Stop Claude before you rewind the thread.")
+    const at = (await Transcript.read(tab.project, sessionId)).before(messageId)
+    if (restoreFiles) await this.session(tab).rewindFiles(messageId)
+    this.closeSession(tabId)
+    // The last turn's checkpoints describe work the rewind took back. The next turn starts from the files as they are now.
+    const turnTo = await capture(tab.project)
+    const { key, queue, queueHeld, threadStart } = this.thread(tabId)
+    const kept = { ...(key ? { key } : {}), ...(queue ? { queue, queueHeld } : {}), ...(threadStart ? { threadStart } : {}), ...(turnTo ? { turnTo } : {}) }
+    // A rewind to the first message leaves nothing to resume, so the next message starts a new session.
+    this.setThread(tabId, at ? { ...this.thread(tabId), ...kept, turnFrom: undefined, rewind: { at, from: messageId } } : kept)
+    this.hooks.broadcast({ type: "session.history", tabId, items: at ? await this.history(tab, sessionId) : [] })
   }
 
   /**
@@ -495,8 +522,10 @@ export class Window {
           })
         }
       }
+      const rewind = this.thread(tab.id).rewind
       found = new Session(tab.project, emit, {
         resume: this.thread(tab.id).sessionId,
+        ...(rewind ? { resumeAt: rewind.at, onResumedAt: () => current() && this.updateThread(tab.id, { rewind: undefined }) } : {}),
         settings: tab,
         compactIdle: this.hooks.compactIdle,
         onSessionId: (sessionId) => {
@@ -549,8 +578,9 @@ export class Window {
       this.hooks.broadcast({ type: "error", message: `Desk could not read the thread in “${tab.title}”`, detail: message(error) })
       return []
     })
-    const saved = this.thread(tab.id).turnChanges ?? {}
-    return items.flatMap((item) => {
+    const { turnChanges: saved = {}, rewind } = this.thread(tab.id)
+    const cut = rewind ? items.findIndex((item) => item.id === rewind.from) : -1
+    return (cut < 0 ? items : items.slice(0, cut)).flatMap((item) => {
       const files = item.type === "result" ? saved[item.id.slice(RESULT_PREFIX.length)] : undefined
       return files ? [item, changesItem(item.id.slice(RESULT_PREFIX.length), files)] : [item]
     })

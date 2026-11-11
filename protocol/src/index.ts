@@ -835,8 +835,13 @@ export type ClientMessage =
   | { readonly type: "thread.clear"; readonly tabId: string }
   /** Names a tab and its session, as Claude Code's /rename does. It runs no turn, so a running one goes on. */
   | { readonly type: "thread.rename"; readonly tabId: string; readonly title: string }
-  /** Copies a tab's session into a new one. The core answers with `thread.forked`. */
-  | { readonly type: "thread.fork"; readonly tabId: string }
+  /** Copies a tab's session into a new one, ending with the turn of `messageId` when given. The core answers with `thread.forked`. */
+  | { readonly type: "thread.fork"; readonly tabId: string; readonly messageId?: string }
+  /**
+   * Takes a tab's thread back to before one of the user's messages. Claude forgets it and what followed.
+   * With `restoreFiles`, the files Claude's tools changed since go back too.
+   */
+  | { readonly type: "thread.rewind"; readonly tabId: string; readonly messageId: string; readonly restoreFiles: boolean }
   /** Deletes a tab's session from this Mac, after stopping a running turn. The tab starts afresh, as after /clear. */
   | { readonly type: "thread.delete"; readonly tabId: string }
   | { readonly type: "permission.answer"; readonly tabId: string; readonly requestId: string; readonly answer: PermissionAnswer }

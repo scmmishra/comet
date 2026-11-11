@@ -32,6 +32,12 @@ export interface TabThread {
   readonly queue?: readonly QueuedMessage[]
   /** Set when a stop or an error paused the queue, until the user resumes it. */
   readonly queueHeld?: boolean
+  /**
+   * A rewind waiting for the thread's next turn. The session resumes at `at`, the last message it keeps.
+   * The transcript still holds `from`, the message the user rewound to, and what follows it, so the
+   * thread hides them until that turn has run.
+   */
+  readonly rewind?: { readonly at: string; readonly from: string }
 }
 
 /** The window: its tabs in their order across projects, each tab's thread, and the folders tabs have opened. */

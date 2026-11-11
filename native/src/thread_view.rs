@@ -200,6 +200,8 @@ fn hash_row(c: &Ctx, r: &ThreadRow, h: &mut DefaultHasher) {
             // A copied message or one of its code blocks.
             c.s.copied.as_ref().filter(|(copied, _)| copied == id || copied.starts_with(&format!("{id}#"))).map(|(copied, _)| copied).hash(h);
             (c.thread.latest_changes() == Some(id.as_str())).hash(h);
+            // A message's Rewind and Fork follow the session and whether Claude works.
+            (c.thread.busy, c.thread.session_id.is_some()).hash(h);
             c.s.threads.approval_menu.hash(h);
         }
         ThreadRow::Group { id, steps, live, summary } => {
@@ -269,14 +271,14 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
                 .children(steered)
                 .children(pictures)
                 .children((!words.is_empty()).then_some(bubble))
-                .child(message_meta(c, item.id(), words, *at))
+                .child(message_meta(c, item.id(), words, *at, message_actions(c, item.id(), words, images).into_iter().flatten()))
         }
         // Markdown makes its own selection group. Leaving it joins its texts to the thread's, so a drag crosses messages.
         ThreadItem::Text { text: words, done, at, .. } => {
             let copied = c.s.copied.as_ref().map(|(key, _)| key.as_str());
             let reply = crate::reply::interactive(crate::reply::document(words), c.tab, item.id(), copied, k).style(theme::markdown(k, c.size)).streaming(!*done).selectable(true).build(k).selection_group(false);
             // A reply still streaming has nothing final to copy.
-            col().w_full().gap(4.0).hover_group().child(reply).children(done.then(|| message_meta(c, item.id(), words, *at)))
+            col().w_full().gap(4.0).hover_group().child(reply).children(done.then(|| message_meta(c, item.id(), words, *at, [])))
         }
         ThreadItem::Compaction { status, pre_tokens, post_tokens, error, .. } => compaction_view(c, status, *pre_tokens, *post_tokens, error.as_deref()),
         ThreadItem::Error { message, .. } => el()
@@ -294,9 +296,9 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
     }
 }
 
-/// A message's copy button and time, after T3 Code. They stay hidden until the message is hovered, so
-/// the thread reads as text.
-fn message_meta(c: &Ctx, id: &str, words: &str, at: Option<f64>) -> El {
+/// A message's copy button, its other `actions` and its time, after T3 Code. They stay hidden until the
+/// message is hovered, so the thread reads as text.
+fn message_meta(c: &Ctx, id: &str, words: &str, at: Option<f64>, actions: impl IntoIterator<Item = El>) -> El {
     let k = c.k;
     let copied = c.s.copied.as_ref().is_some_and(|(copied, _)| copied == id);
     let (id, words) = (id.to_owned(), words.to_owned());
@@ -310,7 +312,30 @@ fn message_meta(c: &Ctx, id: &str, words: &str, at: Option<f64>) -> El {
         })
         .build(k);
     let time = at.map(|at| text(format::message_time(at, format::now_ms())).font(crate::theme::text(12.0)).color(k.c.text_faint));
-    row().h(24.0).gap(6.0).items_center().group_opacity(0.0, 1.0).child(copy).children(time)
+    row().h(24.0).gap(6.0).items_center().group_opacity(0.0, 1.0).child(copy).children(actions).children(time)
+}
+
+/// Rewind and Fork for a message the user sent, after T3 Code. Both need the session Claude Code keeps.
+/// A thread can rewind only while Claude is not working.
+fn message_actions(c: &Ctx, id: &str, words: &str, images: &[crate::protocol::ImageAttachment]) -> Option<[El; 2]> {
+    c.thread.session_id.as_ref()?;
+    let k = c.k;
+    let (tab, message) = (c.tab.to_owned(), id.to_owned());
+    let (rewind_tab, rewind_message, rewind_words, rewind_images) = (tab.clone(), message.clone(), words.to_owned(), images.to_vec());
+    let rewind = IconButton::new(&ic::PENCIL_LINE)
+        .variant(IconButtonVariant::GhostMuted)
+        .label("Rewind to this message")
+        .help(if c.thread.busy { "Stop Claude to rewind" } else { "Rewind and edit" })
+        .disabled(c.thread.busy)
+        .on_press(move |s: &mut Desk| s.ask_rewind(&rewind_tab, &rewind_message, &rewind_words, &rewind_images))
+        .build(k);
+    let fork = IconButton::new(&ic::FORK)
+        .variant(IconButtonVariant::GhostMuted)
+        .label("Fork from this message")
+        .help("Fork from here")
+        .on_press(move |s: &mut Desk| s.fork_from(&tab, &message))
+        .build(k);
+    Some([rewind, fork])
 }
 
 /// An image sent with a message, at most `MESSAGE_IMAGE` wide and tall, in its own proportions.

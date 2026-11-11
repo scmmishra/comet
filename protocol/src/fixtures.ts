@@ -221,6 +221,8 @@ export const CLIENT_MESSAGES = [
   { type: "thread.clear", tabId: "tab-1" },
   { type: "thread.rename", tabId: "tab-1", title: "Login fix" },
   { type: "thread.fork", tabId: "tab-1" },
+  { type: "thread.fork", tabId: "tab-1", messageId: "u1" },
+  { type: "thread.rewind", tabId: "tab-1", messageId: "u2", restoreFiles: true },
   { type: "thread.delete", tabId: "tab-1" },
   { type: "layout.get", tabId: "tab-1" },
   { type: "panel.open", tabId: "tab-1", panel: "support.inbox" },

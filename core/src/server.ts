@@ -162,7 +162,9 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       case "thread.rename":
         return window.renameThread(message.tabId, message.title)
       case "thread.fork":
-        return window.forkThread(message.tabId, reply)
+        return window.forkThread(message.tabId, reply, message.messageId)
+      case "thread.rewind":
+        return window.rewindThread(message.tabId, message.messageId, message.restoreFiles)
       case "thread.delete":
         return window.deleteThread(message.tabId)
       case "session.interrupt":

@@ -867,9 +867,16 @@ pub enum ClientMessage {
     /// Names a tab and its session. It runs no turn, so a running one goes on.
     #[serde(rename = "thread.rename", rename_all = "camelCase")]
     ThreadRename { tab_id: String, title: String },
-    /// Copies a tab's session into a new one. The core answers with `thread.forked`.
+    /// Copies a tab's session into a new one, ending with the turn of `message_id` when given. The core answers with `thread.forked`.
     #[serde(rename = "thread.fork", rename_all = "camelCase")]
-    ThreadFork { tab_id: String },
+    ThreadFork {
+        tab_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        message_id: Option<String>,
+    },
+    /// Takes a tab's thread back to before one of the user's messages. With `restore_files`, the files Claude's tools changed since go back too.
+    #[serde(rename = "thread.rewind", rename_all = "camelCase")]
+    ThreadRewind { tab_id: String, message_id: String, restore_files: bool },
     /// Deletes a tab's session from this Mac, after stopping a running turn. The tab starts afresh.
     #[serde(rename = "thread.delete", rename_all = "camelCase")]
     ThreadDelete { tab_id: String },
@@ -1014,7 +1021,9 @@ mod tests {
             ClientMessage::FilesSearch { project: "/Users/me/code/web".into(), query: "login".into() },
             ClientMessage::ThreadClear { tab_id: "tab-1".into() },
             ClientMessage::ThreadRename { tab_id: "tab-1".into(), title: "Login fix".into() },
-            ClientMessage::ThreadFork { tab_id: "tab-1".into() },
+            ClientMessage::ThreadFork { tab_id: "tab-1".into(), message_id: None },
+            ClientMessage::ThreadFork { tab_id: "tab-1".into(), message_id: Some("u1".into()) },
+            ClientMessage::ThreadRewind { tab_id: "tab-1".into(), message_id: "u2".into(), restore_files: true },
             ClientMessage::ThreadDelete { tab_id: "tab-1".into() },
             ClientMessage::LayoutGet { tab_id: "tab-1".into() },
             ClientMessage::PanelOpen { tab_id: "tab-1".into(), panel: "support.inbox".into() },

@@ -29,6 +29,7 @@ mod projects;
 mod protocol;
 mod questions;
 mod reply;
+mod rewind;
 mod scenes;
 mod session_menu;
 mod settings;

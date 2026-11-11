@@ -119,7 +119,7 @@ Left:
 - A growth stack cannot grow virtual rows open, and holds removed rows 0.15 s before it closes up. Review's files fold at once for this.
 - Text has no unbreakable span, so inline code wraps at its spaces. No-break spaces would keep it whole, but a copied command would then carry them.
 - Rune has no left-start placement, so a subagent's detail centres beside its row.
-- rune-kit's `Dialog` keeps its title and description to one line each, and a long one runs past the panel and pushes the close button out. Desk puts longer text in the dialog's body, where it wraps.
+- rune-kit's `Dialog` keeps its title and description to one line each, and a long one runs past the panel and pushes the close button out. Desk puts longer text in the dialog's body, where it wraps. A `Checkbox` description keeps to one line too, so Desk keeps it short.
 
 ## Desk's design rules
 

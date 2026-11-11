@@ -43,6 +43,12 @@ class Inbox implements AsyncIterable<SDKUserMessage> {
 interface SessionOptions {
   /** A Claude session to continue, from an earlier run of Desk. */
   readonly resume?: string
+  /**
+   * Where a rewound thread resumes: the last message `resume` keeps. Claude Code drops what follows from
+   * the conversation once the next turn runs. `onResumedAt` says when that turn has ended.
+   */
+  readonly resumeAt?: string
+  readonly onResumedAt?: () => void
   readonly settings: RunSettings
   /** Called when Claude names the session, so it can be resumed later. */
   readonly onSessionId: (id: string) => void
@@ -84,6 +90,8 @@ export class Session {
   /** Set from a steered message until Claude Code takes it in, or its turn ends without it. */
   private steering = false
   private settings: RunSettings
+  /** Where the next query resumes, until a turn has run there. Later queries resume at the end, as usual. */
+  private resumeAt?: string
 
   constructor(
     private readonly dir: string,
@@ -91,6 +99,7 @@ export class Session {
     private readonly options: SessionOptions,
   ) {
     this.sessionId = options.resume
+    this.resumeAt = options.resumeAt
     this.settings = options.settings
     this.mapper = new ThreadMapper(dir)
     this.subagents = new Subagents(dir, emit)
@@ -183,6 +192,21 @@ export class Session {
     this.query?.close()
   }
 
+  /**
+   * Restores the files Claude's tools changed from `messageId` on, from the copies Claude Code kept. A
+   * session that has not started opens Claude Code without a message, so nothing reaches the model.
+   * Changes made another way, such as through Bash, stay.
+   */
+  async rewindFiles(messageId: string) {
+    if (!this.started) {
+      this.inbox = new Inbox()
+      await this.start()
+    }
+    if (!this.query) throw new Error("Claude Code did not start, so Desk could not restore the files.")
+    const result = await this.query.rewindFiles(messageId)
+    if (!result.canRewind) throw new Error(result.error ?? "Claude Code kept no copies of the files from that message.")
+  }
+
   answerPermission(requestId: string, answer: PermissionAnswer) {
     this.answer(requestId, "permission", (input, tool, suggestions) => permissionResult(answer, tool, input, suggestions))
   }
@@ -229,6 +253,9 @@ export class Session {
         // It allows the mode and does not set it.
         allowDangerouslySkipPermissions: true,
         ...(this.sessionId ? { resume: this.sessionId } : {}),
+        ...(this.sessionId && this.resumeAt ? { resumeSessionAt: this.resumeAt } : {}),
+        // Claude Code keeps a copy of each file before its tools edit it, so a rewind can restore them.
+        enableFileCheckpointing: true,
         // Claude Code asks whether to compact a large thread that sat idle. The setting answers, so no dialog shows.
         supportedDialogKinds: ["resume_return"],
         onUserDialog: async (request) =>
@@ -267,6 +294,10 @@ export class Session {
           }
           this.endTurn()
           void this.reportContext(running)
+          if (this.resumeAt) {
+            this.resumeAt = undefined
+            this.options.onResumedAt?.()
+          }
         }
       }
     } catch (error) {
