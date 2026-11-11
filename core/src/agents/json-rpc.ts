@@ -23,8 +23,11 @@ type Message = { readonly id?: number | string; readonly method?: string; readon
 interface Handlers {
   /** A message the peer sent that expects no answer. */
   readonly notification: (method: string, params: unknown) => void
-  /** A request the peer sent. What it returns answers the request, and what it throws answers it with an error. */
-  readonly request: (method: string, params: unknown) => unknown
+  /**
+   * A request the peer sent, with the id the peer gave it. What it returns answers the request, and what
+   * it throws answers it with an error.
+   */
+  readonly request: (method: string, params: unknown, id: number | string) => unknown
   /** The peer is gone. Every request still waiting has failed with `error`. */
   readonly closed: (error: Error) => void
 }
@@ -100,7 +103,7 @@ export class JsonRpc {
     const id = message.id
     // A handler may answer later, such as a permission request that waits for the user.
     Promise.resolve()
-      .then(() => this.handlers.request(message.method!, message.params))
+      .then(() => this.handlers.request(message.method!, message.params, id))
       .then(
         (result) => this.ended || this.write({ id, result: result ?? null }),
         (error) => this.ended || this.write({ id, error: { code: error instanceof RpcError && error.code !== undefined ? error.code : INTERNAL_ERROR, message: error instanceof Error ? error.message : String(error) } }),

@@ -5,6 +5,15 @@ export type BareStep = Step extends infer T ? (T extends Step ? Omit<T, "kind" |
 type Tool = Extract<Step, { type: "tool" }>
 type Thought = Extract<Step, { type: "thinking" }>
 
+/** Tool output beyond this many characters is cut. The thread shows a summary, not a log. */
+const MAX_TOOL_OUTPUT = 4000
+
+/** A tool's output as the thread keeps it, cut where it runs long. */
+export const cutOutput = (text: string) => (text.length > MAX_TOOL_OUTPUT ? `${text.slice(0, MAX_TOOL_OUTPUT)}\n…` : text)
+
+/** A path as the thread shows it: relative to the project when it is inside it. */
+export const relativeTo = (dir: string, path: string) => (path.startsWith(`${dir}/`) ? path.slice(dir.length + 1) : path)
+
 /** A label is one line, whatever its target holds, so a long command never spills over the rows below. */
 export const oneLine = (label: string) => label.replace(/\s+/g, " ").trim()
 

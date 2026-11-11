@@ -1,6 +1,6 @@
 import type { SDKAPIRetryMessage, SDKAssistantMessage, SDKMessage, SDKMessageOrigin, SDKPartialAssistantMessage, SessionMessage } from "@anthropic-ai/claude-agent-sdk"
 import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, type ThreadItem } from "@desk/protocol"
-import { thought } from "../../steps"
+import { cutOutput, relativeTo, thought } from "../../steps"
 import { toolStep } from "./steps"
 
 /** What Claude Code writes into a transcript when the user stops a turn, with or without "for tool use". */
@@ -11,8 +11,6 @@ const INTERRUPTED = /^\[Request interrupted by user/
  */
 const COMPACT_SUMMARY = /^This session is being continued from a previous conversation/
 
-/** Tool output beyond this many characters is cut. The thread shows a summary, not a log. */
-const MAX_TOOL_OUTPUT = 4000
 /** Inputs that say in short what a tool call does, in the order a summary prefers them. */
 const SUMMARY_FIELDS = ["command", "file_path", "pattern", "path", "url", "query", "description", "skill"]
 
@@ -122,7 +120,7 @@ export class ThreadMapper {
     if (!Array.isArray(content)) return []
     return content.flatMap((block): ThreadItem[] => {
       const tool = block.type === "tool_result" ? this.tools.get(String(block.tool_use_id)) : undefined
-      return tool ? [toolStep({ ...tool, result: { output: truncate(toolOutputText(block.content)), isError: Boolean(block.is_error) } })] : []
+      return tool ? [toolStep({ ...tool, result: { output: cutOutput(toolOutputText(block.content)), isError: Boolean(block.is_error) } })] : []
     })
   }
 
@@ -213,16 +211,10 @@ function toolEdits(name: string, input: Record<string, unknown>): TextEdit[] | u
   return undefined
 }
 
-const relativeTo = (dir: string, path: string) => (path.startsWith(`${dir}/`) ? path.slice(dir.length + 1) : path)
-
 function toolOutputText(content: unknown): string {
   if (typeof content === "string") return content
   if (Array.isArray(content)) return content.map((part) => (part.type === "text" ? part.text : `[${part.type}]`)).join("\n")
   return ""
-}
-
-function truncate(text: string) {
-  return text.length > MAX_TOOL_OUTPUT ? `${text.slice(0, MAX_TOOL_OUTPUT)}\n…` : text
 }
 
 /** The images the user sent, as base64. Claude Code stores pasted images in the transcript this way. */

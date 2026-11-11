@@ -56,12 +56,14 @@ test("marks each message with the JSON-RPC version only for a peer that needs it
 test("passes on the peer's notifications, and answers its requests, even ones that wait", async () => {
   const { transport, written, say } = peer()
   const notes: [string, unknown][] = []
+  const asked: (number | string)[] = []
   let approve: (decision: string) => void = () => {}
   new JsonRpc(
     transport,
     {
       notification: (method, params) => void notes.push([method, params]),
-      request: (method) => {
+      request: (method, _params, id) => {
+        asked.push(id)
         if (method === "approve") return new Promise<string>((resolve) => (approve = resolve)).then((decision) => ({ decision }))
         throw new RpcError("Desk does not handle that.", -32601)
       },
@@ -74,6 +76,7 @@ test("passes on the peer's notifications, and answers its requests, even ones th
   say({ id: "b", method: "unknown" })
   await until(() => written.length === 1)
   expect(notes).toEqual([["turn/started", { turnId: "t1" }]])
+  expect(asked).toEqual(["a", "b"])
   expect(written).toEqual([{ id: "b", error: { code: -32601, message: "Desk does not handle that." } }])
   approve("accept")
   await until(() => written.length === 2)
