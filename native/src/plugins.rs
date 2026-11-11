@@ -273,7 +273,8 @@ fn item_view(s: &Desk, props: &Map<String, Value>, plugin: String, frame: Frame,
         Some(image) => Some(el().size(icons::SIZE, icons::SIZE).pixels_fit(image.pixels(), rune::SurfaceFit::Fit)),
         None => prop(props, "icon").and_then(catalog_icon).map(|found| icon(found, icons::SIZE).color(k.c.text_muted)),
     };
-    let line = |name: &str| prop(props, name).map(|t| text(t.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate());
+    // A row's quieter lines stay one line each, so a message with line breaks does not make the row tall.
+    let line = |name: &str| prop(props, name).map(|t| text(crate::format::one_line(t)).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate());
     let badge = props.get("badge").map(|b| {
         let words = b.get("text").and_then(Value::as_str).unwrap_or("");
         let (fill, ink) = match b.get("tint").and_then(Value::as_str) {

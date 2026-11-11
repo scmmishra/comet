@@ -1,4 +1,10 @@
-//! Words for numbers and times.
+//! Words for numbers, times and text.
+
+/// Text on one line: each run of whitespace, line breaks included, becomes one space.
+/// A truncated text still breaks at a line break, so text that must stay on one line goes through this.
+pub fn one_line(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
 
 /// "45 s", "2 min", "2 min 5 s".
 pub fn duration(ms: f64) -> String {
@@ -172,6 +178,11 @@ pub fn now_ms() -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn one_line_joins_lines_with_single_spaces() {
+        assert_eq!(one_line("Hi David,\n\n  We need the logs.\r\n"), "Hi David, We need the logs.");
+    }
 
     #[test]
     fn words_as_the_app_writes_them() {

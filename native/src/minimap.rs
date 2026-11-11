@@ -30,10 +30,6 @@ const RAIL_LEFT: f32 = 12.0;
 /// The preview's width, `w-80`.
 const PREVIEW_WIDTH: f32 = 320.0;
 
-fn one_line(text: &str) -> String {
-    text.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
 /// The minimap's marks: one per message the user sent, with the last text Claude wrote before the next one.
 /// A turn Claude Code started itself gets no mark.
 pub fn marks(items: &[ThreadItem]) -> Vec<Mark> {
@@ -41,12 +37,12 @@ pub fn marks(items: &[ThreadItem]) -> Vec<Mark> {
     for item in items {
         match item {
             ThreadItem::User { id, text, self_started: false, .. } => {
-                let line = one_line(text);
+                let line = crate::format::one_line(text);
                 out.push(Mark { id: id.clone(), text: if line.is_empty() { "User message".into() } else { line }, answer: None });
             }
             ThreadItem::Text { text, .. } => {
                 if let Some(last) = out.last_mut() {
-                    last.answer = Some(one_line(text));
+                    last.answer = Some(crate::format::one_line(text));
                 }
             }
             _ => {}

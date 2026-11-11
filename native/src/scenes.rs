@@ -109,7 +109,7 @@ fn plugin(s: &mut Desk) {
     ];
     ops.extend(item(10, "Priya Raman", "Refund for a double charge", Some(("Urgent", "red")), true));
     ops.extend(item(11, "Tom Becker", "Can't reset my password", Some(("2", "blue")), false));
-    ops.extend(item(12, "Ana Souza", "Export to CSV is empty", None, false));
+    ops.extend(item(12, "Ana Souza", "Hi,\n\nExport to CSV is empty.\n\nThanks,\nAna", None, false));
     let messages = serde_json::json!([
         { "type": "plugin.ops", "plugin": "support", "reset": true, "ops": ops },
         { "type": "layout", "tabId": "tab", "layout": { "sidebar": { "id": "support.inbox", "title": "Inbox", "plugin": "support", "root": 1 }, "panels": [], "cards": [{ "id": "support.summary", "title": "Inbox", "plugin": "support", "root": 20 }] } }
