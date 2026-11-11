@@ -113,7 +113,8 @@ pub fn screen(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
             .child(icon(mark, 15.0).color(if selected { k.c.text_base } else { k.c.text_muted }))
             .child(text(*title).font(crate::theme::text(13.0)).color(if selected { k.c.text_base } else { k.c.text_muted }))
     });
-    let sidebar = col().w(280.0).h_full().pt(40.0).pl(24.0).pr(40.0).gap(2.0).child(back).children(nav.collect::<Vec<_>>());
+    // `.settings-nav`: Back, 20 points and a 16 point gap, then the pages 2 points apart.
+    let sidebar = col().w(280.0).h_full().pt(40.0).pl(24.0).pr(40.0).gap(16.0).child(back).child(col().w_full().gap(2.0).children(nav.collect::<Vec<_>>()));
     let content = match page {
         "appearance" => appearance(s, k, layer),
         "projects" => projects(s, k, layer),
@@ -121,7 +122,8 @@ pub fn screen(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
         "skills" => skills(s, k),
         _ => providers(s, k, layer),
     };
-    let content = col().grow(1.0).min_w(0.0).max_w(crate::thread_view::COLUMN).h_full().scroll(ScrollSpec { stick_bottom: false }).child(content);
+    // `.settings-panel` keeps 4 points each side for the lists' shadows.
+    let content = col().grow(1.0).min_w(0.0).max_w(crate::thread_view::COLUMN).h_full().scroll(ScrollSpec { stick_bottom: false }).px(4.0).child(content);
     row()
         .key("settings")
         .w_full()
@@ -144,7 +146,7 @@ fn header(k: &Kit, title: &str, description: &str) -> El {
         .gap(4.0)
         .pt(40.0)
         .px(40.0)
-        .child(text(title.to_owned()).font(rune::TextStyle { size: 15.0, weight: 640.0, ..crate::theme::text(13.0) }).color(k.c.text_base))
+        .child(text(title.to_owned()).font(rune::TextStyle::new(15.0, 640.0).lh(22.5)).color(k.c.text_base))
         .child(text(description.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_muted).wrap())
 }
 
@@ -159,8 +161,10 @@ fn section(k: &Kit, title: String, child: El) -> El {
 /// Rows on one raised surface, after OpenCode's SettingsList.
 fn list(k: &Kit, rows: Vec<El>) -> El {
     let count = rows.len();
-    col().w_full().radius(8.0).fill(k.c.layer_01).border(0.5, k.c.border_muted).px(20.5).py(0.5).children(rows.into_iter().enumerate().map(|(i, r)| {
-        if i + 1 < count { r.border_sides([0.0, 0.0, 0.5, 0.0], k.c.border_base) } else { r }
+    // The list's outline is an inset shadow in the Electron app, which takes no room. A row's bottom border
+    // takes half a point there, which Rune's does not, so the row's padding adds it.
+    col().w_full().radius(8.0).fill(k.c.layer_01).border(0.5, k.c.border_muted).px(20.0).children(rows.into_iter().enumerate().map(|(i, r)| {
+        if i + 1 < count { r.pb(18.5).border_sides([0.0, 0.0, 0.5, 0.0], k.c.border_base) } else { r }
     }))
 }
 
@@ -171,7 +175,7 @@ fn setting(k: &Kit, title: El, description: Option<String>, control: Option<El>)
         .gap(16.0)
         .items_center()
         .py(18.0)
-        .child(col().grow(1.0).min_w(0.0).gap(6.0).child(title).children(description.map(|d| text(d).font(crate::theme::text(13.0)).color(k.c.text_muted).wrap())))
+        .child(col().grow(1.0).min_w(0.0).gap(6.0).child(title).children(description.map(|d| text(d).font(crate::theme::text(13.0).lh(20.0)).color(k.c.text_muted).wrap())))
         .children(control)
 }
 
@@ -299,7 +303,7 @@ fn providers(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
             k,
             title(k, "Compact idle threads"),
             Some("When you return to a large thread that sat idle, Claude Code compacts it first, so its next reply reads a summary, not the whole history.".into()),
-            Some(Switch::new(compact).label("Compact idle threads").hide_label().on_toggle(move |s: &mut Desk| s.update_settings(json!({ "claude": { "compactIdle": !compact } }))).build(k)),
+            Some(Switch::new(compact).web().label("Compact idle threads").hide_label().on_toggle(move |s: &mut Desk| s.update_settings(json!({ "claude": { "compactIdle": !compact } }))).build(k)),
         ));
     }
     let mut sections = vec![section(k, "Claude Code".into(), list(k, rows))];
@@ -415,7 +419,7 @@ fn mcps(s: &Desk, k: &Kit) -> El {
                     _ => "Off in this project".into(),
                 };
                 let description = [Some(status), server.target.clone()].into_iter().flatten().collect::<Vec<_>>().join(" · ");
-                setting(k, title(k, &server.name), Some(description), Some(Switch::new(enabled).label(format!("Use {}", server.name)).hide_label().on_toggle(move |s: &mut Desk| s.core.send(&ClientMessage::McpToggle { project: dir.clone(), name: name.clone(), enabled: !enabled })).build(k)))
+                setting(k, title(k, &server.name), Some(description), Some(Switch::new(enabled).web().label(format!("Use {}", server.name)).hide_label().on_toggle(move |s: &mut Desk| s.core.send(&ClientMessage::McpToggle { project: dir.clone(), name: name.clone(), enabled: !enabled })).build(k)))
             };
             let own: Vec<El> = servers.iter().filter(|x| x.own_project).map(row_for).collect();
             let shared: Vec<El> = servers.iter().filter(|x| !x.own_project).map(row_for).collect();
