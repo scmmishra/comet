@@ -210,7 +210,7 @@ fn subagents_card(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Opti
         let key = format!("subagent-{}", subagent.id);
         if open {
             layer.insert(0, scrim("subagent-scrim", |s: &mut Desk| s.cards.open_subagent = None));
-            layer.push(popover::anchored(k, popover::raised(k, subagent_detail(subagent, now, k), 10.0), &key, Placement::Left, 12.0));
+            layer.push(popover::anchored(k, crate::ui::popover(k, subagent_detail(subagent, now, k)), &key, Placement::Left, 12.0));
         }
         row()
             .key(key)

@@ -255,7 +255,11 @@ pub mod commands {
         s.core.send(&ClientMessage::TabReopen);
     }
 
+    /// ⌘1 to ⌘9: a model while the model picker is open, else a tab.
     pub fn show_tab<const INDEX: usize>(s: &mut Desk, _: &mut Tx) {
+        if s.pick_model_by_number(INDEX) {
+            return;
+        }
         s.workspace.show_tab_at(INDEX, &s.core);
         s.sync_start();
         s.sync_panel();

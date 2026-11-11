@@ -8,7 +8,7 @@ use crate::protocol::{ModelOption, TabInfo};
 use crate::shell::Desk;
 use crate::theme;
 use rune::{El, col, el, icon, row, text};
-use rune_kit::{Kit, Menu, MenuItem, Placement, SegmentedControl, popover, scrim};
+use rune_kit::{Keybind, KeybindVariant, Kit, Menu, MenuItem, Placement, SegmentedControl, popover, scrim};
 use rune_theme_opencode::icons as ic;
 
 /// The popover's width, `w-[min(520px,…)]`, and its effort column, `168px`.
@@ -16,6 +16,8 @@ const WIDTH: f32 = 520.0;
 const EFFORT_WIDTH: f32 = 168.0;
 const MAX_HEIGHT: f32 = 420.0;
 const ROW_HEIGHT: f32 = 36.0;
+/// ⌘1 to ⌘9, the tab shortcuts, pick the first nine aliases while the picker is open.
+const TAB_SHORTCUTS: usize = 9;
 
 /// Whether the picker is open, with every model or only the aliases, and whether its permission menu is open.
 #[derive(Default)]
@@ -43,6 +45,18 @@ impl Desk {
             },
             &self.core,
         );
+    }
+
+    /// ⌘1 to ⌘9 pick a model alias while the picker is open, as the Electron app's `pickModelByNumber` does.
+    /// Whether the picker took the shortcut.
+    pub fn pick_model_by_number(&mut self, index: usize) -> bool {
+        if !self.picker.open {
+            return false;
+        }
+        let Some(value) = self.account.models.iter().filter(|o| is_alias(o)).nth(index).map(|o| o.value.clone()) else { return false };
+        let Some(tab) = self.workspace.active.clone() else { return false };
+        self.pick_model(&tab, &value);
+        true
     }
 
     pub fn toggle_picker(&mut self) {
@@ -84,7 +98,7 @@ pub fn model_picker(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
     // builds the surface from the same parts.
     let body = popover_body(s, tab, selected, k, layer).role("dialog").label("Model and effort");
     layer.insert(0, scrim("model-scrim", |s: &mut Desk| s.picker = Picker::default()));
-    layer.push(popover::anchored(k, popover::raised(k, body, k.radius.md), "model-picker", Placement::TopEnd, 8.0));
+    layer.push(popover::anchored(k, crate::ui::popover(k, body), "model-picker", Placement::TopEnd, 8.0));
     trigger
 }
 
@@ -102,6 +116,7 @@ fn popover_body(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &Kit
     let check = || icon(&ic::CHECK, 15.0).color(k.c.text_base);
     let rows = shown.iter().map(|option| {
         let picked = option.value == tab.model;
+        let shortcut = aliases.iter().position(|a| a.value == option.value).filter(|i| *i < TAB_SHORTCUTS).map(|i| (i + 1).to_string());
         let (id, value) = (tab.id.clone(), option.value.clone());
         row()
             .key(format!("model-{}", option.value))
@@ -110,16 +125,17 @@ fn popover_body(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &Kit
             .gap(10.0)
             .items_center()
             .px(10.0)
-            .radius(8.0)
+            .radius(7.0)
             .hover(k.c.hover)
             .role("button")
             .on_press(move |s: &mut Desk| s.pick_model(&id, &value))
             .child(text(option.label.clone()).font(crate::theme::text(13.0)).color(k.c.text_base))
             .child(text(option.description.clone()).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate().grow(1.0))
             .children(picked.then(check))
+            .children(shortcut.map(|n| Keybind::new(&["⌘", n.as_str()]).variant(KeybindVariant::Ghost).build(k)))
     });
     let older = (!s.picker.show_all && models.len() > aliases.len()).then(|| {
-        row().h(ROW_HEIGHT).items_center().px(10.0).radius(8.0).role("button").on_press(|s: &mut Desk| s.picker.show_all = true).child(text("Show older models").font(crate::theme::text(13.0)).color(k.c.text_faint))
+        row().h(ROW_HEIGHT).items_center().px(10.0).radius(7.0).role("button").on_press(|s: &mut Desk| s.picker.show_all = true).child(text("Show older models").font(crate::theme::text(13.0)).color(k.c.text_faint))
     });
     let loading = models.is_empty().then(|| row().px(10.0).py(8.0).child(text("Loading models…").font(crate::theme::text(13.0)).color(k.c.text_faint)));
     let list = col().w_full().gap(1.0).padding(6.0).children(loading).children(rows).children(older);
@@ -138,7 +154,7 @@ fn popover_body(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &Kit
                 .w_full()
                 .items_center()
                 .px(10.0)
-                .radius(8.0)
+                .radius(7.0)
                 .hover(k.c.hover)
                 .role("button")
                 .on_press(move |s: &mut Desk| {
@@ -157,7 +173,8 @@ fn popover_body(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &Kit
         .gap(8.0)
         .child(text("Effort").font(crate::theme::text(12.0)).color(k.c.text_faint).grow(1.0))
         .children(selected.map(|o| text(option_label(o)).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate()));
-    let effort_column = col().w(EFFORT_WIDTH).border_sides([0.0, 0.0, 0.0, 1.0], k.c.border_muted).child(effort_heading).child(efforts);
+    // The borders take a point of room in CSS, which Rune's do not.
+    let effort_column = col().w(EFFORT_WIDTH).pl(1.0).border_sides([0.0, 0.0, 0.0, 1.0], k.c.border_muted).child(effort_heading).child(efforts);
 
     // Fast mode is only offered on a model that has it.
     let speed = selected.filter(|o| o.fast).map(|_| {
@@ -174,6 +191,7 @@ fn popover_body(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &Kit
         .w_full()
         .items_center()
         .padding(6.0)
+        .pt(7.0)
         .border_sides([1.0, 0.0, 0.0, 0.0], k.c.border_muted)
         .child(speed.unwrap_or_else(el))
         .child(row().grow(1.0))
@@ -207,4 +225,33 @@ fn permission_menu(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &
         }));
     }
     menu.build(k, layer)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::core::Event;
+    use crate::protocol::CoreMessage;
+    use crate::shell::Desk;
+
+    #[test]
+    fn a_number_picks_an_alias_only_while_the_picker_is_open() {
+        let mut s = Desk::default();
+        let messages = serde_json::json!([
+            { "type": "models", "models": [
+                { "value": "default", "label": "Default", "description": "", "efforts": [], "fast": false, "autoMode": true },
+                { "value": "claude-opus-4-8", "label": "Opus 4.8", "description": "", "efforts": [], "fast": false, "autoMode": true },
+                { "value": "sonnet", "label": "Sonnet", "description": "", "efforts": [], "fast": false, "autoMode": true }
+            ] },
+            { "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "New session", "project": "/code/web", "terminals": [], "model": "default", "permissionMode": "auto" }] }
+        ]);
+        for m in serde_json::from_value::<Vec<CoreMessage>>(messages).unwrap() {
+            s.receive(Event::Message(m)).unwrap();
+        }
+        assert!(!s.pick_model_by_number(1), "a closed picker leaves ⌘2 to the tabs");
+        s.toggle_picker();
+        assert!(s.pick_model_by_number(1));
+        // The second alias: the pinned model is not one.
+        assert_eq!(s.workspace.active_tab().unwrap().model, "sonnet");
+        assert!(!s.pick_model_by_number(5), "past the aliases, the tabs take it");
+    }
 }

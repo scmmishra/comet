@@ -64,7 +64,7 @@ pub fn usage_button(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
         .child(text(format!("{}%", fullest.percent.round())).font(crate::theme::text(12.0)).color(k.c.text_muted));
     if s.meters.open {
         layer.insert(0, scrim("usage-scrim", |s: &mut Desk| s.meters.open = false));
-        layer.push(popover::anchored(k, popover::raised(k, usage_popover(usage, k), k.radius.md), "usage-button", Placement::BottomEnd, 8.0));
+        layer.push(popover::anchored(k, crate::ui::popover(k, usage_popover(usage, k)), "usage-button", Placement::BottomEnd, 8.0));
     }
     Some(button)
 }

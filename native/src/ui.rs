@@ -56,3 +56,13 @@ pub fn tinted_badge(label: impl Into<String>, fill: Color, ink: Color) -> El {
         .fill(fill)
         .child(text(label.into()).font(TextStyle::new(11.0, 530.0).lh(11.0).tracking(0.05)).color(ink))
 }
+
+/// `@opencode/ui`'s Popover surface, as the Electron app draws it: the raised fill, a 1 point border in
+/// the outline colour and the medium shadow. Its radius is 0.375rem, which Desk's 13 pixel root makes
+/// 4.875 points. rune-kit's raised surface takes a brighter border and its own radius.
+pub fn popover(k: &Kit, content: El) -> El {
+    const RADIUS: f32 = 4.875;
+    // The border takes a point of room in CSS, which Rune's does not.
+    let surface = content.radius(RADIUS).fill(k.c.layer_02).border(1.0, crate::theme::outline(k.dark)).padding(1.0);
+    k.elevate(surface, &k.elevation.md)
+}
