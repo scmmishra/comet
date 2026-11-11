@@ -27,6 +27,7 @@ mod plugins;
 mod projects;
 mod protocol;
 mod questions;
+mod reply;
 mod scenes;
 mod settings;
 mod shell;

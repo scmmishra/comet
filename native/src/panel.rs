@@ -180,10 +180,14 @@ impl Desk {
     }
 
     /// Shows a file from the thread in the tab's panel. A relative path is in the project.
-    pub fn open_file(&mut self, tab: &str, path: &str) {
+    pub fn open_file(&mut self, tab: &str, path: &str, line: Option<u32>) {
         let Some(project) = self.workspace.tabs.iter().find(|t| t.id == tab).map(|t| t.project.clone()) else { return };
-        let absolute = if path.starts_with('/') { path.to_owned() } else { format!("{}/{path}", project.trim_end_matches('/')) };
-        self.workspace.open_file_tab(tab, &absolute, None, &self.core);
+        let absolute = match path.strip_prefix("~/") {
+            Some(rest) => format!("{}/{rest}", std::env::var("HOME").unwrap_or_default()),
+            None if path.starts_with('/') => path.to_owned(),
+            None => format!("{}/{}", project.trim_end_matches('/'), path.trim_start_matches("./")),
+        };
+        self.workspace.open_file_tab(tab, &absolute, line, &self.core);
         self.sync_panel();
     }
 
@@ -418,7 +422,7 @@ fn file_header(tab: String, dark: bool) -> impl Fn(&Desk, usize, bool) -> El + '
             .variant(IconButtonVariant::GhostMuted)
             .control_size(ControlSize::Small)
             .label(format!("Open {name}"))
-            .on_press(move |s: &mut Desk| s.open_file(&open_tab, &open_path))
+            .on_press(move |s: &mut Desk| s.open_file(&open_tab, &open_path, None))
             .build(k);
         row()
             .key("review-file-header")

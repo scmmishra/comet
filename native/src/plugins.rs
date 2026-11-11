@@ -7,7 +7,7 @@ use crate::protocol::{ClientMessage, DrawnView, TabLayout, UiOp};
 use crate::shell::Desk;
 use crate::theme;
 use rune::{El, ScrollSpec, TextEdit, col, el, row, text, text_input};
-use rune_kit::{ButtonVariant, Kit, Markdown};
+use rune_kit::{ButtonVariant, Kit};
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
 
@@ -247,7 +247,7 @@ fn node_view(s: &Desk, plugin: &str, id: u64, project: &str, k: &Kit) -> El {
             .w_full()
             .min_h(0.0)
             .scroll(ScrollSpec { stick_bottom: false })
-            .child(Markdown::new(prop(props, "text").unwrap_or("")).style(theme::markdown(k, s.account.text_size())).build(k)),
+            .child(crate::reply::document(prop(props, "text").unwrap_or("")).style(theme::markdown(k, s.account.text_size())).build(k)),
         other => text(format!("{other} is not a Desk element.")).font(crate::theme::text(13.0)).color(k.c.text_faint),
     }
 }

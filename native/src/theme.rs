@@ -157,6 +157,11 @@ pub fn quick_exit() -> rune::Transition {
     rune::Transition::opacity().springs(rune::SpringPair::new(EXIT, EXIT))
 }
 
+/// Code blocks' surface, Desk's `--color-code`.
+pub fn code_fill(dark: bool) -> Color {
+    color(colors(dark).code)
+}
+
 /// Desk's `--color-tab`, `--color-tab-hover` and `--color-well`.
 pub fn tab(dark: bool) -> Color {
     color(colors(dark).tab)
@@ -257,6 +262,8 @@ pub fn markdown(k: &Kit, size: f32) -> MarkdownStyle {
         .quote(color(d.line), 2.0, 10.0, k.c.text_muted)
         .rule(color(d.line))
         .link(k.c.text_accent)
+        // Links, file links among them, draw in the accent without an underline, as the Electron app's do.
+        .link_underline(Color::TRANSPARENT)
         // A code block is one flat surface, with no outline.
         .code_block(color(d.code), Color::TRANSPARENT)
         .syntax_theme(code_colors(k.dark))

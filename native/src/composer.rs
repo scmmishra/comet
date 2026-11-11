@@ -9,7 +9,7 @@ use crate::shell::Desk;
 use crate::theme;
 use crate::thread_view::COLUMN;
 use rune::{El, Key, KeyEvent, TextEdit, auto_grow, col, el, icon, row, text, text_input};
-use rune_kit::{ButtonVariant, ControlSize, IconButton, IconButtonVariant, Keybind, Kit, Markdown, Placement, popover};
+use rune_kit::{ButtonVariant, ControlSize, IconButton, IconButtonVariant, Keybind, Kit, Placement, popover};
 use std::collections::HashSet;
 use rune_theme_opencode::icons as ic;
 use std::collections::HashMap;
@@ -657,7 +657,7 @@ fn question_panel(s: &Desk, tab: &str, request: &str, questions: &[Question], k:
             .mx(-6.0)
             .max_h(QUESTION_MAX)
             .scroll(rune::ScrollSpec { stick_bottom: false })
-            .child(col().w_full().px(6.0).pt(6.0).child(Markdown::new(current.question.as_str()).style(theme::markdown(k, s.account.text_size())).build(k)))
+            .child(col().w_full().px(6.0).pt(6.0).child(crate::reply::document(&current.question).style(theme::markdown(k, s.account.text_size())).build(k)))
             .child(col().w_full().mt(6.0).children(options))
     });
     // The bottom border takes a point of room in CSS, which Rune's does not.

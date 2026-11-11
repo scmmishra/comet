@@ -8,7 +8,7 @@ use crate::protocol::{Space, Subagent, TabInfo, ThreadItem};
 use crate::shell::Desk;
 use crate::theme;
 use rune::{El, ScrollSpec, col, el, icon, row, text};
-use rune_kit::{Badge, BadgeVariant, Kit, Markdown, Placement, popover, scrim};
+use rune_kit::{Badge, BadgeVariant, Kit, Placement, popover, scrim};
 use rune_theme_opencode::icons as ic;
 
 /// The rail's width, `w-[264px]`, and its distance from the session's edge.
@@ -302,7 +302,7 @@ fn subagent_detail(subagent: &Subagent, now: f64, k: &Kit) -> El {
         .children(subagent.summary.clone().map(|summary| text(summary).font(crate::theme::text(13.0)).color(k.c.text_muted).wrap().mt(6.0)));
     let steps = subagent.items.iter().map(|item| match item {
         ThreadItem::Tool { label, .. } | ThreadItem::Thinking { label, .. } => text(label.clone()).font(crate::theme::text(13.0)).color(k.c.text_muted).truncate().h(24.0),
-        ThreadItem::Text { text: words, .. } => Markdown::new(words.as_str()).style(theme::markdown(k, 13.0)).build(k).my(4.0),
+        ThreadItem::Text { text: words, .. } => crate::reply::document(words).style(theme::markdown(k, 13.0)).build(k).my(4.0),
         _ => el(),
     });
     let empty = subagent.items.is_empty().then(|| text("No steps yet.").font(crate::theme::text(13.0)).color(k.c.text_faint));

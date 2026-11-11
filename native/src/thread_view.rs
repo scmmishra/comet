@@ -9,7 +9,7 @@ use crate::theme;
 use crate::cards::Lane;
 use crate::threads::Thread;
 use rune::{El, GrowthSpec, Icon, ScrollSpec, col, el, icon, memo, row, text};
-use rune_kit::{ButtonVariant, IconButton, IconButtonVariant, Kit, Markdown, Menu, MenuItem, Placement, Spinner};
+use rune_kit::{ButtonVariant, IconButton, IconButtonVariant, Kit, Menu, MenuItem, Placement, Spinner};
 use rune_theme_opencode::icons as ic;
 use std::borrow::Cow;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -182,7 +182,8 @@ fn hash_row(c: &Ctx, r: &ThreadRow, h: &mut DefaultHasher) {
         ThreadRow::Item { id } => {
             c.thread.revision(id).hash(h);
             open(id, h);
-            c.s.copied.as_ref().is_some_and(|(copied, _)| copied == id).hash(h);
+            // A copied message or one of its code blocks.
+            c.s.copied.as_ref().filter(|(copied, _)| copied == id || copied.starts_with(&format!("{id}#"))).map(|(copied, _)| copied).hash(h);
             (c.thread.latest_changes() == Some(id.as_str())).hash(h);
             c.s.threads.approval_menu.hash(h);
         }
@@ -257,7 +258,8 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
         }
         // Markdown makes its own selection group. Leaving it joins its texts to the thread's, so a drag crosses messages.
         ThreadItem::Text { text: words, done, at, .. } => {
-            let reply = Markdown::new(words.as_str()).style(theme::markdown(k, c.size)).streaming(!*done).selectable(true).build(k).selection_group(false);
+            let copied = c.s.copied.as_ref().map(|(key, _)| key.as_str());
+            let reply = crate::reply::interactive(crate::reply::document(words), c.tab, item.id(), copied, k).style(theme::markdown(k, c.size)).streaming(!*done).selectable(true).build(k).selection_group(false);
             // A reply still streaming has nothing final to copy.
             col().w_full().gap(4.0).hover_group().child(reply).children(done.then(|| message_meta(c, item.id(), words, *at)))
         }
@@ -447,7 +449,7 @@ fn step_view(c: &Ctx, item: &ThreadItem) -> El {
 fn step_detail(c: &Ctx, item: &ThreadItem) -> El {
     let k = c.k;
     match item {
-        ThreadItem::Thinking { text: Some(words), .. } => Markdown::new(words.as_str()).style(theme::markdown(k, 13.0).text(k.c.text_muted)).selectable(true).build(k).selection_group(false),
+        ThreadItem::Thinking { text: Some(words), .. } => crate::reply::document(words).style(theme::markdown(k, 13.0).text(k.c.text_muted)).selectable(true).build(k).selection_group(false),
         ThreadItem::Tool { file, edits: Some(edits), .. } if !edits.is_empty() => edit_view(c, file.as_deref().unwrap_or(""), edits),
         ThreadItem::Tool { summary, kind, result, .. } => {
             // The label names only the program, so a command's detail starts with the command in full.
@@ -538,7 +540,7 @@ fn changes_view(c: &Ctx, id: &str, files: &[crate::protocol::ChangedFile]) -> El
             .radius(7.0)
             .hover(k.c.hover)
             .role("button")
-            .on_press(move |s: &mut Desk| s.open_file(&tab, &path))
+            .on_press(move |s: &mut Desk| s.open_file(&tab, &path, None))
             .child(icon(crate::icons::file_icon(&f.path), 13.0))
             .child(
                 row()
