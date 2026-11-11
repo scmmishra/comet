@@ -33,6 +33,12 @@ jobs:
         with:
           bun-version: 1.4.4
 
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+
       # Before the build, so a version without notes fails in seconds.
       - name: Read the release notes from CHANGELOG.md
         run: bun scripts/release-notes.ts > "$RUNNER_TEMP/notes.md"
@@ -42,6 +48,8 @@ jobs:
       - run: bun run typecheck
 
       - run: bun test core app/src
+
+      - run: cargo test --manifest-path native/Cargo.toml
 
       - run: scripts/package.sh
 

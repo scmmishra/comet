@@ -1,6 +1,6 @@
 name: CI
 
-# Checks the release notes, typechecks, tests and packages Desk.app on the macOS 26 runner that
+# Checks the release notes, typechecks, lints, tests and packages Desk.app on the macOS 26 runner that
 # releases use, so a change that breaks the app's build fails here first.
 on:
   push:
@@ -27,6 +27,15 @@ jobs:
         with:
           bun-version: 1.4.4
 
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      # Rune and its dependencies take minutes to build from nothing.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+
       - run: bun install --frozen-lockfile
 
       - name: Check CHANGELOG.md has a section for the app's version
@@ -35,6 +44,14 @@ jobs:
       - run: bun run typecheck
 
       - run: bun test core app/src
+
+      - run: cargo clippy --manifest-path native/Cargo.toml --all-targets -- -D warnings
+
+      # Some tests start a real core, which the bun install above makes ready.
+      - run: cargo test --manifest-path native/Cargo.toml
+
+      # The Electron app stays buildable until it goes.
+      - run: bun run --cwd app build
 
       - run: scripts/package.sh
 
