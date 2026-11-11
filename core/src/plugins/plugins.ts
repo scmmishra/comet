@@ -13,10 +13,17 @@ type Send = (message: CoreMessage) => void
 /** The files a plugin folder may start from. */
 const ENTRIES = ["index.tsx", "index.ts"]
 
+/** A thread a plugin opens under a key: the key, a title for its tab, and the prompt a new thread starts with. */
+export interface KeyedThread {
+  readonly key: string
+  readonly title?: string
+  readonly prompt?: string
+}
+
 interface PluginHooks {
   readonly broadcast: Send
   /** A plugin asked to open a tab's thread for a key. */
-  readonly openThread: (tabId: string, thread: { key: string; title?: string; prompt?: string }) => void
+  readonly openThread: (tabId: string, thread: KeyedThread) => void
   /** A plugin asked to open a panel instance in a tab. */
   readonly openPanel: (tabId: string, panel: string, params: PanelParams) => void
   /** A panel asked to close itself. */

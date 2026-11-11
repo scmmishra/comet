@@ -28,7 +28,7 @@ export type CodexRequest =
   | { readonly item: QuestionItem; readonly reply: (answers: Answers) => unknown; readonly dismissed: unknown }
 
 /** A request Desk answers itself, without asking the user. */
-export interface AnsweredRequest {
+interface AnsweredRequest {
   readonly answer: unknown
 }
 

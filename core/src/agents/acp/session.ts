@@ -32,7 +32,7 @@ interface AcpRequest extends OpenRequest<PermissionResponse> {
 }
 
 /**
- * One conversation with an ACP agent, in one tab. ACP runs one agent process per connection, so each
+ * One conversation with an ACP agent. ACP runs one agent process per connection, so each
  * session starts its own process on its first message and ends it on close. A process that ends between
  * turns is started again by the next message, which resumes the session.
  */

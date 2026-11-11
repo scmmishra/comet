@@ -1,12 +1,12 @@
 import type { CoreMessage } from "@desk/protocol"
 import { Layouts, type LayoutStore } from "./layouts"
-import { Plugins } from "./plugins"
+import { Plugins, type KeyedThread } from "./plugins"
 
 interface PluginHost {
   /** Sends to every client. */
   readonly broadcast: (message: CoreMessage) => void
   /** Shows the thread for a key in a tab, as a plugin asked. */
-  readonly openThread: (tabId: string, thread: { key: string; title?: string; prompt?: string }) => void
+  readonly openThread: (tabId: string, thread: KeyedThread) => void
   /** Where each tab's layout is kept. */
   readonly store: LayoutStore
   /** Tells the user about a failure in something a plugin asked for. */

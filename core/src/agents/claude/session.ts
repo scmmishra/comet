@@ -59,7 +59,7 @@ interface ClaudeRequest extends OpenRequest<PermissionResult> {
   readonly suggestions: RequestSuggestions
 }
 
-/** One Claude conversation, in one tab. It starts on the first message. */
+/** One Claude conversation. It starts on the first message. */
 export class ClaudeSession implements AgentSession {
   /** Each query reads its own inbox. A failed query's input loop may still wait on its inbox, and must not take the next message. */
   private inbox?: Inbox
@@ -158,7 +158,7 @@ export class ClaudeSession implements AgentSession {
 
   close() {
     this.stop.clear()
-    this.requests.settleAll(() => ({ behavior: "deny", message: "The tab was closed." }))
+    this.requests.settleAll(() => ({ behavior: "deny", message: "The session was closed." }))
     this.inbox?.close()
     this.query?.close()
   }
@@ -276,6 +276,7 @@ export class ClaudeSession implements AgentSession {
   /** Ends the session after an error, which shows in the thread. The next message starts it again. */
   private fail(error: unknown) {
     this.steering = false
+    this.requests.settleAll(() => ({ behavior: "deny", message: "The session failed." }))
     this.emit({ kind: "item", item: errorItem(error) })
     this.endTurn()
     this.inbox?.close()

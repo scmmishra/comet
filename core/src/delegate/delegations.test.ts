@@ -106,10 +106,12 @@ test("shows a task's permission request in the thread and sends the answer back 
   const request = { type: "permission" as const, id: "permission:r1", requestId: "r1", tool: "Bash", kind: "command" as const, detail: "rm -rf dist", allowSession: true }
   codex.sessions[0]!.emit({ kind: "item", item: request })
   expect(events).toContainEqual({ kind: "item", item: request })
+  expect(handoffs.pending()).toEqual([request])
   expect(handoffs.answerPermission("other", "allow")).toBe(false)
   expect(handoffs.answerPermission("r1", "allow")).toBe(true)
   expect(codex.calls).toContain("permission r1 allow")
   codex.sessions[0]!.emit({ kind: "item", item: { ...request, answered: true } })
+  expect(handoffs.pending()).toEqual([])
   expect(handoffs.answerPermission("r1", "allow")).toBe(false)
 })
 

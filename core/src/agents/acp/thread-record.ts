@@ -1,10 +1,10 @@
-import { firstLine } from "../../text"
 import type { ThreadItem } from "@desk/protocol"
 import { existsSync, readFileSync } from "node:fs"
 import { readdir, readFile, rm } from "node:fs/promises"
 import { join } from "node:path"
 import { writeJsonFile } from "../../data-files"
 import type { AgentThreads } from "../agent"
+import { firstLine } from "../../text"
 
 /** One saved thread: the folder it ran in, its title, and its items in order. */
 interface SavedThread {

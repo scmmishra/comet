@@ -20,6 +20,8 @@ export interface Handoffs {
   /** Answers a task's permission request. Says whether the request was a task's, so the session itself is not asked. */
   answerPermission(requestId: string, answer: PermissionAnswer): boolean
   answerQuestion(requestId: string, answers: Readonly<Record<string, string>> | undefined): boolean
+  /** The tasks' requests that still wait for the user, to show again when the session's thread comes back into view. */
+  pending(): ThreadItem[]
   /** Stops the tasks, as stopping the session's turn does. */
   stop(): void
   /** Ends the tasks and takes back the tools, once the session has closed. */
@@ -29,7 +31,7 @@ export interface Handoffs {
 /** One task running for a session: its own session, and the requests of it that wait for the user. */
 interface Child {
   readonly session: AgentSession
-  readonly requests: Set<string>
+  readonly requests: Map<string, ThreadItem>
 }
 
 /** A session that may hand work off, with the tasks running for it. */
@@ -68,6 +70,7 @@ export class Delegations {
       tools: { url: this.endpoint(), authorization: `Bearer ${token}`, instructions: INSTRUCTIONS },
       answerPermission: (requestId, reply) => answer(requestId, (session) => session.answerPermission(requestId, reply)),
       answerQuestion: (requestId, answers) => answer(requestId, (session) => session.answerQuestion(requestId, answers)),
+      pending: () => [...caller.children].flatMap((child) => [...child.requests.values()]),
       stop: () => {
         for (const child of caller.children) void child.session.interrupt().catch(() => undefined)
       },
@@ -134,14 +137,14 @@ export class Delegations {
         // Only the user can answer a request, so it shows in the caller's thread, and its answer comes back here.
         if (event.item.type === "permission" || event.item.type === "question") {
           if (event.item.answered) child.requests.delete(event.item.requestId)
-          else child.requests.add(event.item.requestId)
+          else child.requests.set(event.item.requestId, event.item)
           return host.emit(event)
         }
         if (event.item.type === "user") return
         items.set(event.item.id, event.item)
         show({ items: [...items.values()], toolUses: [...items.values()].filter((item) => item.type === "tool").length })
       }
-      const child: Child = { session: this.agents.get(info.id).open(host.project, emit, { settings, onSessionId: () => {}, ephemeral: true }), requests: new Set() }
+      const child: Child = { session: this.agents.get(info.id).open(host.project, emit, { settings, onSessionId: () => {}, ephemeral: true }), requests: new Map() }
       children.add(child)
       // The agent that asked gave up on the call, such as when the user stopped its turn.
       signal.addEventListener("abort", () => void child.session.interrupt().catch(() => undefined))

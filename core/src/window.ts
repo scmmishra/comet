@@ -4,6 +4,7 @@ import { requireFeature, type Agent, type AgentSession } from "./agents/agent"
 import type { Agents } from "./agents/registry"
 import { resultMessage } from "./agents/turn-items"
 import type { Delegations, Handoffs } from "./delegate/delegations"
+import type { KeyedThread } from "./plugins/plugins"
 import { branchBase, capture, changesSince, checkpointChanges, headTree, keepCheckpoints } from "./checkpoints"
 import { errorMessage } from "./errors"
 import { git } from "./git"
@@ -209,7 +210,7 @@ export class Window {
    * Shows the thread for `key` in a tab, as a plugin asked. A key that led to a thread before resumes
    * it. A new one starts empty and, given a prompt, sends it.
    */
-  async openKey(tabId: string, thread: { readonly key: string; readonly title?: string; readonly prompt?: string }) {
+  async openKey(tabId: string, thread: KeyedThread) {
     const leaving = this.thread(tabId)
     if (leaving.key === thread.key) return
     const tab = this.tab(tabId)
@@ -238,6 +239,8 @@ export class Window {
     const shown = running && items.at(-1)?.type === "result" ? items.slice(0, -1) : items
     this.hooks.broadcast({ type: "session.history", tabId, items: shown })
     if (running) this.hooks.broadcast({ type: "session.event", tabId, event: { kind: "status", busy: true } })
+    // A task's request that came while the thread was away still waits for the user.
+    for (const item of back?.live.handoffs.pending() ?? []) this.hooks.broadcast({ type: "session.event", tabId, event: { kind: "item", item } })
     if (sessionId) this.fillContext(tabId, sessionId)
     // A queue whose turn ended while the thread was away sends its next message now.
     if (!running) this.sendNextQueued(tabId)
@@ -683,6 +686,5 @@ const sessionMessage = (tabId: string, thread: TabThread): CoreMessage => ({ typ
 
 /** Two agents may give their sessions the same id, so a thread is told apart by both. */
 const threadRef = (agent: AgentId, sessionId: string) => `${agent}\n${sessionId}`
-
 
 const changesItem = (lastMessage: string, files: readonly ChangedFile[]): ThreadItem => ({ type: "changes", id: `changes:${lastMessage}`, files })

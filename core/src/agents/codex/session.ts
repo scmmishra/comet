@@ -49,7 +49,7 @@ class Turn {
 type WaitingRequest = CodexRequest & { readonly resolve: (reply: unknown) => void; readonly rpcId: RequestId }
 
 /**
- * One Codex thread, in one tab. It loads the thread into the shared app-server on its first message, and
+ * One Codex thread. It loads the thread into the shared app-server on its first message, and
  * claims the thread's messages there. It also claims the threads of the agents Codex starts, so their
  * requests for approval reach the tab.
  */
