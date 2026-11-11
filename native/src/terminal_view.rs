@@ -1,12 +1,13 @@
-//! A terminal in the view pane: its rows on a fixed grid of cells, the cursor, keys, scrolling, and
-//! selecting text to copy. The screen comes from `terminal.rs`, and the shell runs in the core.
+//! A terminal in the view pane: its rows on a fixed grid of cells, the cursor, keys, scrolling,
+//! selecting text to copy, and the mouse for programs that track it. The screen comes from
+//! `terminal.rs`, and the shell runs in the core.
 
 use crate::protocol::ClientMessage;
 use crate::shell::Desk;
-use crate::terminal::{FOREGROUND, Row, Screen, Size, Spot, key_bytes, paste_bytes};
+use crate::terminal::{FOREGROUND, Mouse, Row, Screen, Size, Spot, key_bytes, mouse_bytes, paste_bytes};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::vte::ansi::Rgb;
-use rune::{Color, Drag, El, Key, KeyEvent, Phase, Span, TextStyle, Tx, col, el, memo, text};
+use rune::{Color, Drag, El, Key, KeyEvent, Mods, Phase, Span, TextStyle, Tx, col, el, memo, text};
 use rune_kit::Kit;
 use std::collections::{HashMap, HashSet};
 
@@ -27,6 +28,10 @@ pub struct Terminals {
     /// Wheel travel not yet a whole line.
     wheel: f32,
     cell: Option<(f32, f32)>,
+    /// The cell last reported to a program that tracks the mouse, so a move reports only a new cell.
+    reported: Option<(usize, usize)>,
+    /// A press went to the program rather than starting a selection.
+    pressed: bool,
 }
 
 fn font() -> TextStyle {
@@ -102,13 +107,61 @@ impl Desk {
     }
 
     /// A press and drag selects text: by characters, or by words and lines after a double or triple click.
-    fn terminal_drag(&mut self, id: &str, phase: Phase, x: f32, y: f32, clicks: u32) {
+    /// A program that tracks the mouse hears the press instead, unless Shift is held, as in xterm.
+    fn terminal_drag(&mut self, id: &str, phase: Phase, x: f32, y: f32, clicks: u32, mods: Mods) {
         let spot = self.terminals.spot(x, y);
         let Some(screen) = self.terminals.screens.get_mut(id) else { return };
-        match phase {
-            Phase::Down => screen.select_from(spot, clicks),
-            Phase::Move => screen.select_to(spot),
-            Phase::Up => screen.drop_empty_selection(),
+        let tracking = screen.mode().intersects(TermMode::MOUSE_MODE) && !mods.shift;
+        let event = match phase {
+            Phase::Down if tracking => Mouse::Press,
+            Phase::Move | Phase::Up if self.terminals.pressed => if phase == Phase::Up { Mouse::Release } else { Mouse::Drag },
+            Phase::Down => return screen.select_from(spot, clicks),
+            Phase::Move => return screen.select_to(spot),
+            Phase::Up => return screen.drop_empty_selection(),
+        };
+        self.terminals.pressed = event != Mouse::Release;
+        self.report_mouse(id, event, spot, mods);
+    }
+
+    /// The pointer over the terminal, for a program that tracks every move.
+    fn terminal_hover(&mut self, id: &str, x: f32, y: f32) {
+        let spot = self.terminals.spot(x, y);
+        if !self.terminals.pressed {
+            self.report_mouse(id, Mouse::Move, spot, Mods::default());
+        }
+    }
+
+    /// The wheel scrolls back through the output. A program that tracks the mouse hears it instead, and a
+    /// full-screen program such as `less` gets arrow keys, as xterm's alternate scroll sends.
+    fn terminal_wheel(&mut self, id: &str, lines: i32, x: f32, y: f32, mods: Mods) {
+        let spot = self.terminals.spot(x, y);
+        let Some(screen) = self.terminals.screens.get_mut(id) else { return };
+        let mode = screen.mode();
+        if mode.intersects(TermMode::MOUSE_MODE) {
+            let event = if lines > 0 { Mouse::WheelUp } else { Mouse::WheelDown };
+            for _ in 0..lines.unsigned_abs() {
+                self.terminals.reported = None;
+                self.report_mouse(id, event, spot, mods);
+            }
+        } else if mode.contains(TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL) {
+            let key = if lines > 0 { Key::Up } else { Key::Down };
+            let bytes = key_bytes(&key, false, false, mode.contains(TermMode::APP_CURSOR)).unwrap_or_default().repeat(lines.unsigned_abs() as usize);
+            self.core.send(&ClientMessage::TerminalInput { id: id.to_owned(), data: bytes });
+        } else {
+            screen.scroll(lines);
+        }
+    }
+
+    /// Sends a pointer event to the program, when it tracks that kind. A move reports only a new cell.
+    fn report_mouse(&mut self, id: &str, event: Mouse, spot: Spot, mods: Mods) {
+        let Some(screen) = self.terminals.screens.get(id) else { return };
+        let cell = (spot.col.min(screen.size.cols - 1), spot.row.min(screen.size.rows - 1));
+        if matches!(event, Mouse::Drag | Mouse::Move) && self.terminals.reported == Some(cell) {
+            return;
+        }
+        if let Some(data) = mouse_bytes(screen.mode(), event, cell.0, cell.1, mods) {
+            self.terminals.reported = Some(cell);
+            self.core.send(&ClientMessage::TerminalInput { id: id.to_owned(), data });
         }
     }
 
@@ -170,7 +223,7 @@ pub fn terminal(s: &Desk, id: &str, k: &Kit) -> El {
     });
     let grid = col().absolute(PAD, 0.0).w(screen.size.cols as f32 * cw).children(rows);
     let cursor = screen.cursor.map(|(x, y)| el().absolute(PAD + x as f32 * cw, y as f32 * ch).size(1.5, ch).fill(ink));
-    let (resize_id, key_id, wheel_id, drag_id) = (id.to_owned(), id.to_owned(), id.to_owned(), id.to_owned());
+    let (resize_id, key_id, wheel_id, drag_id, hover_id) = (id.to_owned(), id.to_owned(), id.to_owned(), id.to_owned(), id.to_owned());
     el()
         .key(format!("terminal-{id}"))
         .w_full()
@@ -182,16 +235,19 @@ pub fn terminal(s: &Desk, id: &str, k: &Kit) -> El {
         .label("Terminal")
         .on_layout(move |s: &mut Desk, r| s.resize_terminal(&resize_id, r[2], r[3]))
         .on_key(move |s: &mut Desk, event: &KeyEvent, tx| s.terminal_key(&key_id, event, tx))
-        .on_drag(move |s: &mut Desk, d: &mut Drag, _| s.terminal_drag(&drag_id, d.phase, d.x, d.y, d.clicks))
+        .on_drag(move |s: &mut Desk, d: &mut Drag, tx| s.terminal_drag(&drag_id, d.phase, d.x, d.y, d.clicks, tx.mods()))
+        .on_pointer_move_local(move |s: &mut Desk, p, tx| {
+            s.terminal_hover(&hover_id, p.x, p.y);
+            // A move only reaches the program. Nothing on screen changes, so the view is not built again.
+            tx.live_only();
+        })
         .on_wheel(move |s: &mut Desk, e, _| {
             let (_, ch) = s.terminals.cell.unwrap_or((7.2, 15.0));
             s.terminals.wheel += e.dy;
             let lines = (s.terminals.wheel / ch).trunc();
             if lines != 0.0 {
                 s.terminals.wheel -= lines * ch;
-                if let Some(screen) = s.terminals.screens.get_mut(&wheel_id) {
-                    screen.scroll(lines as i32);
-                }
+                s.terminal_wheel(&wheel_id, lines as i32, e.x, e.y, e.mods);
             }
             true
         })
@@ -239,4 +295,68 @@ fn row_view(row: &Row, font: TextStyle, (cw, ch): (f32, f32), ink: Color) -> El 
         e = e.child(el().absolute(*col as f32 * cw, 0.0).size(2.0 * cw, ch).center().child(text(glyph.clone()).font(font).color(rgb(*fg))));
     }
     e
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A Desk with one 20×5 terminal, "t", on 10×20 cells.
+    fn desk(output: &[u8]) -> Desk {
+        let mut s = Desk::default();
+        s.terminals.cell = Some((10.0, 20.0));
+        let mut screen = Screen::new(Size { cols: 20, rows: 5 });
+        screen.feed(output);
+        s.terminals.screens.insert("t".into(), screen);
+        s
+    }
+
+    fn sent(s: &Desk) -> Vec<String> {
+        s.core.sent().into_iter().filter(|m| m["type"] == "terminal.input").map(|m| m["data"].as_str().unwrap().to_owned()).collect()
+    }
+
+    /// The middle of a cell, in the terminal's own points.
+    fn at(col: usize, row: usize) -> (f32, f32) {
+        (PAD + col as f32 * 10.0 + 2.0, row as f32 * 20.0 + 10.0)
+    }
+
+    #[test]
+    fn a_program_that_tracks_the_mouse_hears_the_press_and_shift_still_selects() {
+        let mut s = desk(b"one two\x1b[?1000h\x1b[?1006h");
+        let (x, y) = at(2, 1);
+        s.terminal_drag("t", Phase::Down, x, y, 1, Mods::default());
+        s.terminal_drag("t", Phase::Up, x, y, 1, Mods::default());
+        assert_eq!(sent(&s), ["\x1b[<0;3;2M", "\x1b[<0;3;2m"]);
+        let shift = Mods { shift: true, ..Mods::default() };
+        let (x0, y0) = at(0, 0);
+        let (x1, y1) = at(3, 0);
+        s.terminal_drag("t", Phase::Down, x0, y0, 1, shift);
+        s.terminal_drag("t", Phase::Move, x1, y1, 1, shift);
+        s.terminal_drag("t", Phase::Up, x1, y1, 1, shift);
+        assert!(sent(&s).is_empty(), "Shift selects instead of reporting");
+        assert_eq!(s.terminals.screens["t"].selected_text().as_deref(), Some("one"));
+    }
+
+    #[test]
+    fn a_drag_reports_each_new_cell_once() {
+        let mut s = desk(b"\x1b[?1002h\x1b[?1006h");
+        let points = [at(1, 0), at(1, 0), at(2, 0)];
+        s.terminal_drag("t", Phase::Down, points[0].0, points[0].1, 1, Mods::default());
+        for (x, y) in &points[1..] {
+            s.terminal_drag("t", Phase::Move, *x, *y, 1, Mods::default());
+        }
+        assert_eq!(sent(&s), ["\x1b[<0;2;1M", "\x1b[<32;3;1M"]);
+    }
+
+    #[test]
+    fn the_wheel_scrolls_back_or_sends_arrows_to_a_full_screen_program() {
+        let mut s = desk(b"");
+        let (x, y) = at(0, 0);
+        s.terminal_wheel("t", 2, x, y, Mods::default());
+        assert!(sent(&s).is_empty(), "the shell's own screen scrolls back");
+        s.terminals.screens.get_mut("t").unwrap().feed(b"\x1b[?1049h");
+        s.terminal_wheel("t", 2, x, y, Mods::default());
+        s.terminal_wheel("t", -1, x, y, Mods::default());
+        assert_eq!(sent(&s), ["\x1b[A\x1b[A", "\x1b[B"]);
+    }
 }

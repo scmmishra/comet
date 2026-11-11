@@ -8,7 +8,7 @@ use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::{Config, Term, TermMode, viewport_to_point};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor, Rgb};
-use rune::Key;
+use rune::{Key, Mods};
 use std::sync::{Arc, Mutex};
 
 /// Lines kept above the screen.
@@ -334,6 +334,55 @@ fn alt_prefix(bytes: String, alt: bool) -> String {
     if alt { format!("\x1b{bytes}") } else { bytes }
 }
 
+/// A pointer event a program that tracks the mouse hears.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Mouse {
+    Press,
+    Release,
+    /// The pointer moved with the button down.
+    Drag,
+    /// The pointer moved with no button down.
+    Move,
+    WheelUp,
+    WheelDown,
+}
+
+/// The bytes xterm sends for a pointer event at a cell, in the encoding the program asked for: SGR,
+/// UTF-8 or the original. None when the program does not track that event.
+pub fn mouse_bytes(mode: TermMode, event: Mouse, col: usize, row: usize, mods: Mods) -> Option<String> {
+    let tracked = match event {
+        Mouse::Move => TermMode::MOUSE_MOTION,
+        Mouse::Drag => TermMode::MOUSE_DRAG | TermMode::MOUSE_MOTION,
+        _ => TermMode::MOUSE_MODE,
+    };
+    if !mode.intersects(tracked) {
+        return None;
+    }
+    let sgr = mode.contains(TermMode::SGR_MOUSE);
+    let button = match event {
+        Mouse::Press => 0,
+        // SGR names the released button. The original encoding has one code for any release.
+        Mouse::Release => if sgr { 0 } else { 3 },
+        Mouse::Drag => 32,
+        Mouse::Move => 35,
+        Mouse::WheelUp => 64,
+        Mouse::WheelDown => 65,
+    };
+    let code = button + if mods.shift { 4 } else { 0 } + if mods.alt { 8 } else { 0 } + if mods.ctrl { 16 } else { 0 };
+    let (x, y) = (col + 1, row + 1);
+    if sgr {
+        return Some(format!("\x1b[<{code};{x};{y}{}", if event == Mouse::Release { 'm' } else { 'M' }));
+    }
+    // Each value goes out as one character, 32 past it. Input reaches the core as text, so the original
+    // encoding stops at ASCII, where xterm's raw bytes would not survive as UTF-8.
+    let limit = if mode.contains(TermMode::UTF8_MOUSE) { 2015 } else { 95 };
+    if x > limit || y > limit {
+        return None;
+    }
+    let char_of = |v: usize| char::from_u32(32 + v as u32);
+    Some(format!("\x1b[M{}{}{}", char_of(code)?, char_of(x)?, char_of(y)?))
+}
+
 /// Pasted text, bracketed when the program asks for it, so a shell does not run it line by line.
 pub fn paste_bytes(text: &str, bracketed: bool) -> String {
     let text = text.replace("\r\n", "\r").replace('\n', "\r");
@@ -397,5 +446,23 @@ mod tests {
         assert_eq!(key_bytes(&Key::Text("b".into()), false, true, false).as_deref(), Some("\x1bb"));
         assert_eq!(key_bytes(&Key::Function(5), false, false, false).as_deref(), Some("\x1b[15~"));
         assert_eq!(paste_bytes("a\nb", true), "\x1b[200~a\rb\x1b[201~");
+    }
+
+    #[test]
+    fn the_mouse_reports_as_the_program_asks() {
+        let none = Mods::default();
+        let shift = Mods { shift: true, ..Mods::default() };
+        let click = TermMode::MOUSE_REPORT_CLICK;
+        assert_eq!(mouse_bytes(TermMode::empty(), Mouse::Press, 0, 0, none), None, "a program that does not track the mouse hears nothing");
+        assert_eq!(mouse_bytes(click | TermMode::SGR_MOUSE, Mouse::Press, 4, 2, none).as_deref(), Some("\x1b[<0;5;3M"));
+        assert_eq!(mouse_bytes(click | TermMode::SGR_MOUSE, Mouse::Release, 4, 2, shift).as_deref(), Some("\x1b[<4;5;3m"));
+        assert_eq!(mouse_bytes(click, Mouse::Press, 0, 0, none).as_deref(), Some("\x1b[M !!"));
+        assert_eq!(mouse_bytes(click, Mouse::Release, 0, 0, none).as_deref(), Some("\x1b[M#!!"));
+        assert_eq!(mouse_bytes(click, Mouse::Drag, 0, 0, none), None, "clicks alone leave drags out");
+        assert_eq!(mouse_bytes(TermMode::MOUSE_DRAG | TermMode::SGR_MOUSE, Mouse::Drag, 1, 1, none).as_deref(), Some("\x1b[<32;2;2M"));
+        assert_eq!(mouse_bytes(TermMode::MOUSE_DRAG, Mouse::Move, 1, 1, none), None, "drags alone leave moves out");
+        assert_eq!(mouse_bytes(click | TermMode::SGR_MOUSE, Mouse::WheelDown, 0, 0, none).as_deref(), Some("\x1b[<65;1;1M"));
+        assert_eq!(mouse_bytes(click, Mouse::Press, 200, 0, none), None, "the original encoding stops at ASCII");
+        assert_eq!(mouse_bytes(click | TermMode::UTF8_MOUSE, Mouse::Press, 200, 0, none).as_deref(), Some("\x1b[M \u{e9}!"));
     }
 }
