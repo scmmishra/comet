@@ -1,38 +1,62 @@
 #!/bin/bash
-# Builds dist/mac-arm64/Desk.app for this Mac. The app carries the core's source, the core's
-# production packages and the Bun binary that runs it, so it needs nothing from the repo. It runs the
-# Claude Code installed on the Mac, found on the login shell's PATH.
+# Builds dist/mac-arm64/Desk.app, the native Desk, for this Mac. The app carries the core's source, the
+# core's production packages and the Bun binary that runs it, so it needs nothing from the repo. It runs
+# the Claude Code installed on the Mac, found on the login shell's PATH.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-bun="${DESK_BUN:-$(command -v bun)}"
-stage="$repo/dist/stage"
+app="$repo/dist/mac-arm64/Desk.app"
 cd "$repo"
 
-bun run --cwd app build
+# Desk's version and icon still live with the Electron app, until it goes.
+version="$(jq -r .version app/package.json)"
 
-# The core reads Solid, the plugin package, Babel and the Agent SDK's Claude binary from disk while it
-# runs, so it ships as source with its packages instead of as one compiled file.
-rm -rf "$stage"
-mkdir -p "$stage/core"
-for package in protocol plugin core; do
-  mkdir -p "$stage/core/$package"
-  cp "$package/package.json" "$stage/core/$package/"
-  rsync -a --exclude '*.test.ts' --exclude 'test-*.ts' --exclude 'test-support.ts' "$package/src" "$stage/core/$package/"
-done
-cp bun.lock "$stage/core/"
-# The root package.json without the app's workspace. A production install takes the lockfile as frozen,
-# so the rest must match the repo's.
-"$bun" -e 'const root = await Bun.file("package.json").json(); root.workspaces = root.workspaces.filter((w) => w !== "app"); await Bun.write(process.argv[1], JSON.stringify(root, null, 2))' "$stage/core/package.json"
-(cd "$stage/core" && "$bun" install --production --linker hoisted)
-# Desk runs the Claude Code installed on the Mac, so the Agent SDK's own copy of it, about 300 MB, stays out.
-rm -rf "$stage/core/node_modules/@anthropic-ai/claude-agent-sdk-darwin-"*
-cp "$(readlink -f "$bun")" "$stage/bun"
+cargo build --release --manifest-path native/Cargo.toml
+scripts/stage-core.sh
 
-(cd app && bunx electron-builder --mac --arm64 --config electron-builder.yml)
-# Copied in after electron-builder, which leaves every node_modules folder out of what it packs.
-resources="$repo/dist/mac-arm64/Desk.app/Contents/Resources"
-rsync -a --delete "$stage/core/" "$resources/core/"
-cp "$stage/bun" "$resources/bun"
-# Deep, so the helper apps electron-builder renamed are signed again too.
-codesign --force --deep --sign - "$repo/dist/mac-arm64/Desk.app"
-echo "Built $repo/dist/mac-arm64/Desk.app"
+rm -rf "$app"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+cp native/target/release/desk "$app/Contents/MacOS/Desk"
+# The core runs from Contents/Resources, where `native/src/core.rs` looks for it.
+rsync -a dist/stage/core/ "$app/Contents/Resources/core/"
+cp dist/stage/bun "$app/Contents/Resources/bun"
+
+# Desk.icon gives macOS 26 a light and a dark icon, and actool renders an .icns from it for older macOS.
+icons="$(mktemp -d)"
+trap 'rm -rf "$icons"' EXIT
+xcrun actool app/build/Desk.icon --compile "$app/Contents/Resources" --app-icon Desk \
+  --enable-on-demand-resources NO --development-region en --target-device mac --platform macosx \
+  --minimum-deployment-target 13.0 --output-partial-info-plist "$icons/icon.plist" > /dev/null
+
+# The desk: scheme lets `bin/desk` hand a folder to the running Desk (`native/src/opening.rs`).
+cat > "$app/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>Desk</string>
+  <key>CFBundleDisplayName</key><string>Desk</string>
+  <key>CFBundleIdentifier</key><string>app.desk</string>
+  <key>CFBundleExecutable</key><string>Desk</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>$version</string>
+  <key>CFBundleVersion</key><string>$version</string>
+  <key>CFBundleIconFile</key><string>Desk</string>
+  <key>CFBundleIconName</key><string>Desk</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>app.desk</string>
+      <key>CFBundleURLSchemes</key><array><string>desk</string></array>
+    </dict>
+  </array>
+</dict>
+</plist>
+PLIST
+plutil -lint "$app/Contents/Info.plist" > /dev/null
+
+# Signed ad hoc: Desk is built for this Mac, not distributed.
+codesign --force --sign - "$app"
+echo "Built $app"
