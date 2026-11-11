@@ -8,7 +8,7 @@ use crate::shell::Desk;
 use crate::theme;
 use crate::cards::Lane;
 use crate::threads::Thread;
-use rune::{El, GrowthSpec, Icon, ScrollSpec, col, el, icon, memo, row, text};
+use rune::{El, GrowthSpec, Icon, ScrollSpec, Tx, col, el, icon, memo, row, text};
 use rune_kit::{ButtonVariant, IconButton, IconButtonVariant, Kit, Menu, MenuItem, Placement, Spinner};
 use rune_theme_opencode::icons as ic;
 use std::borrow::Cow;
@@ -117,6 +117,17 @@ pub fn thread(s: &Desk, tab: &str, dark: bool, lane: Option<Lane>) -> El {
     let scroll = col().key(key.clone()).w_full().h_full().scroll(ScrollSpec { stick_bottom: true }).on_at_bottom(move |s: &mut Desk, at| s.threads.get_mut(&at_tab).away_from_end = !at).child(list);
     let k = theme::kit(dark);
     col().w_full().grow(1.0).min_h(0.0).child(scroll).children(thread.away_from_end.then(|| scroll_to_end(&key, k)))
+}
+
+/// As in the Electron app, a message the user sends brings the active thread to its end, even from far
+/// up, and the thread follows the end again. True when it scrolled.
+pub fn poll(s: &mut Desk, tx: &mut Tx) -> bool {
+    let Some(tab) = s.workspace.active.clone() else { return false };
+    let sent = s.threads.get(&tab).is_some() && s.threads.get_mut(&tab).take_sent();
+    if sent {
+        tx.scroll_to_bottom_instant(format!("thread-{tab}"));
+    }
+    sent
 }
 
 /// After T3 Code: a pill above the composer once the end of the thread is out of view.

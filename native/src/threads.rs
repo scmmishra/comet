@@ -30,6 +30,10 @@ pub struct Thread {
     pub away_from_end: bool,
     /// The folds, groups and steps the user opened, by row or item id.
     pub open: HashSet<String>,
+    /// Counts the messages the user sent as they arrive, not those Claude Code started itself.
+    sent: u64,
+    /// `sent` as the view last followed it to the end.
+    followed: u64,
 }
 
 impl Thread {
@@ -52,6 +56,13 @@ impl Thread {
             ThreadItem::Changes { id, .. } => Some(id.as_str()),
             _ => None,
         })
+    }
+
+    /// Whether the user sent a message since the last call. The view then goes to the end.
+    pub fn take_sent(&mut self) -> bool {
+        let new = self.sent != self.followed;
+        self.followed = self.sent;
+        new
     }
 
     pub fn revision(&self, id: &str) -> u64 {
@@ -122,7 +133,12 @@ impl Threads {
         let revision = self.next();
         let thread = self.get_mut(tab);
         match event {
-            ThreadEvent::Item { item } => thread.put(item, revision),
+            ThreadEvent::Item { item } => {
+                if matches!(item, ThreadItem::User { self_started: false, .. }) && thread.item(item.id()).is_none() {
+                    thread.sent += 1;
+                }
+                thread.put(item, revision);
+            }
             ThreadEvent::TextDelta { id, delta } => {
                 if let Some(&i) = thread.index.get(&id)
                     && let ThreadItem::Text { text, .. } = &mut thread.items[i]
@@ -174,6 +190,23 @@ mod tests {
 
     fn text(id: &str, body: &str, done: bool) -> ThreadItem {
         ThreadItem::Text { id: id.into(), text: body.into(), done, at: None }
+    }
+
+    fn user(id: &str, self_started: bool) -> ThreadItem {
+        ThreadItem::User { id: id.into(), text: "hi".into(), images: vec![], at: None, steered: false, self_started }
+    }
+
+    #[test]
+    fn a_message_the_user_sends_is_noted_once() {
+        let mut threads = Threads::default();
+        threads.history("t", vec![user("old", false)], None);
+        assert!(!threads.get_mut("t").take_sent(), "a thread read back is not a send");
+        threads.apply("t", ThreadEvent::Item { item: user("u1", false) });
+        threads.apply("t", ThreadEvent::Item { item: user("u1", false) });
+        assert!(threads.get_mut("t").take_sent());
+        assert!(!threads.get_mut("t").take_sent(), "an update to the same message is not a new one");
+        threads.apply("t", ThreadEvent::Item { item: user("task", true) });
+        assert!(!threads.get_mut("t").take_sent(), "a turn Claude Code started is not the user's");
     }
 
     #[test]

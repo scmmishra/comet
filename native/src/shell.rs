@@ -312,7 +312,7 @@ pub fn poll(s: &mut Desk, _: f64, tx: &mut Tx) -> bool {
     s.sync_palette();
     s.sync_plugin_inputs();
     crate::tab_bar::follow_active(s, tx);
-    let composed = composer::poll(s, tx) | copied_poll(s, tx) | toasts_poll(s, tx) | crate::terminal_view::poll(s, tx);
+    let composed = composer::poll(s, tx) | copied_poll(s, tx) | toasts_poll(s, tx) | crate::terminal_view::poll(s, tx) | crate::thread_view::poll(s, tx);
     if s.status == CoreState::Ready {
         let next = s.refresh_usage();
         tx.wake_after(next);

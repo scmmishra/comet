@@ -8,7 +8,7 @@ use crate::triggers::{self, Trigger, TriggerKind};
 use crate::shell::Desk;
 use crate::theme;
 use crate::thread_view::COLUMN;
-use rune::{El, Key, KeyEvent, TextEdit, Tx, auto_grow, col, el, icon, row, text, text_input};
+use rune::{El, Key, KeyEvent, TextEdit, auto_grow, col, el, icon, row, text, text_input};
 use rune_kit::{ButtonVariant, ControlSize, IconButton, IconButtonVariant, Keybind, Kit, Placement, popover};
 use std::collections::HashSet;
 use rune_theme_opencode::icons as ic;
@@ -200,17 +200,15 @@ impl Desk {
 
     /// Sends the active tab's message. While Claude works, it steers or queues, and ⌘ picks the other.
     /// A tab with no name takes it from the message. While Claude asks questions, it answers them.
-    /// Returns the tab when a message went out.
-    fn submit(&mut self, alternate: bool) -> Option<String> {
-        let tab = self.workspace.active.clone()?;
+    fn submit(&mut self, alternate: bool) {
+        let Some(tab) = self.workspace.active.clone() else { return };
         if let Some((request, questions)) = self.question(&tab) {
-            self.advance_question(&tab, &request, &questions);
-            return None;
+            return self.advance_question(&tab, &request, &questions);
         }
         let text = self.drafts.text(&tab).trim().to_owned();
         let images = self.drafts.images.remove(&tab).unwrap_or_default();
         if text.is_empty() && images.is_empty() {
-            return None;
+            return;
         }
         if !text.is_empty() && self.workspace.active_tab().is_some_and(crate::workspace::is_untitled) {
             self.workspace.name_tab(&tab, &text, &self.core);
@@ -222,7 +220,6 @@ impl Desk {
         }
         self.core.send(&ClientMessage::SessionSend { tab_id: tab.clone(), text, images, follow_up });
         self.drafts.edit(&tab).clear();
-        Some(tab)
     }
 
     /// Adds image files to the active tab's message. A file that is not an image Claude reads says why.
@@ -334,15 +331,6 @@ impl Desk {
     }
 }
 
-/// Sends the message, with ⌘ held picking the other follow-up. As in the Electron app, a message the
-/// user sends brings the thread to its end, even from far up, and the thread follows it again.
-fn send(s: &mut Desk, tx: &mut Tx) {
-    let alternate = s.cmd_held();
-    if let Some(tab) = s.submit(alternate) {
-        tx.scroll_to_bottom_instant(format!("thread-{tab}"));
-    }
-}
-
 /// Where the file and command list opens: above the box, or below it on the start screen, where a list
 /// above would be cut off.
 #[derive(Clone, Copy, PartialEq)]
@@ -372,7 +360,10 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &
             let tab = s.workspace.active.clone().unwrap_or_default();
             s.drafts.edit(&tab)
         })
-        .on_submit(send)
+        .on_submit(|s: &mut Desk, _| {
+            let alternate = s.cmd_held();
+            s.submit(alternate);
+        })
         .on_input_key(|s: &mut Desk, key: &KeyEvent, tx| {
             let Some(tab) = s.workspace.active.clone() else { return false };
             if key.mods.shift || key.mods.cmd || key.mods.alt {
@@ -817,7 +808,10 @@ fn send_button(s: &Desk, tab: &str, empty: bool, k: &Kit) -> El {
     // `size="large" class="size-8 rounded-full"`: a large button, grown to 32 points and round.
     let round = |b: IconButton| b.control_size(ControlSize::Large).build(k).size(32.0, 32.0).radius(16.0);
     if !s.busy(tab) {
-        return round(IconButton::new(&ic::ARROW_UP).variant(IconButtonVariant::Submit).label("Send").disabled(empty).on_press_tx(send))
+        return round(IconButton::new(&ic::ARROW_UP).variant(IconButtonVariant::Submit).label("Send").disabled(empty).on_press_tx(|s: &mut Desk, _| {
+            let alternate = s.cmd_held();
+            s.submit(alternate);
+        }))
         .key("send");
     }
     if empty {
@@ -830,7 +824,10 @@ fn send_button(s: &Desk, tab: &str, empty: bool, k: &Kit) -> El {
             .variant(IconButtonVariant::Submit)
             .label(follow.label())
             .help(format!("Click to {}, ⌘-click or ⌘Enter to {}", follow.name(), follow.other().name()))
-            .on_press_tx(send),
+            .on_press_tx(|s: &mut Desk, _| {
+                let alternate = s.cmd_held();
+                s.submit(alternate);
+            }),
     )
     .key("follow-up")
 }
