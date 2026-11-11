@@ -17,6 +17,9 @@ use rune_kit::shell::WindowTitlebar;
 pub const TITLEBAR_HEIGHT: f32 = 44.0;
 /// The ground shown around the main panel, on its sides and below it.
 const PANEL_INSET: f32 = 8.0;
+/// The panel toggle's place in the session's corner: the Electron app's `right-2.5 top-[9px]` from the
+/// outside of the card, less the card's border.
+const TOGGLE_INSET: (f32, f32) = (8.0, 9.0);
 /// The main panel's corners, Desk's `rounded-3xl`.
 const PANEL_RADIUS: f32 = 12.0;
 /// A plugin's sidebar, `w-[320px]`.
@@ -400,22 +403,35 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, window: 
     let width = size.map(|size| size[0]);
     let k = theme::kit(dark);
     let name = s.account.project_label(&tab.project);
+    let place = row()
+        .min_w(0.0)
+        .shrink()
+        .gap(7.0)
+        .items_center()
+        .child(project_mark(&s.account, &tab.project, k))
+        .child(text(name).font(crate::theme::text(13.0)).color(k.c.text_muted))
+        .child(text("/").font(crate::theme::text(13.0)).color(k.c.text_faint))
+        .child(text(tab.title.clone()).font(crate::theme::medium(13.0)).color(k.c.text_base).truncate());
+    let end = row()
+        .gap(4.0)
+        .items_center()
+        // Without room for the rail, the project's cards fold into a chip.
+        .children(width.filter(|w| !crate::cards::Lane::rail(*w)).map(|_| crate::cards::space_chip(s, tab, k, layer)))
+        .children(s.threads.get(&tab.id).and_then(|t| t.context.as_ref()).map(|reading| crate::meters::context_ring(reading, k)));
+    // The header keeps its last 48 points for the panel toggle, which sits over the corner. While the pane
+    // is open, the pane's own header holds the toggle.
     let header = row()
         .key("session-header")
         .w_full()
         .h(HEADER_HEIGHT)
         .items_center()
         .pl(16.0)
-        .pr(10.0)
-        .gap(7.0)
-        .child(project_mark(&s.account, &tab.project, k))
-        .child(text(name).font(crate::theme::text(13.0)).color(k.c.text_muted))
-        .child(text("/").font(crate::theme::text(13.0)).color(k.c.text_faint))
-        .child(text(tab.title.clone()).font(crate::theme::medium(13.0)).color(k.c.text_base).truncate())
+        .pr(48.0)
+        .gap(8.0)
+        .child(place)
         .child(row().grow(1.0))
-        // While the pane is open, its own header holds the toggle, in the window's corner.
-        .children(s.threads.get(&tab.id).and_then(|t| t.context.as_ref()).map(|reading| crate::meters::context_ring(reading, k)))
-        .children((tab.panel_open != Some(true)).then(|| crate::panel::toggle(false, k)));
+        .child(end)
+        .children((tab.panel_open != Some(true)).then(|| crate::panel::toggle(false, k).pin(None, Some(TOGGLE_INSET.0), Some(TOGGLE_INSET.1), None)));
     let started = s.threads.get(&tab.id).is_some_and(|t| !t.items.is_empty());
     let lane = width.map(|w| crate::cards::Lane::for_session(w, thread_view::COLUMN));
     let sidebar = s.plugins.layouts.get(&tab.id).is_some_and(|l| l.sidebar.is_some());

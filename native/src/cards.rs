@@ -48,10 +48,12 @@ impl Lane {
     }
 }
 
-/// The open subagent's detail, by id.
+/// The open subagent's detail, by id, and whether the pointer is on the header chip or the cards it shows.
 #[derive(Default)]
 pub struct Cards {
     open_subagent: Option<String>,
+    on_chip: bool,
+    on_chip_cards: bool,
 }
 
 /// The rail of cards for a tab, pinned to the session's top right.
@@ -69,6 +71,42 @@ pub fn rail(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
         .children(space)
         .children(crate::commands_card::card(s, &tab.project, k, layer))
         .children(plugin_cards(s, tab, k))
+}
+
+/// A project's cards folded into a chip in the session header, for when the session is too narrow for the
+/// rail, as the Electron app's SpaceChip does. Hovering the chip shows the Space and Commands cards.
+pub fn space_chip(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
+    let space = s.projects.get(&tab.project).and_then(|p| p.space.as_ref());
+    let words = |w: String, color| text(w).font(crate::theme::text(12.0)).color(color);
+    let chip = row().key("space-chip").h(28.0).gap(8.0).items_center().radius(7.0).fill(k.c.layer_02).px(10.0).on_hover_change(|s: &mut Desk, on, _| s.cards.on_chip = on);
+    let chip = match space {
+        Some(space) => chip.child(icon(&ic::BRANCH, icons::SIZE).color(k.c.text_muted)).child(words(space.branch.clone(), k.c.text_base).truncate().max_w(160.0)).child(changes(space, k)),
+        None => chip.child(words("Commands".into(), k.c.text_base)),
+    };
+    if s.cards.on_chip || s.cards.on_chip_cards {
+        let cards = col()
+            .key("space-chip-cards")
+            .w(RAIL_WIDTH)
+            .gap(8.0)
+            .on_hover_change(|s: &mut Desk, on, _| s.cards.on_chip_cards = on)
+            .children(space.map(|space| space_card(space, &tab.id, k)))
+            .children(crate::commands_card::card(s, &tab.project, k, layer));
+        layer.push(popover::anchored(k, cards, "space-chip", Placement::BottomEnd, 4.0));
+    }
+    chip
+}
+
+/// The work not yet committed: its line counts, its file count when lines do not count, or None.
+fn changes(space: &Space, k: &Kit) -> El {
+    let c = &space.changes;
+    let faint = |words: String| text(words).font(crate::theme::text(12.0)).color(k.c.text_muted);
+    if c.files == 0 {
+        faint("None".into())
+    } else if c.additions == 0 && c.deletions == 0 {
+        faint(format::plural(c.files as usize, "file"))
+    } else {
+        crate::ui::diff_changes(k, c.additions, c.deletions)
+    }
 }
 
 /// Plugin cards, after the project's own. A card that draws nothing is left out.
@@ -110,14 +148,7 @@ fn space_card(space: &Space, tab: &str, k: &Kit) -> El {
         let parts: Vec<String> = [(u.ahead, "↑"), (u.behind, "↓")].iter().filter(|(n, _)| *n > 0).map(|(n, a)| format!("{a}{n}")).collect();
         (!parts.is_empty()).then(|| faint(parts.join(" ")))
     });
-    let c = &space.changes;
-    let changes = if c.files == 0 {
-        faint("None".into())
-    } else if c.additions == 0 && c.deletions == 0 {
-        faint(format::plural(c.files as usize, "file"))
-    } else {
-        crate::ui::diff_changes(k, c.additions, c.deletions)
-    };
+    let changes = changes(space, k);
     let tab = tab.to_owned();
     // The card counts uncommitted work, so it opens Review on the same changes.
     let changes_line = line(k, &ic::REVIEW, "Changes".into(), Some(changes)).hover(k.c.bg_base).role("button").on_press(move |s: &mut Desk| s.open_review(&tab, "git"));
