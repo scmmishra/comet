@@ -101,9 +101,13 @@ pub fn model_picker(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
     }
     // rune-kit's Popover caps its width at 320, `@opencode/ui`'s default. Desk widens this one, so it
     // builds the surface from the same parts.
-    let body = popover_body(s, tab, selected, k, layer).role("dialog").label("Model and effort");
+    // The permission menu anchors to its button inside the picker, so it goes in after the picker: a popover
+    // ahead of its anchor in the layer finds no place for it and opens in the window's corner.
+    let mut menus = Vec::new();
+    let body = popover_body(s, tab, selected, k, &mut menus).role("dialog").label("Model and effort");
     layer.insert(0, scrim("model-scrim", |s: &mut Desk| s.picker = Picker::default()));
     layer.push(popover::anchored(k, crate::ui::popover(k, body), "model-picker", Placement::TopEnd, 8.0));
+    layer.extend(menus);
     trigger
 }
 
