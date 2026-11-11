@@ -8,6 +8,7 @@ import { antigravityFlavor, INSTALL_PROBLEM, launchAntigravity, SIGN_IN_PROBLEM 
 import { modelsPath, signInFolder, threadsFolder, tokenPath } from "./home"
 import { installRuntime } from "./install"
 import { ModelCache } from "./models"
+import { modesFor } from "./modes"
 import { clearRuntimeTemp, resolveRuntime } from "./runtime"
 import { signInWithGoogle } from "./sign-in"
 
@@ -17,7 +18,7 @@ import { signInWithGoogle } from "./sign-in"
  * Desk never starts the server to read its state, since each start unpacks about 1 GB.
  */
 export function antigravityAgent(host: AgentHost): Agent {
-  const models = new ModelCache(modelsPath)
+  const models = new ModelCache(modelsPath, () => modesFor(resolveRuntime()?.kind))
   const flavor = antigravityFlavor(host, models)
   const threads = new AcpThreadStore(threadsFolder)
   /** The process of a sign-in that runs, which closing Desk ends. */

@@ -6,6 +6,7 @@ import type { AgentReading } from "../agent"
 import { FAKE_OPTIONS } from "../acp/test-agent"
 import { markInstalled, modelsPath, tokenPath } from "./home"
 import { antigravityAgent } from "."
+import { modesFor } from "./modes"
 import { ModelCache } from "./models"
 import { RELEASE } from "./release"
 
@@ -27,7 +28,7 @@ test("reads where Antigravity stands from its files alone: missing, signed out, 
 
   mkdirSync(dirname(tokenPath()), { recursive: true })
   writeFileSync(tokenPath(), "{}")
-  const models = new ModelCache(modelsPath).learn(FAKE_OPTIONS, true)
+  const models = new ModelCache(modelsPath, () => modesFor("server")).learn(FAKE_OPTIONS, true)
   await agent.inspect()
   expect(readings.at(-1)).toEqual({ state: "ready", problem: undefined, version, models })
 })

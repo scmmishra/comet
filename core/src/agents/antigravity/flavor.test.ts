@@ -16,7 +16,7 @@ afterAll(() => {
   else process.env.DESK_ANTIGRAVITY = saved
 })
 
-const flavor = antigravityFlavor({ publish: () => {}, compactIdle: () => false }, new ModelCache(modelsPath))
+const flavor = antigravityFlavor({ publish: () => {}, compactIdle: () => false }, new ModelCache(modelsPath, () => []))
 
 test("runs each of Desk's modes on the server, and always asks on the agy CLI", () => {
   delete process.env.DESK_ANTIGRAVITY
