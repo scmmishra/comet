@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { fakeAppServer } from "./fake-app-server"
+import { fakeAppServer } from "./test-app-server"
 import { AppServer } from "./server"
 import { codexThreads } from "./threads"
 

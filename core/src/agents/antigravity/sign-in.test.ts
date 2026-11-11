@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { fakeAcpAgent, FAKE_OPTIONS } from "../acp/fake-agent"
+import { fakeAcpAgent, FAKE_OPTIONS } from "../acp/test-agent"
 import { signInWithGoogle } from "./sign-in"
 import { BROWSER_COMMAND, signInLink } from "./sign-in-link"
 

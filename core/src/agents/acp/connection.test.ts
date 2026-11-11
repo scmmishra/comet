@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { until } from "../../test-support"
 import { RpcError } from "../json-rpc"
 import { AcpConnection, type AcpClient } from "./connection"
-import { fakeAcpAgent } from "./fake-agent"
+import { fakeAcpAgent } from "./test-agent"
 
 const client: AcpClient = { update: () => {}, permission: async () => ({ outcome: { outcome: "cancelled" } }), closed: () => {} }
 

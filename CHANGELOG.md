@@ -4,6 +4,12 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- Desk runs Codex and Antigravity beside Claude Code. Each uses the login and the plan it already has: Codex your ChatGPT plan, through the `codex` on your Mac, and Antigravity your Google account, through Google's own server, which Desk installs from Settings. No API key is needed.
+- The model picker has a rail of agents. A new tab can move to any agent and any of its models. Once a thread has started it keeps its agent, and another agent's models show with a button that opens a new tab on that agent. An agent that is not installed or not signed in says so there, with the button that fixes it.
+- One agent can hand a task to another. Ask Claude to have Codex review a change, or Codex to ask Claude for a second opinion. The other agent works in the same folder, with permissions no broader than the thread's, and its answer comes back to the thread. The task shows in the Subagents card with the agent and the model it runs on.
+- Settings > Providers shows what every new tab starts with, then one agent at a time: its account, version, default model, effort and permissions, and its plan usage. The usage meter in the tab bar follows the active tab's agent and lists every agent's limits.
+- Rewind, fork, rename and delete show only for an agent that can do them. Codex can do all four, but cannot restore files. Antigravity can only delete. The start screen shows which agent each recent thread ran on, and a thread you pick up continues on that agent.
+- A tab's `/` menu lists the commands of its own agent. It listed Claude Code's commands in every tab.
 - Reload plugins, in the palette, starts every plugin again from its files. An edit to a plugin takes effect without restarting Desk, and a plugin that failed gets another try. Open panels and threads stay.
 - In a window too narrow for the cards, the chip in the session header opens plugin cards too. They showed only beside the thread, so a narrow window hid them.
 - A plugin's list row shows its subtitle and detail on one line each. A message with line breaks, such as a Chatwoot reply that starts "Hi David,", made the row many lines tall.

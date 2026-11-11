@@ -110,7 +110,7 @@ pub fn space_chip(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .key("space-chip-cards")
             .w(RAIL_WIDTH)
             .gap(8.0)
-            // Without the rail, the commands Claude runs in the background and their Stop buttons would show nowhere.
+            // Without the rail, the commands the agent runs in the background and their Stop buttons would show nowhere.
             .children(background_card(s, &tab.id, k))
             .children(space.map(|space| space_card(space, &tab.id, k)))
             .children(crate::commands_card::card(s, &tab.project, k, layer))
@@ -254,7 +254,7 @@ fn status_mark(subagent: &Subagent, thread_agent: &str, k: &Kit) -> El {
         .child(row().absolute(9.0, 9.0).size(11.0, 11.0).radius(5.5).center().fill(k.c.layer_01).child(el().size(7.0, 7.0).radius(3.5).fill((status(subagent).1)(k))))
 }
 
-/// The subagents Claude started, at the top of the stack. The card shows while one runs, or while the turn
+/// The subagents the agent started, at the top of the stack. The card shows while one runs, or while the turn
 /// that started them runs. A subagent opens beside the card with what it has done so far.
 fn subagents_card(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
     let thread = s.threads.get(&tab.id)?;

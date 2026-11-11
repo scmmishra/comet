@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { DEFAULT_MODEL, PERMISSION_MODES } from "@desk/protocol"
 import { modelName, modelOptions, turnModel } from "./models"
-import { MODELS } from "./fake-app-server"
+import { MODELS } from "./test-app-server"
 
 test("lists Codex's default first, then every model Codex shows", () => {
   expect(modelOptions(MODELS)).toEqual([

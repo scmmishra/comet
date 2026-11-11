@@ -1,5 +1,5 @@
 //! The window's tabs: 210 point tabs with the
-//! project's mark, the title in 12 point text and a spinner while Claude works, and a close button
+//! project's mark, the title in 12 point text and a spinner while the agent works, and a close button
 //! on the active tab and the one under the pointer. Rune's TabStrip sets its titles in the kit's
 //! medium weight and shrinks its tabs to fit, so Desk draws its own.
 

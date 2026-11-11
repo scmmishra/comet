@@ -1,5 +1,5 @@
 //! The message box under the thread, after T3 Code: a tall
-//! text area in a card, then a row with the send button. While Claude works, the button stops the turn,
+//! text area in a card, then a row with the send button. While the agent works, the button stops the turn,
 //! or sends a follow-up once there is one to send.
 
 use crate::protocol::{ClientMessage, Question, QueuedMessage, Skill};
@@ -19,7 +19,7 @@ use std::time::Instant;
 const CARD_RADIUS: f32 = 12.0;
 /// The text area grows from two lines to this many, then scrolls.
 const MAX_LINES: usize = 12;
-/// A second Escape within this long stops Claude.
+/// A second Escape within this long stops the agent.
 const STOP_AGAIN: std::time::Duration = std::time::Duration::from_millis(1500);
 const PLACEHOLDER: &str = "Ask anything, @ to add files, / for commands";
 const ANSWER_PLACEHOLDER: &str = "Type your own answer, or leave this blank to use the selected option";
@@ -37,7 +37,7 @@ const LIST_MAX: f32 = 280.0;
 const SAVE_DELAY: std::time::Duration = std::time::Duration::from_millis(400);
 const DRAFTS_FILE: &str = "drafts.json";
 
-/// Desk's own commands, after T3 Code's. They act at once, rather than going to Claude.
+/// Desk's own commands, after T3 Code's. They act at once, rather than going to the agent.
 const DESK_COMMANDS: [(&str, &str); 2] = [("model", "Switch the model for this tab"), ("clear", "Start a fresh session; the thread starts empty")];
 
 /// One row of the file and command list.
@@ -48,7 +48,7 @@ enum Suggestion {
     Skill(Skill),
 }
 
-/// What a message sent while Claude works does, and the other choice, which ⌘ picks.
+/// What a message sent while the agent works does, and the other choice, which ⌘ picks.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum FollowUp {
     Steer,
@@ -88,14 +88,14 @@ impl FollowUp {
         }
     }
 
-    /// A slash command is a turn Claude Code runs on its own, so steering one in would cut the running
+    /// A slash command is a turn the agent runs on its own, so steering one in would cut the running
     /// turn short. It always waits in the queue (`followUpFor` in the protocol).
     fn for_text(self, text: &str) -> FollowUp {
         if text.trim_start().starts_with('/') { FollowUp::Queue } else { self }
     }
 }
 
-/// Each tab's unsent message, what the user gave Claude's open questions, and when Escape was last pressed.
+/// Each tab's unsent message, what the user gave the agent's open questions, and when Escape was last pressed.
 #[derive(Default)]
 pub struct Drafts {
     by_tab: HashMap<String, TextEdit>,
@@ -169,7 +169,7 @@ impl Desk {
     }
 
     /// Moves past the current question, with the composer's text as its answer when there is any. After
-    /// the last question, the answers go to Claude.
+    /// the last question, the answers go to the agent.
     fn advance_question(&mut self, tab: &str, request: &str, questions: &[Question]) {
         let typed = self.drafts.text(tab).trim().to_owned();
         let draft = self.drafts.questions.entry(request.to_owned()).or_default();
@@ -200,8 +200,8 @@ impl Desk {
         }
     }
 
-    /// Sends the active tab's message. While Claude works, it steers or queues, and ⌘ picks the other.
-    /// A tab with no name takes it from the message. While Claude asks questions, it answers them.
+    /// Sends the active tab's message. While the agent works, it steers or queues, and ⌘ picks the other.
+    /// A tab with no name takes it from the message. While the agent asks questions, it answers them.
     fn submit(&mut self, alternate: bool) {
         let Some(tab) = self.workspace.active.clone() else { return };
         if let Some((request, questions)) = self.question(&tab) {
@@ -216,7 +216,7 @@ impl Desk {
             self.workspace.name_tab(&tab, &text, &self.core);
         }
         let follow_up = self.busy(&tab).then(|| self.follow_up(alternate).for_text(&text).name().to_owned());
-        // A message sent while Claude works joins its turn or waits, so its subagents stay.
+        // A message sent while the agent works joins its turn or waits, so its subagents stay.
         if follow_up.is_none() {
             self.threads.new_turn(&tab);
         }
@@ -224,7 +224,7 @@ impl Desk {
         self.drafts.edit(&tab).clear();
     }
 
-    /// Adds image files to the active tab's message. A file that is not an image Claude reads says why.
+    /// Adds image files to the active tab's message. A file that is not an image the agents read says why.
     fn attach(&mut self, paths: &[std::path::PathBuf]) {
         for path in paths {
             self.attach_image(crate::attachments::read(path));
@@ -636,7 +636,7 @@ fn answer_button(s: &Desk, tab: &str, request: &str, questions: &[Question], emp
         .key("answer")
 }
 
-/// Claude's questions, at the top of the composer, after T3 Code. One question shows at a time with its
+/// The agent's questions, at the top of the composer, after T3 Code. One question shows at a time with its
 /// options. The header folds the question away, and the cross dismisses it.
 fn question_panel(s: &Desk, tab: &str, request: &str, questions: &[Question], k: &Kit) -> El {
     let draft = s.drafts.questions.get(request).cloned().unwrap_or_default();

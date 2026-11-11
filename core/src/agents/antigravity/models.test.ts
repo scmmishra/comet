@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { join } from "node:path"
 import { tempFolder } from "../../test-support"
-import { FAKE_OPTIONS } from "../acp/fake-agent"
+import { FAKE_OPTIONS } from "../acp/test-agent"
 import { ModelCache } from "./models"
 
 const MODES = ["default", "acceptEdits", "bypassPermissions"] as const

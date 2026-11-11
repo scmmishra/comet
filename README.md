@@ -6,11 +6,11 @@ Desk is a desktop app for working with coding agents. It runs the agent installe
 
 Each tab is one session in one project, and tabs from several projects share the window. Beside the thread, a stack of cards shows the project's branch, its changes and its commands. A view pane holds Review, terminals and open files. Plugins can add sidebars, panels, cards and commands, so you can shape the window around each job.
 
-Desk is early. Today it runs Claude Code, on Apple silicon Macs. Codex and Linux are planned, and so are agents that can act in Desk itself, such as opening a panel or filling a card for the task.
+Desk is early. Today it runs Claude Code, Codex and Antigravity, on Apple silicon Macs. Each uses the login and the plan it already has, and one agent can hand a task to another. Linux is planned, and so are agents that can act in Desk itself, such as opening a panel or filling a card for the task.
 
 ## Install
 
-Desk needs [Claude Code](https://code.claude.com), installed and logged in. Desk finds it as `claude` on your shell's `PATH`.
+Desk needs at least one agent, installed and logged in. It finds [Claude Code](https://code.claude.com) as `claude` and Codex as `codex` on your shell's `PATH`. Antigravity installs from Settings › Providers, where you sign in with your Google account.
 
 Download `Desk-arm64.zip` from the [latest release](https://github.com/scmmishra/desk/releases), unzip it and move `Desk.app` to `/Applications`. Desk is not notarized. If macOS refuses to open it, allow it in System Settings › Privacy & Security.
 

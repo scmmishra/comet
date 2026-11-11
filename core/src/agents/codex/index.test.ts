@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import type { AgentReading } from "../agent"
 import { until } from "../../test-support"
-import { fakeAppServer, MODELS } from "./fake-app-server"
+import { fakeAppServer, MODELS } from "./test-app-server"
 import { codexAgent } from "./index"
 import { AppServer } from "./server"
 import { signIn } from "./sign-in"

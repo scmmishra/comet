@@ -1,4 +1,4 @@
-//! Claude's Markdown as Desk shows it: a single newline breaks
+//! An agent's Markdown as Desk shows it: a single newline breaks
 //! the line, as Claude Code shows it, inline code that names a file opens the file, and each code block
 //! has a header with its language and a Copy button.
 //!

@@ -565,7 +565,7 @@ pub enum ThreadItem {
         /// Sent into a turn that was still running.
         #[serde(default)]
         steered: bool,
-        /// A turn Claude Code started itself. Its text says why.
+        /// A turn the agent started itself. Its text says why.
         #[serde(default)]
         self_started: bool,
     },

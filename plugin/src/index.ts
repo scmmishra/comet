@@ -23,7 +23,7 @@ export interface TabContext {
   open(panel: string, params?: PanelParams): void
   /** Whether that panel instance is open in the tab. It updates as panels open and close. */
   isOpen(panel: string, params?: PanelParams): boolean
-  /** Opens or resumes the tab's Claude thread for `key`. A new thread starts with `prompt`, when given. */
+  /** Opens or resumes the tab's thread for `key`, on the tab's agent. A new thread starts with `prompt`, when given. */
   openThread(thread: { readonly key: string; readonly title?: string; readonly prompt?: string }): void
   /** Shows a short message. */
   toast(message: string): void

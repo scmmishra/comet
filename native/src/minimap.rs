@@ -1,6 +1,6 @@
 //! The thread's minimap, after T3 Code: a mark per message the
 //! user sent, evenly spaced down a rail in the thread's left gutter. A mark is darker while its turn is on
-//! screen. Marks near the pointer grow, the nearest previews the message and the start of Claude's answer,
+//! screen. Marks near the pointer grow, the nearest previews the message and the start of the agent's answer,
 //! and a click jumps to it. A wide gutter shows the minimap all the time, and a narrow one on hover.
 
 use crate::protocol::ThreadItem;
@@ -9,7 +9,7 @@ use crate::threads::Thread;
 use rune::{El, col, el, text};
 use rune_kit::Kit;
 
-/// One mark: a message the user sent, and the start of Claude's final answer to it.
+/// One mark: a message the user sent, and the start of the agent's final answer to it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Mark {
     pub id: String,
@@ -30,8 +30,8 @@ const RAIL_LEFT: f32 = 12.0;
 /// The preview's width, `w-80`.
 const PREVIEW_WIDTH: f32 = 320.0;
 
-/// The minimap's marks: one per message the user sent, with the last text Claude wrote before the next one.
-/// A turn Claude Code started itself gets no mark.
+/// The minimap's marks: one per message the user sent, with the last text the agent wrote before the next one.
+/// A turn the agent started itself gets no mark.
 pub fn marks(items: &[ThreadItem]) -> Vec<Mark> {
     let mut out: Vec<Mark> = Vec::new();
     for item in items {

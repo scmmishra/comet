@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { until } from "../../test-support"
-import { fakeAppServer } from "./fake-app-server"
+import { fakeAppServer } from "./test-app-server"
 import { AppServer, installedVersion } from "./server"
 
 test("starts one app-server on the first request, greets it, and shares it", async () => {
