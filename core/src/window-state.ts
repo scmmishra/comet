@@ -69,6 +69,9 @@ export interface ClosedTab {
   readonly layout?: PluginLayout
 }
 
+/** The checkpoint commits a thread still names, which Git must keep. */
+export const checkpointsOf = (thread: TabThread): string[] => [thread.threadStart, thread.turnFrom, thread.turnTo].filter((commit) => commit !== undefined)
+
 const windowStatePath = () => join(instanceHome(), "window.json")
 
 /** The saved window. A missing or broken file gives an empty window, and a tab that is not whole is dropped. */

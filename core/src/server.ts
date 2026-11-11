@@ -63,7 +63,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
   })
   // An agent reaches Desk's tools at the server's own port, which is known once it listens.
   let toolsUrl = ""
-  const delegations = new Delegations(agents, { tab: (tabId) => window.running(tabId), emit: (tabId, event) => broadcast({ type: "session.event", tabId, event }) }, () => toolsUrl)
+  const delegations = new Delegations(agents, () => toolsUrl)
   const window = new Window({
     broadcast,
     agents,

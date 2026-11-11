@@ -3,37 +3,43 @@ import { followUpFor, type AgentId, type ChangedFile, type CoreMessage, type Fil
 import { requireFeature, type Agent, type AgentSession } from "./agents/agent"
 import type { Agents } from "./agents/registry"
 import { resultMessage } from "./agents/turn-items"
-import type { Delegations } from "./delegate/delegations"
+import type { Delegations, Handoffs } from "./delegate/delegations"
 import { branchBase, capture, changesSince, checkpointChanges, headTree, keepCheckpoints } from "./checkpoints"
 import { errorMessage } from "./errors"
 import { git } from "./git"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { currentBranch } from "./space"
 import { Terminals } from "./terminals"
-import { loadWindowState, saveWindowState, type ClosedTab, type TabThread, type WindowState } from "./window-state"
+import { TurnWatch } from "./turn"
+import { checkpointsOf, loadWindowState, saveWindowState, type ClosedTab, type TabThread, type WindowState } from "./window-state"
 
 type Send = (message: CoreMessage) => void
 
 /** Enough recent folders to pick from. */
 const MAX_RECENT = 20
-/** How a turn that ends with no result ended, such as one whose session failed to start. */
-const NO_RESULT: TurnOutcome = "error"
+/** How many closed tabs ⌘⇧T can bring back. */
+const CLOSED_TABS = 10
 
-/** How a running turn ends so far, after one of its events. A result says how it ended, and a later error overrides it. */
-export function outcomeAfter(outcome: TurnOutcome, event: ThreadEvent): TurnOutcome {
-  if (event.kind !== "item") return outcome
-  if (event.item.type === "result") return event.item.stopped ? "interrupted" : event.item.isError ? "error" : "done"
-  if (event.item.type === "error") return "error"
-  return outcome
+/** Thrown by `send` when a plugin moved the tab to another thread before the message went out. */
+class ThreadMoved extends Error {
+  constructor() {
+    super("The tab moved to another thread before the message was sent.")
+  }
+}
+
+/** A session that runs a thread, with the work its agent hands to others. */
+interface Live {
+  readonly session: AgentSession
+  readonly handoffs: Handoffs
 }
 
 interface WindowHooks {
   /** Sends to every client. */
   readonly broadcast: Send
   /** The agents that run the tabs' threads. */
-  readonly agents: Agents
-  /** Work a tab's agent hands another agent. Without it, sessions get no tools of Desk's. */
-  readonly delegations?: Pick<Delegations, "server" | "answerPermission" | "answerQuestion" | "stop" | "drop">
+  readonly agents: Pick<Agents, "get" | "all">
+  /** Gives each session Desk's tools, for the work its agent hands another agent. */
+  readonly delegations: Pick<Delegations, "open">
   /** A tab closed, so what runs for it can stop. */
   readonly tabClosed: (tabId: string) => void
   /** A turn ended in a plugin's thread, named by its full key, even while the thread was away from its tab. */
@@ -49,12 +55,13 @@ interface WindowHooks {
  */
 export class Window {
   private state: WindowState = loadWindowState()
-  private sessions = new Map<string, AgentSession>()
+  /** Each tab's session, once its thread has run a turn in this run of Desk. */
+  private sessions = new Map<string, Live>()
   /**
-   * Sessions whose turn still runs in a thread a plugin switched the tab away from, by project and key.
+   * Sessions whose turn still runs in a thread a plugin switched the tab away from, by keyed id.
    * One rejoins its tab when the thread comes back, and closes once its turn ends while away.
    */
-  private readonly parked = new Map<string, { readonly tabId: string; readonly session: AgentSession }>()
+  private readonly parked = new Map<string, { readonly tabId: string; readonly live: Live }>()
   private terminals: Terminals
   /** Each tab's last turn being ended. Review waits for it, so it reads the checkpoint the turn ends on. */
   private readonly turnEnds = new Map<string, Promise<void>>()
@@ -76,7 +83,7 @@ export class Window {
     const kept = new Map<string, Set<string>>()
     for (const { project, thread } of threads) {
       const commits = kept.get(project) ?? new Set<string>()
-      for (const commit of [thread?.threadStart, thread?.turnFrom, thread?.turnTo]) if (commit) commits.add(commit)
+      for (const commit of thread ? checkpointsOf(thread) : []) commits.add(commit)
       kept.set(project, commits)
     }
     for (const [project, commits] of kept) await keepCheckpoints(project, commits).catch(() => undefined)
@@ -101,7 +108,7 @@ export class Window {
     if (!found) return
     const tab: TabInfo = { ...found.tab, terminals: [], ...(found.tab.terminals.some((terminal) => terminal.id === found!.tab.panelActive) ? { panelActive: undefined } : {}) }
     // The tab shows its plugin thread again, so the thread leaves the keyed threads.
-    const { [found.thread?.key ? threadKey(tab.project, found.thread.key) : ""]: _shown, ...keyed } = this.state.keyed
+    const { [found.thread?.key ? keyedId(tab.project, found.thread.key) : ""]: _shown, ...keyed } = this.state.keyed
     this.persist({
       keyed,
       threads: found.thread ? { ...this.state.threads, [tab.id]: found.thread } : this.state.threads,
@@ -143,7 +150,7 @@ export class Window {
     const closed = [...this.state.closed, ...closing].slice(-CLOSED_TABS)
     // A plugin thread outlives its tab under its key, so opening the key again resumes it.
     const keyed = { ...this.state.keyed }
-    for (const { tab, thread } of closing) if (thread?.key) keyed[threadKey(tab.project, thread.key)] = thread
+    for (const { tab, thread } of closing) if (thread?.key) keyed[keyedId(tab.project, thread.key)] = thread
     this.persist({ tabs, active, threads: kept(this.state.threads), layouts: kept(this.state.layouts), closed, keyed })
     for (const tab of tabs) {
       const old = before.get(tab.id)
@@ -151,12 +158,13 @@ export class Window {
       else if (old && !sameRunSettings(old, tab))
         this.sessions
           .get(tab.id)
-          ?.configure(tab)
+          ?.session.configure(tab)
           .catch((error) => this.hooks.broadcast({ type: "error", message: "Desk could not change how the thread runs", detail: errorMessage(error) }))
     }
     for (const id of before.keys()) {
       if (tabs.some((tab) => tab.id === id)) continue
       this.closeSession(id)
+      this.turnEnds.delete(id)
       this.hooks.tabClosed(id)
     }
     if (opened.length) this.remember(opened)
@@ -169,7 +177,7 @@ export class Window {
    * checkpoint. The message then belongs to no thread the tab shows, so it is not sent.
    */
   async send(tabId: string, text: string, images: readonly ImageAttachment[] = [], followUp: FollowUp = "steer") {
-    const running = this.sessions.get(tabId)
+    const running = this.sessions.get(tabId)?.session
     if (running?.busy) {
       // An agent that cannot take a message mid-turn queues it, whatever the user chose.
       if (followUpFor(text, followUp) === "steer" && this.steers(tabId)) return running.steer!(text, images)
@@ -179,10 +187,10 @@ export class Window {
     if (!this.thread(tabId).threadStart) {
       const key = this.thread(tabId).key
       const threadStart = await capture(tab.project)
-      if (this.thread(tabId).key !== key) throw new Error(MOVED)
+      if (this.thread(tabId).key !== key) throw new ThreadMoved()
       if (threadStart) this.updateThread(tabId, { threadStart })
     }
-    this.session(tab).send(text, images)
+    this.live(tab).session.send(text, images)
     void this.recordBranch(tabId)
   }
 
@@ -206,10 +214,10 @@ export class Window {
     const tab = this.tab(tabId)
     this.parkSession(tabId)
     // The thread leaving keeps everything under its key, and the one coming takes back what it kept.
-    const id = threadKey(tab.project, thread.key)
+    const id = keyedId(tab.project, thread.key)
     const coming = this.state.keyed[id] ?? this.shownKeyThread(tab.project, thread.key) ?? { key: thread.key }
     const { [id]: _taken, ...keyed } = this.state.keyed
-    this.persist({ keyed: leaving.key ? { ...keyed, [threadKey(tab.project, leaving.key)]: leaving } : keyed })
+    this.persist({ keyed: leaving.key ? { ...keyed, [keyedId(tab.project, leaving.key)]: leaving } : keyed })
     this.setThread(tabId, coming)
     const sessionId = coming.sessionId
     if (thread.title) this.hooks.broadcast({ type: "tab.title", tabId, title: thread.title })
@@ -217,13 +225,13 @@ export class Window {
     // Another key may have taken the tab while the transcript was read.
     if (this.thread(tabId).key !== thread.key) return
     // A thread whose turn kept running while away rejoins the tab, and its turn shows from where it is.
-    const back = this.parked.get(threadKey(tab.project, thread.key))
+    const back = this.parked.get(id)
     if (back?.tabId === tabId) {
-      this.parked.delete(threadKey(tab.project, thread.key))
-      this.sessions.set(tabId, back.session)
+      this.parked.delete(id)
+      this.sessions.set(tabId, back.live)
     }
     // A transcript read mid-turn closes that turn with a result timed to its last reply. The turn is still running, so its result is left for the live one.
-    const running = back?.session.busy ?? false
+    const running = back?.live.session.busy ?? false
     const shown = running && items.at(-1)?.type === "result" ? items.slice(0, -1) : items
     this.hooks.broadcast({ type: "session.history", tabId, items: shown })
     if (running) this.hooks.broadcast({ type: "session.event", tabId, event: { kind: "status", busy: true } })
@@ -232,14 +240,14 @@ export class Window {
     if (!running) this.sendNextQueued(tabId)
     // A new thread starts with the plugin's prompt. A newer key that took the tab during the send has its
     // own prompt, so this one goes unsaid.
-    if (!sessionId && thread.prompt) await this.send(tabId, thread.prompt).catch((error: Error) => { if (error.message !== MOVED) throw error })
+    if (!sessionId && thread.prompt) await this.send(tabId, thread.prompt).catch((error) => { if (!(error instanceof ThreadMoved)) throw error })
   }
 
   /** Sends a queued message now: into the running turn, or as a turn of its own. */
   async sendQueued(tabId: string, id: string) {
     const queued = this.thread(tabId).queue?.find((message) => message.id === id)
     if (!queued) return
-    const running = this.sessions.get(tabId)
+    const running = this.sessions.get(tabId)?.session
     // An agent that cannot take a message mid-turn keeps it queued until the turn ends.
     if (running?.busy && !this.steers(tabId)) return
     this.removeQueued(tabId, id)
@@ -262,7 +270,7 @@ export class Window {
   private sendNextQueued(tabId: string) {
     const thread = this.thread(tabId)
     const [next, ...rest] = thread.queue ?? []
-    if (!next || thread.queueHeld || this.sessions.get(tabId)?.busy) return
+    if (!next || thread.queueHeld || this.sessions.get(tabId)?.session.busy) return
     this.setQueue(tabId, rest)
     this.send(tabId, next.text, next.images).catch((error) => this.hooks.broadcast({ type: "error", message: "Desk could not send a queued message", detail: errorMessage(error) }))
   }
@@ -273,12 +281,13 @@ export class Window {
 
   /** Asks a tab's turn to stop, and with it the work its agent handed to others. */
   interrupt(tabId: string) {
-    this.hooks.delegations?.stop(tabId)
-    return this.sessions.get(tabId)?.interrupt()
+    const live = this.sessions.get(tabId)
+    live?.handoffs.stop()
+    return live?.session.interrupt()
   }
 
   stopTasks(tabId: string, ids: readonly string[]) {
-    return this.sessions.get(tabId)?.stopTasks?.(ids)
+    return this.sessions.get(tabId)?.session.stopTasks?.(ids)
   }
 
   /** Notes the branch the tab's thread runs on now. A detached HEAD keeps the branch it last ran on. */
@@ -309,16 +318,18 @@ export class Window {
 
   /** Ends a turn that did not stop when asked. Its session closes, and the next message starts a new one on the thread. */
   forceStop(tabId: string) {
-    if (this.sessions.get(tabId)?.forceStop()) this.closeSession(tabId)
+    if (this.sessions.get(tabId)?.session.forceStop()) this.closeSession(tabId)
   }
 
   /** Answers a request in a tab's thread. A request of work handed to another agent goes to that agent. */
   answerPermission(tabId: string, requestId: string, answer: PermissionAnswer) {
-    if (!this.hooks.delegations?.answerPermission(tabId, requestId, answer)) this.sessions.get(tabId)?.answerPermission(requestId, answer)
+    const live = this.sessions.get(tabId)
+    if (live && !live.handoffs.answerPermission(requestId, answer)) live.session.answerPermission(requestId, answer)
   }
 
   answerQuestion(tabId: string, requestId: string, answers: Readonly<Record<string, string>> | undefined) {
-    if (!this.hooks.delegations?.answerQuestion(tabId, requestId, answers)) this.sessions.get(tabId)?.answerQuestion(requestId, answers)
+    const live = this.sessions.get(tabId)
+    if (live && !live.handoffs.answerQuestion(requestId, answers)) live.session.answerQuestion(requestId, answers)
   }
 
   /**
@@ -326,25 +337,24 @@ export class Window {
    * on, out of sight, so switching conversations never stops the agent. An idle session closes.
    */
   private parkSession(tabId: string) {
-    const running = this.sessions.get(tabId)
+    const live = this.sessions.get(tabId)
     const key = this.thread(tabId).key
-    if (!running) return
+    if (!live) return
     this.sessions.delete(tabId)
-    if (running.busy && key) this.parked.set(threadKey(this.tab(tabId).project, key), { tabId, session: running })
-    else running.close()
+    if (live.session.busy && key) this.parked.set(keyedId(this.tab(tabId).project, key), { tabId, live })
+    else close(live)
   }
 
-  closeSession(tabId: string) {
-    this.sessions.get(tabId)?.close()
+  private closeSession(tabId: string) {
+    const live = this.sessions.get(tabId)
+    if (live) close(live)
     this.sessions.delete(tabId)
-    this.hooks.delegations?.drop(tabId)
   }
 
   /** Starts a fresh session in a tab, as /clear asks. The tab keeps its plugin key and its queue, and its thread starts empty. */
   clearThread(tabId: string) {
     this.closeSession(tabId)
-    const { key, queue, queueHeld } = this.thread(tabId)
-    this.setThread(tabId, { ...(key ? { key } : {}), ...(queue ? { queue, queueHeld } : {}) })
+    this.setThread(tabId, startedOver(this.thread(tabId)))
     this.hooks.broadcast({ type: "session.history", tabId, items: [] })
   }
 
@@ -381,15 +391,15 @@ export class Window {
     const { agent, sessionId } = this.started(tabId)
     requireFeature(agent, "rewind", "rewind a thread")
     if (restoreFiles) requireFeature(agent, "restore-files", "restore the files a thread changed")
-    if (this.sessions.get(tabId)?.busy) throw new Error(`Stop ${agent.name} before you rewind the thread.`)
+    if (this.sessions.get(tabId)?.session.busy) throw new Error(`Stop ${agent.name} before you rewind the thread.`)
     // The files go back first, while the transcript still holds the messages that changed them.
-    if (restoreFiles) await this.session(tab).restoreFiles!(messageId)
+    if (restoreFiles) await this.live(tab).session.restoreFiles!(messageId)
     this.closeSession(tabId)
     const rewound = await agent.threads.rewind!(tab.project, sessionId, messageId)
     // The last turn's checkpoints describe work the rewind took back. The next turn starts from the files as they are now.
     const turnTo = await capture(tab.project)
-    const { key, queue, queueHeld, threadStart } = this.thread(tabId)
-    const kept = { ...(key ? { key } : {}), ...(queue ? { queue, queueHeld } : {}), ...(threadStart ? { threadStart } : {}), ...(turnTo ? { turnTo } : {}) }
+    const { threadStart } = this.thread(tabId)
+    const kept = { ...startedOver(this.thread(tabId)), ...(threadStart ? { threadStart } : {}), ...(turnTo ? { turnTo } : {}) }
     // A rewind to the first message leaves nothing to resume, so the next message starts a new session.
     const rewind = !rewound.empty && rewound.resumeAt ? { at: rewound.resumeAt, from: messageId } : undefined
     this.setThread(tabId, rewound.empty ? kept : { ...this.thread(tabId), ...kept, turnFrom: undefined, rewind })
@@ -479,12 +489,6 @@ export class Window {
     return this.tab(tabId).project
   }
 
-  /** A tab's folder and how its thread runs, or nothing for a tab that is gone. */
-  running(tabId: string): { readonly project: string; readonly settings: RunSettings } | undefined {
-    const tab = this.state.tabs.find((found) => found.id === tabId)
-    return tab && { project: tab.project, settings: tab }
-  }
-
   layout(tabId: string): PluginLayout | undefined {
     return this.state.layouts[tabId]
   }
@@ -500,7 +504,7 @@ export class Window {
   }
 
   stop() {
-    for (const session of this.sessions.values()) session.close()
+    for (const live of this.sessions.values()) close(live)
     this.terminals.closeAll()
   }
 
@@ -519,79 +523,70 @@ export class Window {
     return this.state.threads[tabId] ?? {}
   }
 
-  private session(tab: TabInfo) {
-    let found = this.sessions.get(tab.id)
-    if (!found) {
-      // A closed session may still deliver a message. It no longer speaks for the tab, so it is ignored.
-      const key = this.thread(tab.id).key
-      const current = () => this.sessions.get(tab.id) === created
-      // A turn the user stopped, or one that failed, pauses the queue. Any other end sends the next queued message.
-      let pause = false
-      // The message the running turn answers, which names the turn's summary, and the summary being made.
-      let lastMessage: string | undefined
-      let summary: Promise<void> = Promise.resolve()
-      // How the running turn ends, for the plugin that owns the thread.
-      let outcome: TurnOutcome = NO_RESULT
-      const emit = (event: ThreadEvent) => {
-        outcome = outcomeAfter(outcome, event)
-        if (event.kind === "status" && !event.busy) {
-          if (key) this.hooks.turnEnded(tab.id, key, outcome)
-          outcome = NO_RESULT
-        }
-        if (!current()) {
-          // A parked session's turn ended while its thread was away. Nothing shows it, so it closes. Its transcript keeps the turn.
-          if (event.kind === "status" && !event.busy) this.closeParked(created)
-          return
-        }
-        if (event.kind === "context") this.updateThread(tab.id, { context: event.reading })
-        this.hooks.broadcast({ type: "session.event", tabId: tab.id, event })
-        if (event.kind === "item" && event.item.type === "user") lastMessage = event.item.id
-        if (event.kind === "item" && event.item.type === "result") {
-          pause = !!event.item.stopped || event.item.isError
-          if (lastMessage) {
-            summary = this.finishTurn(tab.id, lastMessage, current)
-            this.turnEnds.set(tab.id, summary)
-          }
-        }
-        if (event.kind === "item" && event.item.type === "error") pause = true
-        if (event.kind === "status" && !event.busy) {
-          const paused = pause
-          pause = false
-          // The next queued turn starts from the checkpoint this one ends on, so it waits for it.
-          void summary.then(() => {
-            if (!current()) return
-            if (paused && this.thread(tab.id).queue?.length) this.setQueue(tab.id, this.thread(tab.id).queue!, true)
-            else this.sendNextQueued(tab.id)
-          })
-        }
+  /** A tab's session, opened on the thread's agent when the tab has none. */
+  private live(tab: TabInfo): Live {
+    const found = this.sessions.get(tab.id)
+    if (found) return found
+    const key = this.thread(tab.id).key
+    // A closed session may still deliver a message. It no longer speaks for the tab, so it is ignored.
+    const current = () => this.sessions.get(tab.id) === created
+    const turn = new TurnWatch()
+    // The summary of the turn that ended last, while it is being made.
+    let summary: Promise<void> = Promise.resolve()
+    const emit = (event: ThreadEvent) => {
+      const ended = turn.take(event)
+      if (ended && key) this.hooks.turnEnded(tab.id, key, ended.outcome)
+      if (!current()) {
+        // A parked session's turn ended while its thread was away. Nothing shows it, so it closes. Its transcript keeps the turn.
+        if (ended) this.closeParked(created)
+        return
       }
-      const rewind = this.thread(tab.id).rewind
-      const agent = this.agent(tab)
-      found = agent.open(tab.project, emit, {
-        resume: this.thread(tab.id).sessionId,
-        ...(rewind ? { resumeAt: rewind.at, onResumedAt: () => current() && this.updateThread(tab.id, { rewind: undefined }) } : {}),
-        settings: tab,
-        ...(this.hooks.delegations ? { tools: this.hooks.delegations.server(tab.id) } : {}),
-        onSessionId: (sessionId) => {
-          // The thread belongs to the agent that started it from here on.
-          if (current()) return this.updateThread(tab.id, { sessionId, agent: agent.id })
-          // A parked thread keeps its session under its key, so coming back resumes it.
-          const id = key && threadKey(tab.project, key)
-          const parked = id ? this.state.keyed[id] : undefined
-          if (id && parked) this.persist({ keyed: { ...this.state.keyed, [id]: { ...parked, sessionId, agent: agent.id } } })
-        },
+      if (event.kind === "context") this.updateThread(tab.id, { context: event.reading })
+      this.hooks.broadcast({ type: "session.event", tabId: tab.id, event })
+      if (event.kind === "item" && event.item.type === "result" && turn.message) {
+        summary = this.finishTurn(tab.id, turn.message, current)
+        this.turnEnds.set(tab.id, summary)
+      }
+      if (!ended) return
+      // The next queued turn starts from the checkpoint this one ends on, so it waits for it.
+      void summary.then(() => {
+        if (!current()) return
+        if (ended.held && this.thread(tab.id).queue?.length) this.setQueue(tab.id, this.thread(tab.id).queue!, true)
+        else this.sendNextQueued(tab.id)
       })
-      const created = found
-      this.sessions.set(tab.id, created)
     }
-    return found
+    const rewind = this.thread(tab.id).rewind
+    const agent = this.agent(tab)
+    const handoffs = this.hooks.delegations.open({
+      project: tab.project,
+      settings: () => this.state.tabs.find((open) => open.id === tab.id) ?? tab,
+      // A task's events show only while its session's thread does.
+      emit: (event) => current() && this.hooks.broadcast({ type: "session.event", tabId: tab.id, event }),
+    })
+    const session = agent.open(tab.project, emit, {
+      resume: this.thread(tab.id).sessionId,
+      ...(rewind ? { resumeAt: rewind.at, onResumedAt: () => current() && this.updateThread(tab.id, { rewind: undefined }) } : {}),
+      settings: tab,
+      tools: handoffs.tools,
+      onSessionId: (sessionId) => {
+        // The thread belongs to the agent that started it from here on.
+        if (current()) return this.updateThread(tab.id, { sessionId, agent: agent.id })
+        // A parked thread keeps its session under its key, so coming back resumes it.
+        const id = key && keyedId(tab.project, key)
+        const parked = id ? this.state.keyed[id] : undefined
+        if (id && parked) this.persist({ keyed: { ...this.state.keyed, [id]: { ...parked, sessionId, agent: agent.id } } })
+      },
+    })
+    const created: Live = { session, handoffs }
+    this.sessions.set(tab.id, created)
+    return created
   }
 
-  private closeParked(session: AgentSession) {
-    for (const [key, parked] of this.parked) {
-      if (parked.session !== session) continue
-      this.parked.delete(key)
-      session.close()
+  private closeParked(live: Live) {
+    for (const [id, parked] of this.parked) {
+      if (parked.live !== live) continue
+      this.parked.delete(id)
+      close(live)
     }
   }
 
@@ -670,12 +665,16 @@ export class Window {
   }
 }
 
-/** Thrown by `send` when a plugin moved the tab to another thread before the message went out. */
-const MOVED = "The tab moved to another thread before the message was sent."
+/** Whether two tabs on one agent run the same way, so a save can skip reconfiguring a session. */
+const sameRunSettings = (a: RunSettings, b: RunSettings) => a.model === b.model && a.effort === b.effort && !!a.fast === !!b.fast && a.permissionMode === b.permissionMode
 
-/** Whether two tabs run the same way, so a save can skip reconfiguring a session. */
-export const sameRunSettings = (a: RunSettings, b: RunSettings) =>
-  a.agent === b.agent && a.model === b.model && a.effort === b.effort && !!a.fast === !!b.fast && a.permissionMode === b.permissionMode
+const close = ({ session, handoffs }: Live) => {
+  session.close()
+  handoffs.close()
+}
+
+/** What a thread keeps when it starts over: its plugin key and the messages that wait. */
+const startedOver = ({ key, queue, queueHeld }: TabThread): TabThread => ({ ...(key ? { key } : {}), ...(queue ? { queue, queueHeld } : {}) })
 
 /** Tells the app which session a tab's thread runs in, and on which agent. A thread that has not started has neither. */
 const sessionMessage = (tabId: string, thread: TabThread): CoreMessage => ({ type: "thread.session", tabId, ...(thread.sessionId ? { sessionId: thread.sessionId, ...(thread.agent ? { agent: thread.agent } : {}) } : {}) })
@@ -683,10 +682,7 @@ const sessionMessage = (tabId: string, thread: TabThread): CoreMessage => ({ typ
 /** Two agents may give their sessions the same id, so a thread is told apart by both. */
 const threadRef = (agent: AgentId, sessionId: string) => `${agent}\n${sessionId}`
 
-/** Keys belong to a project, so two projects' plugins can use the same key. The plugin names its own keys. */
-const threadKey = (project: string, key: string) => `${project}\n${key}`
-
-/** How many closed tabs ⌘⇧T can bring back. */
-const CLOSED_TABS = 10
+/** What names a plugin's thread among every project's: its project and its key. Two projects' plugins can use the same key. */
+const keyedId = (project: string, key: string) => `${project}\n${key}`
 
 const changesItem = (lastMessage: string, files: readonly ChangedFile[]): ThreadItem => ({ type: "changes", id: `changes:${lastMessage}`, files })

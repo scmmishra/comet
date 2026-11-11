@@ -5,7 +5,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { claudeTranscript, fakeAgent, gitRepo, tempFolder, type TranscriptEntry, until, useTempHome } from "./test-support"
 import { Agents } from "./agents/registry"
-import { outcomeAfter, Window } from "./window"
+import { Delegations } from "./delegate/delegations"
+import { Window } from "./window"
 
 useTempHome()
 
@@ -17,9 +18,11 @@ function open(state: object) {
   writeFileSync(join(process.env.DESK_HOME!, "window.json"), JSON.stringify(state))
   const sent: CoreMessage[] = []
   const shown: [string, string | undefined][] = []
+  const agents = new Agents(() => {}, { compactIdle: () => false })
   const window = new Window({
     broadcast: (message) => sent.push(message),
-    agents: new Agents(() => {}, { compactIdle: () => false }),
+    agents,
+    delegations: new Delegations(agents, () => "http://127.0.0.1:0/mcp"),
     tabClosed: () => {},
     turnEnded: () => {},
     threadShown: (tabId, threadKey) => shown.push([tabId, threadKey]),
@@ -151,17 +154,6 @@ test("keeps a closed tab's plugin thread under its key, and gives it back when t
   expect(saved().threads.a).toEqual({ key: "conv-1", sessionId: "s1" })
 })
 
-test("tells how a turn ended from its result, and counts a turn with an error or no result as failed", () => {
-  const result = (fields: { isError?: boolean; stopped?: boolean }) => ({ kind: "item" as const, item: { type: "result" as const, id: "r", durationMs: 1, isError: false, ...fields } })
-  const busy = { kind: "status" as const, busy: true }
-  expect(outcomeAfter("error", busy)).toBe("error")
-  expect(outcomeAfter("error", result({}))).toBe("done")
-  expect(outcomeAfter("error", result({ stopped: true }))).toBe("interrupted")
-  expect(outcomeAfter("error", result({ isError: true }))).toBe("error")
-  expect(outcomeAfter("done", { kind: "item", item: { type: "error", id: "e", message: "lost" } })).toBe("error")
-  expect(outcomeAfter("done", busy)).toBe("done")
-})
-
 /**
  * A project with one Claude transcript in it, kept in a temporary Claude config folder. The project's
  * path is resolved, as Claude Code names its folder after the real path.
@@ -247,9 +239,11 @@ function openWithAgents(state: object) {
   writeFileSync(join(process.env.DESK_HOME!, "window.json"), JSON.stringify(state))
   const sent: CoreMessage[] = []
   const ended: [string, string, string][] = []
+  const agents = new Agents(() => {}, { compactIdle: () => false }, { claude: claude.make, codex: codex.make })
   const window = new Window({
     broadcast: (message) => sent.push(message),
-    agents: new Agents(() => {}, { compactIdle: () => false }, { claude: claude.make, codex: codex.make }),
+    agents,
+    delegations: new Delegations(agents, () => "http://127.0.0.1:0/mcp"),
     tabClosed: () => {},
     turnEnded: (tabId, threadKey, outcome) => ended.push([tabId, threadKey, outcome]),
     threadShown: () => {},

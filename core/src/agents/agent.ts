@@ -3,9 +3,8 @@ import type { AgentFeature, AgentId, AgentInfo, ContextReading, ImageAttachment,
 /**
  * What Desk needs from a coding agent, such as Claude Code or Codex. An agent runs conversations, keeps
  * their transcripts, and says who is signed in and which models they may use. The rest of the core talks
- * to agents only through these types, so adding an agent means writing one of these and listing it in
- * `registry.ts`. Each agent turns its own messages into Desk's thread events, so nothing outside its
- * folder reads them.
+ * to agents only through these types. Each agent turns its own messages into Desk's thread events, so
+ * nothing outside its folder reads them. AGENTS.md lists the steps to add one.
  */
 export interface Agent {
   readonly id: AgentId
@@ -15,7 +14,7 @@ export interface Agent {
   readonly features: readonly AgentFeature[]
   /**
    * Reads whether the agent is installed and signed in, its version and its models, and reports each
-   * through the host as it learns it. A failed read reports what to do about it and does not throw.
+   * through the host as it learns it. What it throws shows as the agent's problem.
    */
   inspect(): Promise<void>
   /** Reads the account's plan usage again and reports it through the host. */
