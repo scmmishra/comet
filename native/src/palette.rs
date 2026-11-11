@@ -128,9 +128,11 @@ impl Desk {
         for page in &pages {
             self.load_page(page);
         }
-        // Reading what the plugins offer starts them, so it waits for the palette.
+        // Reading what the plugins offer starts them, so it waits for the palette. A search from the root finds
+        // setups too, so they are read now, not only when their list opens.
         if let Some(project) = self.active_project() {
-            self.core.send(&ClientMessage::ProjectGet { project, part: "plugins".into() });
+            self.core.send(&ClientMessage::ProjectGet { project: project.clone(), part: "plugins".into() });
+            self.core.send(&ClientMessage::SetupsGet { project });
         }
         self.palette = Palette { open: true, start: pages.len(), pages, ..Palette::default() };
     }
@@ -139,15 +141,10 @@ impl Desk {
         self.workspace.active_tab().map(|t| t.project.clone()).or_else(|| self.workspace.recent.first().cloned())
     }
 
+    /// Asks the core for what a list shows, when the palette does not have it yet.
     fn load_page(&mut self, page: &Page) {
-        match page {
-            Page::Threads(project) => self.core.send(&ClientMessage::ProjectGet { project: project.clone(), part: "threads".into() }),
-            Page::Setups => {
-                if let Some(project) = self.active_project() {
-                    self.core.send(&ClientMessage::SetupsGet { project });
-                }
-            }
-            _ => {}
+        if let Page::Threads(project) = page {
+            self.core.send(&ClientMessage::ProjectGet { project: project.clone(), part: "threads".into() });
         }
     }
 
@@ -196,6 +193,27 @@ impl Desk {
                 entry
             }).collect()
         };
+        // Every project's setups, each opening in its own project, which the row names when it is not the active one.
+        let active = self.active_project();
+        let setups = || -> Vec<Entry> {
+            self.plugins
+                .setups
+                .iter()
+                .map(|setup| {
+                    let mut entry = Entry::new("Setups", setup.title.clone(), Action::Setup(setup.project.clone(), setup.id.clone(), setup.title.clone()));
+                    entry.detail = (active.as_ref() != Some(&setup.project)).then(|| self.account.project_label(&setup.project));
+                    entry.project = Some(setup.project.clone());
+                    entry
+                })
+                .collect()
+        };
+        let panels = || -> Vec<Entry> {
+            self.offered().map(|o| o.panels.iter().map(|p| {
+                let mut entry = Entry::new("Panels", p.title.clone(), Action::Panel(p.id.clone()));
+                entry.icon = Some(&crate::icons::PANEL);
+                entry
+            }).collect()).unwrap_or_default()
+        };
         match self.palette.pages.last() {
             Some(Page::Threads(project)) => threads(project),
             Some(Page::Themes) => themes(),
@@ -217,25 +235,12 @@ impl Desk {
             },
             Some(Page::NewSessionIn) => projects(Action::NewSessionIn),
             Some(Page::SearchThreadsIn) => projects(|p| Action::Open(Page::Threads(p))),
-            Some(Page::Panels) => self.offered().map(|o| o.panels.iter().map(|p| {
-                let mut entry = Entry::new("Panels", p.title.clone(), Action::Panel(p.id.clone()));
-                entry.icon = Some(&crate::icons::PANEL);
-                entry
-            }).collect()).unwrap_or_default(),
+            Some(Page::Panels) => panels(),
             Some(Page::Input(id, title, _)) => {
                 let query = self.palette.query.text.trim().to_owned();
                 if query.is_empty() { Vec::new() } else { vec![Entry::new(title, query.clone(), Action::Command(id.clone(), Some(query)))] }
             }
-            Some(Page::Setups) => self
-                .plugins
-                .setups
-                .iter()
-                .map(|setup| {
-                    let mut entry = Entry::new(&self.account.project_label(&setup.project), setup.title.clone(), Action::Setup(setup.project.clone(), setup.id.clone(), setup.title.clone()));
-                    entry.project = Some(setup.project.clone());
-                    entry
-                })
-                .collect(),
+            Some(Page::Setups) => setups(),
             None => {
                 let project = self.active_project();
                 let action = |title: &str, icon: &'static rune::Icon, shortcut: Option<&'static [&'static str]>, action: Action| {
@@ -286,6 +291,8 @@ impl Desk {
                     root.extend(themes());
                     root.extend(settings());
                     root.extend(projects(Action::NewSessionIn));
+                    root.extend(setups());
+                    root.extend(panels());
                     root.extend(recent);
                 }
                 root
@@ -559,6 +566,18 @@ mod tests {
         assert_eq!(titles(&s), ["Speed up the build"]);
         s.palette.query = TextEdit::new("api");
         assert!(titles(&s).contains(&"api".to_owned()), "a search from the root finds projects too");
+    }
+
+    #[test]
+    fn a_search_from_the_root_finds_setups_which_the_palette_reads_as_it_opens() {
+        let mut s = desk();
+        s.show_palette(Vec::new());
+        assert!(s.core.sent().iter().any(|m| m["type"] == "setups.get"), "setups are read with the palette, not only with their list");
+        let setup = |project: &str, title: &str| crate::protocol::ProjectSetup { project: project.into(), id: title.to_lowercase(), title: title.into() };
+        s.plugins.setups = vec![setup("/code/web", "Support inbox"), setup("/code/api", "Support triage")];
+        s.palette.query = TextEdit::new("support");
+        let found: Vec<(String, Option<String>)> = s.matches().into_iter().map(|e| (e.title, e.detail)).collect();
+        assert_eq!(found, [("Support inbox".into(), None), ("Support triage".into(), Some("api".into()))], "another project's setup names its project");
     }
 
     #[test]
