@@ -51,9 +51,8 @@ export interface AgentHost {
 
 export type Emit = (event: ThreadEvent) => void
 
-/** Tools Desk offers a session over MCP, such as handing work to another agent. The agent adds the server to the session under `name`. */
+/** Tools Desk offers a session over MCP, such as handing work to another agent. The agent adds the server to the session under `SERVER_NAME`. */
 export interface ToolServer {
-  readonly name: string
   readonly url: string
   /** The Authorization header that names the session to Desk. */
   readonly authorization: string
@@ -88,8 +87,8 @@ export interface AgentSession {
   readonly busy: boolean
   /** Starts a turn with a message. */
   send(text: string, images?: readonly ImageAttachment[]): void
-  /** Sends a message into the running turn. An agent without `steer` starts a turn with it once the running one ends. */
-  steer(text: string, images?: readonly ImageAttachment[]): void
+  /** Sends a message into the running turn. Only an agent with `steer` has it. */
+  steer?(text: string, images?: readonly ImageAttachment[]): void
   /** Asks the turn to stop. A turn that has not stopped in time is reported as unresponsive. */
   interrupt(): Promise<void>
   /** Ends a turn that did not stop when asked, as stopped. Says whether there was a stop to force. */
@@ -98,8 +97,8 @@ export interface AgentSession {
   configure(settings: RunSettings): Promise<void>
   answerPermission(requestId: string, answer: PermissionAnswer): void
   answerQuestion(requestId: string, answers: Readonly<Record<string, string>> | undefined): void
-  /** Stops commands running in the background. */
-  stopTasks(ids: readonly string[]): Promise<void>
+  /** Stops commands running in the background. An agent that shows none has no such method. */
+  stopTasks?(ids: readonly string[]): Promise<void>
   /** Restores the files the agent's tools changed from a message on. Only an agent with `restore-files` has it. */
   restoreFiles?(messageId: string): Promise<void>
   close(): void

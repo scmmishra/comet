@@ -42,7 +42,7 @@ async function started(s: ReturnType<typeof setup>) {
 const item = (method: "item/started" | "item/completed", found: object) => [method, { threadId: THREAD, turnId: TURN, item: found }] as const
 
 test("runs a whole turn: the thread, the message with its settings, and every item Codex reports", async () => {
-  const tools = { name: "desk", url: "http://127.0.0.1:4000/mcp", authorization: "Bearer t", instructions: "Hand work to other agents." }
+  const tools = { url: "http://127.0.0.1:4000/mcp", authorization: "Bearer t", instructions: "Hand work to other agents." }
   const s = setup({ settings: { agent: "codex", model: "gpt-6-luna", effort: "high", fast: true, permissionMode: "acceptEdits" }, tools })
   s.session.send("Fix the bug", [{ mediaType: "image/png", data: "iVBOR" }])
   const message = s.items()[0]!

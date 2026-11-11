@@ -2,6 +2,7 @@ import type { SDKAPIRetryMessage, SDKAssistantMessage, SDKMessage, SDKMessageOri
 import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, type ThreadItem } from "@desk/protocol"
 import { cutOutput, relativeTo, thought } from "../../steps"
 import { deskToolSummary } from "../../delegate/tools"
+import { modelLabel } from "./models"
 import { deskTool, toolStep } from "./steps"
 
 /** What Claude Code writes into a transcript when the user stops a turn, with or without "for tool use". */
@@ -34,7 +35,7 @@ export class ThreadMapper {
   map(message: SDKMessage, at?: number): ThreadEvent[] {
     switch (message.type) {
       case "system":
-        if (message.subtype === "init") return [{ kind: "init", model: message.model }]
+        if (message.subtype === "init") return [{ kind: "init", model: modelLabel(message.model) }]
         // A command such as /context answers with text of its own, not a reply from Claude.
         if (message.subtype === "local_command_output") return [item({ type: "text", id: message.uuid, text: message.content, done: true, ...(at !== undefined ? { at } : {}) })]
         if (message.subtype === "status") return this.mapCompactionStatus(message)

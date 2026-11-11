@@ -10,7 +10,7 @@ import { acpThreads } from "./thread-record"
 import { acpToolReader } from "./tools"
 
 const SETTINGS: RunSettings = { agent: "antigravity", model: "claude-sonnet", effort: "low", permissionMode: "bypassPermissions" }
-const TOOLS = { name: "desk", url: "http://127.0.0.1:9/mcp", authorization: "Bearer t", instructions: "Hand work to other agents." }
+const TOOLS = { url: "http://127.0.0.1:9/mcp", authorization: "Bearer t", instructions: "Hand work to other agents." }
 
 /** A session on a fake agent, with what it emitted, the session ids it reported and what its flavor heard. */
 function start(options: Partial<SessionOptions> = {}, handlers: Parameters<typeof fakeAcpAgent>[0] = {}) {

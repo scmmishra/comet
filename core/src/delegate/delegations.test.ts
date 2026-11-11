@@ -38,7 +38,7 @@ async function delegations(mode: PermissionMode = "acceptEdits", codexReading: P
 
 test("gives each tab a server under its own token, and knows no other caller", async () => {
   const { service, server } = await delegations()
-  expect(server).toMatchObject({ name: "desk", url: "http://127.0.0.1:4000/mcp" })
+  expect(server).toMatchObject({ url: "http://127.0.0.1:4000/mcp" })
   expect(server.authorization).toMatch(/^Bearer .{40,}$/)
   expect(service.server("a").authorization).toBe(server.authorization)
   expect(service.server("b").authorization).not.toBe(server.authorization)

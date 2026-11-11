@@ -2,8 +2,10 @@ import type { TurnOutcome } from "@desk/plugin"
 import { followUpFor, type AgentId, type ChangedFile, type CoreMessage, type FileChange, type FollowUp, type ImageAttachment, type PermissionAnswer, type PluginLayout, type QueuedMessage, type ReviewScope, type RunSettings, type TabInfo, type ThreadEvent, type ThreadItem, type ThreadSummary } from "@desk/protocol"
 import { requireFeature, type Agent, type AgentSession } from "./agents/agent"
 import type { Agents } from "./agents/registry"
+import { resultMessage } from "./agents/turn-items"
 import type { Delegations } from "./delegate/delegations"
 import { branchBase, capture, changesSince, checkpointChanges, headTree, keepCheckpoints } from "./checkpoints"
+import { errorMessage } from "./errors"
 import { git } from "./git"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { currentBranch } from "./space"
@@ -150,7 +152,7 @@ export class Window {
         this.sessions
           .get(tab.id)
           ?.configure(tab)
-          .catch((error) => this.hooks.broadcast({ type: "error", message: "Desk could not change how the thread runs", detail: message(error) }))
+          .catch((error) => this.hooks.broadcast({ type: "error", message: "Desk could not change how the thread runs", detail: errorMessage(error) }))
     }
     for (const id of before.keys()) {
       if (tabs.some((tab) => tab.id === id)) continue
@@ -170,7 +172,7 @@ export class Window {
     const running = this.sessions.get(tabId)
     if (running?.busy) {
       // An agent that cannot take a message mid-turn queues it, whatever the user chose.
-      if (followUpFor(text, followUp) === "steer" && this.agent(this.tab(tabId)).features.includes("steer")) return running.steer(text, images)
+      if (followUpFor(text, followUp) === "steer" && this.steers(tabId)) return running.steer!(text, images)
       return this.setQueue(tabId, [...(this.thread(tabId).queue ?? []), { id: crypto.randomUUID(), text, ...(images.length ? { images } : {}) }])
     }
     const tab = this.tab(tabId)
@@ -237,10 +239,12 @@ export class Window {
   async sendQueued(tabId: string, id: string) {
     const queued = this.thread(tabId).queue?.find((message) => message.id === id)
     if (!queued) return
+    const running = this.sessions.get(tabId)
+    // An agent that cannot take a message mid-turn keeps it queued until the turn ends.
+    if (running?.busy && !this.steers(tabId)) return
     this.removeQueued(tabId, id)
     // Send now is asked for outright, so even a slash command goes into the running turn.
-    const running = this.sessions.get(tabId)
-    if (running?.busy) return running.steer(queued.text, queued.images)
+    if (running?.busy) return running.steer!(queued.text, queued.images)
     await this.send(tabId, queued.text, queued.images)
   }
 
@@ -260,7 +264,7 @@ export class Window {
     const [next, ...rest] = thread.queue ?? []
     if (!next || thread.queueHeld || this.sessions.get(tabId)?.busy) return
     this.setQueue(tabId, rest)
-    this.send(tabId, next.text, next.images).catch((error) => this.hooks.broadcast({ type: "error", message: "Desk could not send a queued message", detail: message(error) }))
+    this.send(tabId, next.text, next.images).catch((error) => this.hooks.broadcast({ type: "error", message: "Desk could not send a queued message", detail: errorMessage(error) }))
   }
 
   private setQueue(tabId: string, queue: readonly QueuedMessage[], held = this.thread(tabId).queueHeld ?? false) {
@@ -274,7 +278,7 @@ export class Window {
   }
 
   stopTasks(tabId: string, ids: readonly string[]) {
-    return this.sessions.get(tabId)?.stopTasks(ids)
+    return this.sessions.get(tabId)?.stopTasks?.(ids)
   }
 
   /** Notes the branch the tab's thread runs on now. A detached HEAD keeps the branch it last ran on. */
@@ -409,6 +413,11 @@ export class Window {
     if (!sessionId) throw new Error("The thread has not started yet.")
     const tab = this.tab(tabId)
     return { agent: this.agent(tab), project: tab.project, sessionId }
+  }
+
+  /** Whether a tab's agent takes a message into a running turn. */
+  private steers(tabId: string) {
+    return this.agent(this.tab(tabId)).features.includes("steer")
   }
 
   /** The agent that runs a tab's thread: the one the thread started on, else the one the tab names. */
@@ -610,14 +619,14 @@ export class Window {
   /** A restored thread, with each turn's saved summary after its result. A thread that cannot be read shows empty, and the user is told. */
   private async history(tab: TabInfo, sessionId: string): Promise<ThreadItem[]> {
     const items = await this.agent(tab).threads.history(tab.project, sessionId).catch((error) => {
-      this.hooks.broadcast({ type: "error", message: `Desk could not read the thread in “${tab.title}”`, detail: message(error) })
+      this.hooks.broadcast({ type: "error", message: `Desk could not read the thread in “${tab.title}”`, detail: errorMessage(error) })
       return []
     })
     const { turnChanges: saved = {}, rewind } = this.thread(tab.id)
     const cut = rewind ? items.findIndex((item) => item.id === rewind.from) : -1
     return (cut < 0 ? items : items.slice(0, cut)).flatMap((item) => {
-      const files = item.type === "result" ? saved[item.id.slice(RESULT_PREFIX.length)] : undefined
-      return files ? [item, changesItem(item.id.slice(RESULT_PREFIX.length), files)] : [item]
+      const files = item.type === "result" ? saved[resultMessage(item.id)] : undefined
+      return files ? [item, changesItem(resultMessage(item.id), files)] : [item]
     })
   }
 
@@ -677,12 +686,7 @@ const threadRef = (agent: AgentId, sessionId: string) => `${agent}\n${sessionId}
 /** Keys belong to a project, so two projects' plugins can use the same key. The plugin names its own keys. */
 const threadKey = (project: string, key: string) => `${project}\n${key}`
 
-const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
-
 /** How many closed tabs ⌘⇧T can bring back. */
 const CLOSED_TABS = 10
-
-/** A restored turn's result is named after the message it answers: `result:<message id>`. */
-const RESULT_PREFIX = "result:"
 
 const changesItem = (lastMessage: string, files: readonly ChangedFile[]): ThreadItem => ({ type: "changes", id: `changes:${lastMessage}`, files })

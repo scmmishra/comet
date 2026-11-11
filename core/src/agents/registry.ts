@@ -1,4 +1,5 @@
 import { AGENTS, type AgentId, type AgentInfo, type CoreMessage, type Skill } from "@desk/protocol"
+import { errorMessage } from "../errors"
 import type { Agent, AgentHost, AgentReading } from "./agent"
 import { antigravityAgent } from "./antigravity"
 import { claudeAgent } from "./claude"
@@ -110,7 +111,7 @@ export class Agents {
 
   /** An agent that throws while it is read says so in its own row, and the others still show. */
   private async inspect(agent: Agent) {
-    await agent.inspect().catch((error) => this.learn(agent.id, { state: "signed-out", problem: error instanceof Error ? error.message : String(error) }))
+    await agent.inspect().catch((error) => this.learn(agent.id, { state: "signed-out", problem: errorMessage(error) }))
   }
 
   private learn(id: AgentId, reading: AgentReading) {

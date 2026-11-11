@@ -1,3 +1,4 @@
+import { errorMessage } from "../../errors"
 import { whenAborted } from "../abort"
 import { AcpConnection } from "../acp/connection"
 import { CANCELLED } from "../acp/permissions"
@@ -61,7 +62,7 @@ export async function signInWithGoogle(process: Process, options: SignInOptions)
   try {
     await Promise.race([signedIn, timedOut, whenAborted(options.signal)])
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = errorMessage(error)
     throw message.includes(SUBSCRIPTION_REQUIRED) ? new Error("This Google account has no plan that includes Antigravity.") : error
   } finally {
     clearTimeout(timer)

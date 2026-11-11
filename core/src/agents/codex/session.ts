@@ -1,6 +1,9 @@
-import type { ImageAttachment, PermissionAnswer, RunSettings, ThreadItem } from "@desk/protocol"
+import type { ImageAttachment, PermissionAnswer, RunSettings } from "@desk/protocol"
+import { SERVER_NAME } from "../../delegate/tools"
 import type { AgentSession, Emit, SessionOptions, ToolServer } from "../agent"
+import { Requests } from "../requests"
 import { Stop } from "../stopping"
+import { errorItem, forcedStop, resultId, userItem } from "../turn-items"
 import { turnError, turnResult } from "./history"
 import { userInput } from "./input"
 import { changedPaths, threadItems } from "./items"
@@ -42,7 +45,7 @@ class Turn {
   }
 }
 
-/** A request waiting for the user, with what answers Codex and the request's JSON-RPC id, when known. */
+/** A request waiting for the user, with what answers Codex and the request's JSON-RPC id. */
 type WaitingRequest = OpenRequest & { readonly resolve: (reply: unknown) => void; readonly rpcId: RequestId }
 
 /**
@@ -60,13 +63,13 @@ export class CodexSession implements AgentSession, ThreadOwner {
   /** Releases the thread, and the threads of Codex's own agents, from this session. */
   private releases: (() => void)[] = []
   private children = new Set<string>()
+  /** The running turn, from its message until its result. */
   private turn?: Turn
-  private running = false
   private stop: Stop
   private settings: RunSettings
   /** The model Desk last told the tab runs, by name. */
   private announced?: string
-  private requests = new Map<string, WaitingRequest>()
+  private requests: Requests<unknown, WaitingRequest>
   /** The paths of each file change Codex reported, by item id, for the request to apply it. */
   private files = new Map<string, readonly string[]>()
 
@@ -80,10 +83,11 @@ export class CodexSession implements AgentSession, ThreadOwner {
     this.threadId = options.resume
     this.settings = options.settings
     this.stop = new Stop(emit)
+    this.requests = new Requests(emit)
   }
 
   get busy() {
-    return this.running
+    return this.turn !== undefined
   }
 
   /** Codex takes the model, effort and permissions with each turn, so the next turn runs with these. */
@@ -94,15 +98,15 @@ export class CodexSession implements AgentSession, ThreadOwner {
   /** Starts a turn with a message. Desk names the message, and Codex keeps the name, so the item has the same id live and restored. */
   send(text: string, images: readonly ImageAttachment[] = []) {
     const id = crypto.randomUUID()
-    this.emit({ kind: "item", item: { type: "user", id, text, ...(images.length ? { images } : {}), at: Date.now() } })
+    this.emit({ kind: "item", item: userItem(id, text, images) })
     this.run(id, text, images)
   }
 
   /** Sends a message into the running turn, once it has started. A turn that ends before the message lands takes it as its next turn instead. */
   steer(text: string, images: readonly ImageAttachment[] = []) {
-    if (!this.running || !this.turn) return this.send(text, images)
+    if (!this.turn) return this.send(text, images)
     const id = crypto.randomUUID()
-    this.emit({ kind: "item", item: { type: "user", id, text, ...(images.length ? { images } : {}), at: Date.now(), steered: true } })
+    this.emit({ kind: "item", item: userItem(id, text, images, true) })
     void this.steerInto(this.turn, id, text, images)
   }
 
@@ -115,26 +119,22 @@ export class CodexSession implements AgentSession, ThreadOwner {
     await this.server.request("turn/interrupt", { threadId: this.threadId, turnId })
   }
 
-  /** Ends a turn that did not stop when asked, as stopped. The window then closes the session. */
   forceStop(): boolean {
     if (!this.stop.pending) return false
-    this.emit({ kind: "item", item: { type: "result", id: `result:forced-${Date.now()}`, durationMs: 0, isError: false, stopped: true } })
+    this.emit({ kind: "item", item: forcedStop() })
     this.endTurn()
     return true
   }
 
   answerPermission(requestId: string, answer: PermissionAnswer) {
     const request = this.requests.get(requestId)
-    if (request && asksApproval(request)) this.respond(request, request.reply(answer))
+    if (request && asksApproval(request)) this.requests.settle(request, request.reply(answer))
   }
 
   answerQuestion(requestId: string, answers: Readonly<Record<string, string>> | undefined) {
     const request = this.requests.get(requestId)
-    if (request && !asksApproval(request)) this.respond(request, request.reply(answers))
+    if (request && !asksApproval(request)) this.requests.settle(request, request.reply(answers))
   }
-
-  /** Desk shows no background commands for Codex, so there are none to stop. */
-  async stopTasks() {}
 
   /**
    * Declines every open request and stops a running turn, since the app-server runs on after the tab
@@ -142,7 +142,7 @@ export class CodexSession implements AgentSession, ThreadOwner {
    */
   close() {
     this.dismissRequests()
-    const turnId = this.running ? this.turn?.id : undefined
+    const turnId = this.turn?.id
     if (turnId && this.threadId) void this.server.request("turn/interrupt", { threadId: this.threadId, turnId }).catch(() => undefined)
     this.stop.clear()
     this.turn?.end()
@@ -178,10 +178,7 @@ export class CodexSession implements AgentSession, ThreadOwner {
     if (method === ELICITATION && fromDesk(params as unknown as Elicitation)) return Promise.resolve(elicitationReply(params as unknown as Elicitation, "allow"))
     const open = openRequest(method, params, rpcId, (itemId) => this.files.get(itemId))
     if (!open) return undefined
-    return new Promise((resolve) => {
-      this.requests.set(open.item.requestId, { ...open, resolve, rpcId })
-      this.emit({ kind: "item", item: open.item })
-    })
+    return new Promise((resolve) => this.requests.add({ ...open, resolve, rpcId }))
   }
 
   /** The app-server ended, and the thread with it. A running turn fails, and the next message loads the thread again. */
@@ -189,14 +186,13 @@ export class CodexSession implements AgentSession, ThreadOwner {
     this.loading = undefined
     this.releases = []
     this.children.clear()
-    if (this.running) this.fail(error)
+    if (this.turn) this.fail(error)
     else this.dismissRequests()
   }
 
   private run(message: string, text: string, images: readonly ImageAttachment[]) {
-    this.running = true
-    this.emit({ kind: "status", busy: true })
     const turn = (this.turn = new Turn(message))
+    this.emit({ kind: "status", busy: true })
     void this.startTurn(turn, text, images).catch((error) => this.turn === turn && this.fail(error))
   }
 
@@ -224,9 +220,9 @@ export class CodexSession implements AgentSession, ThreadOwner {
       if (turnId === undefined || !this.threadId) throw new Error("The turn ended before the message joined it.")
       await this.server.request("turn/steer", { threadId: this.threadId, expectedTurnId: turnId, clientUserMessageId: message, input: userInput(text, images) })
     } catch (error) {
-      if (!this.running) return this.run(message, text, images)
-      if (this.turn && this.turn !== turn) return void this.steerInto(this.turn, message, text, images)
-      this.emit({ kind: "item", item: { type: "error", id: `error-${Date.now()}`, message: errorMessage(error) } })
+      if (!this.turn) return this.run(message, text, images)
+      if (this.turn !== turn) return void this.steerInto(this.turn, message, text, images)
+      this.emit({ kind: "item", item: errorItem(error) })
     }
   }
 
@@ -304,8 +300,8 @@ export class CodexSession implements AgentSession, ThreadOwner {
 
   /** Codex settled a request itself, such as when its reviewer answered. The request leaves the thread. */
   private settled(rpcId: RequestId) {
-    const request = [...this.requests.values()].find((found) => found.rpcId === rpcId)
-    if (request) this.respond(request, request.dismissed)
+    const request = this.requests.find((found) => found.rpcId === rpcId)
+    if (request) this.requests.settle(request, request.dismissed)
   }
 
   /** The turn ended. Requests it left open are over, a failed turn shows its error, and its result closes it. */
@@ -314,7 +310,7 @@ export class CodexSession implements AgentSession, ThreadOwner {
     if (!turn || (turn.id !== undefined && turn.id !== ended.id)) return
     this.dismissRequests()
     if (ended.status === "failed") this.emit({ kind: "item", item: turnError(ended) })
-    this.emit({ kind: "item", item: turnResult(ended, `result:${turn.message}`, this.stop.pending) })
+    this.emit({ kind: "item", item: turnResult(ended, resultId(turn.message), this.stop.pending) })
     this.endTurn()
   }
 
@@ -322,34 +318,22 @@ export class CodexSession implements AgentSession, ThreadOwner {
     this.stop.clear()
     this.turn?.end()
     this.turn = undefined
-    this.running = false
     this.emit({ kind: "status", busy: false })
   }
 
-  /** Ends the turn after an error, which shows in the thread. */
   private fail(error: unknown) {
     this.dismissRequests()
-    this.emit({ kind: "item", item: { type: "error", id: `error-${Date.now()}`, message: errorMessage(error) } })
+    this.emit({ kind: "item", item: errorItem(error) })
     this.endTurn()
   }
 
   private dismissRequests() {
-    for (const request of [...this.requests.values()]) this.respond(request, request.dismissed)
-  }
-
-  /** Closes a request once, so its item leaves the thread, and gives Codex the reply. */
-  private respond(request: WaitingRequest, reply: unknown) {
-    if (this.requests.get(request.item.requestId) !== request) return
-    this.requests.delete(request.item.requestId)
-    this.emit({ kind: "item", item: { ...request.item, answered: true } as ThreadItem })
-    request.resolve(reply)
+    this.requests.settleAll((request) => request.dismissed)
   }
 }
 
 /** Desk's tools as an MCP server Codex connects to over HTTP, with what to tell the model about them. */
 const toolServer = (tools: ToolServer) => ({
-  config: { [`mcp_servers.${tools.name}`]: { url: tools.url, http_headers: { Authorization: tools.authorization }, tool_timeout_sec: TOOL_TIMEOUT_SEC } },
+  config: { [`mcp_servers.${SERVER_NAME}`]: { url: tools.url, http_headers: { Authorization: tools.authorization }, tool_timeout_sec: TOOL_TIMEOUT_SEC } },
   developerInstructions: tools.instructions,
 })
-
-const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error))

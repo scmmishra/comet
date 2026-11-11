@@ -1,3 +1,4 @@
+import { errorMessage } from "../errors"
 /**
  * A Model Context Protocol server over HTTP, as much of it as serving tools takes. Every agent Desk runs
  * connects to an MCP server at a URL, so this is how Desk offers them tools of its own. Each request is
@@ -53,7 +54,7 @@ export async function serveMcp(request: globalThis.Request, toolsFor: (authoriza
   try {
     return json({ jsonrpc: "2.0", id: message.id, result: await answer(message, tools, request.signal) })
   } catch (error) {
-    return json({ jsonrpc: "2.0", id: message.id, error: { code: METHOD_NOT_FOUND, message: error instanceof Error ? error.message : String(error) } })
+    return json({ jsonrpc: "2.0", id: message.id, error: { code: METHOD_NOT_FOUND, message: errorMessage(error) } })
   }
 }
 
@@ -70,7 +71,7 @@ async function answer(message: Request, tools: ToolSet, signal: AbortSignal): Pr
       // A tool that fails answers the model with why, so the model can change course. It is not a protocol error.
       const result = await tools
         .call(String(message.params?.name), typeof input === "object" && input !== null ? (input as Record<string, unknown>) : {}, signal)
-        .catch((error): ToolResult => ({ text: error instanceof Error ? error.message : String(error), isError: true }))
+        .catch((error): ToolResult => ({ text: errorMessage(error), isError: true }))
       return { content: [{ type: "text", text: result.text }], isError: !!result.isError }
     }
     default:

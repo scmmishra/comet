@@ -2,7 +2,7 @@ import { DEFAULT_MODEL, PERMISSION_MODES, type AgentId, type AgentInfo, type Mod
 import type { AgentSession, ToolServer } from "../agents/agent"
 import type { Agents } from "../agents/registry"
 import type { ToolResult, ToolSet } from "./mcp"
-import { DELEGATE, firstLine, INSTRUCTIONS, LIST_AGENTS, SERVER_NAME } from "./tools"
+import { DELEGATE, taskWords, INSTRUCTIONS, LIST_AGENTS, SERVER_NAME } from "./tools"
 
 /** What Desk reads about the tab whose agent hands work off. */
 export interface DelegationHost {
@@ -45,7 +45,7 @@ export class Delegations {
       this.tokens.set(tabId, token)
       this.tabs.set(token, tabId)
     }
-    return { name: SERVER_NAME, url: this.endpoint(), authorization: `Bearer ${token}`, instructions: INSTRUCTIONS }
+    return { url: this.endpoint(), authorization: `Bearer ${token}`, instructions: INSTRUCTIONS }
   }
 
   /** The tools of the session an Authorization header names, or nothing for a header Desk did not give out. */
@@ -105,7 +105,7 @@ export class Delegations {
     const items = new Map<string, ThreadItem>()
     let subagent: Subagent = {
       id: `delegated:${crypto.randomUUID()}`,
-      description: typeof input.title === "string" && input.title.trim() ? input.title.trim() : firstLine(task),
+      description: typeof input.title === "string" && input.title.trim() ? input.title.trim() : taskWords(task),
       agent: info.id,
       model: model.runs ?? model.label,
       status: "running",
@@ -123,7 +123,7 @@ export class Delegations {
     return new Promise<ToolResult>((resolve) => {
       const finish = () => {
         const outcome = taskOutcome([...items.values()])
-        show({ status: outcome.status, endedAt: Date.now(), summary: firstLine(outcome.text) })
+        show({ status: outcome.status, endedAt: Date.now(), summary: taskWords(outcome.text) })
         this.children.get(tabId)?.delete(child)
         child.session.close()
         resolve({ text: outcome.text, isError: outcome.status !== "completed" })

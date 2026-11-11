@@ -1,3 +1,4 @@
+import { firstLine } from "../../text"
 import type { AgentThreads, Rewound } from "../agent"
 import { historyItems, messageId } from "./history"
 import type { CodexThread } from "./protocol"
@@ -23,7 +24,7 @@ export function codexThreads(server: AppServer): AgentThreads {
       const listed = await server.request<{ data: CodexThread[] }>("thread/list", { cwd: dir, limit: THREAD_LIMIT, sortKey: "updated_at" }).catch(() => ({ data: [] }))
       return listed.data.map((thread) => ({
         id: thread.id,
-        title: thread.name ?? thread.preview.trim().split("\n")[0]!.trim(),
+        title: thread.name ?? firstLine(thread.preview),
         ...(thread.gitInfo?.branch ? { branch: thread.gitInfo.branch } : {}),
         updatedAt: thread.updatedAt * 1000,
       }))

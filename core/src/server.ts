@@ -6,6 +6,7 @@ import { discoverCommands } from "./command-sources"
 import { Commands } from "./commands"
 import { Delegations } from "./delegate/delegations"
 import { serveMcp } from "./delegate/mcp"
+import { errorMessage } from "./errors"
 import { openableFile, openInEditor, readForView } from "./files"
 import { checkImages } from "./images"
 import { Layouts } from "./plugins/layouts"
@@ -52,7 +53,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
 
   let settings = loadSettings()
   const agents = new Agents(broadcast, { compactIdle: () => settings.threads.compactIdle })
-  const report = (error: unknown) => broadcast({ type: "error", message: error instanceof Error ? error.message : String(error) })
+  const report = (error: unknown) => broadcast({ type: "error", message: errorMessage(error) })
   const plugins = new Plugins({
     broadcast,
     openThread: (tabId, thread) => void window.openKey(tabId, thread).catch(report),
@@ -256,7 +257,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         } catch {
           return reply({ type: "error", message: "The message is not valid JSON." })
         }
-        handle(message, reply).catch((error) => reply({ type: "error", message: error instanceof Error ? error.message : String(error) }))
+        handle(message, reply).catch((error) => reply({ type: "error", message: errorMessage(error) }))
       },
     },
   })

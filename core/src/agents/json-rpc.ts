@@ -1,3 +1,4 @@
+import { errorMessage } from "../errors"
 import { spawn } from "../environment"
 
 /** Where a peer's messages come from and go to, one JSON message per line. A test passes its own. */
@@ -106,7 +107,7 @@ export class JsonRpc {
       .then(() => this.handlers.request(message.method!, message.params, id))
       .then(
         (result) => this.ended || this.write({ id, result: result ?? null }),
-        (error) => this.ended || this.write({ id, error: { code: error instanceof RpcError && error.code !== undefined ? error.code : INTERNAL_ERROR, message: error instanceof Error ? error.message : String(error) } }),
+        (error) => this.ended || this.write({ id, error: { code: error instanceof RpcError && error.code !== undefined ? error.code : INTERNAL_ERROR, message: errorMessage(error) } }),
       )
   }
 

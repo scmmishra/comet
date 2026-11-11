@@ -1,4 +1,5 @@
 import type { ThreadItem } from "@desk/protocol"
+import { resultId } from "../turn-items"
 import { imageAttachment } from "./input"
 import { threadItems } from "./items"
 import type { CodexItem, CodexTurn } from "./protocol"
@@ -19,7 +20,7 @@ export function historyItems(dir: string, turns: readonly CodexTurn[]): ThreadIt
     )
     if (turn.status === "inProgress") return items
     const opener = messages[0] ? messageId(messages[0]) : turn.id
-    return [...items, ...(turn.status === "failed" ? [turnError(turn)] : []), turnResult(turn, `result:${opener}`, false)]
+    return [...items, ...(turn.status === "failed" ? [turnError(turn)] : []), turnResult(turn, resultId(opener), false)]
   })
 }
 
