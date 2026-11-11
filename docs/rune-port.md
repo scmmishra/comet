@@ -111,6 +111,7 @@ Done:
 - Markdown block margins are fixed in rune-kit: 12 points where the Electron app sets 10.4.
 - rune-kit's Markdown draws an icon only before a link to a web page, so a file link in a reply has no file icon.
 - A growth stack cannot grow virtual rows open, and holds removed rows 0.15 s before it closes up. Review's files fold at once for this.
+- Text has no unbreakable span, so inline code wraps at its spaces. No-break spaces would keep it whole, but a copied command would then carry them.
 - Rune has no left-start placement, so a subagent's detail centres beside its row.
 
 ## Matching the Electron app

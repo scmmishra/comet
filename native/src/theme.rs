@@ -263,7 +263,8 @@ pub fn markdown(k: &Kit, size: f32) -> MarkdownStyle {
         .muted(k.c.text_faint)
         .inline_code_font(0.92, 400.0)
         .inline_code_bg(color(d.raised))
-        .inline_code_pad(5.0)
+        // rune-kit's 3.5 point pad, short of the Electron app's 5: rune-kit pads code with narrow spaces sized
+        // to the pad, and at 5 points they outgrow the text, which makes a line with code taller than the rest.
         .quote(color(d.line), 2.0, 10.0, k.c.text_muted)
         .rule(color(d.line))
         .link(k.c.text_accent)
