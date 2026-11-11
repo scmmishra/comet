@@ -8,8 +8,7 @@ import { serveMcp } from "./delegate/mcp"
 import { errorMessage } from "./errors"
 import { openableFile, openInEditor, readForView } from "./files"
 import { checkImages } from "./images"
-import { Layouts } from "./plugins/layouts"
-import { Plugins } from "./plugins/plugins"
+import { startPlugins } from "./plugins"
 import { searchFiles } from "./project-files"
 import { findIconFiles, iconFile } from "./project-icons"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
@@ -53,13 +52,6 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
   let settings = loadSettings()
   const agents = new Agents(broadcast, { compactIdle: () => settings.threads.compactIdle })
   const report = (error: unknown) => broadcast({ type: "error", message: errorMessage(error) })
-  const plugins = new Plugins({
-    broadcast,
-    openThread: (tabId, thread) => void window.openKey(tabId, thread).catch(report),
-    openPanel: (tabId, panel, params) => void layouts.openPanel(tabId, panel, params).catch(report),
-    closePanel: (tabId, id) => void layouts.closePanel(tabId, id).catch(report),
-    stopped: () => void layouts.resendAll().catch(report),
-  })
   // An agent reaches Desk's tools at the server's own port, which is known once it listens.
   let toolsUrl = ""
   const delegations = new Delegations(agents, () => toolsUrl)
@@ -69,13 +61,13 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     delegations,
     tabClosed: (tabId) => {
       rows.forget(tabId)
-      plugins.dropTab(tabId)
-      layouts.dropTab(tabId)
+      ui.dropTab(tabId)
     },
     turnEnded: (tabId, threadKey, outcome) => plugins.turnEnded(tabId, threadKey, outcome),
     threadShown: (tabId, threadKey) => plugins.threadShown(tabId, threadKey),
   })
-  const layouts = new Layouts(plugins, window, broadcast)
+  const ui = startPlugins({ broadcast, openThread: (tabId, thread) => void window.openKey(tabId, thread).catch(report), store: window, report })
+  const { plugins, layouts } = ui
   // Each project's commands, made the first time the project is named. They run as long as the core.
   const commands = new Map<string, Commands>()
   const commandsOf = (dir: string) => {
@@ -203,8 +195,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       case "plugin.event":
         return plugins.event(message.plugin, message.handler, message.args)
       case "plugins.reload":
-        plugins.reload()
-        return layouts.redrawAll()
+        return ui.reload()
       case "terminal.open":
         return window.openTerminal(message.id, message.cols, message.rows)
       case "terminal.input":

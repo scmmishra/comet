@@ -286,7 +286,7 @@ export default definePlugin((desk) => {
   installPlugin("edited", card("Before"))
   installPlugin("broken", `export default 42`)
   turnOn({ everywhere: ["edited", "broken"] })
-  const { plugins, layouts, layout, nodes, textOf, errors } = harness()
+  const { plugins, reload, layouts, layout, nodes, textOf, errors } = harness()
   await layouts.send("tab-1")
   const drawn = () => layout("tab-1")!.cards.map((found) => textOf(found.plugin, found.root))
   await until(() => drawn().join() === "Before")
@@ -294,8 +294,7 @@ export default definePlugin((desk) => {
 
   installPlugin("edited", card("After"))
   installPlugin("broken", card("Fixed"))
-  plugins.reload()
-  await layouts.redrawAll()
+  await reload()
   await until(() => drawn().join() === "After,Fixed")
   // The app's copy holds the new worker's nodes only: a card and its text.
   expect(Object.keys(nodes.edited!)).toHaveLength(3)

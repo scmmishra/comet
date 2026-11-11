@@ -2,8 +2,7 @@ import { applyOps, type CoreMessage, type PluginLayout, type TabInfo, type TabLa
 import { mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tempFolder } from "../test-support"
-import { Layouts } from "./layouts"
-import { Plugins } from "./plugins"
+import { startPlugins } from "."
 
 export function installPlugin(name: string, source: string) {
   mkdirSync(join(process.env.DESK_HOME!, "plugins", name), { recursive: true })
@@ -15,7 +14,7 @@ export function turnOn(config: { everywhere?: string[]; projects?: Record<string
 }
 
 /**
- * Plugins and layouts for tabs in one project, wired as the core wires them, with the app's copy of
+ * Plugins and layouts for tabs in one project, with the app's copy of
  * every plugin's nodes. Saved layouts live in memory.
  */
 export function harness() {
@@ -34,15 +33,13 @@ export function harness() {
     if (message.reset || !nodes[message.plugin]) nodes[message.plugin] = {}
     applyOps(nodes[message.plugin]!, message.ops)
   }
-  let layouts!: Layouts
-  const plugins = new Plugins({
+  const ui = startPlugins({
     broadcast,
     openThread: (tabId, thread) => threads.push({ tabId, ...thread }),
-    openPanel: (tabId, panel, params) => void layouts.openPanel(tabId, panel, params),
-    closePanel: (tabId, id) => void layouts.closePanel(tabId, id),
-    stopped: () => void layouts.resendAll(),
+    store: { projectOf: () => project, layout: (tabId) => saved[tabId], setLayout: (tabId, layout) => (saved[tabId] = layout), activeTab: () => screen.active, threadKeyOf: (tabId) => shownThreads[tabId] },
+    report: () => {},
   })
-  layouts = new Layouts(plugins, { projectOf: () => project, layout: (tabId) => saved[tabId], setLayout: (tabId, layout) => (saved[tabId] = layout), activeTab: () => screen.active, threadKeyOf: (tabId) => shownThreads[tabId] }, broadcast)
+  const { plugins, layouts } = ui
   const showThread = (tabId: string, threadKey: string | undefined) => {
     shownThreads[tabId] = threadKey
     plugins.threadShown(tabId, threadKey)
@@ -64,5 +61,5 @@ export function harness() {
   const errors = () => sent.flatMap((message) => (message.type === "error" ? [[message.message, message.detail].filter(Boolean).join(": ")] : []))
   const ids = (found: TabLayout | undefined) => ({ sidebar: found?.sidebar?.id, panels: found?.panels.map((panel) => panel.id), cards: found?.cards.map((card) => card.id) })
 
-  return { project, plugins, layouts, saved, sent, threads, nodes, screen, showThread, layout, textOf, handler, errors, ids }
+  return { project, plugins, layouts, reload: ui.reload, saved, sent, threads, nodes, screen, showThread, layout, textOf, handler, errors, ids }
 }
