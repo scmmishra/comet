@@ -386,7 +386,7 @@ fn review_view(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             let (get, get_mut) = (tab.id.clone(), tab.id.clone());
             DiffView::new(move |s: &Desk| &s.panel.reviews[&get].diff, move |s: &mut Desk| &mut s.panel.reviews.get_mut(&get_mut).expect("a review that showed").diff)
                 .key(format!("review-{}", tab.id))
-                .build(s, k)
+                .build(s, crate::theme::review_kit(k.dark))
                 .grow(1.0)
                 .min_h(0.0)
         }
