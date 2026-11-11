@@ -292,7 +292,7 @@ impl Desk {
         if self.drafts.listed == self.listing(tab) { self.drafts.active } else { 0 }
     }
 
-    fn list_key(&mut self, tab: &str, key: &Key, tx: &mut rune::Tx) -> bool {
+    fn list_key(&mut self, tab: &str, key: &Key) -> bool {
         let count = self.suggestions(tab).len();
         if count == 0 {
             return false;
@@ -302,8 +302,6 @@ impl Desk {
                 let active = self.active_row(tab);
                 self.drafts.active = if *key == Key::Down { (active + 1) % count } else { (active + count - 1) % count };
                 self.drafts.listed = self.listing(tab);
-                // The list scrolls to keep the highlighted row in sight.
-                tx.scroll_into_view_in("suggestions", format!("suggestion-{}", self.drafts.active));
             }
             Key::Enter | Key::Tab => self.pick_suggestion(tab, self.active_row(tab).min(count - 1)),
             Key::Escape => self.drafts.dismissed = self.trigger(tab).map(|t| (tab.to_owned(), t.start)),
@@ -371,7 +369,11 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &
             if key.mods.shift || key.mods.cmd || key.mods.alt {
                 return false;
             }
-            if s.list_key(&tab, &key.key, tx) {
+            if s.list_key(&tab, &key.key) {
+                // The list scrolls to keep the highlighted row in sight.
+                if matches!(key.key, Key::Up | Key::Down) {
+                    tx.scroll_into_view_in("suggestions", format!("suggestion-{}", s.active_row(&tab)));
+                }
                 return true;
             }
             if key.key != Key::Escape {
@@ -915,6 +917,18 @@ mod tests {
         assert!(s.list_key("t", &Key::Down));
         assert!(s.list_key("t", &Key::Enter));
         assert_eq!(s.drafts.text("t"), "look at @src/logout.ts ");
+    }
+
+    #[test]
+    fn typing_more_highlights_the_top_suggestion_again() {
+        let mut s = desk();
+        type_focused(&mut s, "@log");
+        sync(&mut s);
+        s.found_files("/code/x".into(), "log".into(), vec!["src/login.ts".into(), "src/logout.ts".into()]);
+        assert!(s.list_key("t", &Key::Down));
+        assert_eq!(s.active_row("t"), 1);
+        type_focused(&mut s, "@logo");
+        assert_eq!(s.active_row("t"), 0);
     }
 
     #[test]
