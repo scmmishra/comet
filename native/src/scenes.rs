@@ -24,6 +24,11 @@ fn file(s: &mut Desk) {
     for id in scene["open"].as_array().into_iter().flatten().filter_map(|v| v.as_str()) {
         s.threads.toggle(&tab, id);
     }
+    match scene["palette"].as_str() {
+        Some("setups") => s.show_palette(vec![crate::palette::Page::Setups]),
+        Some("root") => s.show_palette(Vec::new()),
+        _ => {}
+    }
 }
 
 /// Settings on Providers, with an update out and plan usage.

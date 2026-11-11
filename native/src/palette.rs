@@ -308,6 +308,8 @@ impl Desk {
             self.palette.pages.push(page);
             self.palette.query = TextEdit::new("");
             self.palette.active = 0;
+            // A fresh query drops the field's focus. The keys only work there, so it takes focus back.
+            tx.focus("palette-input", false);
             return;
         }
         self.palette = Palette::default();
