@@ -406,13 +406,19 @@ fn group_view(c: &Ctx, id: &str, steps: &[String], live: bool, summary: &str) ->
         row().gap(8.0).items_center().h(STEP_HEIGHT).child(icon(group_icon(c, steps), STEP_ICON).color(k.c.text_faint)).child(c.small(summary.to_owned()).color(k.c.text_muted).group_color(k.c.text_base).truncate())
     };
     let head = head.child(crate::icons::chevron(k, open)).key("group-head").role("button").expanded(open).hover_group().on_press_tx(c.toggle(id));
+    // `w-fit max-w-full`: as wide as its label, which a long one cuts short at the lane's edge.
+    let head = row().w_full().child(head.shrink());
     let thought = (live && !open && matches!(latest, ThreadItem::Tool { .. }))
         .then(|| items.iter().rev().find_map(|i| match i {
             ThreadItem::Thinking { text: Some(_), label, .. } => Some(label.clone()),
             _ => None,
         }))
         .flatten()
-        .map(|label| row().gap(8.0).child(icon(kind_icon(StepKind::Thought), STEP_ICON).color(k.c.text_faint).mt(3.0)).child(c.small(label).color(k.c.text_faint).wrap()));
+        .map(|label| {
+            // `line-clamp-4`: the thought wraps in the lane, up to four lines.
+            let words = c.small(label).color(k.c.text_faint).wrap().max_lines(4).shrink().min_w(0.0);
+            row().w_full().gap(8.0).child(icon(kind_icon(StepKind::Thought), STEP_ICON).color(k.c.text_faint).mt(3.0)).child(words)
+        });
     let list = open.then(|| {
         col()
             .key("steps")
