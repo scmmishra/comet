@@ -486,7 +486,8 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, window: 
     };
     crate::thread_view::approval_menu(s, &tab.id, k, layer);
     let body = col().w_full().grow(1.0).min_h(0.0).child(body).children(rail).children(minimap);
-    col().key(format!("session-{}", tab.id)).w_full().grow(1.0).min_h(0.0).child(header).child(body)
+    // A session shows at once, as the Electron app swaps it in, not crossfading from the last one.
+    col().key(format!("session-{}", tab.id)).transition(rune::Transition::none()).w_full().grow(1.0).min_h(0.0).child(header).child(body)
 }
 
 /// The composer under a thread, on its lane, `desk-lane pb-4 pt-1.5`.
