@@ -833,6 +833,12 @@ export type ClientMessage =
   | { readonly type: "setups.get"; readonly project: string }
   /** Starts a fresh session in a tab, as /clear asks. */
   | { readonly type: "thread.clear"; readonly tabId: string }
+  /** Names a tab and its session, as Claude Code's /rename does. It runs no turn, so a running one goes on. */
+  | { readonly type: "thread.rename"; readonly tabId: string; readonly title: string }
+  /** Copies a tab's session into a new one. The core answers with `thread.forked`. */
+  | { readonly type: "thread.fork"; readonly tabId: string }
+  /** Deletes a tab's session from this Mac, after stopping a running turn. The tab starts afresh, as after /clear. */
+  | { readonly type: "thread.delete"; readonly tabId: string }
   | { readonly type: "permission.answer"; readonly tabId: string; readonly requestId: string; readonly answer: PermissionAnswer }
   /** Answers an AskUserQuestion call, by question text. Without `answers`, the user dismissed it. */
   | { readonly type: "question.answer"; readonly tabId: string; readonly requestId: string; readonly answers?: Readonly<Record<string, string>> }
@@ -892,8 +898,12 @@ export type CoreMessage =
   | { readonly type: "layout"; readonly tabId: string; readonly layout: TabLayout }
   /** A panel instance opened, so the app brings it to the front and opens the view pane. */
   | { readonly type: "panel.show"; readonly tabId: string; readonly id: string }
-  /** A plugin opened a thread in a tab under this name. */
+  /** A tab's new name, from a plugin's thread or a rename. */
   | { readonly type: "tab.title"; readonly tabId: string; readonly title: string }
+  /** The Claude session a tab's thread runs in. It is absent until the thread's first message starts one. */
+  | { readonly type: "thread.session"; readonly tabId: string; readonly sessionId?: string }
+  /** A copy of a tab's session, which the app opens in a new tab beside it. */
+  | { readonly type: "thread.forked"; readonly tabId: string; readonly threadId: string; readonly title: string }
   /**
    * Something failed. `message` says what failed, in one line. `detail` holds the cause, such as the
    * error a plugin threw, which can run to several lines. The app shows both.

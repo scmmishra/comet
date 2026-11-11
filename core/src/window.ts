@@ -1,4 +1,4 @@
-import type { SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
+import { deleteSession, forkSession, renameSession, type SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
 import type { TurnOutcome } from "@desk/plugin"
 import { followUpFor, type ChangedFile, type CoreMessage, type FileChange, type FollowUp, type ImageAttachment, type PermissionAnswer, type PluginLayout, type QueuedMessage, type ReviewScope, type TabInfo, type ThreadEvent, type ThreadItem } from "@desk/protocol"
 import { branchBase, capture, changesSince, checkpointChanges, headTree, keepCheckpoints } from "./checkpoints"
@@ -114,6 +114,7 @@ export class Window {
     if (thread.queue?.length) reply({ type: "queue", tabId: tab.id, messages: thread.queue, held: !!thread.queueHeld })
     if (thread.branch) reply({ type: "thread.branch", tabId: tab.id, branch: thread.branch })
     if (!thread.sessionId) return
+    reply({ type: "thread.session", tabId: tab.id, sessionId: thread.sessionId })
     reply({ type: "session.history", tabId: tab.id, items: await this.history(tab, thread.sessionId), context: thread.context })
     if (!thread.context) this.fillContext(tab.id, thread.sessionId)
   }
@@ -335,6 +336,40 @@ export class Window {
     this.hooks.broadcast({ type: "session.history", tabId, items: [] })
   }
 
+  /** Names a tab and its session. Claude Code keeps the name in the transcript, so the thread list and `claude --resume` show it. */
+  async renameThread(tabId: string, title: string) {
+    const name = title.trim()
+    if (!name) throw new Error("A thread needs a name.")
+    const { project, sessionId } = this.started(tabId)
+    await renameSession(sessionId, name, { dir: project })
+    this.hooks.broadcast({ type: "tab.title", tabId, title: name })
+  }
+
+  /** Copies a tab's session into a new one, under the tab's name, for the app to open beside it. */
+  async forkThread(tabId: string, reply: Send) {
+    const { project, sessionId } = this.started(tabId)
+    const title = `${this.tab(tabId).title} (fork)`
+    const forked = await forkSession(sessionId, { dir: project, title })
+    reply({ type: "thread.forked", tabId, threadId: forked.sessionId, title })
+  }
+
+  /**
+   * Deletes a tab's session from this Mac and starts the tab afresh. The session closes first, so
+   * Claude Code stops writing to the transcript before it goes. Review's checkpoints go with the thread.
+   */
+  async deleteThread(tabId: string) {
+    const { project, sessionId } = this.started(tabId)
+    this.clearThread(tabId)
+    await deleteSession(sessionId, { dir: project })
+  }
+
+  /** A tab's project and its session, which must have started. */
+  private started(tabId: string) {
+    const { sessionId } = this.thread(tabId)
+    if (!sessionId) throw new Error("The thread has not started yet.")
+    return { project: this.tab(tabId).project, sessionId }
+  }
+
   /**
    * What changed in a tab's project in the span `scope` names. The thread and last-turn scopes compare
    * checkpoints, after T3 Code, so they show finished turns. A thread with no finished turn has none.
@@ -552,6 +587,7 @@ export class Window {
     if (thread.queue !== before?.queue || !!thread.queueHeld !== !!before?.queueHeld) this.hooks.broadcast({ type: "queue", tabId, messages: thread.queue ?? [], held: !!thread.queueHeld })
     this.persist({ threads: { ...this.state.threads, [tabId]: thread } })
     if (thread.key !== before?.key) this.hooks.threadShown(tabId, thread.key)
+    if (thread.sessionId !== before?.sessionId) this.hooks.broadcast({ type: "thread.session", tabId, ...(thread.sessionId ? { sessionId: thread.sessionId } : {}) })
   }
 
   private persist(change: Partial<WindowState>) {

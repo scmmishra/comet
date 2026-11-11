@@ -652,13 +652,23 @@ pub enum CoreMessage {
     /// A closed tab to add back at `index`.
     #[serde(rename = "tab.reopened")]
     TabReopened { tab: TabInfo, index: usize },
-    /// A plugin opened a thread in a tab under this name.
+    /// A tab's new name, from a plugin's thread or a rename.
     #[serde(rename = "tab.title")]
     TabTitle {
         #[serde(rename = "tabId")]
         tab_id: String,
         title: String,
     },
+    /// The Claude session a tab's thread runs in. It is absent until the thread's first message starts one.
+    #[serde(rename = "thread.session", rename_all = "camelCase")]
+    ThreadSession {
+        tab_id: String,
+        #[serde(default)]
+        session_id: Option<String>,
+    },
+    /// A copy of a tab's session, which the app opens in a new tab beside it.
+    #[serde(rename = "thread.forked", rename_all = "camelCase")]
+    ThreadForked { tab_id: String, thread_id: String, title: String },
     #[serde(rename = "session.event")]
     SessionEvent {
         #[serde(rename = "tabId")]
@@ -854,6 +864,15 @@ pub enum ClientMessage {
     /// Starts a fresh session in a tab, as /clear asks.
     #[serde(rename = "thread.clear", rename_all = "camelCase")]
     ThreadClear { tab_id: String },
+    /// Names a tab and its session. It runs no turn, so a running one goes on.
+    #[serde(rename = "thread.rename", rename_all = "camelCase")]
+    ThreadRename { tab_id: String, title: String },
+    /// Copies a tab's session into a new one. The core answers with `thread.forked`.
+    #[serde(rename = "thread.fork", rename_all = "camelCase")]
+    ThreadFork { tab_id: String },
+    /// Deletes a tab's session from this Mac, after stopping a running turn. The tab starts afresh.
+    #[serde(rename = "thread.delete", rename_all = "camelCase")]
+    ThreadDelete { tab_id: String },
     /// Continues a past thread in a tab that has not started one.
     #[serde(rename = "thread.resume", rename_all = "camelCase")]
     ThreadResume { tab_id: String, thread_id: String },
@@ -994,6 +1013,9 @@ mod tests {
             ClientMessage::CommandsStop { project: "/Users/me/code/web".into(), ids: vec!["c1".into()] },
             ClientMessage::FilesSearch { project: "/Users/me/code/web".into(), query: "login".into() },
             ClientMessage::ThreadClear { tab_id: "tab-1".into() },
+            ClientMessage::ThreadRename { tab_id: "tab-1".into(), title: "Login fix".into() },
+            ClientMessage::ThreadFork { tab_id: "tab-1".into() },
+            ClientMessage::ThreadDelete { tab_id: "tab-1".into() },
             ClientMessage::LayoutGet { tab_id: "tab-1".into() },
             ClientMessage::PanelOpen { tab_id: "tab-1".into(), panel: "support.inbox".into() },
             ClientMessage::PanelClose { tab_id: "tab-1".into(), id: "support.conversation?id=1001".into() },

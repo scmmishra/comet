@@ -30,6 +30,7 @@ mod protocol;
 mod questions;
 mod reply;
 mod scenes;
+mod session_menu;
 mod settings;
 mod shell;
 mod start_screen;

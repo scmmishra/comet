@@ -78,6 +78,7 @@ pub struct Desk {
     /// Whether ⌘ is held, so the new tab button opens its tab next to the active one.
     cmd_held: bool,
     pub tab_bar: crate::tab_bar::TabBar,
+    pub session_menu: crate::session_menu::SessionMenu,
 }
 
 impl Desk {
@@ -126,6 +127,8 @@ impl Desk {
             }
             CoreMessage::TabReopened { tab, index } => w.reopened(tab, index, core),
             CoreMessage::TabTitle { tab_id, title } => w.name_tab(&tab_id, &title, core),
+            CoreMessage::ThreadSession { tab_id, session_id } => self.threads.get_mut(&tab_id).session_id = session_id,
+            CoreMessage::ThreadForked { tab_id, thread_id, title } => self.open_fork(&tab_id, thread_id, &title),
             CoreMessage::SessionHistory { tab_id, items, context } => {
                 for item in &items {
                     self.remember_images(item);
@@ -477,7 +480,8 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, window: 
         .child(project_mark(s, &tab.project, k))
         .child(text(name).font(crate::theme::text(13.0)).color(k.c.text_muted))
         .child(text("/").font(crate::theme::text(13.0)).color(k.c.text_faint))
-        .child(text(tab.title.clone()).font(crate::theme::medium(13.0)).color(k.c.text_base).truncate());
+        .child(text(tab.title.clone()).font(crate::theme::medium(13.0)).color(k.c.text_base).truncate())
+        .children(crate::session_menu::button(s, tab, k, layer));
     let end = row()
         .gap(4.0)
         .items_center()

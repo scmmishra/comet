@@ -159,6 +159,12 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         return reply({ type: "setups", setups: await plugins.setups(message.project) })
       case "thread.clear":
         return window.clearThread(message.tabId)
+      case "thread.rename":
+        return window.renameThread(message.tabId, message.title)
+      case "thread.fork":
+        return window.forkThread(message.tabId, reply)
+      case "thread.delete":
+        return window.deleteThread(message.tabId)
       case "session.interrupt":
         return window.interrupt(message.tabId)
       case "session.forceStop":

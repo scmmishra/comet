@@ -1,6 +1,7 @@
+import { listSessions } from "@anthropic-ai/claude-agent-sdk"
 import { expect, test } from "bun:test"
 import type { CoreMessage, TabInfo } from "@desk/protocol"
-import { readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { gitRepo, tempFolder, useTempHome } from "./test-support"
 import { outcomeAfter, Window } from "./window"
@@ -159,4 +160,55 @@ test("tells how a turn ended from its result, and counts a turn with an error or
   expect(outcomeAfter("error", result({ isError: true }))).toBe("error")
   expect(outcomeAfter("done", { kind: "item", item: { type: "error", id: "e", message: "lost" } })).toBe("error")
   expect(outcomeAfter("done", busy)).toBe("done")
+})
+
+/**
+ * A project with one Claude transcript in it, kept in a temporary Claude config folder. The project's
+ * path is resolved, as Claude Code names its folder after the real path.
+ */
+function startedThread() {
+  process.env.CLAUDE_CONFIG_DIR ??= tempFolder("claude")
+  const project = realpathSync(tempFolder("sessions"))
+  const folder = join(process.env.CLAUDE_CONFIG_DIR, "projects", project.replace(/[^a-zA-Z0-9]/g, "-"))
+  mkdirSync(folder, { recursive: true })
+  const sessionId = crypto.randomUUID()
+  const message = { type: "user", uuid: crypto.randomUUID(), parentUuid: null, sessionId, cwd: project, timestamp: new Date().toISOString(), message: { role: "user", content: "Fix the login form" } }
+  writeFileSync(join(folder, `${sessionId}.jsonl`), `${JSON.stringify(message)}\n`)
+  const opened = open({ tabs: [{ ...tab("a", project), title: "Fix the login form" }], threads: { a: { sessionId } }, recent: [] })
+  return { ...opened, project, sessionId, transcript: join(folder, `${sessionId}.jsonl`) }
+}
+
+test("renames a tab and its session, without a turn", async () => {
+  const { window, sent, project } = startedThread()
+  await window.renameThread("a", "  Login fix ")
+  expect(sent).toContainEqual({ type: "tab.title", tabId: "a", title: "Login fix" })
+  expect((await listSessions({ dir: project })).map((session) => session.summary)).toEqual(["Login fix"])
+  await expect(window.renameThread("a", " ")).rejects.toThrow("needs a name")
+})
+
+test("forks a session into a new one under the tab's name", async () => {
+  const { window, project, sessionId } = startedThread()
+  const replies: CoreMessage[] = []
+  await window.forkThread("a", (message) => replies.push(message))
+  const forked = replies[0] as Extract<CoreMessage, { type: "thread.forked" }>
+  expect(forked).toMatchObject({ type: "thread.forked", tabId: "a", title: "Fix the login form (fork)" })
+  expect(forked.threadId).not.toBe(sessionId)
+  expect((await listSessions({ dir: project })).map((session) => session.sessionId).sort()).toEqual([sessionId, forked.threadId].sort())
+})
+
+test("deletes a session's transcript and starts the tab afresh", async () => {
+  const { window, sent, transcript } = startedThread()
+  await window.deleteThread("a")
+  expect(existsSync(transcript)).toBe(false)
+  expect(saved().threads.a).toEqual({})
+  expect(sent).toContainEqual({ type: "thread.session", tabId: "a" })
+  expect(sent).toContainEqual({ type: "session.history", tabId: "a", items: [] })
+})
+
+test("refuses to rename, fork or delete a thread that has not started", async () => {
+  const project = tempFolder("fresh")
+  const { window } = open({ tabs: [tab("a", project)], threads: {}, recent: [] })
+  await expect(window.renameThread("a", "Name")).rejects.toThrow("not started")
+  await expect(window.forkThread("a", () => {})).rejects.toThrow("not started")
+  await expect(window.deleteThread("a")).rejects.toThrow("not started")
 })
