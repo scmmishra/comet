@@ -116,7 +116,11 @@ pub fn screen(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
             .fill(if selected { k.c.layer_03 } else { rune::Color::TRANSPARENT })
             .hover(k.c.hover)
             .role("tab")
-            .on_press(move |s: &mut Desk| s.open_settings(id))
+            .on_press_tx(move |s: &mut Desk, tx| {
+                s.open_settings(id);
+                // The new page shows whole, with no fade or slide of its parts.
+                tx.instant();
+            })
             .child(icon(mark, 15.0).color(if selected { k.c.text_base } else { k.c.text_muted }))
             .child(text(*title).font(crate::theme::text(13.0)).color(if selected { k.c.text_base } else { k.c.text_muted }))
     });
@@ -129,8 +133,9 @@ pub fn screen(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
         "skills" => skills(s, k),
         _ => providers(s, k, layer),
     };
-    // `.settings-panel` keeps 4 points each side for the lists' shadows.
-    let content = col().grow(1.0).min_w(0.0).max_w(crate::thread_view::COLUMN).h_full().scroll(ScrollSpec { stick_bottom: false }).px(4.0).child(content);
+    // `.settings-panel` keeps 4 points each side for the lists' shadows. Each page is its own element:
+    // unkeyed, Rune would morph one page's parts into the next page's.
+    let content = col().key(format!("settings-page-{page}")).grow(1.0).min_w(0.0).max_w(crate::thread_view::COLUMN).h_full().scroll(ScrollSpec { stick_bottom: false }).px(4.0).child(content);
     row()
         .key("settings")
         .w_full()

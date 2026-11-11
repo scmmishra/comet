@@ -356,6 +356,8 @@ impl Desk {
             Action::Settings(page) => {
                 self.open_settings(page);
                 tx.focus("settings", false);
+                // A page picked from the keyboard shows whole, with no fade or slide of its parts.
+                tx.instant();
             }
             Action::Open(_) => {}
         }
