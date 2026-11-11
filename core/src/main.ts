@@ -1,6 +1,6 @@
 import type { CoreReady } from "@desk/protocol"
 import { startCore } from "./server"
-import { takeLoginEnvironment } from "./environment"
+import { takeLoginEnvironment } from "./login-environment"
 
 const token = process.env.DESK_TOKEN
 if (!token) {
@@ -9,10 +9,10 @@ if (!token) {
 }
 
 // The environment is read while the server starts. The app connects only after the line below, so
-// nothing the core starts runs before the environment is in place.
+// nothing the core starts runs before the environment is in place. From the cache, it is in place at once.
 const environment = takeLoginEnvironment()
 const core = startCore({ token })
-await environment
+await environment.ready
 // The app reads the first line of stdout as this, so nothing may print before it.
 const ready: CoreReady = { port: core.port }
 console.log(JSON.stringify(ready))
