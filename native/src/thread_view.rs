@@ -285,7 +285,7 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
             .radius(BOX_RADIUS)
             .px(12.0)
             .py(8.0)
-            .child(text(message.clone()).wrap().font(theme::thread_text(k, c.size)).color(k.c.danger.fg).selectable(true)),
+            .child(text(message.clone()).wrap().shrink().min_w(0.0).font(theme::thread_text(k, c.size)).color(k.c.danger.fg).selectable(true)),
         ThreadItem::Changes { id, files } => changes_view(c, id, files),
         ThreadItem::Permission { request_id, kind, detail, reason, .. } => permission_view(c, request_id, kind, detail, reason.as_deref()),
         ThreadItem::Thinking { .. } | ThreadItem::Tool { .. } => step_view(c, item),
