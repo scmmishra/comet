@@ -196,27 +196,35 @@ impl Desk {
     }
 }
 
+/// Where a plugin's view sits. A card's rows take the spacing of Desk's own cards, such as Subagents, so
+/// the stack reads as one. A sidebar's and a panel's take a list's.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Frame {
+    Card,
+    Pane,
+}
+
 /// A view a plugin drew for a tab. Where it sits gives it its frame.
-pub fn view(s: &Desk, view: &DrawnView, project: &str, k: &Kit) -> El {
-    node_view(s, &view.plugin, view.root, project, k)
+pub fn view(s: &Desk, view: &DrawnView, project: &str, frame: Frame, k: &Kit) -> El {
+    node_view(s, &view.plugin, view.root, project, frame, k)
 }
 
-fn children(s: &Desk, plugin: &str, node: &Node, project: &str, k: &Kit) -> Vec<El> {
-    node.children.iter().map(|c| node_view(s, plugin, *c, project, k).key(format!("node-{c}"))).collect()
+fn children(s: &Desk, plugin: &str, node: &Node, project: &str, frame: Frame, k: &Kit) -> Vec<El> {
+    node.children.iter().map(|c| node_view(s, plugin, *c, project, frame, k).key(format!("node-{c}"))).collect()
 }
 
-fn node_view(s: &Desk, plugin: &str, id: u64, project: &str, k: &Kit) -> El {
+fn node_view(s: &Desk, plugin: &str, id: u64, project: &str, frame: Frame, k: &Kit) -> El {
     let Some(node) = s.plugins.node(plugin, id) else { return el() };
     let props = &node.props;
     let plugin_owned = plugin.to_owned();
     match node.kind.as_str() {
         TEXT_NODE => text(node.text.clone().unwrap_or_default()).font(crate::theme::text(13.0)).color(k.c.text_base).wrap(),
-        ROOT_NODE => col().w_full().grow(1.0).min_h(0.0).children(children(s, plugin, node, project, k)),
+        ROOT_NODE => col().w_full().grow(1.0).min_h(0.0).children(children(s, plugin, node, project, frame, k)),
         "stack" => {
             let row_direction = prop(props, "direction") == Some("row");
             let gap = props.get("gap").and_then(Value::as_f64).unwrap_or(2.0) as f32 * 4.0;
             let base = if row_direction { row().items_center() } else { col() };
-            let base = base.min_w(0.0).min_h(0.0).gap(gap).children(children(s, plugin, node, project, k));
+            let base = base.min_w(0.0).min_h(0.0).gap(gap).children(children(s, plugin, node, project, frame, k));
             if props.get("grow").and_then(Value::as_bool) == Some(true) { base.grow(1.0) } else { base }
         }
         "text" => {
@@ -228,8 +236,8 @@ fn node_view(s: &Desk, plugin: &str, id: u64, project: &str, k: &Kit) -> El {
             let words: String = node.children.iter().filter_map(|c| s.plugins.node(plugin, *c)?.text.clone()).collect();
             text(words).font(font).color(color).wrap()
         }
-        "list" => col().w_full().grow(1.0).min_h(0.0).gap(1.0).scroll(ScrollSpec { stick_bottom: false }).children(children(s, plugin, node, project, k)),
-        "item" => item_view(s, props, plugin_owned, k),
+        "list" => col().w_full().grow(1.0).min_h(0.0).gap(1.0).scroll(ScrollSpec { stick_bottom: false }).children(children(s, plugin, node, project, frame, k)),
+        "item" => item_view(s, props, plugin_owned, frame, k),
         "button" => {
             let variant = match prop(props, "variant") {
                 Some("primary") => ButtonVariant::Contrast,
@@ -255,7 +263,7 @@ fn node_view(s: &Desk, plugin: &str, id: u64, project: &str, k: &Kit) -> El {
 }
 
 /// One row of a list. It is selectable when it has `onSelect`, and opens its `href` in the browser when it has one.
-fn item_view(s: &Desk, props: &Map<String, Value>, plugin: String, k: &Kit) -> El {
+fn item_view(s: &Desk, props: &Map<String, Value>, plugin: String, frame: Frame, k: &Kit) -> El {
     let selected = props.get("selected").and_then(Value::as_bool) == Some(true);
     let on_select = handler(props, "onSelect");
     let href = prop(props, "href").map(str::to_owned);
@@ -285,24 +293,35 @@ fn item_view(s: &Desk, props: &Map<String, Value>, plugin: String, k: &Kit) -> E
     let lines = col().grow(1.0).min_w(0.0).child(head).children(line("subtitle")).children(line("detail"));
     // The icon sits on the title's line, 20 points tall at Desk's 13 point text.
     let lead = lead.map(|lead| el().h(20.0).center().child(lead));
-    let item = row()
-        .w_full()
-        .gap(8.0)
+    // A card's row is one of its lines, as in the Subagents card. A list's row is 0.5rem of Desk's 13 pixel root.
+    let (gap, px, py, radius, hover) = match frame {
+        Frame::Card => (10.0, 8.0, 7.0, 7.0, k.c.bg_base),
+        Frame::Pane => (8.0, 10.0, 8.0, 6.5, k.c.hover),
+    };
+    let item = match frame {
+        // The card's content sits 8 points in, so its text lines up with the card's title. A row reaches
+        // back out by as much, so its hover fills the card's width, as the Subagents card's rows do. It
+        // stretches to that width, since a full width would not take the margins.
+        Frame::Card => row().mx(-px),
+        Frame::Pane => row().w_full(),
+    };
+    let item = item
+        .gap(gap)
         .items_start()
-        .px(10.0)
-        .py(8.0)
-        .radius(6.5)
+        .px(px)
+        .py(py)
+        .radius(radius)
         .fill(if selected { k.c.layer_02 } else { rune::Color::TRANSPARENT })
         .children(lead)
         .child(lines);
     match (href, on_select) {
-        (Some(url), _) => item.hover(k.c.hover).role("link").on_press_tx(move |s: &mut Desk, tx| {
+        (Some(url), _) => item.hover(hover).role("link").on_press_tx(move |s: &mut Desk, tx| {
             if let Err(e) = tx.open_url(&url) {
                 s.toasts.show(e.to_string(), true);
             }
             s.fire(&plugin, on_select, Vec::new());
         }),
-        (None, Some(_)) => item.hover(k.c.hover).role("button").on_press(move |s: &mut Desk| s.fire(&plugin, on_select, Vec::new())),
+        (None, Some(_)) => item.hover(hover).role("button").on_press(move |s: &mut Desk| s.fire(&plugin, on_select, Vec::new())),
         (None, None) => item,
     }
 }

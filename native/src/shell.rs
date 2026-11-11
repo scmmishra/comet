@@ -413,7 +413,7 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
             let pane = (tab.panel_open == Some(true)).then(|| card("panel-card", crate::panel::panel(s, tab, k, layer)));
             // A plugin's sidebar sits before the session, as a card of its own.
             let sidebar = s.plugins.layouts.get(&tab.id).and_then(|l| l.sidebar.as_ref()).map(|view| {
-                col().key("sidebar").w(SIDEBAR_WIDTH).h_full().min_h(0.0).padding(9.0).radius(PANEL_RADIUS).clip_rounded(PANEL_RADIUS).fill(k.c.layer_01).border(1.0, k.c.border_muted).child(crate::plugins::view(s, view, &tab.project, k))
+                col().key("sidebar").w(SIDEBAR_WIDTH).h_full().min_h(0.0).padding(9.0).radius(PANEL_RADIUS).clip_rounded(PANEL_RADIUS).fill(k.c.layer_01).border(1.0, k.c.border_muted).child(crate::plugins::view(s, view, &tab.project, crate::plugins::Frame::Pane, k))
             });
             row().w_full().grow(1.0).min_h(0.0).gap(PANEL_INSET).children(sidebar).child(card("session-card", session)).children(pane)
         }

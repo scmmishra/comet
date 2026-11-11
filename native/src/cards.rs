@@ -140,7 +140,13 @@ fn plugin_cards(s: &Desk, tab: &TabInfo, k: &Kit) -> Vec<El> {
         .cards
         .iter()
         .filter(|view| !s.plugins.is_empty(view))
-        .map(|view| card(k, 12.0).key(format!("card-{}", view.id)).gap(4.0).child(text(view.title.clone()).font(crate::theme::text(12.0)).color(k.c.text_faint)).child(crate::plugins::view(s, view, &tab.project, k)))
+        // The title sits as the Subagents card's heading does, and the card's rows line up with its rows.
+        .map(|view| {
+            card(k, 6.0)
+                .key(format!("card-{}", view.id))
+                .child(text(view.title.clone()).font(crate::theme::text(12.0)).color(k.c.text_faint).px(8.0).pb(4.0).pt(6.0))
+                .child(col().w_full().px(8.0).child(crate::plugins::view(s, view, &tab.project, crate::plugins::Frame::Card, k)))
+        })
         .collect()
 }
 

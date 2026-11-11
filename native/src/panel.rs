@@ -328,7 +328,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     // parts into the next one's, and keyed with its default fade, it would crossfade them.
     let body_key = format!("panel-body-{}", tab.panel_active.as_deref().unwrap_or("review"));
     let body = match (terminal, shown) {
-        _ if plugin_panel.is_some() => col().w_full().grow(1.0).min_h(0.0).px(12.0).pb(12.0).child(crate::plugins::view(s, plugin_panel.expect("checked"), &tab.project, k)),
+        _ if plugin_panel.is_some() => col().w_full().grow(1.0).min_h(0.0).px(12.0).pb(12.0).child(crate::plugins::view(s, plugin_panel.expect("checked"), &tab.project, crate::plugins::Frame::Pane, k)),
         (Some(t), _) => crate::terminal_view::terminal(s, &t.id, k),
         (None, Some(file)) => file_view(s, tab, &file.path, file.line, k),
         (None, None) => review_view(s, tab, k, layer),
