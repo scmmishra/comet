@@ -6,7 +6,9 @@ use crate::format;
 use crate::protocol::{ClientMessage, DrawnView, TabLayout, UiOp};
 use crate::shell::Desk;
 use crate::theme;
-use rune::{El, ScrollSpec, TextEdit, col, el, row, text, text_input};
+use crate::icons;
+use rune::{El, ScrollSpec, TextEdit, col, el, icon, row, text, text_input};
+use rune_theme_opencode::icons as ic;
 use rune_kit::{ButtonVariant, Kit};
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
@@ -227,7 +229,7 @@ fn node_view(s: &Desk, plugin: &str, id: u64, project: &str, k: &Kit) -> El {
             text(words).font(font).color(color).wrap()
         }
         "list" => col().w_full().grow(1.0).min_h(0.0).gap(1.0).scroll(ScrollSpec { stick_bottom: false }).children(children(s, plugin, node, project, k)),
-        "item" => item_view(props, plugin_owned, k),
+        "item" => item_view(s, props, plugin_owned, k),
         "button" => {
             let variant = match prop(props, "variant") {
                 Some("primary") => ButtonVariant::Contrast,
@@ -252,10 +254,17 @@ fn node_view(s: &Desk, plugin: &str, id: u64, project: &str, k: &Kit) -> El {
     }
 }
 
-/// One row of a list. It is selectable when it has `onSelect`.
-fn item_view(props: &Map<String, Value>, plugin: String, k: &Kit) -> El {
+/// One row of a list. It is selectable when it has `onSelect`, and opens its `href` in the browser when it has one.
+fn item_view(s: &Desk, props: &Map<String, Value>, plugin: String, k: &Kit) -> El {
     let selected = props.get("selected").and_then(Value::as_bool) == Some(true);
     let on_select = handler(props, "onSelect");
+    let href = prop(props, "href").map(str::to_owned);
+    // An image file draws in place of a catalog icon. A name the catalog lacks draws nothing.
+    let image = prop(props, "image").and_then(|path| s.images.file(std::path::Path::new(path)));
+    let lead = match image {
+        Some(image) => Some(el().size(icons::SIZE, icons::SIZE).pixels_fit(image.pixels(), rune::SurfaceFit::Fit)),
+        None => prop(props, "icon").and_then(catalog_icon).map(|found| icon(found, icons::SIZE).color(k.c.text_muted)),
+    };
     let line = |name: &str| prop(props, name).map(|t| text(t.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate());
     let badge = props.get("badge").map(|b| {
         let words = b.get("text").and_then(Value::as_str).unwrap_or("");
@@ -268,22 +277,39 @@ fn item_view(props: &Map<String, Value>, plugin: String, k: &Kit) -> El {
         };
         crate::ui::tinted_badge(words, fill, ink)
     });
-    let head = row().w_full().gap(8.0).items_center().child(text(prop(props, "title").unwrap_or("").to_owned()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate().grow(1.0)).children(badge);
+    // A link says it leaves Desk with an arrow after the title.
+    let out = href.is_some().then(|| icon(&ic::ARROW_UP_RIGHT, icons::SIZE).color(k.c.text_faint));
+    let head = row().w_full().gap(8.0).items_center().child(text(prop(props, "title").unwrap_or("").to_owned()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate().grow(1.0)).children(badge).children(out);
     // The title and its badge on one line, the quieter lines under it, no gap
     // between, rounded to 0.5rem of Desk's 13 pixel root.
-    let item = col()
+    let lines = col().grow(1.0).min_w(0.0).child(head).children(line("subtitle")).children(line("detail"));
+    // The icon sits on the title's line, 20 points tall at Desk's 13 point text.
+    let lead = lead.map(|lead| el().h(20.0).center().child(lead));
+    let item = row()
         .w_full()
+        .gap(8.0)
+        .items_start()
         .px(10.0)
         .py(8.0)
         .radius(6.5)
         .fill(if selected { k.c.layer_02 } else { rune::Color::TRANSPARENT })
-        .child(head)
-        .children(line("subtitle"))
-        .children(line("detail"));
-    match on_select {
-        Some(_) => item.hover(k.c.hover).role("button").on_press(move |s: &mut Desk| s.fire(&plugin, on_select, Vec::new())),
-        None => item,
+        .children(lead)
+        .child(lines);
+    match (href, on_select) {
+        (Some(url), _) => item.hover(k.c.hover).role("link").on_press_tx(move |s: &mut Desk, tx| {
+            if let Err(e) = tx.open_url(&url) {
+                s.toasts.show(e.to_string(), true);
+            }
+            s.fire(&plugin, on_select, Vec::new());
+        }),
+        (None, Some(_)) => item.hover(k.c.hover).role("button").on_press(move |s: &mut Desk| s.fire(&plugin, on_select, Vec::new())),
+        (None, None) => item,
     }
+}
+
+/// The catalog icon a plugin names, if the catalog has it. `protocol/src/icon-names.ts` lists the names a plugin may use.
+fn catalog_icon(name: &str) -> Option<&'static rune::Icon> {
+    ic::ALL.iter().copied().find(|found| found.name == name)
 }
 
 /// A plugin's text field. What is typed stays here, so typing never waits on the plugin.

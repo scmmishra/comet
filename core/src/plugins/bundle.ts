@@ -53,6 +53,9 @@ export async function bundlePlugin(name: string, plugin: string): Promise<string
     target: "bun",
     conditions: ["browser"],
     plugins: [solidJsx],
+    // A file the plugin imports, such as an SVG for an item's image, is copied beside the bundle. The
+    // import names it by its full path, since the app reads it from there.
+    publicPath: `${outdir}/`,
   })
   if (!result.success) throw new Error(`Desk could not build the plugin ${name}: ${result.logs.map(String).join("\n")}`)
   return join(outdir, basename(result.outputs[0]!.path))

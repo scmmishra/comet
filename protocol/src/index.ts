@@ -1,5 +1,9 @@
 /** Messages between the Desk app and the core, sent as JSON over one WebSocket. */
 
+import type { IconName } from "./icon-names"
+
+export { ICON_NAMES, type IconName } from "./icon-names"
+
 /** The line the core prints on stdout once it listens, so the app knows where to connect. */
 export interface CoreReady {
   readonly port: number
@@ -671,8 +675,22 @@ export interface UiPrimitives {
   text: { tone?: "normal" | "muted" | "strong" }
   /** A scrolling list of items. */
   list: {}
-  /** One row of a list. It is selectable when it has `onSelect`. */
-  item: { title: string; subtitle?: string; detail?: string; badge?: { text: string; tint?: Tint }; selected?: boolean; onSelect?: () => void }
+  /**
+   * One row of a list. It is selectable when it has `onSelect`. With `href`, a press opens that URL in the
+   * browser, and runs `onSelect` too when given. `icon` names a catalog icon to draw before the title.
+   * `image` is the path of an image file, such as an SVG the plugin imports, and draws in place of `icon`.
+   */
+  item: {
+    title: string
+    subtitle?: string
+    detail?: string
+    badge?: { text: string; tint?: Tint }
+    icon?: IconName
+    image?: string
+    href?: string
+    selected?: boolean
+    onSelect?: () => void
+  }
   button: { label: string; variant?: ButtonVariant; disabled?: boolean; onClick: () => void }
   /** A text field. Desk keeps what is typed and reports it through `onInput`. Setting `value` replaces it, such as "" to clear it. */
   textinput: { value: string; placeholder?: string; multiline?: boolean; onInput: (value: string) => void; /** Enter, or ⌘Enter in a multiline field. */ onSubmit?: () => void }

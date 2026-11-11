@@ -106,6 +106,15 @@ desk.card("conversation", {
 })
 ```
 
+A list's `Item` can lead with an icon and open a link. `icon` names an icon from the OpenCode catalog, and `IconName` lists them. `image` draws an image file in its place, such as a logo. A plugin imports the file, and the import gives its path. `href` opens a URL in the browser when the item is pressed:
+
+```tsx
+import logo from "./logo.svg"
+
+<Item title="Open in Chatwoot" image={logo} href={url} />
+<Item title="Docs" icon="link" href={docs} />
+```
+
 A panel's context also has `ctx.params` and `ctx.close()`. A command's context has no `visible()` or `thread()`, since a command draws nothing.
 
 ## Who owns what

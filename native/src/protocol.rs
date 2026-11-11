@@ -900,8 +900,13 @@ mod tests {
 
     /// One fixture list as JSON, printed by Bun from the TypeScript that the typecheck holds to the protocol.
     fn fixtures(name: &str) -> Vec<Value> {
+        printed("fixtures", name)
+    }
+
+    /// A list `protocol/src/<module>.ts` exports, as JSON, printed by Bun.
+    fn printed(module: &str, name: &str) -> Vec<Value> {
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-        let script = format!("import {{ {name} }} from './protocol/src/fixtures.ts'; console.log(JSON.stringify({name}))");
+        let script = format!("import {{ {name} }} from './protocol/src/{module}.ts'; console.log(JSON.stringify({name}))");
         let out = Command::new(std::env::var("DESK_BUN").unwrap_or_else(|_| "bun".into()))
             .args(["-e", &script])
             .current_dir(repo)
@@ -942,6 +947,16 @@ mod tests {
                 assert_eq!(&serde_json::to_value(&decoded).unwrap(), tab);
             }
         }
+    }
+
+    #[test]
+    fn the_catalog_holds_every_icon_a_plugin_may_name() {
+        let missing: Vec<String> = printed("icon-names", "ICON_NAMES")
+            .into_iter()
+            .filter_map(|name| name.as_str().map(str::to_owned))
+            .filter(|name| !rune_theme_opencode::icons::ALL.iter().any(|icon| icon.name == name))
+            .collect();
+        assert!(missing.is_empty(), "the catalog lacks {missing:?}");
     }
 
     #[test]

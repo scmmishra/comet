@@ -1,8 +1,8 @@
-import type { MessageData, PanelParams, Tint, UiPrimitive, UiPrimitives } from "@desk/protocol"
+import type { IconName, MessageData, PanelParams, Tint, UiPrimitive, UiPrimitives } from "@desk/protocol"
 import type { JSX } from "solid-js"
 import { createElement, spread } from "./renderer"
 
-export type { MessageData, PanelParams, Tint }
+export type { IconName, MessageData, PanelParams, Tint }
 
 /**
  * Desk's plugin API. A plugin is a TSX module in `~/.desk/plugins/<name>/index.tsx` whose default
