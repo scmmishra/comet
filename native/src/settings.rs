@@ -1,5 +1,5 @@
 //! Desk's settings, after OpenCode's settings screen: a sidebar of
-//! pages, and the chosen page beside it, in place of the session. Back, or Escape, returns to it.
+//! pages, and the chosen page beside it, on a card over the session. Back, or Escape, returns to it.
 
 use crate::format;
 use crate::models::{effort_label, permission, permission_for, permission_modes};
@@ -33,7 +33,7 @@ pub struct SettingsUi {
 }
 
 impl Desk {
-    /// Shows a settings page in place of the session, reading what it shows.
+    /// Shows a settings page over the session, reading what it shows.
     pub fn open_settings(&mut self, page: &str) {
         // Settings opened afresh drop what was typed and never saved.
         if self.workspace.settings_page.is_none() {

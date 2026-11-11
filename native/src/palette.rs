@@ -369,10 +369,13 @@ impl Desk {
             }
             Action::Theme(theme) => self.set_theme(theme.id()),
             Action::Settings(page) => {
+                // Closed Settings slide up as they open. A page picked while they show swaps in whole,
+                // with no fade or slide of its parts.
+                if self.workspace.settings_page.is_some() {
+                    tx.instant();
+                }
                 self.open_settings(page);
                 tx.focus("settings", false);
-                // A page picked from the keyboard shows whole, with no fade or slide of its parts.
-                tx.instant();
             }
             Action::Open(_) => {}
         }

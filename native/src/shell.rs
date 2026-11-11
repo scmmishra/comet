@@ -25,6 +25,13 @@ const TOGGLE_INSET: (f32, f32) = (8.0, 9.0);
 const ANIMATION_SPEED: f32 = 1.2;
 /// The main panel's corners, Desk's `rounded-3xl`.
 const PANEL_RADIUS: f32 = 12.0;
+/// How far Settings' card sits below the top of the main panel, so the tab's card shows behind its top edge.
+const SETTINGS_TOP: f32 = 16.0;
+/// How far Settings' card slides up as it opens, and down as it closes.
+const SETTINGS_TRAVEL: f32 = 48.0;
+/// The tab's card behind Settings: pushed back, so its top edge peeks out above Settings' card, and dimmed.
+const COVERED_SCALE: f32 = 0.98;
+const COVERED_OPACITY: f32 = 0.7;
 /// A plugin's sidebar, `w-[320px]`.
 const SIDEBAR_WIDTH: f32 = 320.0;
 /// The session's header, `h-[46px]`.
@@ -252,7 +259,7 @@ pub mod commands {
         super::open_folder(tx);
     }
 
-    /// Closes the tab, or Settings while they show in its place.
+    /// Closes the tab, or Settings while they cover it.
     pub fn close_tab(s: &mut Desk, tx: &mut Tx) {
         if s.workspace.settings_page.is_some() {
             s.close_settings();
@@ -389,15 +396,17 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
     let line = |words: String| text(words).font(crate::theme::text(13.0)).color(k.c.text_muted);
     // A card on the ground: the session, and the view pane beside it while open.
     let card = |key: &str, child: El| col().key(key.to_owned()).w_frac(1.0).grow(1.0).shrink().min_w(0.0).h_full().min_h(0.0).fill(k.c.bg_base).radius(PANEL_RADIUS).clip_rounded(PANEL_RADIUS).border(1.0, k.c.border_muted).padding(1.0).child(child);
+    let settings_open = s.status == CoreState::Ready && w.settings_page.is_some();
     let cards = match (&s.status, w.active_tab()) {
-        // Settings show in place of the tab, in the card the session fills.
-        (CoreState::Ready, _) if s.workspace.settings_page.is_some() => row().w_full().grow(1.0).min_h(0.0).child(card("settings-card", crate::settings::screen(s, k, &mut layer))),
         (CoreState::Ready, Some(tab)) => {
+            // A session under Settings draws no popovers: they would show on top of Settings.
+            let mut covered = Vec::new();
+            let layer = if settings_open { &mut covered } else { &mut layer };
             // The room inside the card's border, which the lane and the rail are placed in.
             let size = cx.layout_size("session-body");
             let window = cx.layout_size("window");
-            let session = col().key("session-body").w_full().h_full().min_h(0.0).child(session(s, tab, dark, size, window, &mut layer));
-            let pane = (tab.panel_open == Some(true)).then(|| card("panel-card", crate::panel::panel(s, tab, k, &mut layer)));
+            let session = col().key("session-body").w_full().h_full().min_h(0.0).child(session(s, tab, dark, size, window, layer));
+            let pane = (tab.panel_open == Some(true)).then(|| card("panel-card", crate::panel::panel(s, tab, k, layer)));
             // A plugin's sidebar sits before the session, as a card of its own.
             let sidebar = s.plugins.layouts.get(&tab.id).and_then(|l| l.sidebar.as_ref()).map(|view| {
                 col().key("sidebar").w(SIDEBAR_WIDTH).h_full().min_h(0.0).padding(9.0).radius(PANEL_RADIUS).clip_rounded(PANEL_RADIUS).fill(k.c.layer_01).border(1.0, k.c.border_muted).child(crate::plugins::view(s, view, &tab.project, k))
@@ -415,7 +424,22 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
             row().w_full().grow(1.0).min_h(0.0).child(card("body", col().w_full().h_full().center().child(words.key("status"))))
         }
     };
-    let main = col().key("main").w_full().grow(1.0).min_h(0.0).px(PANEL_INSET).pb(PANEL_INSET).child(cards);
+    // Settings slide up as a card over the tab. The tab stays drawn behind them, pushed back and dimmed,
+    // so going back shows it at once.
+    let cards = if settings_open { cards.key("ground").scale(COVERED_SCALE).opacity(COVERED_OPACITY).inert() } else { cards.key("ground") };
+    let settings = settings_open.then(|| {
+        col()
+            .key("settings-card")
+            .pin(Some(PANEL_INSET), Some(SETTINGS_TOP), Some(PANEL_INSET), Some(PANEL_INSET))
+            .fill(k.c.bg_base)
+            .radius(PANEL_RADIUS)
+            .clip_rounded(PANEL_RADIUS)
+            .border(1.0, k.c.border_muted)
+            .padding(1.0)
+            .transition(rune::Transition::offset(0.0, SETTINGS_TRAVEL).combined(rune::Transition::opacity()))
+            .child(crate::settings::screen(s, k, &mut layer))
+    });
+    let main = col().key("main").w_full().grow(1.0).min_h(0.0).px(PANEL_INSET).pb(PANEL_INSET).child(cards).children(settings);
     crate::palette::palette(s, cx.layout_size("window").map_or(820.0, |size| size[1]), k, &mut layer);
     layer.extend(crate::toasts::region(s, k));
     // Coming back to the window is when files and usage most likely changed outside Desk.
