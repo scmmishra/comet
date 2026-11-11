@@ -443,18 +443,24 @@ export class Window {
 
   /**
    * What changed in a tab's project in the span `scope` names. The thread and last-turn scopes compare
-   * checkpoints, after T3 Code, so they show finished turns. A thread with no finished turn has none.
+   * checkpoints, after T3 Code, so they show finished turns. A thread with no finished turn has none, and
+   * neither has a folder that is not a Git repo. A Git failure, such as a diff too large to read, reaches
+   * the user, so it never reads as no changes.
    */
   async review(tabId: string, scope: ReviewScope): Promise<FileChange[]> {
     const project = this.tab(tabId).project
+    const read = (changes: Promise<FileChange[]>) =>
+      changes.catch((error) => {
+        throw new Error(`Review could not read the changes. ${errorMessage(error)}`)
+      })
     if (scope === "thread" || scope === "turn") {
       await this.turnEnds.get(tabId)
       const thread = this.thread(tabId)
       const from = scope === "thread" ? thread.threadStart : thread.turnFrom
-      return from && thread.turnTo ? checkpointChanges(project, from, thread.turnTo).catch(() => []) : []
+      return from && thread.turnTo ? read(checkpointChanges(project, from, thread.turnTo)) : []
     }
     const base = scope === "git" ? await headTree(project) : await branchBase(project)
-    return base ? changesSince(project, base).catch(() => []) : []
+    return base ? read(changesSince(project, base)) : []
   }
 
   /** A project's recent threads across every agent, newest first, each with the tab that has it open. */

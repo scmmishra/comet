@@ -416,3 +416,11 @@ test("stopping the window closes the sessions that run while their thread is awa
   window.stop()
   expect(codex.calls).toEqual(["send Draft a reply", "close"])
 })
+
+test("Review says why it could not read a thread's changes, and shows none for a folder that is not a Git repo", async () => {
+  const repo = gitRepo({ "a.txt": "one\n" })
+  const missing = "0123456789abcdef0123456789abcdef01234567"
+  const { window } = openWithAgents({ tabs: [codexTab("a", repo.dir), codexTab("b", tempFolder("plain"))], threads: { a: { turnFrom: missing, turnTo: missing } }, recent: [] })
+  await expect(window.review("a", "turn")).rejects.toThrow("Review could not read the changes. git ")
+  expect(await window.review("b", "git")).toEqual([])
+})
