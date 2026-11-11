@@ -3,7 +3,7 @@ import { expect, test } from "bun:test"
 import type { CoreMessage, TabInfo } from "@desk/protocol"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { claudeTranscript, fakeAgent, gitRepo, tempFolder, type TranscriptEntry, useTempHome } from "./test-support"
+import { claudeTranscript, fakeAgent, gitRepo, tempFolder, type TranscriptEntry, until, useTempHome } from "./test-support"
 import { Agents } from "./agents/registry"
 import { outcomeAfter, Window } from "./window"
 
@@ -246,14 +246,15 @@ function openWithAgents(state: object) {
   const codex = fakeAgent("codex", [], [{ id: "x1", title: "Newer", updatedAt: 2 }])
   writeFileSync(join(process.env.DESK_HOME!, "window.json"), JSON.stringify(state))
   const sent: CoreMessage[] = []
+  const ended: [string, string, string][] = []
   const window = new Window({
     broadcast: (message) => sent.push(message),
     agents: new Agents(() => {}, { compactIdle: () => false }, { claude: claude.make, codex: codex.make }),
     tabClosed: () => {},
-    turnEnded: () => {},
+    turnEnded: (tabId, threadKey, outcome) => ended.push([tabId, threadKey, outcome]),
     threadShown: () => {},
   })
-  return { window, sent, claude, codex }
+  return { window, sent, ended, claude, codex }
 }
 
 test("runs a tab on the agent it names, and its thread stays on the agent that started it", async () => {
@@ -327,4 +328,111 @@ test("rewinds through the thread's agent, restoring files first when asked, and 
   expect(claude.calls).toEqual(["restore u1", "close", "rewind c1 u1"])
   expect(saved().threads.a).toMatchObject({ sessionId: "c1", agent: "claude" })
   expect(saved().threads.a.rewind).toBeUndefined()
+})
+
+const codexTab = (id: string, project: string): TabInfo => ({ ...tab(id, project), agent: "codex" })
+
+test("sends the next queued message once the turn ends", async () => {
+  const project = tempFolder("queue")
+  const { window, codex } = openWithAgents({ tabs: [codexTab("a", project)], threads: {}, recent: [] })
+  await window.send("a", "one")
+  await window.send("a", "two")
+  await window.send("a", "three")
+  codex.sessions[0]!.finish()
+  await until(() => codex.calls.includes("send two"))
+  expect(codex.calls).toEqual(["send one", "send two"])
+  expect(saved().threads.a.queue).toMatchObject([{ text: "three" }])
+})
+
+test("holds the queue after a stop or an error, until it is resumed", async () => {
+  const project = tempFolder("queue")
+  const { window, sent, codex } = openWithAgents({ tabs: [codexTab("a", project), codexTab("b", project)], threads: {}, recent: [] })
+  await window.send("a", "one")
+  await window.send("a", "two")
+  await window.interrupt("a")
+  await until(() => !!saved().threads.a.queueHeld)
+  expect(sent).toContainEqual({ type: "queue", tabId: "a", messages: [expect.objectContaining({ text: "two" })], held: true })
+  expect(codex.calls).not.toContain("send two")
+  window.resumeQueue("a")
+  await until(() => codex.calls.includes("send two"))
+  expect(saved().threads.a.queue).toEqual([])
+
+  await window.send("b", "one")
+  await window.send("b", "two")
+  const session = codex.sessions.at(-1)!
+  session.emit({ kind: "item", item: { type: "error", id: "e1", message: "lost" } })
+  session.emit({ kind: "status", busy: false })
+  await until(() => !!saved().threads.b.queueHeld)
+  expect(saved().threads.b.queue).toMatchObject([{ text: "two" }])
+})
+
+test("sends a queued message into the running turn when asked, and keeps it queued for an agent that takes none", async () => {
+  const project = tempFolder("queue")
+  const { window, claude, codex } = openWithAgents({ tabs: [tab("a", project), codexTab("b", project)], threads: {}, recent: [] })
+  await window.send("a", "one")
+  await window.send("a", "/compact")
+  await window.sendQueued("a", saved().threads.a.queue[0].id)
+  expect(claude.calls).toEqual(["send one", "steer /compact"])
+  expect(saved().threads.a.queue).toEqual([])
+
+  await window.send("b", "one")
+  await window.send("b", "two")
+  await window.sendQueued("b", saved().threads.b.queue[0].id)
+  expect(codex.calls).toEqual(["send one"])
+  expect(saved().threads.b.queue).toMatchObject([{ text: "two" }])
+})
+
+test("tells the plugin how each turn of its thread ended", async () => {
+  const project = tempFolder("outcome")
+  const { window, ended, codex } = openWithAgents({ tabs: [codexTab("a", project)], threads: {}, recent: [] })
+  await window.openKey("a", { key: "inbox.conv-1", prompt: "Draft a reply" })
+  codex.sessions[0]!.finish()
+  expect(ended).toEqual([["a", "inbox.conv-1", "done"]])
+  await window.send("a", "again")
+  await window.interrupt("a")
+  expect(ended.at(-1)).toEqual(["a", "inbox.conv-1", "interrupted"])
+  await window.send("a", "once more")
+  codex.sessions[0]!.emit({ kind: "status", busy: false })
+  expect(ended.at(-1)).toEqual(["a", "inbox.conv-1", "error"])
+})
+
+test("a turn goes on while its thread is away, and its session closes once the turn ends there", async () => {
+  const project = tempFolder("parked")
+  const { window, sent, ended, codex } = openWithAgents({ tabs: [codexTab("a", project)], threads: {}, recent: [] })
+  await window.openKey("a", { key: "inbox.conv-1", prompt: "Draft a reply" })
+  await window.openKey("a", { key: "inbox.conv-2" })
+  expect(codex.calls).toEqual(["send Draft a reply"])
+  sent.length = 0
+  codex.sessions[0]!.finish()
+  expect(ended).toEqual([["a", "inbox.conv-1", "done"]])
+  expect(codex.calls).toEqual(["send Draft a reply", "close"])
+  // Nothing of the away thread shows in the thread the tab moved to.
+  expect(sent.filter((message) => message.type === "session.event")).toEqual([])
+  expect(saved().keyed[`${project}\ninbox.conv-1`]).toMatchObject({ sessionId: "codex-session" })
+})
+
+test("a thread that comes back mid-turn shows as running, on the session that kept going", async () => {
+  const project = tempFolder("parked")
+  const { window, sent, codex } = openWithAgents({ tabs: [codexTab("a", project)], threads: {}, recent: [] })
+  await window.openKey("a", { key: "inbox.conv-1", prompt: "Draft a reply" })
+  await window.openKey("a", { key: "inbox.conv-2" })
+  sent.length = 0
+  await window.openKey("a", { key: "inbox.conv-1" })
+  expect(sent).toContainEqual({ type: "session.event", tabId: "a", event: { kind: "status", busy: true } })
+  codex.sessions[0]!.finish()
+  expect(codex.calls).toEqual(["send Draft a reply"])
+  expect(sent).toContainEqual({ type: "session.event", tabId: "a", event: { kind: "status", busy: false } })
+})
+
+test("lists the files a turn changed under its answer, and again when the thread is read back", async () => {
+  const repo = gitRepo({ "a.txt": "one\n" })
+  const { window, sent, codex } = openWithAgents({ tabs: [codexTab("a", repo.dir)], threads: {}, recent: [] })
+  await window.send("a", "Change it")
+  repo.write("a.txt", "two\n")
+  codex.sessions[0]!.finish()
+  const changes = () => sent.flatMap((message) => (message.type === "session.event" && message.event.kind === "item" && message.event.item.type === "changes" ? [message.event.item] : []))
+  await until(() => changes().length > 0)
+  expect(changes()).toMatchObject([{ id: "changes:u1", files: [{ path: "a.txt" }] }])
+  expect(await window.review("a", "turn")).toMatchObject([{ path: "a.txt" }])
+  expect(saved().threads.a.turnChanges.u1).toMatchObject([{ path: "a.txt" }])
 })

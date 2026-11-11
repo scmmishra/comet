@@ -108,7 +108,7 @@ export function fakeAgent(id: AgentId, features: readonly AgentFeature[] = [], t
           return busy
         },
         send: (text) => turn("send", text),
-        steer: (text) => turn("steer", text),
+        ...(has("steer") ? { steer: (text: string) => turn("steer", text) } : {}),
         interrupt: async () => {
           calls.push("interrupt")
           if (!busy) return
@@ -120,7 +120,6 @@ export function fakeAgent(id: AgentId, features: readonly AgentFeature[] = [], t
         configure: async (settings) => void calls.push(`configure ${settings.model}`),
         answerPermission: (requestId, answer) => void calls.push(`permission ${requestId} ${answer}`),
         answerQuestion: (requestId) => void calls.push(`question ${requestId}`),
-        stopTasks: async () => {},
         ...(has("restore-files") ? { restoreFiles: async (messageId: string) => void calls.push(`restore ${messageId}`) } : {}),
         close: () => void calls.push("close"),
       }
