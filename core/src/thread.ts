@@ -13,7 +13,7 @@ const COMPACT_SUMMARY = /^This session is being continued from a previous conver
 /** Tool output beyond this many characters is cut. The thread shows a summary, not a log. */
 const MAX_TOOL_OUTPUT = 4000
 /** Inputs that say in short what a tool call does, in the order a summary prefers them. */
-const SUMMARY_FIELDS = ["command", "file_path", "pattern", "path", "url", "query", "description"]
+const SUMMARY_FIELDS = ["command", "file_path", "pattern", "path", "url", "query", "description", "skill"]
 
 type ToolItem = Extract<ThreadItem, { type: "tool" }>
 

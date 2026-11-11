@@ -42,6 +42,7 @@ test("shapes an edit with its file relative to the project, and other calls by t
   })
   expect(toolItem(DIR, "t2", "Grep", { pattern: "TODO", glob: "*.ts" }).summary).toBe("TODO")
   expect(toolItem(DIR, "t3", "Custom", { level: 2 }).summary).toBe('{"level":2}')
+  expect(toolItem(DIR, "t4", "Skill", { skill: "chatwoot-cli" }).summary).toBe("chatwoot-cli")
 })
 
 test("rebuilds a thread from a stored transcript, timing each turn and hiding Claude Code's own messages", () => {
