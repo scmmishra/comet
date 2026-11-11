@@ -43,20 +43,17 @@ jobs:
 
       - run: bun run typecheck
 
-      - run: bun test core app/src
+      - run: bun test core
 
       - run: cargo clippy --manifest-path native/Cargo.toml --all-targets -- -D warnings
 
       # Some tests start a real core, which the bun install above makes ready.
       - run: cargo test --manifest-path native/Cargo.toml
 
-      # The Electron app stays buildable until it goes.
-      - run: bun run --cwd app build
-
       - run: scripts/package.sh
 
       - name: Check the app's version and signature
         run: |
           plist=dist/mac-arm64/Desk.app/Contents/Info.plist
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$(jq -r .version app/package.json)"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$(sed -n 's/^version = "\(.*\)"$/\1/p' native/Cargo.toml | head -1)"
           codesign --verify --deep --strict dist/mac-arm64/Desk.app

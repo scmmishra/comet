@@ -1,8 +1,8 @@
 # Moving the app to Rune
 
-Desk's UI moves from Electron and Solid to Rune, Anomaly's Rust framework. The new app lives in `native/`. The Bun core stays as it is, with the Agent SDK, Git, PTYs, commands and plugins. The protocol stays JSON over one loopback WebSocket.
+Desk's UI moved from Electron and Solid to Rune, Anomaly's Rust framework. The app lives in `native/`. The Bun core stayed as it was, with the Agent SDK, Git, PTYs, commands and plugins. The protocol stayed JSON over one loopback WebSocket.
 
-The work goes in phases. The Electron app stays the shipped Desk until the last phase. Each phase ends with something that runs.
+The work went in phases, and all of them are done. The Electron app stayed the shipped Desk until the last phase, which removed it. This file records the move and the gaps Rune still leaves.
 
 ## Why
 
@@ -95,9 +95,11 @@ Done:
 - A bundled Desk finds its core in its own resources and serves the main instance, `~/.desk`. Run from the repo, it keeps the `native` instance, since the Electron Desk Dev owns `~/.desk/dev` under a lock of its own.
 - `AGENTS.md` describes the native app, its tasks and Rune's headless checks.
 
+- `app/` is gone. Desk's version is `native/Cargo.toml`'s, and its icon is `native/assets/Desk.icon`.
+
 Left:
 
-- Remove `app/`. The native package still reads the version from `app/package.json` and the icon from `app/build/Desk.icon`, so both move first. The dev instance can then take the name `dev`.
+- The dev instance can take the name `dev`, now that no other Desk owns `~/.desk/dev`.
 
 ## Open decisions
 
@@ -118,13 +120,11 @@ Left:
 - Text has no unbreakable span, so inline code wraps at its spaces. No-break spaces would keep it whole, but a copied command would then carry them.
 - Rune has no left-start placement, so a subagent's detail centres beside its row.
 
-## Matching the Electron app
+## Desk's design rules
 
-The native app compares against the Electron app on the same data. Desk Dev can run in a throwaway home (`DESK_HOME=/tmp/… DESK_DEBUG_PORT=9333 mise run dev`), and its renderer takes core messages from `import("/core.ts")`. The native `file` scene reads the same messages from `DESK_SCENE_FILE`.
-
-Look, icons and type should match. Small spacing differences are fine. A few rules the Electron app follows that are easy to miss:
+The native app was matched against the Electron app, which was built from `@opencode/ui`. Its look, icons and type carry over. A few rules that are easy to miss:
 
 - Desk's own text is weight 400 on a 1.5 line. Only `@opencode/ui` components use the kit's 440 and 530.
 - Every `<Icon>` draws at 15 points, whatever size class it is given (`icons::SIZE`).
-- A CSS border takes room. Rune's does not, so a native element copying one adds the width to its padding. Outlines the Electron app draws as shadows do not.
+- In the design, a border takes room, as in CSS, and an outline drawn as a shadow does not. Rune's borders take no room, so a native element with a design border adds its width to its padding.
 - rem values shrink by Desk's 13 pixel root: `@opencode/ui`'s popover radius is 4.875 points, not 6.

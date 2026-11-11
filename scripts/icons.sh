@@ -1,14 +1,12 @@
 #!/bin/bash
-# Renders the logo into the app's icons. Run it after changing assets/logo.svg or assets/logo-dark.svg,
-# and commit what it writes. Needs rsvg-convert (`brew install librsvg`).
-#
-# - build/Desk.icon: the Icon Composer icon, which macOS 26 shows in light or dark with the system.
-#   electron-builder also renders it into the .icns that older macOS shows.
-# - build/icon-dev.png: an amber icon that Desk Dev shows in the Dock, so the two are told apart.
+# Renders the logo into native/assets/Desk.icon, the Icon Composer icon, which macOS 26 shows in light or
+# dark with the system. `scripts/package.sh` also renders it into the .icns that older macOS shows. Run it
+# after changing assets/logo.svg or assets/logo-dark.svg, and commit what it writes. Needs rsvg-convert
+# (`brew install librsvg`).
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 assets="$repo/assets"
-out="$repo/app/build"
+out="$repo/native/assets"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$out"
@@ -52,8 +50,4 @@ cat > "$out/Desk.icon/icon.json" <<'EOF'
 }
 EOF
 
-# The dev icon swaps the slab's blues for ambers of the same weight.
-sed -e 's/#9CC6FF/#FFD08A/g' -e 's/#4C8BF0/#F0962E/g' -e 's/#2F64C4/#C46F1F/g' -e 's/#244F9E/#9E5615/g' \
-  "$assets/logo.svg" > "$work/logo-dev.svg"
-rsvg-convert -w 512 -h 512 "$work/logo-dev.svg" -o "$out/icon-dev.png"
-echo "Wrote $out/Desk.icon and $out/icon-dev.png"
+echo "Wrote $out/Desk.icon"

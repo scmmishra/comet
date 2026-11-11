@@ -18,13 +18,13 @@ Always build code cleanly, modularly, and with proper architecture and separatio
 - `core/` is a Bun process. It owns sessions, the Claude Agent SDK, Git, PTYs, commands and space data, for every project the window's tabs work in. Later it also owns cards, variables and the MCP server.
 - `native/` is Desk: a Rust app built with Rune and `rune-kit`. It is a thin client: it draws what the core sends. Its state lives in modules by concern, such as `workspace.rs` (tabs and what shows), `threads.rs` (each tab's thread), `projects.rs` (what is read about each project) and `account.rs` (settings, models and usage).
 - `protocol/` holds the message types the core and its clients share. They talk JSON over one WebSocket on loopback, guarded by a token. The native app's types are written by hand in `native/src/protocol.rs` for the messages it reads. `protocol/src/fixtures.ts` holds one core message of each type, and the native tests decode them.
-- `app/` is the Electron Desk that `native/` replaced, with Solid and `@opencode/ui`. It stays buildable until it goes. `docs/rune-port.md` records the move.
+- `docs/rune-port.md` records the move from the Electron app, which Desk was until `native/` replaced it, and the gaps Rune still leaves.
 
 Keep logic in the core. The clients only draw it.
 
 ## UI components
 
-Build the UI from `rune-kit`. Its components match `@opencode/ui` by name, variant and state, and Desk's look follows the Electron app, which was built from `@opencode/ui`.
+Build the UI from `rune-kit`. Its components match `@opencode/ui` by name, variant and state, and Desk's design comes from `@opencode/ui`. `docs/rune-port.md` lists the design rules that are easy to miss.
 
 - Before you write a component, look for one in `rune-kit`. OpenCode's stories in `~/scmmishra/reference/opencode/packages/ui` show how each one is meant to look and behave.
 - Use the component as it is. Change its look only when Desk's design needs it.
@@ -40,15 +40,14 @@ Build the UI from `rune-kit`. Its components match `@opencode/ui` by name, varia
 - One Desk runs at a time, with one window. Its tabs are saved in `~/.desk/window.json`.
 - `mise run dev` runs Desk from the repo with `cargo run`. It keeps its tabs and plugin builds in `~/.desk/native`, so it runs beside the installed Desk. Settings, commands and plugins are shared. `DESK_DIR=<folder> mise run dev` opens a folder in it.
 - A Desk run from the repo starts the core with `bun` from `PATH`. Set `DESK_BUN` to use another binary. The core needs Bun 1.4 or newer.
-- `mise run test` runs the core and native tests. `mise run check` typechecks, lints, runs every test and builds the Electron app.
-- `mise run electron:dev` and `mise run electron:package` run and build the Electron Desk. Its Desk Dev keeps `~/.desk/dev`.
-- `assets/logo.svg` and `assets/logo-dark.svg` are the logo in light and dark. `mise run icons` renders them into `app/build`, which both apps read. Commit what it writes.
+- `mise run test` runs the core and native tests. `mise run check` typechecks, lints and runs every test.
+- `assets/logo.svg` and `assets/logo-dark.svg` are the logo in light and dark. `mise run icons` renders them into `native/assets/Desk.icon`. Commit what it writes.
 
 ## Release
 
-- The version in `app/package.json` is Desk's version. `scripts/package.sh` writes it into Desk.app's `Info.plist`.
+- The version in `native/Cargo.toml` is Desk's version. `scripts/package.sh` writes it into Desk.app's `Info.plist`.
 - Changes go in `CHANGELOG.md` under `## Unreleased` until they ship. CI fails when the version has no section.
-- To release, rename `## Unreleased` to the new version, set the version in `app/package.json` to match, and push to `main`. Then start the Release workflow by hand. It publishes `Desk-arm64.zip` as the GitHub release `v<version>`, with the version's section as its notes.
+- To release, rename `## Unreleased` to the new version, set the version in `native/Cargo.toml` to match, and push to `main`. Then start the Release workflow by hand. It publishes `Desk-arm64.zip` as the GitHub release `v<version>`, with the version's section as its notes.
 - Desk has no auto-update yet. `mise run install` updates the installed Desk from the checkout.
 
 ## Check the UI
@@ -59,8 +58,6 @@ Do not take screen captures. Rune runs Desk headless, with no window and no core
 - `src/scenes.rs` lists the scenes. The `file` scene takes core messages from the JSON file `DESK_SCENE_FILE` names, so any thread, review or plugin view can be drawn from data.
 - `--script events.json` replays input: `tap`, `move`, `drag`, `wheel`, `type`, `key` and `paste`, each at a time `t`. A text field takes keys only once a tap has focused it.
 - A headless run has no input method events, no system clipboard and no core. Check those in the installed app.
-
-The Electron app is checked with agent-browser, as `app/` describes: start it with `DESK_DEBUG_PORT=9333`, then `agent-browser connect 9333`.
 
 ## References
 
@@ -81,12 +78,5 @@ T3 Code and OpenCode are cloned in `~/scmmishra/reference`. T3 Code's server sho
 
 - An app opened from the Dock or Finder starts with launchd's short PATH. The core takes the login shell's PATH at start (`core/src/main.ts`), so Claude Code and the tools Desk runs find the user's.
 - A Rune popover anchored to an element inside another popover must go into the overlay layer after that popover. Ahead of its anchor, it opens in the window's corner.
-
 - A Desk started from inside Claude Code inherits that session's `CLAUDECODE` and `CLAUDE_CODE_*` variables. Claude sessions that Desk starts would then take themselves for children of that session. The core removes those variables at start, by prefix.
-- The quirks below are the Electron app's.
-- `@opencode/ui`'s Tabs select their first tab when the chosen one has no trigger yet, and report it as a change. A tab must exist before it is selected. The view pane gives its Tabs a new choice one update late for this.
-- `@opencode/ui`'s `menu.css` sits outside Tailwind's layers. Its rules beat utility classes, so an override needs `!`.
-- An `@opencode/ui` popover closes when focus leaves its content. A menu inside a popover must render without `Menu.Portal`.
-- `@opencode/ui`'s Tabs put each tab's value in a CSS selector without escaping it. A value must not hold quotes, so panel instance ids are URI-encoded.
-- `@opencode/ui`'s `showToast` gives a toast with only a description an empty title, which draws as a blank line above the text. `index.css` hides an empty toast title.
-- `@opencode/ui` names its source before its types, so TypeScript checks its `.tsx` files under the app's tsconfig. The app's tsconfig turns off `verbatimModuleSyntax` and uses the ES2025 lib for that.
+

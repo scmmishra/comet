@@ -10,8 +10,8 @@ description = "Test the core and the native Desk"
 run = "bun test core && cargo test --manifest-path native/Cargo.toml"
 
 [tasks.check]
-description = "Typecheck, lint, test and build"
-run = "bun run typecheck && bun test core app/src && cargo clippy --manifest-path native/Cargo.toml --all-targets -- -D warnings && cargo test --manifest-path native/Cargo.toml && bun run --cwd app build"
+description = "Typecheck, lint and test"
+run = "bun run typecheck && bun test core && cargo clippy --manifest-path native/Cargo.toml --all-targets -- -D warnings && cargo test --manifest-path native/Cargo.toml"
 
 [tasks.package]
 description = "Build Desk.app in dist/mac-arm64"
@@ -24,11 +24,3 @@ run = "scripts/install.sh"
 [tasks.icons]
 description = "Render assets/logo.svg into the app's icons"
 run = "scripts/icons.sh"
-
-[tasks."electron:dev"]
-description = "Run the Electron Desk Dev, which Desk replaces"
-run = "bun run --cwd app dev"
-
-[tasks."electron:package"]
-description = "Build the Electron Desk.app in dist/electron"
-run = "scripts/package-electron.sh"

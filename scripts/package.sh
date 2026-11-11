@@ -7,8 +7,8 @@ repo="$(cd "$(dirname "$0")/.." && pwd)"
 app="$repo/dist/mac-arm64/Desk.app"
 cd "$repo"
 
-# Desk's version and icon still live with the Electron app, until it goes.
-version="$(jq -r .version app/package.json)"
+# Desk's version is the native crate's.
+version="$(sed -n 's/^version = "\(.*\)"$/\1/p' native/Cargo.toml | head -1)"
 
 cargo build --release --manifest-path native/Cargo.toml
 scripts/stage-core.sh
@@ -23,7 +23,7 @@ cp dist/stage/bun "$app/Contents/Resources/bun"
 # Desk.icon gives macOS 26 a light and a dark icon, and actool renders an .icns from it for older macOS.
 icons="$(mktemp -d)"
 trap 'rm -rf "$icons"' EXIT
-xcrun actool app/build/Desk.icon --compile "$app/Contents/Resources" --app-icon Desk \
+xcrun actool native/assets/Desk.icon --compile "$app/Contents/Resources" --app-icon Desk \
   --enable-on-demand-resources NO --development-region en --target-device mac --platform macosx \
   --minimum-deployment-target 13.0 --output-partial-info-plist "$icons/icon.plist" > /dev/null
 

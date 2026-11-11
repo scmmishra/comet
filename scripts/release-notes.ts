@@ -1,13 +1,17 @@
 // Prints the CHANGELOG.md section for a version, without its heading.
-//   bun scripts/release-notes.ts            the version in app/package.json
+//   bun scripts/release-notes.ts            the version in native/Cargo.toml
 //   bun scripts/release-notes.ts 0.2.0      another version
 // Exits with an error when the section is missing or empty. The release workflow and CI both run it,
 // so a version can't ship without its notes.
 import { join } from "node:path"
-import { version as current } from "../app/package.json" with { type: "json" }
-
 const ROOT = join(import.meta.dir, "..")
+const cargo = await Bun.file(join(ROOT, "native/Cargo.toml")).text()
+const current = /^version = "(.+)"$/m.exec(cargo)?.[1]
 const version = process.argv[2] ?? current
+if (!version) {
+  console.error("native/Cargo.toml names no version.")
+  process.exit(1)
+}
 
 const lines = (await Bun.file(join(ROOT, "CHANGELOG.md")).text()).split("\n")
 const heading = new RegExp(`^## ${version.replaceAll(".", "\\.")}(\\s|$)`)

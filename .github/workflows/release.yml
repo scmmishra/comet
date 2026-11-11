@@ -18,12 +18,12 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Read the version
-        run: echo "TAG=v$(jq -r .version app/package.json)" >> "$GITHUB_ENV"
+        run: echo "TAG=v$(sed -n 's/^version = "\(.*\)"$/\1/p' native/Cargo.toml | head -1)" >> "$GITHUB_ENV"
 
       - name: Stop if the version is already released
         run: |
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
-            echo "$TAG is already released. Bump the version in app/package.json first."
+            echo "$TAG is already released. Bump the version in native/Cargo.toml first."
             exit 1
           fi
 
@@ -47,7 +47,7 @@ jobs:
 
       - run: bun run typecheck
 
-      - run: bun test core app/src
+      - run: bun test core
 
       - run: cargo test --manifest-path native/Cargo.toml
 
