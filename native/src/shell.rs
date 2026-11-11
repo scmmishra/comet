@@ -350,6 +350,13 @@ fn copied_poll(s: &mut Desk, tx: &mut Tx) -> bool {
     false
 }
 
+/// A `desk://open?dir=` link, as `bin/desk` opens it: the folder opens in a new tab.
+pub fn open_url(s: &mut Desk, url: &str, _: &mut Tx) {
+    let Some(dir) = crate::opening::folder_from_url(url) else { return };
+    s.workspace.open_asked(dir, &s.account, &s.core);
+    s.sync_start();
+}
+
 /// The input method, for the editors Desk draws itself. Text fields hear it on their own.
 pub fn ime(s: &mut Desk, event: &rune::Ime, _: &mut Tx) -> bool {
     s.terminal_ime(event)

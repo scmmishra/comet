@@ -21,6 +21,7 @@ mod meters;
 mod minimap;
 mod model_picker;
 mod models;
+mod opening;
 mod palette;
 mod panel;
 mod plugins;
@@ -107,7 +108,15 @@ fn main() {
         scenes: scenes::SCENES,
         ..AppSpec::new("Desk", (1280.0, 820.0), Desk::default, shell::view)
     })
-    .init(move || Desk::new(state.clone()))
+    .init(move || {
+        let mut desk = Desk::new(state.clone());
+        // A Desk run from the repo opens the folder `DESK_DIR` names, as `DESK_DIR=<folder> mise run dev` does.
+        if let Some(dir) = opening::folder_from_env() {
+            desk.workspace.open_asked(dir, &desk.account, &desk.core);
+        }
+        desk
+    })
+    .on_open_url(shell::open_url)
     .on_ime(shell::ime)
     // The Electron app draws with `-webkit-font-smoothing: antialiased`, which is Rune's Off.
     .font_smoothing(rune::FontSmoothing::Off)

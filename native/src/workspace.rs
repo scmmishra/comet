@@ -39,6 +39,8 @@ pub struct Workspace {
     pub settings_page: Option<String>,
     /// Whether the saved tabs are back. Until then, a change to the tabs would overwrite them.
     restored: bool,
+    /// Folders `desk <folder>` asked to open before the saved tabs were back. Each opens in a tab once they are.
+    asked: Vec<String>,
 }
 
 impl Workspace {
@@ -56,10 +58,24 @@ impl Workspace {
         self.active = active.filter(|id| tabs.iter().any(|t| &t.id == id)).or_else(|| tabs.first().map(|t| t.id.clone()));
         self.tabs = tabs;
         self.restored = true;
+        for dir in std::mem::take(&mut self.asked) {
+            self.new_tab(Place::End, Some(dir), account, core)?;
+        }
         if self.tabs.is_empty() {
             self.new_tab(Place::End, None, account, core)?;
         }
         Ok(())
+    }
+
+    /// Opens `dir` in a new tab at the end, as `desk <folder>` asks. Until the saved tabs are back, it
+    /// waits for them, so restoring them does not drop it.
+    pub fn open_asked(&mut self, dir: String, account: &Account, core: &Core) {
+        if !self.restored {
+            self.asked.push(dir);
+            return;
+        }
+        // A tab with a project of its own never needs a folder.
+        let _ = self.new_tab(Place::End, Some(dir), account, core);
     }
 
     /// Opens a tab in `project`, else in the window's project, and brings it to the front.
@@ -244,6 +260,20 @@ mod tests {
 
     fn tab(id: &str) -> TabInfo {
         TabInfo { id: id.into(), title: id.into(), project: format!("/code/{id}"), terminals: vec![], model: "default".into(), effort: None, fast: None, permission_mode: "auto".into(), files: vec![], panel_active: None, review_scope: None, panel_open: None, rest: Map::new() }
+    }
+
+    #[test]
+    fn a_folder_asked_for_before_the_tabs_are_back_opens_after_them() {
+        let (mut w, core) = (Workspace::default(), Core::default());
+        w.open_asked("/code/web".into(), &Account::default(), &core);
+        assert!(w.tabs.is_empty(), "nothing opens before the saved tabs arrive");
+        let saved = TabInfo { id: "a".into(), project: "/code/api".into(), ..tab("a") };
+        w.restore(vec![saved], Some("a".into()), &Account::default(), &core).unwrap();
+        let projects: Vec<&str> = w.tabs.iter().map(|t| t.project.as_str()).collect();
+        assert_eq!(projects, ["/code/api", "/code/web"]);
+        assert_eq!(w.active_tab().map(|t| t.project.as_str()), Some("/code/web"), "the asked folder comes to the front");
+        w.open_asked("/code/docs".into(), &Account::default(), &core);
+        assert_eq!(w.tabs.len(), 3, "once the tabs are back, a folder opens at once");
     }
 
     fn restored(ids: &[&str], active: &str) -> (Workspace, Core) {
