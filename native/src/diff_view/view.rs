@@ -169,8 +169,8 @@ impl<S: 'static> DiffView<S> {
         }
         let v = Rc::new(View { look, d: self });
         let count = st.rows.len();
-        // Desk's change: a folding file's rows leave with a quick fade, and the list closes up on a faster
-        // spring than rune-kit's 0.32.
+        // Desk's change: rows that leave, as when unchanged lines fold away, go with a quick fade, and the
+        // list closes up on a faster spring than rune-kit's 0.32. Files fold at once, from Desk's header.
         let growth = GrowthSpec { spring: rune::Spring::new(0.18, 0.0), ..GrowthSpec::default() };
         let mut list = col().key("rows").w_full().growth(growth).child_exit(crate::theme::quick_exit()).selection_group(true).role("list").label("Diff");
         if !wrap {

@@ -381,12 +381,15 @@ fn review_view(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .variant(IconButtonVariant::GhostMuted)
             .label(if all_open { "Collapse all" } else { "Expand all" })
             .help(if all_open { "Collapse all" } else { "Expand all" })
-            .on_press(move |s: &mut Desk| {
+            .on_press_tx(move |s: &mut Desk, tx| {
                 if let Some(review) = s.panel.reviews.get_mut(&id) {
                     for f in 0..review.diff.files().len() {
                         review.diff.set_collapsed(f, all_open);
                     }
                 }
+                // Files fold and open at once. Rune's growth stack cannot grow virtual rows open, and
+                // holds removed ones for 0.15 s before closing up, so a glide reads as a cut and a lag.
+                tx.instant();
             })
             .build(k)
     });
@@ -443,10 +446,12 @@ fn file_header(tab: String, dark: bool) -> impl Fn(&Desk, usize, bool) -> El + '
             .role("button")
             .expanded(!collapsed)
             .label(format!("{} {path}", if collapsed { "Expand" } else { "Collapse" }))
-            .on_press(move |s: &mut Desk| {
+            .on_press_tx(move |s: &mut Desk, tx| {
                 if let Some(review) = s.panel.reviews.get_mut(&toggle_tab) {
                     review.diff.set_collapsed(f, !collapsed);
                 }
+                // At once, as Collapse all does.
+                tx.instant();
             })
             .child(crate::icons::chevron(k, !collapsed))
             .child(icon(crate::icons::file_icon(&path), crate::icons::SIZE))

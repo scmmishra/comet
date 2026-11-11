@@ -109,6 +109,7 @@ Done:
 - `DiffView` scrolls on its own, so it needs a height inside a thread row.
 - `DiffView` draws its own file headers and fixes its syntax colours and code font. Desk keeps a copy of it in `native/src/diff_view`, with hooks for all three, so Review matches the Electron app. anomalyco/rune#576 asks for the hooks upstream. Once they land, Desk goes back to rune-kit's.
 - Markdown block margins are fixed in rune-kit: 12 points where the Electron app sets 10.4.
+- A growth stack cannot grow virtual rows open, and holds removed rows 0.15 s before it closes up. Review's files fold at once for this.
 - Rune has no left-start placement, so a subagent's detail centres beside its row.
 
 ## Matching the Electron app
