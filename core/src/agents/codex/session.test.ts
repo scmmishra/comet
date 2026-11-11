@@ -304,10 +304,33 @@ test("a request Codex settles itself leaves the thread, and Codex gets no second
   expect(s.codex.reply(7)).not.toEqual({ id: 7, result: { decision: "accept" } })
 })
 
+test("approves a call of Desk's own tools itself, and asks the user about another MCP server's", async () => {
+  const s = setup()
+  await started(s)
+  const form = { type: "object", properties: { remember: { type: "boolean", default: false } } }
+  s.codex.ask(0, "mcpServer/elicitation/request", { threadId: THREAD, turnId: TURN, serverName: "desk", mode: "form", _meta: null, message: "Allow desk to run list_agents?", requestedSchema: form })
+  await until(() => s.codex.reply(0) !== undefined)
+  expect(s.codex.reply(0)).toEqual({ id: 0, result: { action: "accept", content: { remember: false }, _meta: null } })
+  expect(s.last("permission")).toBeUndefined()
+
+  s.codex.ask(1, "mcpServer/elicitation/request", { threadId: THREAD, turnId: TURN, serverName: "github", mode: "form", _meta: null, message: "Allow github to run create_issue?", requestedSchema: form })
+  await until(() => s.last("permission") !== undefined)
+  expect(s.last("permission")).toMatchObject({ tool: "github", kind: "permission", detail: "Allow github to run create_issue?", allowSession: true })
+  s.session.answerPermission(s.last("permission")!.requestId, "allow-session")
+  await until(() => s.codex.reply(1) !== undefined)
+  expect(s.codex.reply(1)).toEqual({ id: 1, result: { action: "accept", content: { remember: false }, _meta: { persist: "session" } } })
+
+  s.codex.ask(2, "mcpServer/elicitation/request", { threadId: THREAD, turnId: null, serverName: "github", mode: "form", _meta: null, message: "Allow github to run delete_repo?", requestedSchema: form })
+  await until(() => s.last("permission")?.detail === "Allow github to run delete_repo?")
+  s.session.answerPermission(s.last("permission")!.requestId, "decline")
+  await until(() => s.codex.reply(2) !== undefined)
+  expect(s.codex.reply(2)).toEqual({ id: 2, result: { action: "decline", content: null, _meta: null } })
+})
+
 test("refuses a request Desk does not handle", async () => {
   const s = setup()
   await started(s)
-  s.codex.ask(0, "mcpServer/elicitation/request", { threadId: THREAD })
+  s.codex.ask(0, "mcpServer/elicitation/request", { threadId: THREAD, serverName: "github", mode: "url", url: "https://example.com", elicitationId: "e1" })
   await until(() => s.codex.reply(0) !== undefined)
   expect(s.codex.reply(0)).toEqual({ id: 0, error: { code: -32601, message: "Desk does not handle that request." } })
 })

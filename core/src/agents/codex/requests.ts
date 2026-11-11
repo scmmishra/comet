@@ -1,4 +1,5 @@
 import type { PermissionAnswer, PermissionKind, Question, ThreadItem } from "@desk/protocol"
+import { answerable, ELICITATION, elicitationItem, elicitationReply, type Elicitation } from "./elicitation"
 import { scriptOfWords, shellScript } from "./shell"
 
 /**
@@ -32,10 +33,10 @@ const review = (answer: PermissionAnswer) => ({ decision: REVIEW_DECISIONS[answe
 type Params = Record<string, unknown> & { readonly itemId?: string; readonly reason?: string | null }
 
 /**
- * The request Codex asks with `method`, or undefined for one Desk does not handle. `files` gives the
- * paths of a file change Codex has already reported, by its item id.
+ * The request Codex asks with `method`, or undefined for one Desk does not handle. `rpcId` is the id
+ * Codex gave the request. `files` gives the paths of a file change Codex has already reported, by its item id.
  */
-export function openRequest(method: string, params: Params, files: (itemId: string) => readonly string[] | undefined): OpenRequest | undefined {
+export function openRequest(method: string, params: Params, rpcId: number | string, files: (itemId: string) => readonly string[] | undefined): OpenRequest | undefined {
   switch (method) {
     case "item/commandExecution/requestApproval": {
       const command = typeof params.command === "string" ? shellScript(params.command) : ""
@@ -56,6 +57,12 @@ export function openRequest(method: string, params: Params, files: (itemId: stri
     case "applyPatchApproval": {
       const paths = Object.keys((params.fileChanges as object | null) ?? {})
       return asking(permission(String(params.callId), "Edit", "file-change", paths.join(", ") || "Change files", params.reason), review)
+    }
+    case ELICITATION: {
+      const asked = params as unknown as Elicitation
+      if (!answerable(asked)) return undefined
+      // An MCP server's question has no item of its own, so the request's own id names it.
+      return asking(elicitationItem(asked, `elicitation:${rpcId}`), (answer) => elicitationReply(asked, answer))
     }
     default:
       return undefined

@@ -6,6 +6,7 @@ import { userInput } from "./input"
 import { changedPaths, threadItems } from "./items"
 import { modelName, turnModel, type ModelCatalog } from "./models"
 import { runPolicy, threadPolicy } from "./permissions"
+import { ELICITATION, elicitationReply, fromDesk, type Elicitation } from "./elicitation"
 import type { CodexItem, CodexModel, CodexTurn, RequestId, TokenUsage } from "./protocol"
 import { asksApproval, openRequest, type OpenRequest } from "./requests"
 import type { AppServer, ThreadOwner, ThreadParams } from "./server"
@@ -173,7 +174,9 @@ export class CodexSession implements AgentSession, ThreadOwner {
 
   /** A request about the thread, which waits for the user's answer. Undefined for one Desk does not handle. */
   request(method: string, params: ThreadParams, rpcId: RequestId): Promise<unknown> | undefined {
-    const open = openRequest(method, params, (itemId) => this.files.get(itemId))
+    // Desk approves a call of its own tools itself, so the user is not asked about them.
+    if (method === ELICITATION && fromDesk(params as unknown as Elicitation)) return Promise.resolve(elicitationReply(params as unknown as Elicitation, "allow"))
+    const open = openRequest(method, params, rpcId, (itemId) => this.files.get(itemId))
     if (!open) return undefined
     return new Promise((resolve) => {
       this.requests.set(open.item.requestId, { ...open, resolve, rpcId })
