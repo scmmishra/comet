@@ -1,6 +1,6 @@
 //! `@opencode/ui` components rune-kit has no counterpart for, drawn as `@opencode/ui` draws them.
 
-use rune::{Color, El, Icon, TextStyle, el, icon, row, text};
+use rune::{Color, El, Icon, TextStyle, col, el, icon, row, text};
 use std::sync::Mutex;
 use rune_kit::Kit;
 
@@ -63,7 +63,7 @@ pub fn tinted_badge(label: impl Into<String>, fill: Color, ink: Color) -> El {
 pub fn popover(k: &Kit, content: El) -> El {
     const RADIUS: f32 = 4.875;
     // The border takes a point of room in CSS, which Rune's does not.
-    let surface = content.radius(RADIUS).fill(k.c.layer_02).border(1.0, crate::theme::outline(k.dark)).padding(1.0);
+    let surface = col().radius(RADIUS).fill(k.c.layer_02).border(1.0, crate::theme::outline(k.dark)).padding(1.0).child(content);
     k.elevate(surface, &k.elevation.md)
 }
 
