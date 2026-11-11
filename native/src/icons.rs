@@ -11,6 +11,7 @@ macro_rules! glyph {
 
 glyph!(PULL_REQUEST, "pull-request", "M4 5.1v5.8M12 10.9V6.5a2 2 0 0 0-2-2H7.5M9 3 7.5 4.5 9 6M5.6 3.5a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0M5.6 12.5a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0M13.6 12.5a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0");
 glyph!(GAUGE, "gauge", "M2.5 11a5.5 5.5 0 1 1 11 0M8 11l2.5-3");
+glyph!(BOLT, "bolt", "M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z");
 glyph!(PLAY, "play", "M5 3.5v9l7.5-4.5z");
 glyph!(SPARKLE, "sparkle", "M8 2.5l1.4 4.1 4.1 1.4-4.1 1.4L8 13.5l-1.4-4.1L2.5 8l4.1-1.4z");
 glyph!(SHIELD_OFF, "shield-off", "M8 1.5l5 2v4c0 3-2.2 5.3-5 6-2.8-.7-5-3-5-6v-4zM2.5 2.5l11 11");

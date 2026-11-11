@@ -8,7 +8,7 @@ use crate::protocol::{ModelOption, TabInfo};
 use crate::shell::Desk;
 use crate::theme;
 use rune::{El, col, el, icon, row, text};
-use rune_kit::{Keybind, KeybindVariant, Kit, Menu, MenuItem, Placement, SegmentedControl, popover, scrim};
+use rune_kit::{Keybind, KeybindVariant, Kit, Menu, MenuItem, Placement, popover, scrim};
 use rune_theme_opencode::icons as ic;
 
 /// The popover's width, `w-[min(520px,…)]`, and its effort column, `168px`.
@@ -179,13 +179,16 @@ fn popover_body(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &Kit
     // Fast mode is only offered on a model that has it.
     let speed = selected.filter(|o| o.fast).map(|_| {
         let id = tab.id.clone();
-        SegmentedControl::new(&["Standard", "Fast"], Some(usize::from(tab.fast == Some(true))))
-            .label("Speed")
-            .on_pick(move |s: &mut Desk, i, _| {
+        crate::ui::segmented(
+            k,
+            "Speed",
+            &[crate::ui::Segment { icon: None, words: Some("Standard"), name: "Standard" }, crate::ui::Segment { icon: Some(&icons::BOLT), words: Some("Fast"), name: "Fast" }],
+            usize::from(tab.fast == Some(true)),
+            move |s: &mut Desk, i| {
                 let id = id.clone();
                 s.workspace.change_tab(&id, |t| t.fast = Some(i == 1), &s.core);
-            })
-            .build(k)
+            },
+        )
     });
     let footer = row()
         .w_full()

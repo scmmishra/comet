@@ -6,7 +6,7 @@ use crate::protocol::{ClientMessage, FileChange, FileView, TabInfo};
 use crate::shell::Desk;
 use rune::{El, ScrollSpec, col, el, icon, row, text};
 use rune_kit::diff::{DiffMode, DiffState, DiffView, parse};
-use rune_kit::{ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, SegmentedControl, Select};
+use rune_kit::{ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Select};
 use rune_theme_opencode::icons as ic;
 use std::collections::HashMap;
 
@@ -196,7 +196,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let on_review = shown.is_none() && terminal.is_none() && plugin_panel.is_none();
     let review = tab_button(
         "panel-review".into(),
-        row().gap(7.0).items_center().child(icon(&ic::REVIEW, 15.0).color(k.c.text_muted)).child(text("Review").font(crate::theme::text(13.0)).color(if on_review { k.c.text_base } else { k.c.text_muted })),
+        row().gap(7.0).items_center().child(icon(&ic::REVIEW, 15.0).color(k.c.text_muted)).child(text("Review").font(crate::theme::medium(13.0)).color(if on_review { k.c.text_base } else { k.c.text_muted })),
         on_review,
         el(),
     )
@@ -217,7 +217,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .build(k);
         tab_button(
             format!("panel-{}", file.id),
-            row().gap(7.0).items_center().child(icon(rune_theme_opencode::file_icons::file(&file.path), 14.0)).child(text(name).font(crate::theme::text(13.0)).color(if active { k.c.text_base } else { k.c.text_muted })),
+            row().gap(7.0).items_center().child(icon(rune_theme_opencode::file_icons::file(&file.path), 14.0)).child(text(name).font(crate::theme::medium(13.0)).color(if active { k.c.text_base } else { k.c.text_muted })),
             active,
             close,
         )
@@ -238,7 +238,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .build(k);
         tab_button(
             format!("panel-{}", t.id),
-            row().gap(7.0).items_center().child(icon(&ic::TERMINAL, 15.0).color(k.c.text_muted)).child(text(t.title.clone()).font(crate::theme::text(13.0)).color(if active { k.c.text_base } else { k.c.text_muted })),
+            row().gap(7.0).items_center().child(icon(&ic::TERMINAL, 15.0).color(k.c.text_muted)).child(text(t.title.clone()).font(crate::theme::medium(13.0)).color(if active { k.c.text_base } else { k.c.text_muted })),
             active,
             close,
         )
@@ -255,7 +255,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .label("Close panel")
             .on_press(move |s: &mut Desk| s.core.send(&ClientMessage::PanelClose { tab_id: close_tab.clone(), id: close_id.clone() }))
             .build(k);
-        tab_button(format!("panel-{}", p.id), text(p.title.clone()).font(crate::theme::text(13.0)).color(if active { k.c.text_base } else { k.c.text_muted }), active, close)
+        tab_button(format!("panel-{}", p.id), text(p.title.clone()).font(crate::theme::medium(13.0)).color(if active { k.c.text_base } else { k.c.text_muted }), active, close)
             .role("tab")
             .on_press(move |s: &mut Desk| s.show_panel_tab(&show_tab, Some(show_id.clone())))
     });
@@ -272,9 +272,11 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
         .child(review)
         .children(terminals)
         .children(files)
-        .child(new_terminal)
+        // The tabs take the free width, so the new terminal button sits at the end, beside the toggle.
         .child(row().grow(1.0))
-        .child(toggle(true, k));
+        .child(new_terminal)
+        // The Electron app pins the toggle to the pane's corner, 11 points past the new terminal button.
+        .child(toggle(true, k).ml(7.0));
     let body = match (terminal, shown) {
         _ if plugin_panel.is_some() => col().w_full().grow(1.0).min_h(0.0).px(12.0).pb(12.0).child(crate::plugins::view(s, plugin_panel.expect("checked"), &tab.project, k)),
         (Some(t), _) => crate::terminal_view::terminal(s, &t.id, k),
@@ -310,8 +312,34 @@ fn review_view(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .child(text(format::plural(r.files.len(), "file")).font(crate::theme::text(13.0)).color(k.c.text_faint))
             .child(crate::ui::diff_changes(k, added, removed))
     });
-    let style = SegmentedControl::new(&["Unified", "Split"], Some(usize::from(s.panel.split))).label("Diff view").on_pick(|s: &mut Desk, i, _| s.set_split(i == 1)).build(k);
-    let controls = row().w_full().gap(8.0).items_center().px(12.0).pb(8.0).pt(2.0).child(select).children(counts).child(row().grow(1.0)).child(style);
+    let style = crate::ui::segmented(
+        k,
+        "Diff view",
+        &[
+            crate::ui::Segment { icon: Some(&ic::UNIFIED), words: None, name: "Unified diff" },
+            crate::ui::Segment { icon: Some(&ic::SPLIT), words: None, name: "Split diff" },
+        ],
+        usize::from(s.panel.split),
+        |s: &mut Desk, i| s.set_split(i == 1),
+    );
+    // Folds every file, or opens them all again once they are all folded.
+    let fold_all = review.filter(|r| !r.files.is_empty()).map(|r| {
+        let all_open = (0..r.diff.files().len()).all(|f| !r.diff.collapsed(f));
+        let id = tab.id.clone();
+        IconButton::new(if all_open { &ic::COLLAPSE } else { &ic::EXPAND })
+            .variant(IconButtonVariant::GhostMuted)
+            .label(if all_open { "Collapse all" } else { "Expand all" })
+            .help(if all_open { "Collapse all" } else { "Expand all" })
+            .on_press(move |s: &mut Desk| {
+                if let Some(review) = s.panel.reviews.get_mut(&id) {
+                    for f in 0..review.diff.files().len() {
+                        review.diff.set_collapsed(f, all_open);
+                    }
+                }
+            })
+            .build(k)
+    });
+    let controls = row().w_full().gap(8.0).items_center().px(12.0).pb(8.0).pt(2.0).child(select).children(counts).child(row().grow(1.0)).children(fold_all).child(style);
     let content = match review {
         None => centred(k, "Loading changes…"),
         Some(r) if r.files.is_empty() => centred(k, scope_words(scope).1),

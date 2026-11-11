@@ -66,3 +66,39 @@ pub fn popover(k: &Kit, content: El) -> El {
     let surface = content.radius(RADIUS).fill(k.c.layer_02).border(1.0, crate::theme::outline(k.dark)).padding(1.0);
     k.elevate(surface, &k.elevation.md)
 }
+
+/// One item of a segmented control: an icon, words, or both, and its name for assistive tools.
+pub struct Segment {
+    pub icon: Option<&'static Icon>,
+    pub words: Option<&'static str>,
+    pub name: &'static str,
+}
+
+/// `@opencode/ui`'s SegmentedControl with icons in its items, as the Electron app gives Review's diff
+/// view and the model picker's Fast speed. rune-kit's SegmentedControl takes words only, so Desk draws
+/// this one with its measures: 28 points tall, 12 points in, radius 6, the chosen item raised.
+pub fn segmented<S: 'static>(k: &Kit, name: &str, segments: &[Segment], selected: usize, pick: impl Fn(&mut S, usize) + Clone + 'static) -> El {
+    let c = &k.c;
+    let outline = |e: El, color: Color| e.box_shadow(rune::Shadow { spread: 0.5, color, ..Default::default() });
+    let items = segments.iter().enumerate().map(|(i, segment)| {
+        let on = i == selected;
+        let ink = if on { c.text_base } else { c.text_muted };
+        let pick = pick.clone();
+        let item = row()
+            .key(format!("segment{i}"))
+            .role("radio")
+            .checked(on)
+            .label(segment.name)
+            .position_in_set(i + 1, segments.len())
+            .h(28.0)
+            .px(12.0)
+            .gap(6.0)
+            .center()
+            .radius(6.0)
+            .on_press(move |s: &mut S| pick(s, i))
+            .children(segment.icon.map(|mark| icon(mark, crate::icons::SIZE).color(ink)))
+            .children(segment.words.map(|words| text(words).font(TextStyle { line_height: 13.0, ..k.ty.ui }).color(ink)));
+        if on { outline(item.fill(c.bg_base), c.border_strong) } else { item }
+    });
+    outline(row().role("radiogroup").label(name.to_owned()).h(28.0).items_center().radius(6.0).fill(c.layer_01), c.border_base).children(items)
+}
