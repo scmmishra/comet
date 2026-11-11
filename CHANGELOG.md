@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- Commands Claude leaves running in the background have a card of their own, below Subagents. Each command shows how long it has run and has its own Stop. Once the turn ends, the card says Claude picks up again when one finishes. In a window too narrow for the cards, it opens from the chip in the session header. The line above the message box is gone.
 - Each message you sent has a pencil and a fork beside it, after T3 Code. The pencil rewinds the thread to before that message, after you confirm: Claude forgets it and everything after, and the message goes back in the message box to change and send again. You can also restore the files Claude edited since. The fork opens a copy of the thread, through that message's reply, in a new tab.
 - A menu beside the session's title renames the session, forks it into a new tab, copies its ID, or deletes it after you confirm. A rename runs no turn, so Claude keeps working, and the thread list and `claude --resume` show the new name. Deleting stops a running turn, removes the thread from this Mac, and leaves the tab empty to start again.
 - A plugin finds the tools on your shell's PATH, such as a CLI in ~/.local/bin. Plugins ran with the PATH Desk started with, so the Chatwoot inbox showed "command not found: chatwoot" in Desk opened from the Dock.

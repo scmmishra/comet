@@ -448,7 +448,7 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &
         .child(input)
         .child(actions)
         .on_drop_files(|s: &mut Desk, paths: &[std::path::PathBuf], _| s.attach(paths));
-    col().w_full().children(background_row(s, tab, k)).children(queue_view(s, tab, k)).child(card)
+    col().w_full().children(queue_view(s, tab, k)).child(card)
 }
 
 fn suggestion_name(s: &Suggestion) -> &str {
@@ -725,46 +725,6 @@ fn option_mark(checked: bool, multiple: bool, k: &Kit) -> El {
 
 /// A tab's queued messages, above the composer, after T3 Code: dashed bubbles waiting for the turn to end.
 /// Each can be sent now, edited in the composer, or removed. A stop or an error pauses the queue.
-/// The commands Claude left running in the background, after T3 Code: what runs, for how long, and a Stop
-/// for all of it. "Waiting" means the turn has ended and Claude picks up again when a command finishes.
-fn background_row(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
-    let thread = s.threads.get(tab)?;
-    let tasks = &thread.background;
-    if tasks.is_empty() {
-        return None;
-    }
-    let state = if thread.busy { "Running" } else { "Waiting" };
-    let labels: Vec<&str> = tasks.iter().map(|t| t.label.as_str()).collect();
-    let words = match tasks.as_slice() {
-        [only] => format!("{state} · {}", only.label),
-        _ => format!("{state} · {}: {}", crate::format::plural(tasks.len(), "background command"), labels.join(", ")),
-    };
-    let since = match tasks.as_slice() {
-        [only] => Some(crate::format::duration((s.now_ms - only.started_at).max(0.0))),
-        _ => None,
-    };
-    let (tab, ids) = (tab.to_owned(), tasks.iter().map(|t| t.id.clone()).collect::<Vec<_>>());
-    let stop = crate::theme::small_button("Stop")
-        .variant(ButtonVariant::Ghost)
-        .on_press(move |s: &mut Desk| s.core.send(&ClientMessage::TasksStop { tab_id: tab.clone(), ids: ids.clone() }))
-        .build(k);
-    Some(
-        row()
-            .key("background")
-            .w_full()
-            .gap(8.0)
-            .items_center()
-            .px(4.0)
-            .mb(8.0)
-            .label("Background commands")
-            .help(labels.join("\n"))
-            .child(icon(&ic::OUTLINE_CONSOLE, crate::icons::SIZE).color(k.c.text_faint))
-            .child(text(words).font(crate::theme::text(13.0)).color(k.c.text_faint).truncate().grow(1.0).min_w(0.0))
-            .children(since.map(|d| text(d).font(crate::theme::text(13.0)).color(k.c.text_faint)))
-            .child(stop),
-    )
-}
-
 fn queue_view(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
     let thread = s.threads.get(tab)?;
     if thread.queue.is_empty() {

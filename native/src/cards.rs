@@ -4,11 +4,11 @@
 
 use crate::format;
 use crate::icons;
-use crate::protocol::{Space, Subagent, TabInfo, ThreadItem};
+use crate::protocol::{ClientMessage, Space, Subagent, TabInfo, ThreadItem};
 use crate::shell::Desk;
 use crate::theme;
 use rune::{El, ScrollSpec, col, el, icon, row, text};
-use rune_kit::{Badge, BadgeVariant, Kit, Placement, popover, scrim};
+use rune_kit::{Badge, BadgeVariant, IconButton, IconButtonVariant, Kit, Placement, popover, scrim};
 use rune_theme_opencode::icons as ic;
 
 /// The rail's width, `w-[264px]`, and its distance from the session's edge.
@@ -77,6 +77,7 @@ pub fn rail(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
         .pin(None, Some(0.0), Some(RAIL_EDGE), Some(0.0))
         .scroll(ScrollSpec { stick_bottom: false })
         .children(subagents)
+        .children(background_card(s, &tab.id, k))
         .children(space)
         .children(crate::commands_card::card(s, &tab.project, k, layer))
         .children(plugin_cards(s, tab, k))
@@ -109,6 +110,8 @@ pub fn space_chip(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .key("space-chip-cards")
             .w(RAIL_WIDTH)
             .gap(8.0)
+            // Without the rail, the commands Claude runs in the background and their Stop buttons would show nowhere.
+            .children(background_card(s, &tab.id, k))
             .children(space.map(|space| space_card(space, &tab.id, k)))
             .children(crate::commands_card::card(s, &tab.project, k, layer));
         layer.insert(0, scrim("space-chip-scrim", |s: &mut Desk| s.cards.chip_open = false));
@@ -285,6 +288,49 @@ fn subagents_card(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Opti
     Some(card(k, 6.0).key("subagents-card").role("region").label("Subagents").child(text(heading).font(crate::theme::text(12.0)).color(k.c.text_faint).px(8.0).pb(4.0).pt(6.0)).children(rows.collect::<Vec<_>>()))
 }
 
+/// The commands Claude left running in the background, after T3 Code: what each runs, for how long, and a
+/// Stop for each. Once the turn has ended, Claude picks up again when one finishes, and the card says so.
+/// Subagents have their own card, so they stay out of this one.
+fn background_card(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
+    let thread = s.threads.get(tab)?;
+    if thread.background.is_empty() {
+        return None;
+    }
+    let heading = format!("Background · {} running", thread.background.len());
+    let rows = thread.background.iter().map(|task| {
+        let (tab, id) = (tab.to_owned(), task.id.clone());
+        let stop = IconButton::new(&ic::STOP)
+            .variant(IconButtonVariant::GhostMuted)
+            .label("Stop command")
+            .help("Stop")
+            .on_press(move |s: &mut Desk| s.core.send(&ClientMessage::TasksStop { tab_id: tab.clone(), ids: vec![id.clone()] }))
+            .build(k);
+        row()
+            .key(format!("background-{}", task.id))
+            .w_full()
+            .gap(10.0)
+            .items_center()
+            .pl(8.0)
+            .pr(4.0)
+            .py(3.0)
+            .help(task.label.clone())
+            .child(icon(&ic::OUTLINE_CONSOLE, icons::SIZE).color(k.c.text_muted))
+            .child(text(task.label.clone()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate().grow(1.0).min_w(0.0))
+            .child(text(format::duration((s.now_ms - task.started_at).max(0.0))).font(crate::theme::text(12.0)).color(k.c.text_faint))
+            .child(stop)
+    });
+    let waiting = (!thread.busy).then(|| text("Claude picks up again when one finishes.").font(crate::theme::text(12.0)).color(k.c.text_faint).px(8.0).pt(4.0).pb(4.0));
+    Some(
+        card(k, 6.0)
+            .key("background-card")
+            .role("region")
+            .label("Background commands")
+            .child(text(heading).font(crate::theme::text(12.0)).color(k.c.text_faint).px(8.0).pb(4.0).pt(6.0))
+            .children(rows.collect::<Vec<_>>())
+            .children(waiting),
+    )
+}
+
 /// What a subagent was asked, how it stands, and its steps so far.
 fn subagent_detail(subagent: &Subagent, now: f64, k: &Kit) -> El {
     let facts: Vec<String> = [subagent.kind.clone(), Some(status(subagent).0.to_owned()), Some(elapsed(subagent, now)), (subagent.tool_uses > 0).then(|| format::plural(subagent.tool_uses as usize, "tool use"))].into_iter().flatten().collect();
@@ -318,6 +364,19 @@ fn subagent_detail(subagent: &Subagent, now: f64, k: &Kit) -> El {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_background_card_shows_only_while_commands_run() {
+        let mut s = Desk::default();
+        let k = theme::kit(true);
+        let tab = serde_json::json!({ "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "New session", "project": "/code/web", "terminals": [], "model": "default", "permissionMode": "auto" }] });
+        s.receive(crate::core::Event::Message(serde_json::from_value(tab).unwrap())).unwrap();
+        let tasks = |list: serde_json::Value| serde_json::from_value(serde_json::json!({ "type": "session.event", "tabId": "t", "event": { "kind": "background", "tasks": list } })).unwrap();
+        s.receive(crate::core::Event::Message(tasks(serde_json::json!([{ "id": "b1", "label": "npm run dev", "startedAt": 0.0 }])))).unwrap();
+        assert!(background_card(&s, "t", k).is_some());
+        s.receive(crate::core::Event::Message(tasks(serde_json::json!([])))).unwrap();
+        assert!(background_card(&s, "t", k).is_none());
+    }
 
     #[test]
     fn the_lane_centres_and_moves_aside_for_the_rail() {
