@@ -5,7 +5,7 @@ use crate::format;
 use crate::protocol::{ClientMessage, FileChange, FileView, TabInfo};
 use crate::shell::Desk;
 use rune::{El, ScrollSpec, col, el, icon, row, text};
-use rune_kit::diff::{DiffMode, DiffState, DiffView, parse};
+use crate::diff_view::{DiffMode, DiffState, DiffView, FileStatus, parse};
 use rune_kit::{ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Select};
 use rune_theme_opencode::icons as ic;
 use std::collections::HashMap;
@@ -386,12 +386,70 @@ fn review_view(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             let (get, get_mut) = (tab.id.clone(), tab.id.clone());
             DiffView::new(move |s: &Desk| &s.panel.reviews[&get].diff, move |s: &mut Desk| &mut s.panel.reviews.get_mut(&get_mut).expect("a review that showed").diff)
                 .key(format!("review-{}", tab.id))
+                .file_header(file_header(tab.id.clone(), k.dark))
+                .syntax_theme(crate::theme::code_colors(k.dark))
+                .code_font(crate::theme::mono(12.0))
                 .build(s, crate::theme::review_kit(k.dark))
                 .grow(1.0)
                 .min_h(0.0)
         }
     };
     col().w_full().grow(1.0).min_h(0.0).child(controls).child(content)
+}
+
+/// A file's header in Review, as the Electron app draws it: the chevron, the file's icon, its folder
+/// muted and its name, a quiet status, its line counts and a button to open it. The whole header folds
+/// the file.
+fn file_header(tab: String, dark: bool) -> impl Fn(&Desk, usize, bool) -> El + 'static {
+    move |s: &Desk, f: usize, collapsed: bool| {
+        let k = crate::theme::kit(dark);
+        let Some(file) = s.panel.reviews.get(&tab).and_then(|r| r.diff.files().get(f)) else { return el() };
+        let path = file.path().to_owned();
+        let (dir, name) = path.rsplit_once('/').map_or((None, path.as_str()), |(d, n)| (Some(d), n));
+        let status = match file.status {
+            FileStatus::Added => Some("added"),
+            FileStatus::Deleted => Some("deleted"),
+            FileStatus::Renamed => Some("renamed"),
+            FileStatus::Copied => Some("copied"),
+            FileStatus::Modified => None,
+        };
+        let (toggle_tab, open_tab, open_path) = (tab.clone(), tab.clone(), path.clone());
+        let open = IconButton::new(&ic::ARROW_UP_RIGHT)
+            .variant(IconButtonVariant::GhostMuted)
+            .control_size(ControlSize::Small)
+            .label(format!("Open {name}"))
+            .on_press(move |s: &mut Desk| s.open_file(&open_tab, &open_path))
+            .build(k);
+        row()
+            .key("review-file-header")
+            .w_full()
+            .h_full()
+            .gap(8.0)
+            .items_center()
+            .px(12.0)
+            .hover(k.c.hover)
+            .role("button")
+            .expanded(!collapsed)
+            .label(format!("{} {path}", if collapsed { "Expand" } else { "Collapse" }))
+            .on_press(move |s: &mut Desk| {
+                if let Some(review) = s.panel.reviews.get_mut(&toggle_tab) {
+                    review.diff.set_collapsed(f, !collapsed);
+                }
+            })
+            .child(crate::icons::chevron(k, !collapsed))
+            .child(icon(rune_theme_opencode::file_icons::file(&path), crate::icons::SIZE))
+            .child(
+                row()
+                    .min_w(0.0)
+                    .shrink()
+                    .children(dir.map(|d| text(format!("{d}/")).font(crate::theme::text(13.0)).color(k.c.text_faint).truncate_head().min_w(0.0).shrink()))
+                    .child(text(name.to_owned()).font(crate::theme::text(13.0)).color(k.c.text_base)),
+            )
+            .children(status.map(|w| text(w).font(crate::theme::text(13.0)).color(k.c.text_faint)))
+            .child(row().grow(1.0))
+            .child(crate::ui::diff_changes(k, file.additions() as u32, file.deletions() as u32))
+            .child(open)
+    }
 }
 
 fn centred(k: &Kit, words: &str) -> El {

@@ -110,7 +110,7 @@ Left out, for now:
 - Markdown messages are their own selection group, so a drag stops at a message's end. `.selection_group(false)` works around it.
 - `Collapsible` builds its content even when closed.
 - `DiffView` scrolls on its own, so it needs a height inside a thread row.
-- `DiffView` draws its own file headers and syntax colours. Review's headers (chevron, file icon, muted folder, lowercase status, `+N -N`) and pierre's code colours differ from the Electron app until Rune lets an app set them.
+- `DiffView` draws its own file headers and fixes its syntax colours and code font. Desk keeps a copy of it in `native/src/diff_view`, with hooks for all three, so Review matches the Electron app. anomalyco/rune#576 asks for the hooks upstream. Once they land, Desk goes back to rune-kit's.
 - Markdown block margins are fixed in rune-kit: 12 points where the Electron app sets 10.4.
 - Rune has no left-start placement, so a subagent's detail centres beside its row.
 
