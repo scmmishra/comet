@@ -383,14 +383,14 @@ export interface AgentAccount {
  * - `ready`: installed and signed in.
  * - `missing`: not installed on this Mac.
  * - `signed-out`: installed, with no account.
- * - `installing` and `signing-in`: Desk is doing so, as the user asked.
+ * - `installing`, `signing-in` and `updating`: Desk is doing so, as the user asked.
  * `problem` says what to do about a state that is not ready, in one line.
  */
 export interface AgentInfo {
   readonly id: AgentId
   /** The agent's name, such as "Claude Code". */
   readonly name: string
-  readonly state: "checking" | "ready" | "missing" | "signed-out" | "installing" | "signing-in"
+  readonly state: "checking" | "ready" | "missing" | "signed-out" | "installing" | "signing-in" | "updating"
   readonly problem?: string
   readonly version?: AgentVersion
   readonly account?: AgentAccount

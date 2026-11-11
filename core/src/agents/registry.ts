@@ -62,11 +62,15 @@ export class Agents {
     for (const agent of this.agents.values()) void agent.refreshUsage().catch(() => undefined)
   }
 
-  /** Runs something an agent does to itself, such as its update, then reads the agent again. */
-  async run(id: AgentId, action: "update" | "install" | "signIn") {
+  /**
+   * Runs something an agent does to itself, such as its update. The agent's row says so while it runs,
+   * and the agent is read again once it ends, whether it worked or not.
+   */
+  async run(id: AgentId, action: AgentAction) {
     const agent = this.get(id)
     const run = agent[action]
-    if (!run) throw new Error(`${agent.name} has no ${ACTIONS[action]} Desk can run.`)
+    if (!run) throw new Error(`${agent.name} has no ${ACTIONS[action].name} Desk can run.`)
+    this.learn(id, { state: ACTIONS[action].state, problem: undefined })
     try {
       await run.call(agent)
     } finally {
@@ -95,4 +99,11 @@ export class Agents {
   }
 }
 
-const ACTIONS = { update: "updater", install: "installer", signIn: "sign-in" } as const
+type AgentAction = "update" | "install" | "signIn"
+
+/** What each action is called when an agent lacks it, and the state an agent shows while it runs. */
+const ACTIONS: Record<AgentAction, { readonly name: string; readonly state: AgentInfo["state"] }> = {
+  update: { name: "updater", state: "updating" },
+  install: { name: "installer", state: "installing" },
+  signIn: { name: "sign-in", state: "signing-in" },
+}

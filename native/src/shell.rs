@@ -115,12 +115,7 @@ impl Desk {
         let mut result = Ok(());
         match message {
             CoreMessage::Settings { settings } => self.account.settings = Some(settings),
-            CoreMessage::Models { models } => self.account.models = models,
-            CoreMessage::ClaudeVersion { version } => {
-                self.account.claude_code = Some(version);
-                self.account.updating = false;
-            }
-            CoreMessage::Account { account } => self.account.user = Some(account),
+            CoreMessage::Agents { agents } => self.account.agents = agents,
             CoreMessage::Recent { projects } => w.recent = projects,
             CoreMessage::Tabs { tabs, active } => {
                 result = w.restore(tabs, active, account, core);
@@ -128,8 +123,14 @@ impl Desk {
             }
             CoreMessage::TabReopened { tab, index } => w.reopened(tab, index, core),
             CoreMessage::TabTitle { tab_id, title } => w.name_tab(&tab_id, &title, core),
-            CoreMessage::ThreadSession { tab_id, session_id } => self.threads.get_mut(&tab_id).session_id = session_id,
-            CoreMessage::ThreadForked { tab_id, thread_id, title } => self.open_fork(&tab_id, thread_id, &title),
+            CoreMessage::ThreadSession { tab_id, session_id, agent } => {
+                self.threads.get_mut(&tab_id).session_id = session_id;
+                // A started thread keeps the agent it started on, so the tab follows it.
+                if let Some(agent) = agent.filter(|a| w.tabs.iter().any(|t| t.id == tab_id && t.agent != *a)) {
+                    w.set_agent(&tab_id, &agent, account, core);
+                }
+            }
+            CoreMessage::ThreadForked { tab_id, agent, thread_id, title } => self.open_fork(&tab_id, &agent, thread_id, &title),
             CoreMessage::SessionHistory { tab_id, items, context } => {
                 for item in &items {
                     self.remember_images(item);
@@ -159,18 +160,13 @@ impl Desk {
             CoreMessage::TerminalOutput { id, data } => self.terminal_output(&id, &data),
             CoreMessage::TerminalExit { id } => self.terminal_exit(&id),
             CoreMessage::File { project, path, file } => self.take_file(project, path, file),
-            CoreMessage::Usage { usage } => self.account.usage = usage,
             CoreMessage::PluginOps { plugin, ops, reset } => self.plugins.apply(&plugin, &ops, reset),
             CoreMessage::Layout { tab_id, layout } => {
                 self.plugins.layouts.insert(tab_id, layout);
             }
             CoreMessage::PanelShow { tab_id, id } => self.panel_shown(&tab_id, &id),
             CoreMessage::Setups { setups } => self.plugins.setups = setups,
-            CoreMessage::Error { message, detail } => {
-                // A failed update reaches the app only as an error, so the Update button comes back.
-                self.account.updating = false;
-                self.toasts.error(message, detail);
-            }
+            CoreMessage::Error { message, detail } => self.toasts.error(message, detail),
             CoreMessage::Notice { message } => self.toasts.show(message, false),
             CoreMessage::Other => {}
         }
@@ -578,7 +574,7 @@ mod tests {
     use serde_json::Map;
 
     fn tab(id: &str, title: &str) -> TabInfo {
-        TabInfo { id: id.into(), title: title.into(), project: format!("/code/{id}"), terminals: vec![], model: "default".into(), effort: None, fast: None, permission_mode: "auto".into(), files: vec![], panel_active: None, review_scope: None, panel_open: None, rest: Map::new() }
+        TabInfo { id: id.into(), title: title.into(), project: format!("/code/{id}"), terminals: vec![], agent: "claude".into(), model: "default".into(), effort: None, fast: None, permission_mode: "auto".into(), files: vec![], panel_active: None, review_scope: None, panel_open: None, rest: Map::new() }
     }
 
     fn runtime(tabs: Vec<TabInfo>, active: &str) -> Runtime<Desk> {

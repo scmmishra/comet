@@ -26,6 +26,13 @@ pub static CLAUDE: Icon = Icon {
 };
 
 
+/// Antigravity's mark: an arch that lifts off its base line. The OpenCode catalog has no mark for it.
+pub static ANTIGRAVITY: Icon = Icon {
+    name: "antigravity",
+    view: 16.0,
+    body: r#"<path d="M2.6 13.2C4.4 13.2 5.1 3 8 3s3.6 10.2 5.4 10.2M5.6 9.4c1.5-.9 3.3-.9 4.8 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
 /// The panel toggle: a window with its right side marked, filled while the panel is open.
 pub static PANEL: Icon = Icon {
     name: "panel",

@@ -55,7 +55,8 @@ export function modelOptions(models: readonly ModelInfo[], defaultEfforts: Reado
       value: model.value,
       label: model.displayName,
       description: model.description,
-      ...(runs && runs !== model.displayName ? { runs } : {}),
+      // "Sonnet" already says it runs Sonnet 5.5. "Default" does not say what it runs.
+      ...(runs && !runs.toLowerCase().startsWith(model.displayName.toLowerCase()) ? { runs } : {}),
       efforts: model.supportsEffort ? (model.supportedEffortLevels ?? []) : [],
       ...(defaultEffort ? { defaultEffort } : {}),
       fast: !!model.supportsFastMode,

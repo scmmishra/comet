@@ -8,7 +8,7 @@ use crate::shell::{CoreState, Desk};
 /// A scene: its name, and what it sets in a fresh window.
 type Scene = (&'static str, fn(&mut Desk));
 
-pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-projects", settings_projects), ("settings-mcp", settings_mcp), ("file", file)];
+pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("models-other-agent", models_other_agent), ("models-missing-agent", models_missing_agent), ("models-new-tab", models_new_tab), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-codex", settings_codex), ("settings-antigravity", settings_antigravity), ("settings-projects", settings_projects), ("settings-mcp", settings_mcp), ("file", file)];
 
 /// The core messages in the JSON file `DESK_SCENE_FILE` names, with the thread rows in its `open` list
 /// opened.
@@ -45,18 +45,10 @@ fn file(s: &mut Desk) {
     }
 }
 
-/// Settings on Providers, with an update out and plan usage.
+/// Settings on Providers: Claude Code with an update out and plan usage, Codex signed in, and Antigravity not installed.
 fn settings(s: &mut Desk) {
     models(s);
     s.picker = Default::default();
-    let messages = serde_json::json!([
-        { "type": "settings", "settings": { "appearance": { "theme": "dark", "fontSize": 14 }, "claude": { "model": "default", "effort": null, "permissionMode": "auto", "followUp": "steer", "compactIdle": false }, "projects": { "/Users/me/code/web": { "name": "Web", "color": "blue" } } } },
-        { "type": "claude.version", "version": { "installed": "2.5.1", "latest": "2.5.3", "updateAvailable": true, "updatable": true } },
-        { "type": "account", "account": { "email": "me@example.com", "organization": "Example", "plan": "max", "apiProvider": "firstParty" } }
-    ]);
-    for message in serde_json::from_value::<Vec<CoreMessage>>(messages).expect("the scene's messages decode") {
-        s.receive(Event::Message(message)).expect("settings need no folder");
-    }
     s.open_settings("providers");
 }
 
@@ -150,12 +142,12 @@ fn start(s: &mut Desk) {
     let now = crate::format::now_ms();
     let messages = serde_json::json!([
         { "type": "recent", "projects": ["/Users/me/code/web", "/Users/me/code/api"] },
-        { "type": "tabs", "active": "tab", "tabs": [{ "id": "tab", "title": "New session", "project": "/Users/me/code/web", "terminals": [], "model": "default", "permissionMode": "auto" }] },
+        { "type": "tabs", "active": "tab", "tabs": [{ "id": "tab", "title": "New session", "project": "/Users/me/code/web", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] },
         { "type": "project", "project": "/Users/me/code/web", "part": "space", "value": { "name": "web", "root": "/Users/me/code/web", "branch": "main", "changes": {} } },
         { "type": "project", "project": "/Users/me/code/web", "part": "threads", "value": [
-            { "id": "s1", "title": "Fix the login form", "updatedAt": now - 5.0 * 60_000.0 },
-            { "id": "s2", "title": "Add a dark theme to the settings page", "branch": "theme", "updatedAt": now - 3.0 * 3_600_000.0 },
-            { "id": "s3", "title": "Speed up the build", "updatedAt": now - 2.0 * 86_400_000.0 }
+            { "id": "s1", "agent": "claude", "title": "Fix the login form", "updatedAt": now - 5.0 * 60_000.0 },
+            { "id": "s2", "agent": "codex", "title": "Add a dark theme to the settings page", "branch": "theme", "updatedAt": now - 3.0 * 3_600_000.0 },
+            { "id": "s3", "agent": "claude", "title": "Speed up the build", "updatedAt": now - 2.0 * 86_400_000.0 }
         ] }
     ]);
     for message in serde_json::from_value::<Vec<CoreMessage>>(messages).expect("the scene's messages decode") {
@@ -163,17 +155,92 @@ fn start(s: &mut Desk) {
     }
 }
 
-/// The thread with the model picker open.
+/// Providers on Codex, which has no update and no idle compaction.
+fn settings_codex(s: &mut Desk) {
+    settings(s);
+    s.show_settings_agent("codex");
+}
+
+/// Providers on Antigravity, which is not installed.
+fn settings_antigravity(s: &mut Desk) {
+    settings(s);
+    s.show_settings_agent("antigravity");
+}
+
+/// The settings and the agents every scene with a picker or a settings page starts from: Claude Code
+/// and Codex ready, each on a plan, and Antigravity not installed.
+fn agents(s: &mut Desk) {
+    let modes = ["default", "acceptEdits", "auto", "bypassPermissions"];
+    let codex_efforts = ["low", "medium", "high", "xhigh", "max", "ultra"];
+    let messages = serde_json::json!([
+        { "type": "settings", "settings": {
+            "appearance": { "theme": "dark", "fontSize": 14 },
+            "threads": { "agent": "claude", "followUp": "steer", "compactIdle": false },
+            "agents": { "claude": { "model": "default", "permissionMode": "auto" }, "codex": { "model": "default", "effort": "medium", "permissionMode": "auto" }, "antigravity": { "model": "default", "permissionMode": "default" } },
+            "projects": { "/Users/me/code/web": { "name": "Web", "color": "blue" } },
+        } },
+        { "type": "agents", "agents": [
+            {
+                "id": "claude", "name": "Claude Code", "state": "ready",
+                "version": { "installed": "2.5.1", "latest": "2.5.3", "updateAvailable": true, "updatable": true },
+                "account": { "email": "me@example.com", "organization": "Example", "plan": "max" },
+                "features": ["steer", "rewind", "restore-files", "fork", "rename", "delete", "compact-idle"],
+                "usage": { "windows": [{ "id": "five_hour", "label": "Session", "percent": 42, "resetsAt": "2030-01-01T10:00:00Z" }, { "id": "seven_day", "label": "This week", "percent": 18 }] },
+                "models": [
+                    { "value": "default", "label": "Default", "description": "The recommended model", "runs": "Opus 5.5", "efforts": ["low", "medium", "high", "xhigh", "max"], "defaultEffort": "high", "fast": true, "permissionModes": modes },
+                    { "value": "sonnet", "label": "Sonnet", "description": "Fast and capable for everyday tasks", "runs": "Sonnet 5.5", "efforts": ["low", "medium", "high"], "fast": false, "permissionModes": modes },
+                    { "value": "haiku", "label": "Haiku", "description": "Fastest for quick answers", "efforts": [], "fast": false, "permissionModes": ["default", "acceptEdits", "bypassPermissions"] },
+                    { "value": "claude-opus-4-8", "label": "Opus 4.8", "description": "Older model", "efforts": ["high"], "fast": false, "permissionModes": modes, "older": true }
+                ]
+            },
+            {
+                "id": "codex", "name": "Codex", "state": "ready",
+                "version": { "installed": "0.167.0", "updateAvailable": false, "updatable": false },
+                "account": { "email": "me@example.com", "plan": "plus" },
+                "features": ["steer", "rewind", "fork", "rename", "delete", "sign-in"],
+                "usage": { "windows": [{ "id": "primary", "label": "Session", "percent": 9 }, { "id": "secondary", "label": "This week", "percent": 31 }] },
+                "models": [
+                    { "value": "default", "label": "Default", "description": "Latest workhorse model for coding and everyday work.", "runs": "GPT-6.1-Sol", "efforts": codex_efforts, "defaultEffort": "low", "fast": true, "permissionModes": modes },
+                    { "value": "gpt-6.1-sol", "label": "GPT-6.1-Sol", "description": "Latest workhorse model for coding and everyday work.", "efforts": codex_efforts, "defaultEffort": "low", "fast": true, "permissionModes": modes },
+                    { "value": "gpt-6-astra", "label": "GPT-6-Astra", "description": "Frontier intelligence for the most demanding work.", "efforts": codex_efforts, "defaultEffort": "low", "fast": true, "permissionModes": modes },
+                    { "value": "gpt-6-luna", "label": "GPT-6-Luna", "description": "Fast and affordable model for easier tasks.", "efforts": ["low", "medium", "high"], "defaultEffort": "medium", "fast": true, "permissionModes": modes }
+                ]
+            },
+            { "id": "antigravity", "name": "Antigravity", "state": "missing", "problem": "Install it to use the models of your Google account.", "features": ["delete", "install", "sign-in"], "models": [] }
+        ] }
+    ]);
+    for message in serde_json::from_value::<Vec<CoreMessage>>(messages).expect("the scene's messages decode") {
+        s.receive(Event::Message(message)).expect("agents need no folder");
+    }
+}
+
+/// The thread with the model picker open, on the thread's own agent.
 fn models(s: &mut Desk) {
     thread(s);
-    let models = serde_json::json!({ "type": "models", "models": [
-        { "value": "default", "label": "Default", "description": "The recommended model", "resolvedModel": "claude-opus-5-5", "efforts": ["low", "medium", "high", "xhigh", "max"], "defaultEffort": "high", "fast": true, "autoMode": true },
-        { "value": "sonnet", "label": "Sonnet", "description": "Fast and capable for everyday tasks", "resolvedModel": "claude-sonnet-5-5", "efforts": ["low", "medium", "high"], "fast": false, "autoMode": true },
-        { "value": "haiku", "label": "Haiku", "description": "Fastest for quick answers", "efforts": [], "fast": false, "autoMode": false },
-        { "value": "claude-opus-4-8", "label": "Opus 4.8", "description": "Older model", "efforts": ["high"], "fast": false, "autoMode": true }
-    ] });
-    s.receive(Event::Message(serde_json::from_value(models).expect("the models decode"))).expect("models need no folder");
+    agents(s);
     s.toggle_picker();
+}
+
+/// The picker of a started thread, showing another agent: its models, and the way to a new tab on it.
+fn models_other_agent(s: &mut Desk) {
+    models(s);
+    let session = serde_json::json!({ "type": "thread.session", "tabId": "tab", "sessionId": "s1", "agent": "claude" });
+    s.receive(Event::Message(serde_json::from_value(session).expect("the session decodes"))).expect("a session needs no folder");
+    s.view_agent("codex");
+}
+
+/// The picker showing an agent that is not installed.
+fn models_missing_agent(s: &mut Desk) {
+    models(s);
+    s.view_agent("antigravity");
+}
+
+/// A new tab's picker, showing Codex, whose models the tab can take.
+fn models_new_tab(s: &mut Desk) {
+    start(s);
+    agents(s);
+    s.toggle_picker();
+    s.view_agent("codex");
 }
 
 /// A tab with a finished turn, a steered message, and a running turn with a live group.
@@ -184,7 +251,7 @@ fn thread(s: &mut Desk) {
     let at = |ago_s: f64| now - ago_s * 1000.0;
     s.now_ms = now;
     let messages = serde_json::json!([
-        { "type": "tabs", "active": "tab", "tabs": [{ "id": "tab", "title": "Fix the login form", "project": "/Users/me/code/web", "terminals": [], "model": "default", "permissionMode": "auto" }] },
+        { "type": "tabs", "active": "tab", "tabs": [{ "id": "tab", "title": "Fix the login form", "project": "/Users/me/code/web", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] },
         { "type": "session.history", "tabId": "tab", "items": [
             { "type": "user", "id": "u1", "text": "The login form loses its error message after a retry. Can you fix it?", "at": at(125.0) },
             { "type": "thinking", "id": "th1", "text": "**Reading the form**", "kind": "thought", "label": "Reading the form" },

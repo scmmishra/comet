@@ -552,8 +552,8 @@ mod tests {
         let mut s = Desk::default();
         let messages = serde_json::json!([
             { "type": "recent", "projects": ["/code/web", "/code/api"] },
-            { "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "Fix login", "project": "/code/web", "terminals": [], "model": "default", "permissionMode": "auto" }] },
-            { "type": "project", "project": "/code/web", "part": "threads", "value": [{ "id": "s1", "title": "Speed up the build", "updatedAt": 0.0 }] }
+            { "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "Fix login", "project": "/code/web", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] },
+            { "type": "project", "project": "/code/web", "part": "threads", "value": [{ "id": "s1", "agent": "claude", "title": "Speed up the build", "updatedAt": 0.0 }] }
         ]);
         for m in serde_json::from_value::<Vec<CoreMessage>>(messages).unwrap() {
             s.receive(Event::Message(m)).unwrap();

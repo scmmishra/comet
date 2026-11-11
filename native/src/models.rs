@@ -1,11 +1,11 @@
-//! The models Claude Code offers and how a tab's run settings follow them.
+//! The models an agent offers and how a tab's run settings follow them.
 
 use crate::icons;
 use crate::protocol::ModelOption;
 use rune::Icon;
 use rune_theme_opencode::icons as ic;
 
-/// Each effort's words.
+/// Each effort's words. A level Desk has no words for shows as its agent names it.
 pub fn effort_label(effort: &str) -> &str {
     match effort {
         "low" => "Low",
@@ -13,6 +13,9 @@ pub fn effort_label(effort: &str) -> &str {
         "high" => "High",
         "xhigh" => "Extra high",
         "max" => "Max",
+        "ultra" => "Ultra",
+        "minimal" => "Minimal",
+        "none" => "None",
         other => other,
     }
 }
@@ -31,21 +34,15 @@ pub fn permission(mode: &str) -> (&'static str, &'static str, &'static Icon) {
     (label, description, icon)
 }
 
-/// Aliases such as "opus" follow the newest model of a family, so they lead the list. Pinned models,
-/// such as "claude-opus-4-8", wait behind "Show older models".
-pub fn is_alias(option: &ModelOption) -> bool {
-    !option.value.starts_with("claude-")
-}
-
 /// The effort a model keeps when it becomes the model: the chosen one if it takes it, else its default.
 pub fn effort_for(option: &ModelOption, effort: Option<&str>) -> Option<String> {
     effort.filter(|e| option.efforts.iter().any(|x| x == e)).map(str::to_owned)
 }
 
-/// The permission modes a model takes. Auto needs a model that supports it.
-pub fn permission_modes(option: Option<&ModelOption>) -> impl Iterator<Item = &'static str> {
-    let auto = option.is_some_and(|o| o.auto_mode);
-    PERMISSION.iter().map(|p| p.0).filter(move |mode| *mode != "auto" || auto)
+/// The permission modes a model takes, in Desk's order. Before the models arrive, every mode but Auto shows,
+/// since Auto needs a model that supports it.
+pub fn permission_modes(option: Option<&ModelOption>) -> impl Iterator<Item = &'static str> + '_ {
+    PERMISSION.iter().map(|p| p.0).filter(move |mode| option.map_or(*mode != "auto", |o| o.permission_modes.iter().any(|m| m == mode)))
 }
 
 /// The permission mode a model keeps when it becomes the model: the chosen one if it takes it, else Supervised.
@@ -53,53 +50,38 @@ pub fn permission_for(option: Option<&ModelOption>, mode: &str) -> String {
     if permission_modes(option).any(|m| m == mode) { mode } else { "default" }.to_owned()
 }
 
-/// "claude-opus-5-5" → "Opus 5.5". Unknown ids pass through unchanged.
-pub fn model_label(id: &str) -> String {
-    let Some(rest) = id.strip_prefix("claude-") else { return id.to_owned() };
-    let mut parts = rest.split('-');
-    let (Some(family), Some(major)) = (parts.next(), parts.next()) else { return id.to_owned() };
-    if family.is_empty() || !family.chars().all(|c| c.is_ascii_lowercase()) || major.is_empty() || !major.chars().all(|c| c.is_ascii_digit()) {
-        return id.to_owned();
-    }
-    let minor = parts.next().filter(|m| m.len() == 1 && m.chars().all(|c| c.is_ascii_digit()));
-    let mut name = family[..1].to_uppercase() + &family[1..];
-    name.push(' ');
-    name.push_str(major);
-    if let Some(minor) = minor {
-        name.push('.');
-        name.push_str(minor);
-    }
-    name
-}
-
 /// A model's name as the picker shows it: the model that runs, so "Default" reads as "Opus 5.5".
-pub fn option_label(option: &ModelOption) -> String {
-    option.resolved_model.as_deref().map_or_else(|| option.label.clone(), model_label)
+pub fn option_label(option: &ModelOption) -> &str {
+    option.runs.as_deref().unwrap_or(&option.label)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn model(value: &str, auto_mode: bool) -> ModelOption {
-        ModelOption { value: value.into(), label: value.into(), description: String::new(), resolved_model: None, efforts: vec!["low".into(), "high".into()], default_effort: None, fast: false, auto_mode }
+    fn model(value: &str, modes: &[&str]) -> ModelOption {
+        ModelOption { value: value.into(), label: value.into(), description: String::new(), runs: None, efforts: vec!["low".into(), "high".into()], default_effort: None, fast: false, permission_modes: modes.iter().map(|m| (*m).to_owned()).collect(), older: false }
     }
 
     #[test]
-    fn auto_needs_a_model_that_takes_it() {
-        assert_eq!(permission_for(Some(&model("m", true)), "auto"), "auto");
-        assert_eq!(permission_for(Some(&model("m", false)), "auto"), "default");
+    fn a_mode_needs_a_model_that_takes_it() {
+        let every = model("m", &["default", "acceptEdits", "auto", "bypassPermissions"]);
+        let some = model("m", &["default", "acceptEdits", "bypassPermissions"]);
+        assert_eq!(permission_for(Some(&every), "auto"), "auto");
+        assert_eq!(permission_for(Some(&some), "auto"), "default");
         assert_eq!(permission_for(None, "auto"), "default");
         assert_eq!(permission_for(None, "acceptEdits"), "acceptEdits");
+        assert_eq!(permission_modes(Some(&some)).collect::<Vec<_>>(), ["default", "acceptEdits", "bypassPermissions"]);
     }
 
     #[test]
-    fn names_models_and_keeps_only_efforts_a_model_takes() {
-        assert_eq!(model_label("claude-opus-5-5"), "Opus 5.5");
-        assert_eq!(model_label("claude-haiku-5-20260101"), "Haiku 5");
-        assert_eq!(model_label("opus"), "opus");
-        assert!(is_alias(&model("opus", true)) && !is_alias(&model("claude-opus-4-8", true)));
-        assert_eq!(effort_for(&model("m", true), Some("high")).as_deref(), Some("high"));
-        assert_eq!(effort_for(&model("m", true), Some("max")), None);
+    fn names_the_model_that_runs_and_keeps_only_efforts_a_model_takes() {
+        let mut default = model("default", &[]);
+        assert_eq!(option_label(&default), "default");
+        default.runs = Some("Opus 5.5".into());
+        assert_eq!(option_label(&default), "Opus 5.5");
+        assert_eq!(effort_for(&default, Some("high")).as_deref(), Some("high"));
+        assert_eq!(effort_for(&default, Some("max")), None);
+        assert_eq!(effort_label("ultra"), "Ultra");
     }
 }

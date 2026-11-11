@@ -200,8 +200,8 @@ fn hash_row(c: &Ctx, r: &ThreadRow, h: &mut DefaultHasher) {
             // A copied message or one of its code blocks.
             c.s.copied.as_ref().filter(|(copied, _)| copied == id || copied.starts_with(&format!("{id}#"))).map(|(copied, _)| copied).hash(h);
             (c.thread.latest_changes() == Some(id.as_str())).hash(h);
-            // A message's Rewind and Fork follow the session and whether Claude works.
-            (c.thread.busy, c.thread.session_id.is_some()).hash(h);
+            // A message's Rewind and Fork follow the session and whether the agent works.
+            (c.thread.busy, c.thread.session_id.is_some(), c.s.tab_can(c.tab, "rewind"), c.s.tab_can(c.tab, "fork")).hash(h);
             c.s.threads.approval_menu.hash(h);
         }
         ThreadRow::Group { id, steps, live, summary } => {
@@ -315,9 +315,9 @@ fn message_meta(c: &Ctx, id: &str, words: &str, at: Option<f64>, actions: impl I
     row().h(24.0).gap(6.0).items_center().group_opacity(0.0, 1.0).child(copy).children(actions).children(time)
 }
 
-/// Rewind and Fork for a message the user sent, after T3 Code. Both need the session Claude Code keeps.
-/// A thread can rewind only while Claude is not working.
-fn message_actions(c: &Ctx, id: &str, words: &str, images: &[crate::protocol::ImageAttachment]) -> Option<[El; 2]> {
+/// Rewind and Fork for a message the user sent, after T3 Code. Both need the session the agent keeps, and
+/// an agent that can do them. A thread can rewind only while the agent is not working.
+fn message_actions(c: &Ctx, id: &str, words: &str, images: &[crate::protocol::ImageAttachment]) -> Option<Vec<El>> {
     c.thread.session_id.as_ref()?;
     let k = c.k;
     let (tab, message) = (c.tab.to_owned(), id.to_owned());
@@ -325,7 +325,7 @@ fn message_actions(c: &Ctx, id: &str, words: &str, images: &[crate::protocol::Im
     let rewind = IconButton::new(&ic::PENCIL_LINE)
         .variant(IconButtonVariant::GhostMuted)
         .label("Rewind to this message")
-        .help(if c.thread.busy { "Stop Claude to rewind" } else { "Rewind and edit" })
+        .help(if c.thread.busy { format!("Stop {} to rewind", c.s.agent_name(c.s.tab_agent(c.tab))) } else { "Rewind and edit".to_owned() })
         .disabled(c.thread.busy)
         .on_press(move |s: &mut Desk| s.ask_rewind(&rewind_tab, &rewind_message, &rewind_words, &rewind_images))
         .build(k);
@@ -335,7 +335,8 @@ fn message_actions(c: &Ctx, id: &str, words: &str, images: &[crate::protocol::Im
         .help("Fork from here")
         .on_press(move |s: &mut Desk| s.fork_from(&tab, &message))
         .build(k);
-    Some([rewind, fork])
+    let can = |feature: &str| c.s.tab_can(c.tab, feature);
+    Some([can("rewind").then_some(rewind), can("fork").then_some(fork)].into_iter().flatten().collect())
 }
 
 /// An image sent with a message, at most `MESSAGE_IMAGE` wide and tall, in its own proportions.

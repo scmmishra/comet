@@ -61,7 +61,7 @@ mod tests {
     #[test]
     fn reads_threads_and_space_and_a_folder_outside_git() {
         let mut projects = Projects::default();
-        projects.read("/a".into(), "threads", serde_json::json!([{ "id": "s", "title": "T", "updatedAt": 5.0 }]));
+        projects.read("/a".into(), "threads", serde_json::json!([{ "id": "s", "agent": "claude", "title": "T", "updatedAt": 5.0 }]));
         projects.read("/a".into(), "space", serde_json::json!({ "name": "a", "root": "/a", "branch": "main", "changes": {} }));
         projects.read("/b".into(), "space", Value::Null);
         assert_eq!(projects.get("/a").unwrap().threads.as_ref().unwrap()[0].title, "T");

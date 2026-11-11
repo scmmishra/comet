@@ -1,9 +1,10 @@
 //! Desk's settings, after OpenCode's settings screen: a sidebar of
 //! pages, and the chosen page beside it, on a card over the session. Back, or Escape, returns to it.
 
+use crate::agents::{mark, state_label, status_line};
 use crate::format;
 use crate::models::{effort_label, permission, permission_for, permission_modes};
-use crate::protocol::{ClientMessage, ProjectSettings, ThemeChoice};
+use crate::protocol::{AgentDefaults, AgentInfo, AgentState, AgentVersion, ClientMessage, ProjectSettings, ThemeChoice};
 use crate::shell::Desk;
 use rune::{El, Key, KeyEvent, ScrollSpec, TextEdit, col, el, icon, row, text};
 use rune_kit::{Badge, BadgeVariant, ButtonVariant, Kit, Select, Switch, TextInput};
@@ -27,6 +28,8 @@ const PROJECT_COLORS: [&str; 9] = ["orange", "yellow", "cyan", "green", "red", "
 #[derive(Default)]
 pub struct SettingsUi {
     open_select: Option<String>,
+    /// The agent Providers shows. None shows the default agent.
+    agent: Option<String>,
     /// The project whose icon picker is open.
     icon_picker: Option<String>,
     fields: std::collections::HashMap<String, TextEdit>,
@@ -42,7 +45,8 @@ impl Desk {
         self.workspace.settings_page = Some(page.to_owned());
         self.settings.open_select = None;
         match page {
-            "providers" => self.core.send(&ClientMessage::ClaudeVersionGet),
+            // The agents are read again, so one installed or signed in outside Desk shows.
+            "providers" => self.core.send(&ClientMessage::AgentsGet),
             "mcps" | "skills" => {
                 if let Some(project) = self.workspace.active_tab().map(|t| t.project.clone()) {
                     self.core.send(&ClientMessage::ProjectGet { project, part: if page == "mcps" { "mcp" } else { "skills" }.into() });
@@ -50,6 +54,12 @@ impl Desk {
             }
             _ => {}
         }
+    }
+
+    /// Shows an agent on Providers, as its tab does.
+    pub fn show_settings_agent(&mut self, agent: &str) {
+        self.settings.agent = Some(agent.to_owned());
+        self.settings.open_select = None;
     }
 
     /// Closes the icon picker, as Escape does. Whether it was open.
@@ -238,104 +248,195 @@ fn select(s: &Desk, k: &Kit, layer: &mut Vec<El>, key: &str, options: &[(String,
         .build(k, layer)
 }
 
+/// Providers: what a new tab starts with, then one section per agent Desk runs.
 fn providers(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
-    let account = &s.account;
-    let claude = account.settings.as_ref().map(|x| &x.claude);
-    let model = claude.and_then(|c| account.model(&c.model));
-    let line = match &account.user {
-        None => "Checking the account…".to_owned(),
-        Some(None) => "Not signed in. Run claude in a terminal to sign in.".to_owned(),
-        Some(Some(user)) => match &user.email {
-            Some(email) => format!("Signed in as {email}{}", user.organization.as_ref().map(|o| format!(" · {o}")).unwrap_or_default()),
-            None => match &user.api_key_source {
-                Some(source) => format!("Signed in with an API key from {source}."),
-                None => format!("Signed in through {}.", user.api_provider.as_deref().unwrap_or("another provider")),
-            },
-        },
-    };
-    let connected = account.user.as_ref().map(|u| {
-        Badge::new(if u.is_some() { "Connected" } else { "Not signed in" }).variant(if u.is_some() { BadgeVariant::Accent } else { BadgeVariant::Neutral }).build(k)
-    });
-    let claude_title = row().gap(8.0).items_center().child(icon(&crate::icons::CLAUDE, 16.0).color(crate::theme::claude())).child(title(k, "Claude Code"));
-    let version = match &account.claude_code {
-        None => "Checking the version…".to_owned(),
-        Some(v) => match &v.installed {
-            None => "Desk found no Claude Code on your PATH.".to_owned(),
-            Some(installed) if v.update_available => format!("Claude Code {installed}. {} is out.{}", v.latest.as_deref().unwrap_or("A newer version"), if v.updatable { "" } else { " Update it the way you installed it." }),
-            Some(installed) => format!("Claude Code {installed}{}.", if v.latest.is_some() { ", the newest" } else { "" }),
-        },
-    };
-    let update = account.claude_code.as_ref().filter(|v| v.update_available && v.updatable).map(|_| {
-        crate::theme::small_button(if account.updating { "Updating…" } else { "Update" })
-            .variant(ButtonVariant::Contrast)
-            .disabled(account.updating)
-            .on_press(|s: &mut Desk| {
-                s.account.updating = true;
-                s.core.send(&ClientMessage::ClaudeUpdate);
-            })
-            .build(k)
-    });
-    let mut rows = vec![setting(k, claude_title, Some(line), connected), setting(k, title(k, "Version"), Some(version), update)];
-    if let Some(claude) = claude {
-        let models: Vec<(String, String)> = account.models.iter().map(|m| (m.value.clone(), m.label.clone())).collect();
-        rows.push(setting(
+    let mut sections = Vec::new();
+    if let Some(settings) = &s.account.settings {
+        sections.push(section(k, "New tabs".into(), new_tabs(s, &settings.threads, k, layer)));
+    }
+    if s.account.agents.is_empty() {
+        sections.push(text("Reading the agents…").font(crate::theme::text(13.0)).color(k.c.text_faint));
+    }
+    // One agent shows at a time, so the page stays short however many agents Desk runs.
+    if let Some(agent) = s.settings.agent.as_deref().and_then(|id| s.account.agent(id)).or_else(|| s.account.agent(s.account.default_agent())).or(s.account.agents.first()) {
+        // An agent that is not ready says so in its first row, beside the button that gets it ready.
+        let heading = agent_action(agent, k).is_none().then(|| agent_heading(agent, k));
+        sections.push(section_with(agent_tabs(s, &agent.id, k), col().w_full().gap(12.0).children(heading).child(agent_settings(s, agent, k, layer))));
+    }
+    col().w_full().child(header(k, "Providers", "The coding agents Desk runs, and what a new tab starts with.")).child(body(sections))
+}
+
+/// What every new tab starts with, whichever agent it runs.
+fn new_tabs(s: &Desk, threads: &crate::protocol::ThreadSettings, k: &Kit, layer: &mut Vec<El>) -> El {
+    let agents: Vec<(String, String)> = s.account.agents.iter().map(|a| (a.id.clone(), a.name.clone())).collect();
+    let follow = [("steer".to_owned(), "Steer".to_owned()), ("queue".to_owned(), "Queue".to_owned())];
+    list(k, vec![
+        setting(
             k,
-            title(k, "Default model"),
-            Some("The model a new tab starts on. A tab can change it in the model picker.".into()),
-            Some(select(s, k, layer, "default-model", &models, &claude.model, |s: &mut Desk, value: &str| {
-                let effort = s.account.model(value).and_then(|m| crate::models::effort_for(m, s.account.settings.as_ref()?.claude.effort.as_deref()));
-                s.update_settings(json!({ "claude": { "model": value, "effort": effort } }));
-            })),
-        ));
-        if let Some(option) = model.filter(|m| !m.efforts.is_empty()) {
-            let default = format!("Default{}", option.default_effort.as_deref().map(|e| format!(" ({})", effort_label(e))).unwrap_or_default());
-            let efforts: Vec<(String, String)> = std::iter::once(("default".to_owned(), default)).chain(option.efforts.iter().map(|e| (e.clone(), effort_label(e).to_owned()))).collect();
-            rows.push(setting(
-                k,
-                title(k, "Default effort"),
-                Some("How long Claude thinks before it answers, on the default model.".into()),
-                Some(select(s, k, layer, "default-effort", &efforts, claude.effort.as_deref().unwrap_or("default"), |s: &mut Desk, value: &str| {
-                    s.update_settings(json!({ "claude": { "effort": if value == "default" { None } else { Some(value) } } }));
-                })),
-            ));
-        }
-        let modes: Vec<(String, String)> = permission_modes(model).map(|m| (m.to_owned(), permission(m).0.to_owned())).collect();
-        rows.push(setting(
-            k,
-            title(k, "Default permissions"),
-            Some("How a new tab's Claude handles tool calls. A tab can change it in the model picker. Auto needs a model that supports it.".into()),
-            Some(select(s, k, layer, "default-permissions", &modes, &permission_for(model, &claude.permission_mode), |s: &mut Desk, value: &str| {
-                s.update_settings(json!({ "claude": { "permissionMode": value } }));
-            })),
-        ));
-        let follow = [("steer".to_owned(), "Steer".to_owned()), ("queue".to_owned(), "Queue".to_owned())];
-        rows.push(setting(
+            title(k, "Default agent"),
+            Some("The agent a new tab starts on. A tab can change it in the model picker until its first message.".into()),
+            Some(select(s, k, layer, "default-agent", &agents, &threads.agent, |s: &mut Desk, value: &str| s.update_settings(json!({ "threads": { "agent": value } })))),
+        ),
+        setting(
             k,
             title(k, "Follow-ups"),
-            Some("What Enter does while Claude works: steer the running turn, or queue the message for when it ends. ⌘Enter does the other, for one message.".into()),
-            Some(select(s, k, layer, "follow-ups", &follow, &claude.follow_up, |s: &mut Desk, value: &str| s.update_settings(json!({ "claude": { "followUp": value } })))),
-        ));
-        let compact = account.settings.as_ref().is_some_and(|x| x.claude.compact_idle);
+            Some("What Enter does while the agent works: steer the running turn, or queue the message for when it ends. ⌘Enter does the other, for one message. An agent that cannot be steered always queues.".into()),
+            Some(select(s, k, layer, "follow-ups", &follow, &threads.follow_up, |s: &mut Desk, value: &str| s.update_settings(json!({ "threads": { "followUp": value } })))),
+        ),
+    ])
+}
+
+/// The agents as tabs: each one's mark and name, with a dot on one that is not ready.
+fn agent_tabs(s: &Desk, shown: &str, k: &Kit) -> El {
+    let tabs = s.account.agents.iter().map(|agent| {
+        let on = agent.id == shown;
+        let id = agent.id.clone();
+        let dot = (agent.state != AgentState::Ready).then(|| el().size(6.0, 6.0).radius(3.0).fill(if agent.state == AgentState::Checking { k.c.text_faint } else { k.c.warning.fg }));
+        row()
+            .key(format!("settings-agent-{}", agent.id))
+            .h(32.0)
+            .gap(8.0)
+            .items_center()
+            .px(10.0)
+            .radius(6.0)
+            .fill(if on { k.c.layer_03 } else { rune::Color::TRANSPARENT })
+            .hover(k.c.hover)
+            .role("tab")
+            .checked(on)
+            .label(format!("{}, {}", agent.name, state_label(agent.state)))
+            .on_press_tx(move |s: &mut Desk, tx| {
+                s.show_settings_agent(&id);
+                // The agent's rows show whole, with no morph from the rows of the agent before.
+                tx.instant();
+            })
+            .child(mark(&agent.id, 15.0, k))
+            .child(text(agent.name.clone()).font(crate::theme::medium(13.0)).color(if on { k.c.text_base } else { k.c.text_muted }))
+            .children(dot)
+    });
+    row().w_full().gap(4.0).role("tablist").label("Agents").children(tabs)
+}
+
+/// What the agent on show runs on: who is signed in, and where it stands.
+fn agent_heading(agent: &AgentInfo, k: &Kit) -> El {
+    let badge = Badge::new(state_label(agent.state)).variant(if agent.state == AgentState::Ready { BadgeVariant::Accent } else { BadgeVariant::Neutral }).build(k);
+    row().key(format!("agent-heading-{}", agent.id)).w_full().gap(8.0).items_center().child(text(status_line(agent)).font(crate::theme::text(13.0)).color(k.c.text_muted).truncate().grow(1.0).min_w(0.0)).child(badge)
+}
+
+/// An agent's rows: its account, its version, what a new tab starts it with, and its plan usage. An agent
+/// that is not ready shows only what stands in the way, with the button that clears it.
+fn agent_settings(s: &Desk, agent: &AgentInfo, k: &Kit, layer: &mut Vec<El>) -> El {
+    let mut rows = Vec::new();
+    // An agent that is not ready leads with the button that gets it ready.
+    if let Some(action) = agent_action(agent, k) {
+        rows.push(setting(k, title(k, &crate::agents::state_sentence(agent)), agent.problem.clone(), Some(action)));
+    }
+    if let Some(version) = agent.version.as_ref().filter(|v| v.installed.is_some()) {
+        rows.push(setting(k, title(k, "Version"), Some(version_line(agent, version)), update_button(agent, version, k)));
+    }
+    if let Some(defaults) = s.account.defaults(&agent.id).filter(|_| !agent.models.is_empty()) {
+        rows.extend(default_rows(s, agent, defaults, k, layer));
+    }
+    if agent.features.iter().any(|f| f == "compact-idle") {
+        let compact = s.account.settings.as_ref().is_some_and(|x| x.threads.compact_idle);
         rows.push(setting(
             k,
             title(k, "Compact idle threads"),
-            Some("When you return to a large thread that sat idle, Claude Code compacts it first, so its next reply reads a summary, not the whole history.".into()),
-            Some(Switch::new(compact).web().label("Compact idle threads").hide_label().on_toggle(move |s: &mut Desk| s.update_settings(json!({ "claude": { "compactIdle": !compact } }))).build(k)),
+            Some(format!("When you return to a large thread that sat idle, {} compacts it first, so its next reply reads a summary, not the whole history.", agent.name)),
+            Some(Switch::new(compact).web().label("Compact idle threads").hide_label().on_toggle(move |s: &mut Desk| s.update_settings(json!({ "threads": { "compactIdle": !compact } }))).build(k)),
         ));
     }
-    let mut sections = vec![section(k, "Claude Code".into(), list(k, rows))];
-    if let Some(usage) = &account.usage {
-        let plan = account.user.as_ref().and_then(|u| u.as_ref()?.plan.clone()).map_or_else(|| "Plan".to_owned(), |p| format!("Claude {}{}", p[..1].to_uppercase(), &p[1..]));
-        let windows = col().w(260.0).gap(12.0).children(usage.windows.iter().map(|w| {
-            col()
-                .w_full()
-                .gap(5.0)
-                .child(row().w_full().child(text(w.label.clone()).font(crate::theme::text(13.0)).color(k.c.text_base).grow(1.0)).child(text(format!("{}%", w.percent.round())).font(crate::theme::text(13.0)).color(k.c.text_muted)))
-                .child(rune_kit::Progress::new(Some(w.percent as f32 / 100.0)).build(k))
-        }));
-        sections.push(section(k, "Subscription".into(), list(k, vec![setting(k, title(k, &plan), Some("Your plan's usage limits, as Claude Code reports them.".into()), Some(windows))])));
+    if let Some(usage) = &agent.usage {
+        let plan = agent.account.as_ref().and_then(|a| a.plan.as_deref()).map_or_else(|| "Plan usage".to_owned(), |p| format!("{} plan", crate::agents::capitalized(p)));
+        rows.push(setting(k, title(k, &plan), Some(format!("Your plan's usage limits, as {} reports them.", agent.name)), Some(usage_windows(usage, k))));
     }
-    col().w_full().child(header(k, "Providers", "The coding agents Desk runs, and what a new tab starts with.")).child(body(sections))
+    if rows.is_empty() {
+        return text(agent.problem.clone().unwrap_or_else(|| "Nothing to set yet.".to_owned())).key(format!("agent-rows-{}", agent.id)).font(crate::theme::text(13.0)).color(k.c.text_faint).wrap();
+    }
+    list(k, rows).key(format!("agent-rows-{}", agent.id))
+}
+
+/// The button that gets an agent ready: its install, or its sign-in. None when Desk can do neither, or nothing is needed.
+fn agent_action(agent: &AgentInfo, k: &Kit) -> Option<El> {
+    let id = agent.id.clone();
+    let can = |feature: &str| agent.features.iter().any(|f| f == feature);
+    match agent.state {
+        AgentState::Missing if can("install") => Some(crate::theme::small_button("Install").variant(ButtonVariant::Contrast).on_press(move |s: &mut Desk| s.core.send(&ClientMessage::AgentInstall { agent: id.clone() })).build(k)),
+        AgentState::SignedOut if can("sign-in") => Some(crate::theme::small_button("Sign in").variant(ButtonVariant::Contrast).on_press(move |s: &mut Desk| s.core.send(&ClientMessage::AgentSignIn { agent: id.clone() })).build(k)),
+        AgentState::Installing => Some(crate::theme::small_button("Installing…").disabled(true).build(k)),
+        AgentState::SigningIn => Some(crate::theme::small_button("Signing in…").disabled(true).build(k)),
+        _ => None,
+    }
+}
+
+fn version_line(agent: &AgentInfo, version: &AgentVersion) -> String {
+    let installed = version.installed.as_deref().unwrap_or_default();
+    if version.update_available {
+        let how = if version.updatable { "" } else { " Update it the way you installed it." };
+        return format!("{} {installed}. {} is out.{how}", agent.name, version.latest.as_deref().unwrap_or("A newer version"));
+    }
+    format!("{} {installed}{}.", agent.name, if version.latest.is_some() { ", the newest" } else { "" })
+}
+
+fn update_button(agent: &AgentInfo, version: &AgentVersion, k: &Kit) -> Option<El> {
+    let updating = agent.state == AgentState::Updating;
+    let id = agent.id.clone();
+    (updating || (version.update_available && version.updatable)).then(|| {
+        crate::theme::small_button(if updating { "Updating…" } else { "Update" }).variant(ButtonVariant::Contrast).disabled(updating).on_press(move |s: &mut Desk| s.core.send(&ClientMessage::AgentUpdate { agent: id.clone() })).build(k)
+    })
+}
+
+/// What a new tab starts an agent with: its model, that model's effort, and its permission mode.
+fn default_rows(s: &Desk, agent: &AgentInfo, defaults: &AgentDefaults, k: &Kit, layer: &mut Vec<El>) -> Vec<El> {
+    let model = s.account.model(&agent.id, &defaults.model);
+    let save = |id: &str| {
+        let id = id.to_owned();
+        move |s: &mut Desk, change: serde_json::Value| s.update_settings(json!({ "agent": { "id": id, "defaults": change } }))
+    };
+    let models: Vec<(String, String)> = agent.models.iter().map(|m| (m.value.clone(), m.label.clone())).collect();
+    let (id, save_model) = (agent.id.clone(), save(&agent.id));
+    let mut rows = vec![setting(
+        k,
+        title(k, "Default model"),
+        Some(format!("The model a new {} tab starts on. A tab can change it in the model picker.", agent.name)),
+        Some(select(s, k, layer, &format!("default-model-{}", agent.id), &models, &defaults.model, move |s: &mut Desk, value: &str| {
+            // The effort stays only if the new model takes it.
+            let effort = s.account.model(&id, value).and_then(|m| crate::models::effort_for(m, s.account.defaults(&id)?.effort.as_deref()));
+            save_model(s, json!({ "model": value, "effort": effort }));
+        })),
+    )];
+    if let Some(option) = model.filter(|m| !m.efforts.is_empty()) {
+        let default = format!("Default{}", option.default_effort.as_deref().map(|e| format!(" ({})", effort_label(e))).unwrap_or_default());
+        let efforts: Vec<(String, String)> = std::iter::once(("default".to_owned(), default)).chain(option.efforts.iter().map(|e| (e.clone(), effort_label(e).to_owned()))).collect();
+        let save_effort = save(&agent.id);
+        rows.push(setting(
+            k,
+            title(k, "Default effort"),
+            Some("How long the model thinks before it answers, on the default model.".into()),
+            Some(select(s, k, layer, &format!("default-effort-{}", agent.id), &efforts, defaults.effort.as_deref().unwrap_or("default"), move |s: &mut Desk, value: &str| {
+                save_effort(s, json!({ "effort": if value == "default" { None } else { Some(value) } }));
+            })),
+        ));
+    }
+    let modes: Vec<(String, String)> = permission_modes(model).map(|m| (m.to_owned(), permission(m).0.to_owned())).collect();
+    let save_mode = save(&agent.id);
+    rows.push(setting(
+        k,
+        title(k, "Default permissions"),
+        Some(format!("How {} handles tool calls in a new tab. A tab can change it in the model picker.", agent.name)),
+        Some(select(s, k, layer, &format!("default-permissions-{}", agent.id), &modes, &permission_for(model, &defaults.permission_mode), move |s: &mut Desk, value: &str| save_mode(s, json!({ "permissionMode": value })))),
+    ));
+    rows
+}
+
+/// A plan's usage windows, each with how full it is.
+fn usage_windows(usage: &crate::protocol::PlanUsage, k: &Kit) -> El {
+    col().w(260.0).gap(12.0).children(usage.windows.iter().map(|w| {
+        col()
+            .w_full()
+            .gap(5.0)
+            .child(row().w_full().child(text(w.label.clone()).font(crate::theme::text(13.0)).color(k.c.text_base).grow(1.0)).child(text(format!("{}%", w.percent.round())).font(crate::theme::text(13.0)).color(k.c.text_muted)))
+            .child(rune_kit::Progress::new(Some(w.percent as f32 / 100.0)).build(k))
+    }))
 }
 
 fn appearance(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
@@ -562,8 +663,8 @@ mod tests {
     fn desk() -> Desk {
         let mut s = Desk::default();
         let messages = serde_json::json!([
-            { "type": "settings", "settings": { "appearance": { "theme": "dark", "fontSize": 14 }, "claude": { "model": "default", "effort": null, "permissionMode": "auto", "followUp": "steer" }, "projects": { "/code/web": { "color": "blue", "icon": "web.png" } } } },
-            { "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "Fix login", "project": "/code/web", "terminals": [], "model": "default", "permissionMode": "auto" }] }
+            { "type": "settings", "settings": { "appearance": { "theme": "dark", "fontSize": 14 }, "threads": { "agent": "claude", "followUp": "steer" }, "agents": { "claude": { "model": "default", "effort": null, "permissionMode": "auto" } }, "projects": { "/code/web": { "color": "blue", "icon": "web.png" } } } },
+            { "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "Fix login", "project": "/code/web", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] }
         ]);
         for m in serde_json::from_value::<Vec<CoreMessage>>(messages).unwrap() {
             s.receive(Event::Message(m)).unwrap();

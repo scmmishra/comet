@@ -155,7 +155,7 @@ impl Drafts {
 
 impl Desk {
     fn follow_up(&self, alternate: bool) -> FollowUp {
-        let chosen = FollowUp::from_setting(self.account.settings.as_ref().map_or("steer", |s| s.claude.follow_up.as_str()));
+        let chosen = FollowUp::from_setting(self.account.settings.as_ref().map_or("steer", |s| s.threads.follow_up.as_str()));
         if alternate { chosen.other() } else { chosen }
     }
 
@@ -337,7 +337,7 @@ impl Desk {
         }
     }
 
-    /// Escape stops Claude only when pressed twice, so a reflexive Escape does not cut a turn short.
+    /// Escape stops the agent only when pressed twice, so a reflexive Escape does not cut a turn short.
     fn escape(&mut self, tab: &str) {
         if !self.busy(tab) {
             return;
@@ -346,7 +346,7 @@ impl Desk {
             Some(at) if at.elapsed() < STOP_AGAIN => self.interrupt(tab),
             _ => {
                 self.drafts.escaped_at = Some(Instant::now());
-                self.toasts.show("Press Esc again to stop Claude.", false);
+                self.toasts.show(format!("Press Esc again to stop {}.", self.agent_name(self.tab_agent(tab))), false);
             }
         }
     }
@@ -875,7 +875,7 @@ mod tests {
     /// A window with one untitled tab, as restored from the core.
     fn desk() -> Desk {
         let mut s = Desk::default();
-        let tab = TabInfo { id: "t".into(), title: crate::workspace::NEW_TAB_TITLE.into(), project: "/code/x".into(), terminals: vec![], model: "default".into(), effort: None, fast: None, permission_mode: "auto".into(), files: vec![], panel_active: None, review_scope: None, panel_open: None, rest: Map::new() };
+        let tab = TabInfo { id: "t".into(), title: crate::workspace::NEW_TAB_TITLE.into(), project: "/code/x".into(), terminals: vec![], agent: "claude".into(), model: "default".into(), effort: None, fast: None, permission_mode: "auto".into(), files: vec![], panel_active: None, review_scope: None, panel_open: None, rest: Map::new() };
         s.receive(Event::Message(CoreMessage::Tabs { tabs: vec![tab], active: Some("t".into()) })).unwrap();
         let _ = s.core.sent();
         s

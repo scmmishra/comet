@@ -228,7 +228,7 @@ mod tests {
         let project = home.join("project");
         std::fs::create_dir_all(home.join(DEV_INSTANCE)).unwrap();
         std::fs::create_dir_all(&project).unwrap();
-        let tab = |id: &str, title: &str| serde_json::json!({ "id": id, "title": title, "project": project, "terminals": [], "model": "default", "permissionMode": "auto" });
+        let tab = |id: &str, title: &str| serde_json::json!({ "id": id, "title": title, "project": project, "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" });
         let window = serde_json::json!({ "tabs": [tab("a", "First"), tab("b", "Second")], "active": "b", "threads": {}, "recent": [], "keyed": {}, "layouts": {}, "closed": [] });
         std::fs::write(home.join(DEV_INSTANCE).join("window.json"), window.to_string()).unwrap();
         home
@@ -278,7 +278,7 @@ mod tests {
         });
         // The core opens only a terminal a saved tab lists, as the app saves a new terminal before opening it.
         let project = home.join("project").to_string_lossy().into_owned();
-        let tab: crate::protocol::TabInfo = serde_json::from_value(serde_json::json!({ "id": "a", "title": "First", "project": project, "terminals": [{ "id": "term", "title": "Terminal" }], "model": "default", "permissionMode": "auto" })).unwrap();
+        let tab: crate::protocol::TabInfo = serde_json::from_value(serde_json::json!({ "id": "a", "title": "First", "project": project, "terminals": [{ "id": "term", "title": "Terminal" }], "agent": "claude", "model": "default", "permissionMode": "auto" })).unwrap();
         core.send(&ClientMessage::TabsSave { tabs: vec![tab], active: Some("a".into()) });
         core.send(&ClientMessage::TerminalOpen { id: "term".into(), cols: 60, rows: 10 });
         core.send(&ClientMessage::TerminalInput { id: "term".into(), data: "echo desk-$((40+2))\r".into() });

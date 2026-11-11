@@ -37,7 +37,8 @@ impl Desk {
         };
         self.workspace.show_tab(&tab, &self.core);
         self.workspace.name_tab(&tab, &thread.title, &self.core);
-        self.core.send(&ClientMessage::ThreadResume { tab_id: tab, thread_id: thread.id.clone() });
+        self.workspace.set_agent(&tab, &thread.agent, &self.account, &self.core);
+        self.core.send(&ClientMessage::ThreadResume { tab_id: tab, agent: thread.agent.clone(), thread_id: thread.id.clone() });
         self.core.send(&ClientMessage::ProjectGet { project: project.to_owned(), part: "threads".into() });
     }
 }
@@ -132,7 +133,7 @@ fn recent_threads(s: &Desk, tab: &TabInfo, k: &Kit) -> Option<El> {
             .key(format!("thread-{}", thread.id))
             .h(36.0)
             .w_full()
-            .gap(12.0)
+            .gap(10.0)
             .items_center()
             .px(8.0)
             .radius(7.0)
@@ -140,6 +141,8 @@ fn recent_threads(s: &Desk, tab: &TabInfo, k: &Kit) -> Option<El> {
             .hover_group()
             .role("button")
             .on_press_tx(move |s: &mut Desk, tx| s.open_thread(&summary, &dir, tx))
+            // The agent the thread ran on, which the tab that continues it runs.
+            .child(crate::agents::mark(&thread.agent, 14.0, k))
             .child(text(thread.title.clone()).font(crate::theme::text(13.0)).color(k.c.text_muted).group_color(k.c.text_base).truncate().grow(1.0))
             .children(other)
             // `w-12 text-right`: times end on one edge, whatever their length.

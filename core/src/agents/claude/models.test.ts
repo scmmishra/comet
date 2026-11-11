@@ -4,7 +4,7 @@ import { claudeAccount, modelLabel, modelOptions } from "./models"
 test("keeps each model's effort levels and default, and none for a model without effort", () => {
   const options = modelOptions([
     { value: "default", resolvedModel: "claude-opus-5-5", displayName: "Default", description: "Complex work", supportsEffort: true, supportedEffortLevels: ["low", "high"], supportsAutoMode: true },
-    { value: "claude-haiku-4-5", displayName: "Haiku 4.5", description: "Quick answers", supportedEffortLevels: ["low"] },
+    { value: "claude-haiku-4-5", resolvedModel: "claude-haiku-4-5", displayName: "Haiku 4.5", description: "Quick answers", supportedEffortLevels: ["low"] },
   ], new Map([["default", "high"]]))
   expect(options).toEqual([
     { value: "default", label: "Default", description: "Complex work", runs: "Opus 5.5", efforts: ["low", "high"], defaultEffort: "high", fast: false, permissionModes: ["default", "acceptEdits", "auto", "bypassPermissions"] },

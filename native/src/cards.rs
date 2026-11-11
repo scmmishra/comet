@@ -246,10 +246,10 @@ fn elapsed(subagent: &Subagent, now: f64) -> String {
     format::duration((subagent.ended_at.unwrap_or(now) - subagent.started_at).max(0.0))
 }
 
-/// Claude's mark with a dot for how the subagent stands.
-fn status_mark(subagent: &Subagent, k: &Kit) -> El {
+/// The mark of the agent that runs the subagent, with a dot for how it stands. An agent's own subagent runs on `thread_agent`.
+fn status_mark(subagent: &Subagent, thread_agent: &str, k: &Kit) -> El {
     el().size(16.0, 16.0)
-        .child(icon(&icons::CLAUDE, 16.0).color(theme::claude()))
+        .child(crate::agents::mark(subagent.agent.as_deref().unwrap_or(thread_agent), 16.0, k))
         // A 7 point dot, `-bottom-0.5 -right-0.5`, with `ring-2` in the card's colour drawn outside it.
         .child(row().absolute(9.0, 9.0).size(11.0, 11.0).radius(5.5).center().fill(k.c.layer_01).child(el().size(7.0, 7.0).radius(3.5).fill((status(subagent).1)(k))))
 }
@@ -272,7 +272,7 @@ fn subagents_card(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Opti
         let key = format!("subagent-{}", subagent.id);
         if open {
             layer.insert(0, scrim("subagent-scrim", |s: &mut Desk| s.cards.open_subagent = None));
-            layer.push(popover::anchored(k, crate::ui::popover(k, subagent_detail(subagent, now, k)), &key, Placement::Left, 12.0));
+            layer.push(popover::anchored(k, crate::ui::popover(k, subagent_detail(s, subagent, &tab.agent, now, k)), &key, Placement::Left, 12.0));
         }
         row()
             .key(key)
@@ -287,7 +287,7 @@ fn subagents_card(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Opti
             .role("button")
             .expanded(open)
             .on_press(move |s: &mut Desk| s.cards.open_subagent = if s.cards.open_subagent.as_deref() == Some(id.as_str()) { None } else { Some(id.clone()) })
-            .child(status_mark(subagent, k))
+            .child(status_mark(subagent, &tab.agent, k))
             .child(text(subagent.description.clone()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate().grow(1.0))
             .child(text(elapsed(subagent, now)).font(crate::theme::text(12.0)).color(k.c.text_faint))
             .child(icon(&ic::CHEVRON_RIGHT, icons::SIZE).color(k.c.text_faint))
@@ -295,8 +295,8 @@ fn subagents_card(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Opti
     Some(card(k, 6.0).key("subagents-card").role("region").label("Subagents").child(text(heading).font(crate::theme::text(12.0)).color(k.c.text_faint).px(8.0).pb(4.0).pt(6.0)).children(rows.collect::<Vec<_>>()))
 }
 
-/// The commands Claude left running in the background, after T3 Code: what each runs, for how long, and a
-/// Stop for each. Once the turn has ended, Claude picks up again when one finishes, and the card says so.
+/// The commands the agent left running in the background, after T3 Code: what each runs, for how long, and a
+/// Stop for each. Once the turn has ended, the agent picks up again when one finishes, and the card says so.
 /// Subagents have their own card, so they stay out of this one.
 fn background_card(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
     let thread = s.threads.get(tab)?;
@@ -326,7 +326,7 @@ fn background_card(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
             .child(text(format::duration((s.now_ms - task.started_at).max(0.0))).font(crate::theme::text(12.0)).color(k.c.text_faint))
             .child(stop)
     });
-    let waiting = (!thread.busy).then(|| text("Claude picks up again when one finishes.").font(crate::theme::text(12.0)).color(k.c.text_faint).px(8.0).pt(4.0).pb(4.0));
+    let waiting = (!thread.busy).then(|| text(format!("{} picks up again when one finishes.", s.agent_name(s.tab_agent(tab)))).font(crate::theme::text(12.0)).color(k.c.text_faint).px(8.0).pt(4.0).pb(4.0));
     Some(
         card(k, 6.0)
             .key("background-card")
@@ -339,14 +339,16 @@ fn background_card(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
 }
 
 /// What a subagent was asked, how it stands, and its steps so far.
-fn subagent_detail(subagent: &Subagent, now: f64, k: &Kit) -> El {
-    let facts: Vec<String> = [subagent.kind.clone(), Some(status(subagent).0.to_owned()), Some(elapsed(subagent, now)), (subagent.tool_uses > 0).then(|| format::plural(subagent.tool_uses as usize, "tool use"))].into_iter().flatten().collect();
+fn subagent_detail(s: &Desk, subagent: &Subagent, thread_agent: &str, now: f64, k: &Kit) -> El {
+    // Work handed to another agent names that agent and its model, since neither is the thread's.
+    let runs_on = subagent.agent.as_deref().map(|agent| [Some(s.agent_name(agent).to_owned()), subagent.model.clone()].into_iter().flatten().collect::<Vec<_>>().join(" "));
+    let facts: Vec<String> = [runs_on, subagent.kind.clone(), Some(status(subagent).0.to_owned()), Some(elapsed(subagent, now)), (subagent.tool_uses > 0).then(|| format::plural(subagent.tool_uses as usize, "tool use"))].into_iter().flatten().collect();
     let header = col()
         .w_full()
         .px(16.0)
         .py(12.0)
         .border_sides([0.0, 0.0, 1.0, 0.0], k.c.border_muted)
-        .child(row().gap(8.0).items_center().child(status_mark(subagent, k)).child(text(subagent.description.clone()).font(crate::theme::medium(13.0)).color(k.c.text_base).truncate()))
+        .child(row().gap(8.0).items_center().child(status_mark(subagent, thread_agent, k)).child(text(subagent.description.clone()).font(crate::theme::medium(13.0)).color(k.c.text_base).truncate()))
         .child(text(facts.join(" · ")).font(crate::theme::text(12.0)).color(k.c.text_faint).mt(4.0))
         .children(subagent.summary.clone().map(|summary| text(summary).font(crate::theme::text(13.0)).color(k.c.text_muted).wrap().mt(6.0)));
     let steps = subagent.items.iter().map(|item| match item {
@@ -376,7 +378,7 @@ mod tests {
     fn the_background_card_shows_only_while_commands_run() {
         let mut s = Desk::default();
         let k = theme::kit(true);
-        let tab = serde_json::json!({ "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "New session", "project": "/code/web", "terminals": [], "model": "default", "permissionMode": "auto" }] });
+        let tab = serde_json::json!({ "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "New session", "project": "/code/web", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] });
         s.receive(crate::core::Event::Message(serde_json::from_value(tab).unwrap())).unwrap();
         let tasks = |list: serde_json::Value| serde_json::from_value(serde_json::json!({ "type": "session.event", "tabId": "t", "event": { "kind": "background", "tasks": list } })).unwrap();
         s.receive(crate::core::Event::Message(tasks(serde_json::json!([{ "id": "b1", "label": "npm run dev", "startedAt": 0.0 }])))).unwrap();
