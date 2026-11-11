@@ -8,6 +8,8 @@ import { shellScript } from "./shell"
 
 /** A tool call's arguments beyond this many characters are cut in its summary. */
 const MAX_SUMMARY = 200
+/** The collab tool that starts one of Codex's own agents. Its other tools, such as waiting for one, are not shown. */
+const SPAWN_AGENT = "spawnAgent"
 
 type ToolItem = Extract<ThreadItem, { type: "tool" }>
 
@@ -52,9 +54,6 @@ export function threadItems(dir: string, item: CodexItem, done: boolean, at?: nu
       return []
   }
 }
-
-/** The collab tool that starts one of Codex's own agents. Its other tools, such as waiting for one, are not shown. */
-const SPAWN_AGENT = "spawnAgent"
 
 /** One file of a patch, with its path relative to the project. */
 function fileItem(dir: string, id: string, change: FileUpdate, isError: boolean | undefined): ToolItem {

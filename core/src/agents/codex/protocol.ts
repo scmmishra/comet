@@ -1,7 +1,5 @@
-/**
- * The parts of Codex's app-server protocol that Desk reads, written by hand from the schema that
- * `codex app-server generate-ts` prints. Each type lists only the fields Desk reads.
- */
+// The parts of Codex's app-server protocol that Desk reads, written by hand from the schema that
+// `codex app-server generate-ts` prints. Each type lists only the fields Desk reads.
 
 export interface CodexTurn {
   readonly id: string

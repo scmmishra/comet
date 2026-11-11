@@ -4,15 +4,14 @@ import type { AgentSession, Emit, SessionOptions, ToolServer } from "../agent"
 import type { RequestId } from "../json-rpc"
 import { Requests } from "../requests"
 import { Stop } from "../stopping"
-import { errorItem, forcedStop, resultId, userItem } from "../turn-items"
+import { errorItem, forcedStop, userItem } from "../turn-items"
 import { turnError, turnResult } from "./history"
 import { userInput } from "./input"
 import { changedPaths, threadItems } from "./items"
 import { modelName, turnModel, type ModelCatalog } from "./models"
 import { runPolicy, threadPolicy } from "./permissions"
-import { ELICITATION, elicitationReply, fromDesk, type Elicitation } from "./elicitation"
 import type { CodexItem, CodexModel, CodexTurn, TokenUsage } from "./protocol"
-import { asksApproval, openRequest, type OpenRequest } from "./requests"
+import { asksApproval, readRequest, type OpenRequest } from "./requests"
 import type { AppServer, ThreadOwner, ThreadParams } from "./server"
 
 /** How long Codex may take on a call to Desk's tools, in seconds. A handed-off task can run for an hour. */
@@ -96,14 +95,14 @@ export class CodexSession implements AgentSession, ThreadOwner {
     this.settings = settings
   }
 
-  /** Starts a turn with a message. Desk names the message, and Codex keeps the name, so the item has the same id live and restored. */
+  /** Desk names the message, and Codex keeps the name, so the item has the same id live and restored. */
   send(text: string, images: readonly ImageAttachment[] = []) {
     const id = crypto.randomUUID()
     this.emit({ kind: "item", item: userItem(id, text, images) })
     this.run(id, text, images)
   }
 
-  /** Sends a message into the running turn, once it has started. A turn that ends before the message lands takes it as its next turn instead. */
+  /** The message joins the turn once the turn has started. A turn that ends before the message lands takes it as its next turn instead. */
   steer(text: string, images: readonly ImageAttachment[] = []) {
     if (!this.turn) return this.send(text, images)
     const id = crypto.randomUUID()
@@ -111,7 +110,7 @@ export class CodexSession implements AgentSession, ThreadOwner {
     void this.steerInto(this.turn, id, text, images)
   }
 
-  /** Asks the turn to stop. A turn still waiting to start is stopped once it starts, since Codex stops only a running turn. */
+  /** A turn still waiting to start is stopped once it starts, since Codex stops only a running turn. */
   async interrupt() {
     const turn = this.turn
     if (!turn || !this.stop.begin()) return
@@ -173,16 +172,14 @@ export class CodexSession implements AgentSession, ThreadOwner {
     }
   }
 
-  /** A request about the thread, which waits for the user's answer. Undefined for one Desk does not handle. */
   request(method: string, params: ThreadParams, rpcId: RequestId): Promise<unknown> | undefined {
-    // Desk approves a call of its own tools itself, so the user is not asked about them.
-    if (method === ELICITATION && fromDesk(params as unknown as Elicitation)) return Promise.resolve(elicitationReply(params as unknown as Elicitation, "allow"))
-    const open = openRequest(method, params, rpcId, (itemId) => this.files.get(itemId))
-    if (!open) return undefined
-    return new Promise((resolve) => this.requests.add({ ...open, resolve, rpcId }))
+    const asked = readRequest(method, params, rpcId, (itemId) => this.files.get(itemId))
+    if (!asked) return undefined
+    if ("answer" in asked) return Promise.resolve(asked.answer)
+    return new Promise((resolve) => this.requests.add({ ...asked, resolve, rpcId }))
   }
 
-  /** The app-server ended, and the thread with it. A running turn fails, and the next message loads the thread again. */
+  /** A running turn fails, and the next message loads the thread again. */
   lost(error: Error) {
     this.loading = undefined
     this.releases = []
@@ -199,7 +196,7 @@ export class CodexSession implements AgentSession, ThreadOwner {
 
   private async startTurn(turn: Turn, text: string, images: readonly ImageAttachment[]) {
     this.models = await this.catalog.get()
-    const threadId = await this.load()
+    const threadId = await this.load(this.models)
     const chosen = turnModel(this.models, this.settings)
     turn.model = chosen.model ?? this.threadModel
     const { turn: started } = await this.server.request<{ turn: CodexTurn }>("turn/start", {
@@ -228,16 +225,16 @@ export class CodexSession implements AgentSession, ThreadOwner {
   }
 
   /** Loads the thread into the app-server: a new one, or the one the tab resumes. Desk's tools join it as an MCP server. */
-  private load(): Promise<string> {
-    this.loading ??= this.open().catch((error) => {
+  private load(models: readonly CodexModel[]): Promise<string> {
+    this.loading ??= this.open(models).catch((error) => {
       this.loading = undefined
       throw error
     })
     return this.loading
   }
 
-  private async open(): Promise<string> {
-    const { model } = turnModel(this.models, this.settings)
+  private async open(models: readonly CodexModel[]): Promise<string> {
+    const { model } = turnModel(models, this.settings)
     const params = { cwd: this.dir, ...threadPolicy(this.settings.permissionMode), ...(model ? { model } : {}), ...(this.options.tools ? toolServer(this.options.tools) : {}) }
     const resume = this.threadId
     // An ephemeral thread is not written to disk, so Codex neither lists nor resumes it.
@@ -311,7 +308,7 @@ export class CodexSession implements AgentSession, ThreadOwner {
     if (!turn || (turn.id !== undefined && turn.id !== ended.id)) return
     this.dismissRequests()
     if (ended.status === "failed") this.emit({ kind: "item", item: turnError(ended) })
-    this.emit({ kind: "item", item: turnResult(ended, resultId(turn.message), this.stop.pending) })
+    this.emit({ kind: "item", item: turnResult(ended, turn.message, this.stop.pending) })
     this.endTurn()
   }
 

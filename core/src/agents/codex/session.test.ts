@@ -298,10 +298,10 @@ test("a request Codex settles itself leaves the thread, and Codex gets no second
   s.codex.ask(7, "item/commandExecution/requestApproval", { kind: "command", threadId: THREAD, turnId: TURN, itemId: "exec-1", command: "ls" })
   await until(() => s.last("permission") !== undefined)
   s.codex.notify("serverRequest/resolved", { threadId: THREAD, requestId: 7 })
-  await until(() => s.last("permission")?.answered === true)
+  await until(() => s.last("permission")?.answered === true && s.codex.reply(7) !== undefined)
   s.session.answerPermission("exec-1", "allow")
-  await until(() => s.codex.reply(7) !== undefined)
-  expect(s.codex.reply(7)).not.toEqual({ id: 7, result: { decision: "accept" } })
+  await Bun.sleep(20)
+  expect(s.codex.replies(7)).toEqual([{ id: 7, result: { decision: "decline" } }])
 })
 
 test("approves a call of Desk's own tools itself, and asks the user about another MCP server's", async () => {

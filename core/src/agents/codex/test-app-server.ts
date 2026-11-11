@@ -71,6 +71,9 @@ export function fakeAppServer() {
     }
   }
 
+  /** Every reply Desk wrote to the request Codex sent with `id`. */
+  const replies = (id: number | string) => written.filter((message) => message.method === undefined && message.id === id)
+
   return {
     launch,
     get launches() {
@@ -82,8 +85,9 @@ export function fakeAppServer() {
     },
     /** The params of each request and notification Desk sent with `method`. */
     sent: (method: string) => written.filter((message) => message.method === method).map((message) => message.params),
-    /** Desk's reply to the request Codex sent with `id`, once it has written one. */
-    reply: (id: number | string) => written.find((message) => message.method === undefined && message.id === id),
+    /** Desk's first reply to the request Codex sent with `id`, once it has written one. */
+    reply: (id: number | string) => replies(id)[0],
+    replies,
     notify: (method: string, params: object) => current!.say({ method, params }),
     /** Codex asks Desk something, such as an approval. */
     ask: (id: number | string, method: string, params: object) => current!.say({ id, method, params }),

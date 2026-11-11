@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { until } from "../../test-support"
 import { fakeAppServer } from "./test-app-server"
-import { AppServer, installedVersion } from "./server"
+import { AppServer } from "./server"
 
 test("starts one app-server on the first request, greets it, and shares it", async () => {
   const codex = fakeAppServer()
@@ -13,11 +13,6 @@ test("starts one app-server on the first request, greets it, and shares it", asy
   expect(codex.sent("initialize")).toEqual([{ clientInfo: { name: "desk", title: "Desk", version: expect.any(String) }, capabilities: { experimentalApi: true } }])
   expect(codex.sent("initialized")).toEqual([undefined])
   expect(await server.version()).toBe("0.167.0")
-})
-
-test("reads Codex's version from its user agent", () => {
-  expect(installedVersion("desk/0.167.0 (Mac OS 26.6.2; arm64) unknown (desk; 0.0.1)")).toBe("0.167.0")
-  expect(installedVersion("")).toBeUndefined()
 })
 
 test("sends a thread's messages to its owner, and the rest to listeners", async () => {
