@@ -9,6 +9,13 @@ export interface CoreReady {
   readonly port: number
 }
 
+/** The coding agents Desk runs, in the order Desk lists them. */
+export const AGENTS = ["claude", "codex", "antigravity"] as const
+export type AgentId = (typeof AGENTS)[number]
+
+/** The agent a tab runs when nothing says otherwise, such as a tab saved before Desk ran more than one. */
+export const DEFAULT_AGENT: AgentId = "claude"
+
 /** How full a thread's context window is. */
 export interface ContextReading {
   readonly percent: number
@@ -22,20 +29,20 @@ export interface TextEdit {
   readonly after: string
 }
 
-/** The image types Claude reads. */
+/** The image types every agent reads. */
 export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const
-/** The largest image Claude takes, in bytes before base64. */
+/** The largest image Desk sends, in bytes before base64. It is Claude's limit, the lowest of the agents'. */
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 /**
- * What a message sent while Claude works does: steer joins the running turn, and queue waits for the turn
- * to end. ⌘Enter does the other one, for one message.
+ * What a message sent while the agent works does: steer joins the running turn, and queue waits for the
+ * turn to end. ⌘Enter does the other one, for one message.
  */
 export const FOLLOW_UPS = ["steer", "queue"] as const
 export type FollowUp = (typeof FOLLOW_UPS)[number]
 
 /**
- * What a message sent while Claude works does. A slash command, such as /rename, is a turn Claude Code
+ * What a message sent while the agent works does. A slash command, such as /rename, is a turn the agent
  * runs on its own, so steering one in would cut the running turn short. It always waits in the queue.
  */
 export const followUpFor = (text: string, chosen: FollowUp): FollowUp => (text.trimStart().startsWith("/") ? "queue" : chosen)
@@ -54,20 +61,20 @@ export interface ImageAttachment {
 }
 
 /**
- * One item of a thread, shaped for drawing. The core turns the Agent SDK's messages into these, so the
- * app never reads SDK types or tool inputs. Items are told apart by id within their thread.
+ * One item of a thread, shaped for drawing. The core turns each agent's own messages into these, so the
+ * app never reads an agent's types or tool inputs. Items are told apart by id within their thread.
  */
 export type ThreadItem =
   /** `at` is when it was sent, in milliseconds since the epoch, when that is known. */
   /**
    * A message that starts a turn. `steered` marks one sent into a turn that was still running. `selfStarted`
-   * marks a turn Claude Code started itself: a background task finished, or a subagent or another session sent
+   * marks a turn the agent started itself: a background task finished, or a subagent or another session sent
    * it a message. Its text says which.
    */
   | { readonly type: "user"; readonly id: string; readonly text: string; readonly images?: readonly ImageAttachment[]; readonly at?: number; readonly steered?: boolean; readonly selfStarted?: boolean }
   /** Assistant text. `at` is when it finished. Text still streaming is not done and has none. */
   | { readonly type: "text"; readonly id: string; readonly text: string; readonly done: boolean; readonly at?: number }
-  /** Claude's thinking. `text` is what it thought, when Claude Code shares it. */
+  /** The agent's thinking. `text` is what it thought, when the agent shares it. */
   | { readonly type: "thinking"; readonly id: string; readonly text?: string; readonly kind: StepKind; readonly label: string }
   /**
    * A tool call. `summary` is what it was given in short, such as its command or path, relative to the
@@ -86,7 +93,7 @@ export type ThreadItem =
     }
   /**
    * A tool call waiting for the user's approval, after T3 Code. `detail` is what the user approves: the
-   * command itself, else Claude Code's sentence for the request. `reason` says why Claude Code asks, when
+   * command itself, else the agent's sentence for the request. `reason` says why the agent asks, when
    * that adds to `detail`. `requestId` answers it. It leaves the thread once answered.
    */
   | {
@@ -97,15 +104,15 @@ export type ThreadItem =
       readonly kind: PermissionKind
       readonly detail: string
       readonly reason?: string
-      /** Whether "Always allow this session" is offered. Claude Code withholds it when its rule would grant more than this call. */
+      /** Whether "Always allow this session" is offered. An agent withholds it when its rule would grant more than this call. */
       readonly allowSession: boolean
       readonly answered?: boolean
     }
-  /** Questions Claude asks with AskUserQuestion, waiting for answers. `requestId` answers them. It leaves the thread once answered. */
+  /** Questions the agent asks the user, waiting for answers. `requestId` answers them. It leaves the thread once answered. */
   | { readonly type: "question"; readonly id: string; readonly requestId: string; readonly questions: readonly Question[]; readonly answered?: boolean }
   /**
-   * Claude Code compacting the thread's context, after T3 Code. Live compactions carry the token counts
-   * before and after. A restored one has none. `error` is Claude Code's reason when it failed.
+   * The agent compacting the thread's context, after T3 Code. Live compactions carry the token counts
+   * before and after, when the agent reports them. A restored one has none. `error` is the agent's reason when it failed.
    */
   | {
       readonly type: "compaction"
@@ -121,7 +128,7 @@ export type ThreadItem =
   /** The files a turn changed, without their diffs, added once the turn ends. */
   | { readonly type: "changes"; readonly id: string; readonly files: readonly ChangedFile[] }
 
-/** What a permission request would let Claude do, which picks its icon and label, after T3 Code. */
+/** What a permission request would let the agent do, which picks its icon and label, after T3 Code. */
 export type PermissionKind = "command" | "file-change" | "file-read" | "permission"
 
 /**
@@ -130,7 +137,7 @@ export type PermissionKind = "command" | "file-change" | "file-read" | "permissi
  */
 export type PermissionAnswer = "allow" | "allow-session" | "decline" | "cancel"
 
-/** One question of an AskUserQuestion call. */
+/** One question the agent asks the user. */
 export interface Question {
   readonly header: string
   readonly question: string
@@ -139,7 +146,7 @@ export interface Question {
 }
 
 /**
- * One step of Claude's work in a turn: a thought or a tool call. The core names each: its `kind`, and
+ * One step of the agent's work in a turn: a thought or a tool call. The core names each: its `kind`, and
  * its `label` in a few words, such as "Ran npm" or the thought's first line.
  */
 export type Step = Extract<ThreadItem, { type: "thinking" | "tool" }>
@@ -184,42 +191,47 @@ export type ThreadEvent =
   /** More text for a text item still streaming. */
   | { readonly kind: "text.delta"; readonly id: string; readonly delta: string }
   | { readonly kind: "status"; readonly busy: boolean }
-  /** The model that runs, as the session reports it. */
+  /** The model that runs, by the name Desk shows for it, such as "Opus 5.5". */
   | { readonly kind: "init"; readonly model: string }
   /** Read after each turn. */
   | { readonly kind: "context"; readonly reading: ContextReading }
-  /** A subagent Claude started, sent whole each time it changes. */
+  /** A subagent the agent started, sent whole each time it changes. */
   | { readonly kind: "subagent"; readonly subagent: Subagent }
   /** The commands running in the background now, sent whole each time the set changes. */
   | { readonly kind: "background"; readonly tasks: readonly BackgroundTask[] }
   /**
-   * The user asked the turn to stop, at `since`. `unresponsive` once Claude Code has not stopped in
+   * The user asked the turn to stop, at `since`. `unresponsive` once the agent has not stopped in
    * time, so Force stop can end it. The turn's end clears it.
    */
   | { readonly kind: "stopping"; readonly since: number; readonly unresponsive: boolean }
-  /** A request to the API failed and Claude Code tries again, as attempt `attempt` of `maxRetries`, after `delayMs`. More output clears it. */
+  /** A request to the API failed and the agent tries again, as attempt `attempt` of `maxRetries`, after `delayMs`. More output clears it. */
   | { readonly kind: "retry"; readonly attempt: number; readonly maxRetries: number; readonly delayMs: number; readonly error: string }
 
-/** A command Claude left running in the background, such as a long review or a dev server. */
+/** A command the agent left running in the background, such as a long review or a dev server. */
 export interface BackgroundTask {
-  /** Claude Code's task id. */
+  /** The agent's task id. */
   readonly id: string
-  /** What it runs, as Claude Code describes it: the command, or what Claude named it. */
+  /** What it runs, as the agent describes it: the command, or what the agent named it. */
   readonly label: string
   /** When Desk first saw it, in milliseconds since the epoch. */
   readonly startedAt: number
 }
 
 /**
- * A subagent Claude started in a turn, such as an Explore agent. It runs beside the thread, so Desk shows
- * it in its own card, not in the thread. `items` is what it has done so far, shaped as thread items.
+ * A subagent the agent started in a turn: one of its own, such as Claude's Explore agent, or another
+ * agent it handed work to through Desk. It runs beside the thread, so Desk shows it in its own card, not
+ * in the thread. `items` is what it has done so far, shaped as thread items.
  */
 export interface Subagent {
-  /** Claude Code's task id. */
+  /** The agent's task id, or Desk's id for work handed to another agent. */
   readonly id: string
   readonly description: string
   /** The kind of agent, such as "Explore". */
   readonly type?: string
+  /** The agent that runs it. Absent for an agent's own subagent, which runs on the agent that started it. */
+  readonly agent?: AgentId
+  /** The model it runs on, by the name Desk shows for it, when it is not the thread's. */
+  readonly model?: string
   readonly status: "running" | "completed" | "failed" | "stopped"
   /** Whether it runs in the background, so the turn that started it can end first. */
   readonly background: boolean
@@ -274,7 +286,8 @@ export interface FileChange {
 
 /** One plan usage window, such as the 5-hour session limit. */
 export interface UsageWindow {
-  readonly id: "five_hour" | "seven_day"
+  /** The window as the agent names it, such as "five_hour". */
+  readonly id: string
   readonly label: string
   /** Percentage used, 0–100. */
   readonly percent: number
@@ -286,23 +299,24 @@ export interface PlanUsage {
   readonly windows: readonly [UsageWindow, ...UsageWindow[]]
 }
 
-/** Claude Code's own default model, as a ModelOption value. */
+/** An agent's own default model, as a ModelOption value. Every agent lists it first. */
 export const DEFAULT_MODEL = "default"
 
-/** How much Claude thinks before it answers, from least to most. */
-export const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const
-export type Effort = (typeof EFFORTS)[number]
+/** How much a model thinks before it answers, as its agent names the level, such as "high". Each model lists the levels it takes. */
+export type Effort = string
 
 /**
- * How Claude Code handles tool calls, as T3 Code names them: Supervised asks first, Auto-accept edits
- * lets edits through, Auto lets a classifier decide, and Full access never asks.
+ * How an agent handles tool calls, as T3 Code names them: Supervised asks first, Auto-accept edits
+ * lets edits through, Auto lets a reviewer decide, and Full access never asks. Each model lists the modes it takes.
  */
 export const PERMISSION_MODES = ["default", "acceptEdits", "auto", "bypassPermissions"] as const
 export type PermissionMode = (typeof PERMISSION_MODES)[number]
 
 /** How a tab's thread runs. A change applies to a running thread from its next reply. */
 export interface RunSettings {
-  /** The model, as a ModelOption value. */
+  /** The agent that runs the thread. A tab can change it only before its thread starts. */
+  readonly agent: AgentId
+  /** The model, as a ModelOption value of that agent. */
   readonly model: string
   /** Absent means the model's default effort. */
   readonly effort?: Effort
@@ -311,28 +325,90 @@ export interface RunSettings {
   readonly permissionMode: PermissionMode
 }
 
-/** A model Claude Code offers the account, as its /model menu lists it. */
+/** A model an agent offers the account, as the agent's own model menu lists it. */
 export interface ModelOption {
-  /** What a session is started with, such as "opus". "default" is Claude Code's own default. */
+  /** What a session is started with, such as "opus". "default" is the agent's own default. */
   readonly value: string
   readonly label: string
   readonly description: string
-  /** The model that runs, such as "claude-opus-5-5". */
-  readonly resolvedModel?: string
-  /** The effort levels the model takes. Empty when it takes none. */
+  /** The model that runs, by the name Desk shows for it, when the label does not say: "Default" runs "Opus 5.5". */
+  readonly runs?: string
+  /** The effort levels the model takes, from least to most. Empty when it takes none. */
   readonly efforts: readonly Effort[]
-  /** The effort Claude Code uses when the tab sets none, after the user's own settings. */
+  /** The effort the agent uses when the tab sets none, after the user's own settings. */
   readonly defaultEffort?: Effort
   /** Whether the model has fast mode. */
   readonly fast: boolean
-  /** Whether the model takes the Auto permission mode. */
-  readonly autoMode: boolean
+  /** The permission modes the model takes. Auto needs a model, or an agent, that supports it. */
+  readonly permissionModes: readonly PermissionMode[]
+  /** Whether the picker keeps the model behind "Show older models", such as one pinned to a past version. */
+  readonly older?: boolean
 }
 
-/** A past thread in a project, as Claude Code saved it. */
+/**
+ * What an agent can do beyond a conversation. The app offers only what the tab's agent lists, and the
+ * core refuses the rest.
+ * - `steer`: a message joins the running turn. Without it, every message sent meanwhile waits in the queue.
+ * - `rewind`: a thread goes back to before a message. `restore-files` also takes its file changes back.
+ * - `fork`, `rename`, `delete`: what the session menu does to a thread.
+ * - `compact-idle`: the agent compacts a large thread that sat idle.
+ * - `sign-in`: Desk can start the agent's sign-in. `install`: Desk can install the agent.
+ */
+export const AGENT_FEATURES = ["steer", "rewind", "restore-files", "fork", "rename", "delete", "compact-idle", "sign-in", "install"] as const
+export type AgentFeature = (typeof AGENT_FEATURES)[number]
+
+/** An agent's version on this Mac, and whether a newer one is out. A version that could not be read is absent. */
+export interface AgentVersion {
+  readonly installed?: string
+  /** The newest version on the user's update channel. */
+  readonly latest?: string
+  readonly updateAvailable: boolean
+  /** Whether Desk can update it, with the agent's own updater. */
+  readonly updatable: boolean
+}
+
+/** The account an agent is signed in with, as it reports it. */
+export interface AgentAccount {
+  readonly email?: string
+  readonly organization?: string
+  /** The plan the account is on, such as "max" or "plus". Absent without one, such as with an API key. */
+  readonly plan?: string
+  /** How the agent signs in when not with a subscription, such as "an API key" or "Amazon Bedrock". */
+  readonly method?: string
+}
+
+/**
+ * An agent as Desk knows it now. `state` says where it stands:
+ * - `checking`: Desk is still reading it.
+ * - `ready`: installed and signed in.
+ * - `missing`: not installed on this Mac.
+ * - `signed-out`: installed, with no account.
+ * - `installing`, `signing-in` and `updating`: Desk is doing so, as the user asked.
+ * `problem` says what to do about a state that is not ready, in one line.
+ */
+export interface AgentInfo {
+  readonly id: AgentId
+  /** The agent's name, such as "Claude Code". */
+  readonly name: string
+  readonly state: "checking" | "ready" | "missing" | "signed-out" | "installing" | "signing-in" | "updating"
+  readonly problem?: string
+  readonly version?: AgentVersion
+  readonly account?: AgentAccount
+  /** The models the agent offers, with its default first. Empty until read. */
+  readonly models: readonly ModelOption[]
+  readonly features: readonly AgentFeature[]
+  /** The account's plan usage. Absent until read, and when the account has no plan limits. */
+  readonly usage?: PlanUsage
+  /** The page a sign-in that runs waits on, so the user can open it again after closing it. */
+  readonly signInLink?: string
+}
+
+/** A past thread in a project, as its agent saved it. */
 export interface ThreadSummary {
-  /** Claude's session id, which resumes the thread. */
+  /** The agent's session id, which resumes the thread. */
   readonly id: string
+  /** The agent the thread ran on, which a tab that resumes it runs. */
+  readonly agent: AgentId
   readonly title: string
   readonly branch?: string
   /** Milliseconds since the epoch. */
@@ -358,17 +434,23 @@ export interface AppearanceSettings {
   readonly codeFont: string
 }
 
-/** What a new tab starts Claude with. */
-export interface ClaudeSettings {
-  /** A ModelOption value. */
+/** What a new tab starts an agent with. */
+export interface AgentDefaults {
+  /** A ModelOption value of the agent. */
   readonly model: string
   /** Absent means the model's default effort. */
   readonly effort?: Effort
-  /** A model without Auto mode starts Supervised instead. */
+  /** A model that does not take the mode starts Supervised instead. */
   readonly permissionMode: PermissionMode
-  /** What Enter does while Claude works. */
+}
+
+/** How threads start and run, whichever agent runs them. */
+export interface ThreadSettings {
+  /** The agent a new tab starts with. */
+  readonly agent: AgentId
+  /** What Enter does while the agent works. */
   readonly followUp: FollowUp
-  /** Compacts a thread's context once it has sat idle, so picking it up again starts small. */
+  /** Compacts a thread's context once it has sat idle, so picking it up again starts small. Only an agent with `compact-idle` does. */
   readonly compactIdle: boolean
 }
 
@@ -382,28 +464,6 @@ export interface ProjectSettings {
   readonly color?: ProjectColor
   /** An image in the project to use as its icon, as a path relative to its folder. */
   readonly icon?: string
-}
-
-/** The Claude Code that Desk runs, and whether a newer one is out. A version that could not be read is absent. */
-export interface ClaudeCodeVersion {
-  readonly installed?: string
-  /** The newest version on the user's update channel. */
-  readonly latest?: string
-  readonly updateAvailable: boolean
-  /** Whether Desk can update it: only the native install updates itself with `claude update`. */
-  readonly updatable: boolean
-}
-
-/** The Claude account Claude Code is signed in with, as it reports it. */
-export interface ClaudeAccount {
-  readonly email?: string
-  readonly organization?: string
-  /** Such as "max" or "pro". Absent with an API key. */
-  readonly plan?: string
-  /** "firstParty" for Anthropic. Other values, such as "bedrock", mean the account lives with that cloud. */
-  readonly apiProvider?: string
-  /** Set when Claude Code signs in with an API key, naming where the key comes from. */
-  readonly apiKeySource?: string
 }
 
 /** An MCP server Claude Code loads in a project, and how its connection stands. */
@@ -423,8 +483,8 @@ export interface McpServer {
 }
 
 /**
- * A command Claude Code offers in a project: one of its own, a skill or a custom command. The core lists
- * them grouped by `group`, in order, with Claude Code's own first.
+ * A command an agent offers in a project: one of its own, a skill or a custom command. The core lists
+ * them grouped by `group`, in order, with the agent's own first.
  */
 export interface Skill {
   /** What follows the slash, such as "pdf" or "figma:figma-use". */
@@ -432,7 +492,7 @@ export interface Skill {
   readonly description: string
   /** What the command takes after its name, such as "<file>". */
   readonly argumentHint?: string
-  /** Whether it is Claude Code's own command, such as /compact, rather than a skill. */
+  /** Whether it is the agent's own command, such as /compact, rather than a skill. */
   readonly builtin?: boolean
   /** Whether it lives in this project, rather than being available to every project. */
   readonly ownProject: boolean
@@ -442,7 +502,9 @@ export interface Skill {
 
 export interface DeskSettings {
   readonly appearance: AppearanceSettings
-  readonly claude: ClaudeSettings
+  readonly threads: ThreadSettings
+  /** What a new tab starts each agent with. */
+  readonly agents: Readonly<Record<AgentId, AgentDefaults>>
   /** By project folder. */
   readonly projects: Readonly<Record<string, ProjectSettings>>
 }
@@ -450,7 +512,12 @@ export interface DeskSettings {
 /** Desk's settings before anyone changes them. The app uses them until the core sends the saved ones. */
 export const DEFAULT_SETTINGS: DeskSettings = {
   appearance: { theme: "dark", fontSize: 14, uiFont: "", codeFont: "" },
-  claude: { model: DEFAULT_MODEL, permissionMode: "auto", followUp: "steer", compactIdle: false },
+  threads: { agent: DEFAULT_AGENT, followUp: "steer", compactIdle: false },
+  agents: {
+    claude: { model: DEFAULT_MODEL, permissionMode: "auto" },
+    codex: { model: DEFAULT_MODEL, permissionMode: "auto" },
+    antigravity: { model: DEFAULT_MODEL, permissionMode: "default" },
+  },
   projects: {},
 }
 
@@ -460,7 +527,9 @@ export const DEFAULT_SETTINGS: DeskSettings = {
  */
 export interface SettingsChange {
   readonly appearance?: Partial<AppearanceSettings>
-  readonly claude?: Partial<Omit<ClaudeSettings, "effort">> & { readonly effort?: Effort | null }
+  readonly threads?: Partial<ThreadSettings>
+  /** What a new tab starts one agent with. */
+  readonly agent?: { readonly id: AgentId; readonly defaults: Partial<Omit<AgentDefaults, "effort">> & { readonly effort?: Effort | null } }
   readonly project?: { readonly dir: string; readonly settings: ProjectSettings }
 }
 
@@ -519,8 +588,8 @@ export interface ProjectParts {
   readonly icons: readonly string[]
   /** Null when Claude Code could not be asked. Reading starts the servers, so it takes a few seconds. */
   readonly mcp: readonly McpServer[] | null
-  /** Skills and custom commands. Null when Claude Code could not be asked. */
-  readonly skills: readonly Skill[] | null
+  /** Each agent's skills and custom commands, by agent. Null when the agent could not be asked. An agent with no slash commands lists none. */
+  readonly skills: Readonly<Partial<Record<AgentId, readonly Skill[] | null>>>
   /** What the plugins on in the project let the user start. Reading starts those plugins. */
   readonly plugins: PluginContributions
 }
@@ -779,14 +848,20 @@ export type ClientMessage =
   | { readonly type: "project.get"; readonly project: string; readonly part: ProjectPart }
   /** Turns an MCP server on or off for the project. Claude Code keeps the choice. */
   | { readonly type: "mcp.toggle"; readonly project: string; readonly name: string; readonly enabled: boolean }
+  /** Reads the agents: whether each is installed and signed in, its models and its plan usage. The core answers with `agents`, again as it learns more. */
+  | { readonly type: "agents.get" }
+  /** Reads every agent's plan usage again. The core answers with `agents`. */
   | { readonly type: "usage.get" }
-  | { readonly type: "models.get" }
-  /** Reads the Claude Code version and the newest one out. The core answers with `claude.version`. */
-  | { readonly type: "claude.version.get" }
-  /** Updates Claude Code with its own updater. The core answers with `claude.version` once it is done. */
-  | { readonly type: "claude.update" }
-  /** Continues a past thread in a tab that has not started one. */
-  | { readonly type: "thread.resume"; readonly tabId: string; readonly threadId: string }
+  /** Updates an agent with its own updater. The core answers with `agents` once it is done. */
+  | { readonly type: "agent.update"; readonly agent: AgentId }
+  /** Installs an agent that has `install`. The core answers with `agents` as it goes. */
+  | { readonly type: "agent.install"; readonly agent: AgentId }
+  /** Starts an agent's sign-in, which opens in the browser, for an agent that has `sign-in`. The core answers with `agents` once it ends. */
+  | { readonly type: "agent.signIn"; readonly agent: AgentId }
+  /** Stops an agent's install or sign-in. The core answers with `agents`, as the agent was before. */
+  | { readonly type: "agent.cancel"; readonly agent: AgentId }
+  /** Continues a past thread in a tab that has not started one. The tab runs the thread's agent. */
+  | { readonly type: "thread.resume"; readonly tabId: string; readonly agent: AgentId; readonly threadId: string }
   /** Starts a terminal, or reattaches to one already running under this id. */
   | { readonly type: "terminal.open"; readonly id: string; readonly cols: number; readonly rows: number }
   | { readonly type: "terminal.input"; readonly id: string; readonly data: string }
@@ -813,7 +888,7 @@ export type ClientMessage =
   | { readonly type: "file.open"; readonly project: string; readonly path: string; readonly line?: number }
   /** Reads a file to show in the panel. `path` is relative to the project, absolute, or from ~/. The core answers with `file`. */
   | { readonly type: "file.read"; readonly project: string; readonly path: string }
-  /** Sends a message. While Claude works, `followUp` says whether it steers the turn or waits in the queue. */
+  /** Sends a message. While the agent works, `followUp` says whether it steers the turn or waits in the queue. */
   | { readonly type: "session.send"; readonly tabId: string; readonly text: string; readonly images?: readonly ImageAttachment[]; readonly followUp?: FollowUp }
   /** Sends a queued message now: into the running turn, or as a new turn when none runs. */
   | { readonly type: "queue.send"; readonly tabId: string; readonly id: string }
@@ -823,29 +898,29 @@ export type ClientMessage =
   /** Finds files in the project whose path matches `query`, for an @ mention or the file search. The core answers with `files.found`. */
   | { readonly type: "files.search"; readonly project: string; readonly query: string }
   | { readonly type: "session.interrupt"; readonly tabId: string }
-  /** Ends a turn that did not stop when asked, by closing its Claude Code process. */
+  /** Ends a turn that did not stop when asked, by closing its agent's session. */
   | { readonly type: "session.forceStop"; readonly tabId: string }
   /** Switches the tab's project back to the branch its thread last ran on. */
   | { readonly type: "branch.restore"; readonly tabId: string }
-  /** Stops commands Claude left running in the background in a tab. */
+  /** Stops commands the agent left running in the background in a tab. */
   | { readonly type: "tasks.stop"; readonly tabId: string; readonly ids: readonly string[] }
   /** Lists the setups of every project with plugins on, the active `project`'s first. The core answers with `setups`. */
   | { readonly type: "setups.get"; readonly project: string }
   /** Starts a fresh session in a tab, as /clear asks. */
   | { readonly type: "thread.clear"; readonly tabId: string }
-  /** Names a tab and its session, as Claude Code's /rename does. It runs no turn, so a running one goes on. */
+  /** Names a tab and its session, as an agent's /rename does. It runs no turn, so a running one goes on. */
   | { readonly type: "thread.rename"; readonly tabId: string; readonly title: string }
   /** Copies a tab's session into a new one, ending with the turn of `messageId` when given. The core answers with `thread.forked`. */
   | { readonly type: "thread.fork"; readonly tabId: string; readonly messageId?: string }
   /**
-   * Takes a tab's thread back to before one of the user's messages. Claude forgets it and what followed.
-   * With `restoreFiles`, the files Claude's tools changed since go back too.
+   * Takes a tab's thread back to before one of the user's messages. The agent forgets it and what followed.
+   * With `restoreFiles`, the files the agent's tools changed since go back too.
    */
   | { readonly type: "thread.rewind"; readonly tabId: string; readonly messageId: string; readonly restoreFiles: boolean }
   /** Deletes a tab's session from this Mac, after stopping a running turn. The tab starts afresh, as after /clear. */
   | { readonly type: "thread.delete"; readonly tabId: string }
   | { readonly type: "permission.answer"; readonly tabId: string; readonly requestId: string; readonly answer: PermissionAnswer }
-  /** Answers an AskUserQuestion call, by question text. Without `answers`, the user dismissed it. */
+  /** Answers the agent's questions, by question text. Without `answers`, the user dismissed them. */
   | { readonly type: "question.answer"; readonly tabId: string; readonly requestId: string; readonly answers?: Readonly<Record<string, string>> }
   /** Asks for what plugins show in a saved tab. The core draws it and answers with `layout`. */
   | { readonly type: "layout.get"; readonly tabId: string }
@@ -872,13 +947,8 @@ export type CoreMessage =
   /** Folders tabs have opened, most recent first. Sent on connect, before the tabs, and when a tab opens a folder. */
   | { readonly type: "recent"; readonly projects: readonly string[] }
   | { [K in ProjectPart]: { readonly type: "project"; readonly project: string; readonly part: K; readonly value: ProjectParts[K] } }[ProjectPart]
-  /** The models Claude Code offers, read once when first asked. */
-  | { readonly type: "models"; readonly models: readonly ModelOption[] }
-  | { readonly type: "claude.version"; readonly version: ClaudeCodeVersion }
-  /** Who Claude Code is signed in as, read with the models. Absent when it is not signed in. */
-  | { readonly type: "account"; readonly account?: ClaudeAccount }
-  /** `usage` is absent when Claude has no plan limits, such as with an API key. */
-  | { readonly type: "usage"; readonly usage?: PlanUsage }
+  /** Every agent as Desk knows it now, in Desk's order, sent whole each time one changes. */
+  | { readonly type: "agents"; readonly agents: readonly AgentInfo[] }
   | { readonly type: "review"; readonly tabId: string; readonly scope: ReviewScope; readonly files: readonly FileChange[] }
   /** Setups across projects, each with the project it opens in. A setup on in every project shows once, for the active one. */
   | { readonly type: "setups"; readonly setups: readonly ProjectSetup[] }
@@ -897,7 +967,7 @@ export type CoreMessage =
   | { readonly type: "session.event"; readonly tabId: string; readonly event: ThreadEvent }
   /** A tab's thread as rows, sent after its history and whenever an event changes them. */
   | { readonly type: "session.rows"; readonly tabId: string; readonly rows: readonly ThreadRow[] }
-  /** A restored thread, read back from Claude's transcript in one message, so the app can tell it from live events. */
+  /** A restored thread, read back from its agent's transcript in one message, so the app can tell it from live events. */
   | { readonly type: "session.history"; readonly tabId: string; readonly items: readonly ThreadItem[]; readonly context?: ContextReading }
   /** Changes to a plugin's UI. With `reset`, they replace every node the app holds for the plugin. */
   | { readonly type: "plugin.ops"; readonly plugin: string; readonly ops: readonly UiOp[]; readonly reset?: boolean }
@@ -907,10 +977,13 @@ export type CoreMessage =
   | { readonly type: "panel.show"; readonly tabId: string; readonly id: string }
   /** A tab's new name, from a plugin's thread or a rename. */
   | { readonly type: "tab.title"; readonly tabId: string; readonly title: string }
-  /** The Claude session a tab's thread runs in. It is absent until the thread's first message starts one. */
-  | { readonly type: "thread.session"; readonly tabId: string; readonly sessionId?: string }
-  /** A copy of a tab's session, which the app opens in a new tab beside it. */
-  | { readonly type: "thread.forked"; readonly tabId: string; readonly threadId: string; readonly title: string }
+  /**
+   * The session a tab's thread runs in, and the agent it runs on. Both are absent until the thread's first
+   * message starts one. A started thread keeps its agent, so the app sets the tab's agent to it.
+   */
+  | { readonly type: "thread.session"; readonly tabId: string; readonly sessionId?: string; readonly agent?: AgentId }
+  /** A copy of a tab's session, on the same agent, which the app opens in a new tab beside it. */
+  | { readonly type: "thread.forked"; readonly tabId: string; readonly agent: AgentId; readonly threadId: string; readonly title: string }
   /**
    * Something failed. `message` says what failed, in one line. `detail` holds the cause, such as the
    * error a plugin threw, which can run to several lines. The app shows both.

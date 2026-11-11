@@ -1,6 +1,7 @@
 //! Desk, drawn with Rune. The Bun core does the work. This app draws what it sends.
 
 mod account;
+mod agents;
 mod attachments;
 mod base64;
 mod cards;
@@ -135,7 +136,7 @@ fn main() {
     let app = app.on_ready(move |_| {
         if let Some(core) = starting.borrow_mut().take() {
             let handle = handle.clone();
-            core.send(&protocol::ClientMessage::ModelsGet);
+            core.send(&protocol::ClientMessage::AgentsGet);
             core.start(move |event| handle.update(move |s: &mut Desk, tx| s.receive_in(event, tx)));
         }
     });

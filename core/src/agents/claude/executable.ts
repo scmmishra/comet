@@ -1,4 +1,4 @@
-import { which } from "./environment"
+import { which } from "../../environment"
 
 /** What to tell the user when Desk finds no Claude Code to run. */
 export const NO_CLAUDE_CODE = "Desk runs the Claude Code installed on this Mac, and found no `claude` on your PATH. Install Claude Code, then send again."

@@ -2,6 +2,7 @@
 //! core saves the tabs as the app sends them, and sends them back on connect.
 
 use crate::account::Account;
+use crate::account::DEFAULT_MODEL;
 use crate::models::permission_for;
 use crate::core::Core;
 use crate::ids;
@@ -99,22 +100,29 @@ impl Workspace {
         Ok(id)
     }
 
-    /// A new tab's thread starts on the default model, effort and permission mode, and on the speed of the tab in front.
+    /// A new tab's thread starts on the default agent, with that agent's default run settings.
     fn tab_in(&self, project: String, account: &Account) -> TabInfo {
-        let claude = account.settings.as_ref().map(|s| &s.claude);
-        let model = claude.map_or_else(|| "default".to_owned(), |c| c.model.clone());
-        let mode = claude.map_or("default", |c| c.permission_mode.as_str());
-        TabInfo {
+        let mut tab = TabInfo {
             id: ids::uuid(),
             title: NEW_TAB_TITLE.into(),
             project,
             terminals: Vec::new(),
-            permission_mode: permission_for(account.model(&model), mode),
-            effort: claude.and_then(|c| c.effort.clone()),
-            fast: self.active_tab().and_then(|t| t.fast),
-            model,
+            agent: String::new(),
+            model: String::new(),
+            effort: None,
+            fast: None,
+            permission_mode: String::new(),
             files: vec![], panel_active: None, review_scope: None, panel_open: None, rest: Map::new(),
-        }
+        };
+        run_on(&mut tab, account.default_agent(), account);
+        // A new tab keeps the speed of the tab in front, when both run the same agent on a model that has it.
+        tab.fast = self.active_tab().filter(|t| t.agent == tab.agent).and_then(|t| t.fast).filter(|_| account.model(&tab.agent, &tab.model).is_some_and(|m| m.fast));
+        tab
+    }
+
+    /// Moves a tab to another agent, on that agent's default run settings. The core starts its thread there.
+    pub fn set_agent(&mut self, id: &str, agent: &str, account: &Account, core: &Core) {
+        self.change_tab(id, |t| run_on(t, agent, account), core);
     }
 
     /// Closes a tab. The tab before it comes to the front. A window keeps at least one tab.
@@ -259,12 +267,25 @@ impl Workspace {
     }
 }
 
+/// Puts a tab on an agent, with the model, effort and permission mode a new tab starts that agent with.
+/// Fast mode goes, since it belongs to the model the tab ran before.
+fn run_on(tab: &mut TabInfo, agent: &str, account: &Account) {
+    let defaults = account.defaults(agent);
+    let model = defaults.map_or(DEFAULT_MODEL, |d| d.model.as_str());
+    let option = account.model(agent, model);
+    tab.agent = agent.to_owned();
+    tab.model = model.to_owned();
+    tab.effort = defaults.and_then(|d| d.effort.clone()).filter(|e| option.is_none_or(|o| o.efforts.contains(e)));
+    tab.fast = None;
+    tab.permission_mode = permission_for(option, defaults.map_or("default", |d| d.permission_mode.as_str()));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn tab(id: &str) -> TabInfo {
-        TabInfo { id: id.into(), title: id.into(), project: format!("/code/{id}"), terminals: vec![], model: "default".into(), effort: None, fast: None, permission_mode: "auto".into(), files: vec![], panel_active: None, review_scope: None, panel_open: None, rest: Map::new() }
+        TabInfo { id: id.into(), title: id.into(), project: format!("/code/{id}"), terminals: vec![], agent: "claude".into(), model: "default".into(), effort: None, fast: None, permission_mode: "auto".into(), files: vec![], panel_active: None, review_scope: None, panel_open: None, rest: Map::new() }
     }
 
     #[test]

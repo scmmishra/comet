@@ -1,5 +1,5 @@
 import type { SDKControlGetUsageResponse, SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
-import type { CoreMessage, PlanUsage, UsageWindow } from "@desk/protocol"
+import type { PlanUsage, UsageWindow } from "@desk/protocol"
 import { homedir } from "node:os"
 import { probe } from "./probe"
 
@@ -12,26 +12,26 @@ const WINDOWS = [
   { id: "seven_day", label: "This week" },
 ] as const satisfies readonly Pick<UsageWindow, "id" | "label">[]
 
-/** The account's plan usage, kept for every client. It reads the same from any folder, so it is read from the home folder. */
+/** The account's plan usage. It reads the same from any folder, so it is read from the home folder. */
 export class Usage {
   private usage?: PlanUsage
   private probedAt = 0
 
-  constructor(private readonly broadcast: (message: CoreMessage) => void) {}
+  constructor(private readonly publish: (usage: PlanUsage | undefined) => void) {}
 
-  /** Probes again unless a probe ran in the last minute, then sends the reading. */
+  /** Probes again unless a probe ran in the last minute, then reports the reading. */
   async refresh() {
     if (Date.now() - this.probedAt >= PROBE_INTERVAL_MS) {
       this.probedAt = Date.now()
       this.usage = (await probeUsage(homedir())) ?? this.usage
     }
-    this.broadcast({ type: "usage", usage: this.usage })
+    this.publish(this.usage)
   }
 
   /** Takes a rate-limit event, which a session receives during a turn. */
   rateLimit(info: SDKRateLimitInfo) {
     this.usage = applyRateLimit(this.usage, info)
-    this.broadcast({ type: "usage", usage: this.usage })
+    this.publish(this.usage)
   }
 }
 

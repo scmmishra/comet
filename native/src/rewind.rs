@@ -18,7 +18,7 @@ struct Ask {
     message: String,
     text: String,
     images: Vec<ImageAttachment>,
-    /// Whether to restore the files Claude's tools changed since the message. Off by default, since it changes files.
+    /// Whether to restore the files the agent's tools changed since the message. Off by default, since it changes files.
     restore_files: bool,
 }
 
@@ -45,20 +45,22 @@ impl Desk {
 pub fn dialog(s: &Desk, tab: &str, k: &Kit, layer: &mut Vec<El>) {
     let Some(ask) = s.rewind.asking.as_ref().filter(|ask| ask.tab == tab) else { return };
     // The dialog's description keeps to one line, so the explanation sits in the body, where it wraps.
-    let explain = text("Claude forgets this message and everything after it. The message goes back in the message box, so you can change it and send it again.")
+    let agent = s.agent_name(s.tab_agent(tab));
+    let explain = text(format!("{agent} forgets this message and everything after it. The message goes back in the message box, so you can change it and send it again."))
         .font(crate::theme::text(13.0))
         .color(k.c.text_muted)
         .wrap();
-    let restore = Checkbox::new(ask.restore_files)
-        .label("Restore files Claude changed since")
+    // Only an agent that keeps a copy of each file it edits can take its changes back.
+    let restore = s.tab_can(tab, "restore-files").then(|| Checkbox::new(ask.restore_files)
+        .label(format!("Restore files {agent} changed since"))
         // A checkbox's description keeps to one line, so it stays short.
-        .description("Changes from commands Claude ran stay.")
+        .description("Changes from commands it ran stay.")
         .on_toggle(|s: &mut Desk| {
             if let Some(ask) = s.rewind.asking.as_mut() {
                 ask.restore_files = !ask.restore_files;
             }
         })
-        .build(k);
+        .build(k));
     let footer = row()
         .w_full()
         .gap(8.0)
@@ -69,7 +71,7 @@ pub fn dialog(s: &Desk, tab: &str, k: &Kit, layer: &mut Vec<El>) {
         .open(true)
         .fit()
         .on_close(|s: &mut Desk| s.rewind.asking = None)
-        .child(col().w_full().gap(16.0).px(16.0).pb(16.0).child(explain).child(restore).child(footer))
+        .child(col().w_full().gap(16.0).px(16.0).pb(16.0).child(explain).children(restore).child(footer))
         .build(k, layer);
 }
 
@@ -81,7 +83,7 @@ mod tests {
 
     fn desk() -> Desk {
         let mut s = Desk::default();
-        let tabs = serde_json::json!({ "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "Fix the login form", "project": "/code/web", "terminals": [], "model": "default", "permissionMode": "auto" }] });
+        let tabs = serde_json::json!({ "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "Fix the login form", "project": "/code/web", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] });
         s.receive(Event::Message(serde_json::from_value::<CoreMessage>(tabs).unwrap())).unwrap();
         let _ = s.core.sent();
         s

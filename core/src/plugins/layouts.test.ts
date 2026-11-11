@@ -121,7 +121,7 @@ test("tells views whether they are on screen, as the active tab, its view pane a
   installPlugin("watcher", WATCHER)
   turnOn({ everywhere: ["watcher"] })
   const { plugins, layouts, layout, textOf, screen } = harness()
-  const tab = (id: string, panelActive?: string, panelOpen?: boolean): TabInfo => ({ id, title: id, project: "/p", terminals: [], model: "default", permissionMode: "default", ...(panelActive ? { panelActive } : {}), ...(panelOpen !== undefined ? { panelOpen } : {}) })
+  const tab = (id: string, panelActive?: string, panelOpen?: boolean): TabInfo => ({ id, title: id, project: "/p", terminals: [], agent: "claude", model: "default", permissionMode: "default", ...(panelActive ? { panelActive } : {}), ...(panelOpen !== undefined ? { panelOpen } : {}) })
   await layouts.openSetup("tab-1", "watcher.watch")
   const shown = () => {
     const found = layout("tab-1")!

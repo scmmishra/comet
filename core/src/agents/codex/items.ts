@@ -1,0 +1,87 @@
+import type { ThreadItem } from "@desk/protocol"
+import { deskToolLabel, deskToolSummary, SERVER_NAME } from "../../delegate/tools"
+import { commandLabel, cutOutput, relativeTo, thought, tool } from "../../steps"
+import { fileEdits } from "./diff"
+import type { CodexItem, FileUpdate } from "./protocol"
+import { shellScript } from "./shell"
+
+/** A tool call's arguments beyond this many characters are cut in its summary. */
+const MAX_SUMMARY = 200
+
+type ToolItem = Extract<ThreadItem, { type: "tool" }>
+
+/**
+ * A Codex item as thread items. `done` says the item has completed, and `at` stamps finished text. A
+ * file change becomes one item per file. A user message makes none, since the session or the history
+ * adds the user's messages itself. Items Desk does not show, such as plans, make none.
+ */
+export function threadItems(dir: string, item: CodexItem, done: boolean, at?: number): ThreadItem[] {
+  switch (item.type) {
+    case "agentMessage":
+      return [{ type: "text", id: item.id, text: item.text, done, ...(done && at !== undefined ? { at } : {}) }]
+    case "reasoning":
+      return [thought(item.id, (item.summary.length ? item.summary : item.content).join("\n\n"))]
+    case "commandExecution": {
+      const summary = shellScript(item.command)
+      const failed = item.status === "failed" || item.status === "declined" || (item.exitCode !== null && item.exitCode !== 0)
+      const result = done ? { output: cutOutput(item.aggregatedOutput ?? ""), isError: failed } : undefined
+      return [tool({ type: "tool", id: item.id, name: "Bash", summary, ...(result ? { result } : {}) }, "command", commandLabel(summary, result))]
+    }
+    case "fileChange":
+      return item.changes.map((change, index) => fileItem(dir, `${item.id}:${index}`, change, done ? item.status !== "completed" : undefined))
+    case "mcpToolCall": {
+      const result = done ? (item.error ? { output: item.error.message, isError: true } : { output: cutOutput(contentText(item.result?.content ?? [])), isError: item.status === "failed" }) : undefined
+      const name = `${item.server}.${item.tool}`
+      // A tool of Desk's own reads the same in every agent's thread.
+      const desk = item.server === SERVER_NAME ? deskToolSummary(item.tool, item.arguments) : undefined
+      const summary = desk ?? argumentsSummary(item.arguments)
+      return [tool({ type: "tool", id: item.id, name, summary, ...(result ? { result } : {}) }, "other", desk === undefined ? `${name} ${summary}` : deskToolLabel(item.tool, summary, done))]
+    }
+    case "webSearch":
+      return [tool({ type: "tool", id: item.id, name: "WebSearch", summary: item.query, ...finished(done, false) }, "web", `Searched the web for ${item.query}`)]
+    case "contextCompaction":
+      return [{ type: "compaction", id: item.id, status: done ? "done" : "running" }]
+    case "collabAgentToolCall":
+      if (item.tool !== SPAWN_AGENT) return []
+      return [tool({ type: "tool", id: item.id, name: "Agent", summary: firstLine(item.prompt ?? ""), ...finished(done, item.status === "failed") }, "other", `Started an agent: ${firstLine(item.prompt ?? "")}`)]
+    case "subAgentActivity":
+      if (item.kind !== "started") return []
+      return [tool({ type: "tool", id: item.id, name: "Agent", summary: agentName(item.agentPath), ...finished(done, false) }, "other", `Started an agent: ${agentName(item.agentPath)}`)]
+    default:
+      return []
+  }
+}
+
+/** The collab tool that starts one of Codex's own agents. Its other tools, such as waiting for one, are not shown. */
+const SPAWN_AGENT = "spawnAgent"
+
+/** One file of a patch, with its path relative to the project. */
+function fileItem(dir: string, id: string, change: FileUpdate, isError: boolean | undefined): ToolItem {
+  const file = relativeTo(dir, change.path)
+  const verb = change.kind.type === "add" ? "Wrote" : change.kind.type === "delete" ? "Deleted" : "Edited"
+  const result = isError === undefined ? {} : { result: { output: "", isError } }
+  return tool({ type: "tool", id, name: "Edit", summary: file, file, edits: fileEdits(change), ...result }, "edit", `${verb} ${file}`)
+}
+
+/** The paths a patch changes, relative to the project, for the request that asks to apply it. */
+export const changedPaths = (dir: string, changes: readonly { readonly path: string }[]) => changes.map((change) => relativeTo(dir, change.path))
+
+/** A result with no output, for a call whose output Desk does not show. A call still running has none. */
+const finished = (done: boolean, isError: boolean) => (done ? { result: { output: "", isError } } : {})
+
+/** The last part of a subagent's path, such as "say_hello" from "/root/say_hello". */
+const agentName = (path: string) => path.split("/").filter(Boolean).at(-1) ?? path
+
+const firstLine = (text: string) => text.trim().split("\n")[0]!.trim()
+
+function argumentsSummary(args: unknown): string {
+  const text = args === null || args === undefined ? "" : JSON.stringify(args)
+  return text.length > MAX_SUMMARY ? `${text.slice(0, MAX_SUMMARY - 1)}…` : text
+}
+
+/** An MCP result's text. Content that is not text shows as its type. */
+function contentText(content: readonly unknown[]): string {
+  return content.map((part) => (isText(part) ? part.text : `[${(part as { type?: string })?.type ?? "content"}]`)).join("\n")
+}
+
+const isText = (part: unknown): part is { type: "text"; text: string } => (part as { type?: unknown })?.type === "text" && typeof (part as { text?: unknown }).text === "string"

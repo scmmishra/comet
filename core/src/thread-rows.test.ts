@@ -1,12 +1,13 @@
 import type { ThreadItem, ThreadRow } from "@desk/protocol"
 import { expect, test } from "bun:test"
-import { named } from "./steps"
+import { toolStep } from "./agents/claude/steps"
+import { thought as thoughtStep } from "./steps"
 import { ThreadRows, threadRows } from "./thread-rows"
 
 const user = (id: string, at?: number): ThreadItem => ({ type: "user", id, text: id, ...(at ? { at } : {}) })
 const text = (id: string): ThreadItem => ({ type: "text", id, text: id, done: true })
-const thought = (id: string): ThreadItem => named({ type: "thinking", id, text: `${id}.` })
-const tool = (id: string, done = true): ThreadItem => named({ type: "tool", id, name: "Bash", summary: id, ...(done ? { result: { output: "", isError: false } } : {}) })
+const thought = (id: string): ThreadItem => thoughtStep(id, `${id}.`)
+const tool = (id: string, done = true): ThreadItem => toolStep({ type: "tool", id, name: "Bash", summary: id, ...(done ? { result: { output: "", isError: false } } : {}) })
 
 /** Each row's kind, with an item row named by its item's type. */
 const kinds = (rows: readonly { type: string; id: string }[], items: readonly ThreadItem[]) =>

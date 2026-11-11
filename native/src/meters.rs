@@ -2,7 +2,7 @@
 //! the title bar shows them.
 
 use crate::format;
-use crate::protocol::{ClientMessage, ContextReading, PlanUsage, UsageWindow};
+use crate::protocol::{AgentInfo, ClientMessage, ContextReading, PlanUsage, UsageWindow};
 use crate::shell::Desk;
 use rune::{El, col, el, icon, row, text};
 use rune_kit::{Kit, Placement, Progress, popover, scrim};
@@ -47,10 +47,14 @@ impl Desk {
     }
 }
 
-/// The tab bar's plan usage: the fullest window as a small meter, every window in a popover.
+/// The tab bar's plan usage: the fullest window of the active tab's agent as a small meter, and every
+/// agent's windows in a popover. An agent with no plan limits has none, so the meter then shows the
+/// fullest window of any agent.
 pub fn usage_button(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
-    let usage = s.account.usage.as_ref()?;
-    let fullest = usage.windows.iter().max_by(|a, b| a.percent.total_cmp(&b.percent))?;
+    let read: Vec<(&AgentInfo, &PlanUsage)> = s.account.agents.iter().filter_map(|a| Some((a, a.usage.as_ref()?))).collect();
+    let active = s.workspace.active_tab().and_then(|t| s.account.usage(&t.agent));
+    let shown: Vec<&UsageWindow> = active.map_or_else(|| read.iter().flat_map(|(_, u)| &u.windows).collect(), |u| u.windows.iter().collect());
+    let fullest = shown.into_iter().max_by(|a, b| a.percent.total_cmp(&b.percent))?;
     let button = row()
         .key("usage-button")
         .h(30.0)
@@ -69,7 +73,7 @@ pub fn usage_button(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
         .child(text(format!("{}%", fullest.percent.round())).font(crate::theme::text(12.0)).color(k.c.text_muted));
     if s.meters.open {
         layer.insert(0, scrim("usage-scrim", |s: &mut Desk| s.meters.open = false));
-        layer.push(popover::anchored(k, crate::ui::popover(k, usage_popover(usage, k)), "usage-button", Placement::BottomEnd, 8.0));
+        layer.push(popover::anchored(k, crate::ui::popover(k, usage_popover(&read, k)), "usage-button", Placement::BottomEnd, 8.0));
     }
     Some(button)
 }
@@ -87,9 +91,14 @@ fn meter(value: f32, k: &Kit) -> El {
         .child(el().h_full().w_frac(value.clamp(0.0, 1.0)).radius(999.0).fill(k.c.text_muted))
 }
 
-fn usage_popover(usage: &PlanUsage, k: &Kit) -> El {
-    let heading = text("CLAUDE PLAN USAGE").font(rune::TextStyle { tracking: 0.66, ..k.ty.small_medium }).color(k.c.text_faint);
-    col().w(280.0).padding(12.0).gap(12.0).child(heading).children(usage.windows.iter().map(|w| usage_row(w, k)))
+/// Each agent's plan windows, under the agent's mark and name.
+fn usage_popover(read: &[(&AgentInfo, &PlanUsage)], k: &Kit) -> El {
+    let sections = read.iter().map(|(agent, usage)| {
+        let plan = agent.account.as_ref().and_then(|a| a.plan.as_deref()).map(|p| text(format!("{} plan", crate::agents::capitalized(p))).font(crate::theme::text(12.0)).color(k.c.text_faint));
+        let heading = row().w_full().gap(7.0).items_center().child(crate::agents::mark(&agent.id, 14.0, k)).child(text(agent.name.clone()).font(crate::theme::medium(12.0)).color(k.c.text_base).grow(1.0)).children(plan);
+        col().w_full().gap(10.0).child(heading).children(usage.windows.iter().map(|w| usage_row(w, k)))
+    });
+    col().w(280.0).padding(12.0).gap(18.0).children(sections)
 }
 
 fn usage_row(window: &UsageWindow, k: &Kit) -> El {

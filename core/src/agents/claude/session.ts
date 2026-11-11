@@ -1,14 +1,14 @@
 import { query, type CanUseTool, type PermissionResult, type Query, type SDKMessage, type SDKRateLimitInfo, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 import type { ImageAttachment, PermissionAnswer, RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
+import type { AgentSession, Emit, SessionOptions, ToolServer } from "../agent"
+import { Stop } from "../stopping"
 import { readContext } from "./context"
-import { sdkModel } from "./models"
+import { modelLabel, sdkEffort, sdkModel } from "./models"
 import { BackgroundTasks } from "./background-tasks"
-import { claudeCodePath } from "./claude-code"
+import { claudeCodePath } from "./executable"
 import { Subagents } from "./subagents"
 import { ASK_USER_QUESTION, permissionItem, permissionResult, questionItem, questionResult } from "./requests"
 import { ThreadMapper } from "./thread"
-
-type Emit = (event: ThreadEvent) => void
 
 /** A queue the SDK reads user messages from. A session stays open between turns while it waits. */
 class Inbox implements AsyncIterable<SDKUserMessage> {
@@ -40,25 +40,14 @@ class Inbox implements AsyncIterable<SDKUserMessage> {
   }
 }
 
-interface SessionOptions {
-  /** A Claude session to continue, from an earlier run of Desk. */
-  readonly resume?: string
-  /**
-   * Where a rewound thread resumes: the last message `resume` keeps. Claude Code drops what follows from
-   * the conversation once the next turn runs. `onResumedAt` says when that turn has ended.
-   */
-  readonly resumeAt?: string
-  readonly onResumedAt?: () => void
-  readonly settings: RunSettings
-  /** Called when Claude names the session, so it can be resumed later. */
-  readonly onSessionId: (id: string) => void
+/** What a Claude session needs beyond any agent's: where its rate-limit updates go, and the idle-compaction setting. */
+export interface ClaudeSessionOptions extends SessionOptions {
   /** Called with each plan rate-limit update Claude sends during a turn. */
   readonly onRateLimit: (info: SDKRateLimitInfo) => void
   /** Whether to compact a large thread that sat idle, when Claude Code asks on its return. Read at each ask. */
   readonly compactIdle: () => boolean
 }
 
-/** One Claude conversation, in one tab. It starts on the first message. */
 type RequestSuggestions = Parameters<CanUseTool>[2]["suggestions"]
 
 /** A request waiting for the user: the item that shows it, what Claude asked with, and how to answer Claude Code. */
@@ -70,7 +59,8 @@ interface OpenRequest {
   readonly resolve: (result: PermissionResult) => void
 }
 
-export class Session {
+/** One Claude conversation, in one tab. It starts on the first message. */
+export class ClaudeSession implements AgentSession {
   /** Each query reads its own inbox. A failed query's input loop may still wait on its inbox, and must not take the next message. */
   private inbox = new Inbox()
   private query?: Query
@@ -80,10 +70,8 @@ export class Session {
   /** Open requests, permissions and questions, by request id. */
   private requests = new Map<string, OpenRequest>()
   private sessionId?: string
-  /** Set while a turn the user stopped winds down, until its result arrives. */
-  private stopping = false
-  /** Marks a stop unresponsive once it has waited too long. */
-  private unresponsive?: ReturnType<typeof setTimeout>
+  /** The stop the user asked for, while its turn winds down, until its result arrives. */
+  private stop: Stop
   private running = false
   /** Set from the first message, while Claude Code is found and started, until the session fails. */
   private started = false
@@ -96,12 +84,13 @@ export class Session {
   constructor(
     private readonly dir: string,
     private readonly emit: Emit,
-    private readonly options: SessionOptions,
+    private readonly options: ClaudeSessionOptions,
   ) {
     this.sessionId = options.resume
     this.resumeAt = options.resumeAt
     this.settings = options.settings
     this.mapper = new ThreadMapper(dir)
+    this.stop = new Stop(emit)
     this.subagents = new Subagents(dir, emit)
     this.backgroundTasks = new BackgroundTasks(emit)
   }
@@ -112,7 +101,7 @@ export class Session {
     if (!this.query) return
     await this.query.setModel(sdkModel(settings.model))
     // null drops a flag, so the model's default effort, or standard speed, applies again.
-    await this.query.applyFlagSettings({ effortLevel: settings.effort ?? null, fastMode: settings.fast || null })
+    await this.query.applyFlagSettings({ effortLevel: settings.effort ? sdkEffort(settings.effort) : null, fastMode: settings.fast || null })
     await this.query.setPermissionMode(settings.permissionMode)
   }
 
@@ -156,12 +145,7 @@ export class Session {
    * stop, after T3 Code.
    */
   async interrupt() {
-    if (!this.query || this.stopping) return
-    this.stopping = true
-    const since = Date.now()
-    this.emit({ kind: "stopping", since, unresponsive: false })
-    clearTimeout(this.unresponsive)
-    this.unresponsive = setTimeout(() => this.stopping && this.emit({ kind: "stopping", since, unresponsive: true }), UNRESPONSIVE_AFTER_MS)
+    if (!this.query || !this.stop.begin()) return
     await this.query.interrupt()
   }
 
@@ -170,7 +154,7 @@ export class Session {
    * Claude Code, and the next message starts a new one on the same thread. Says whether there was a stop to force.
    */
   forceStop(): boolean {
-    if (!this.stopping) return false
+    if (!this.stop.pending) return false
     this.emit({ kind: "item", item: { type: "result", id: `result:forced-${Date.now()}`, durationMs: 0, isError: false, stopped: true } })
     this.endTurn()
     return true
@@ -178,14 +162,13 @@ export class Session {
 
   /** What a turn's end resets, and the status that tells the tab. */
   private endTurn() {
-    this.stopping = false
-    clearTimeout(this.unresponsive)
+    this.stop.clear()
     this.running = false
     this.emit({ kind: "status", busy: false })
   }
 
   close() {
-    clearTimeout(this.unresponsive)
+    this.stop.clear()
     for (const { resolve } of this.requests.values()) resolve({ behavior: "deny", message: "The tab was closed." })
     this.requests.clear()
     this.inbox.close()
@@ -197,7 +180,7 @@ export class Session {
    * session that has not started opens Claude Code without a message, so nothing reaches the model.
    * Changes made another way, such as through Bash, stay.
    */
-  async rewindFiles(messageId: string) {
+  async restoreFiles(messageId: string) {
     if (!this.started) {
       this.inbox = new Inbox()
       await this.start()
@@ -243,15 +226,17 @@ export class Session {
         // A subagent's text and thinking reach Desk too, with a one-line status, for its card.
         forwardSubagentText: true,
         agentProgressSummaries: true,
-        systemPrompt: { type: "preset", preset: "claude_code" },
+        systemPrompt: { type: "preset", preset: "claude_code", ...(this.options.tools ? { append: this.options.tools.instructions } : {}) },
+        ...(this.options.tools ? { mcpServers: toolServers(this.options.tools), allowedTools: [`mcp__${this.options.tools.name}__*`] } : {}),
         canUseTool: this.askPermission,
         model: sdkModel(this.settings.model),
-        ...(this.settings.effort ? { effort: this.settings.effort } : {}),
+        ...(this.settings.effort ? { effort: sdkEffort(this.settings.effort) } : {}),
         ...(this.settings.fast ? { settings: { fastMode: true } } : {}),
         permissionMode: this.settings.permissionMode,
         // Full access needs this at start. Passing it always lets a thread switch to Full access later.
         // It allows the mode and does not set it.
         allowDangerouslySkipPermissions: true,
+        ...(this.options.ephemeral ? { persistSession: false } : {}),
         ...(this.sessionId ? { resume: this.sessionId } : {}),
         ...(this.sessionId && this.resumeAt ? { resumeSessionAt: this.resumeAt } : {}),
         // Claude Code keeps a copy of each file before its tools edit it, so a rewind can restore them.
@@ -280,15 +265,14 @@ export class Session {
           // The result of a turn the user stopped says so, so the thread can tell it from one that finished.
           // A turn Claude Code starts itself, after a background task, makes the tab busy again.
           if (event.kind === "status" && event.busy) this.running = true
-          this.emit(this.stopping ? stoppedEvent(event) : event)
+          this.emit(this.stop.pending ? stoppedEvent(event) : named(event))
         }
         // A compaction changes how much of the context is used.
         if (message.type === "system" && message.subtype === "compact_boundary") void this.reportContext(running)
         if (message.type === "result") {
           // A steered message that missed the turn starts the next one, so the tab stays busy.
           if (this.steering) {
-            this.stopping = false
-            clearTimeout(this.unresponsive)
+            this.stop.clear()
             this.steering = false
             continue
           }
@@ -309,8 +293,7 @@ export class Session {
   private fail(error: unknown) {
     this.running = false
     this.steering = false
-    this.stopping = false
-    clearTimeout(this.unresponsive)
+    this.stop.clear()
     this.emit({ kind: "item", item: { type: "error", id: `error-${Date.now()}`, message: error instanceof Error ? error.message : String(error) } })
     this.emit({ kind: "status", busy: false })
     this.inbox.close()
@@ -321,7 +304,7 @@ export class Session {
   /** Whether a result only ends the step a steered message cut short. The turn goes on with the message. */
   private steered(result: Extract<SDKMessage, { type: "result" }>) {
     const cut = result.terminal_reason === "aborted_streaming" || result.terminal_reason === "aborted_tools"
-    if (!cut || !this.steering || this.stopping) return false
+    if (!cut || !this.steering || this.stop.pending) return false
     this.steering = false
     return true
   }
@@ -357,8 +340,8 @@ export class Session {
   }
 }
 
-/** How long a stop may take before the tab offers Force stop, as in T3 Code. */
-const UNRESPONSIVE_AFTER_MS = 15_000
+/** The model that runs, by the name Desk shows for it. */
+const named = (event: ThreadEvent): ThreadEvent => (event.kind === "init" ? { ...event, model: modelLabel(event.model) } : event)
 
 /**
  * An event of a turn the user is stopping. Its result says it was stopped, so the thread can tell it from
@@ -371,9 +354,8 @@ function stoppedEvent(event: ThreadEvent): ThreadEvent {
   return event
 }
 
-/** Whether two tabs run the same way, so a save can skip reconfiguring a session. */
-export const sameRunSettings = (a: RunSettings, b: RunSettings) =>
-  a.model === b.model && a.effort === b.effort && !!a.fast === !!b.fast && a.permissionMode === b.permissionMode
+/** Desk's tools as an MCP server Claude Code connects to over HTTP. */
+const toolServers = (tools: ToolServer) => ({ [tools.name]: { type: "http" as const, url: tools.url, headers: { Authorization: tools.authorization } } })
 
 /** A message's content for Claude. Images go before the text, as the API recommends. */
 function userContent(text: string, images: readonly ImageAttachment[]) {

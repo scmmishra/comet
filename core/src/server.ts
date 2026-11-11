@@ -1,26 +1,27 @@
 import type { ClientMessage, CoreMessage, ProjectPart, ProjectParts } from "@desk/protocol"
 import type { ServerWebSocket } from "bun"
-import { claudeCodeVersion, updateClaudeCode } from "./claude-update"
+import { readMcpServers, toggleMcpServer } from "./agents/claude/mcp"
+import { Agents } from "./agents/registry"
 import { discoverCommands } from "./command-sources"
 import { Commands } from "./commands"
+import { Delegations } from "./delegate/delegations"
+import { serveMcp } from "./delegate/mcp"
 import { openableFile, openInEditor, readForView } from "./files"
 import { checkImages } from "./images"
-import { readMcpServers, toggleMcpServer } from "./mcp"
-import { Models } from "./models"
-import { recentThreads } from "./past-threads"
 import { Layouts } from "./plugins/layouts"
 import { Plugins } from "./plugins/plugins"
 import { searchFiles } from "./project-files"
 import { findIconFiles, iconFile } from "./project-icons"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { loadSettings, saveSettings, updateSettings } from "./settings"
-import { readSkills } from "./skills"
 import { readSpace } from "./space"
 import { ThreadRows } from "./thread-rows"
-import { Usage } from "./usage"
 import { Window } from "./window"
 
 type Send = (message: CoreMessage) => void
+
+/** Where agents reach Desk's own tools, over MCP. */
+const MCP_PATH = "/mcp"
 
 export interface CoreServer {
   readonly port: number
@@ -50,8 +51,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
   const project = <K extends ProjectPart>(dir: string, part: K, value: ProjectParts[K]) => ({ type: "project", project: dir, part, value }) as CoreMessage
 
   let settings = loadSettings()
-  const models = new Models(broadcast)
-  const usage = new Usage(broadcast)
+  const agents = new Agents(broadcast, { compactIdle: () => settings.threads.compactIdle })
   const report = (error: unknown) => broadcast({ type: "error", message: error instanceof Error ? error.message : String(error) })
   const plugins = new Plugins({
     broadcast,
@@ -60,10 +60,13 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     closePanel: (tabId, id) => void layouts.closePanel(tabId, id).catch(report),
     stopped: () => void layouts.resendAll().catch(report),
   })
+  // An agent reaches Desk's tools at the server's own port, which is known once it listens.
+  let toolsUrl = ""
+  const delegations = new Delegations(agents, { tab: (tabId) => window.running(tabId), emit: (tabId, event) => broadcast({ type: "session.event", tabId, event }) }, () => toolsUrl)
   const window = new Window({
     broadcast,
-    compactIdle: () => settings.claude.compactIdle,
-    rateLimit: (info) => usage.rateLimit(info),
+    agents,
+    delegations,
     tabClosed: (tabId) => {
       rows.forget(tabId)
       plugins.dropTab(tabId)
@@ -96,10 +99,10 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     space: (dir, reply) => readSpace(dir).then(reply),
     commands: (dir, reply) => reply(commandsOf(dir).list()),
     commandSources: (dir, reply) => discoverCommands(dir, new Set(commandsOf(dir).list().map((command) => command.command))).then(reply),
-    threads: (dir, reply) => recentThreads(dir, window.openThreads(dir)).then(reply),
+    threads: (dir, reply) => window.recentThreads(dir).then(reply),
     icons: (dir, reply) => findIconFiles(dir).then(reply),
     mcp: (dir, reply) => readMcpServers(dir, reply),
-    skills: (dir, reply) => readSkills(dir).then(reply),
+    skills: (dir, reply) => agents.commands(dir).then(reply),
     plugins: (dir, reply) => plugins.contributions(dir).then(reply),
   }
   const read = <K extends ProjectPart>(dir: string, part: K, reply: Send) => readers[part](dir, (value) => reply(project(dir, part, value)))
@@ -129,15 +132,18 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         return commandsOf(message.project).run(message.ids)
       case "commands.stop":
         return commandsOf(message.project).stop(message.ids)
-      case "claude.version.get":
-        return reply({ type: "claude.version", version: await claudeCodeVersion() })
-      case "claude.update":
-        await updateClaudeCode()
-        return reply({ type: "claude.version", version: await claudeCodeVersion() })
-      case "models.get":
-        return models.get(reply)
+      case "agents.get":
+        return agents.send(reply)
       case "usage.get":
-        return usage.refresh()
+        return agents.refreshUsage()
+      case "agent.update":
+        return agents.run(message.agent, "update")
+      case "agent.install":
+        return agents.run(message.agent, "install")
+      case "agent.signIn":
+        return agents.run(message.agent, "signIn")
+      case "agent.cancel":
+        return agents.cancel(message.agent)
       case "tabs.save":
         window.save(message.tabs, message.active)
         return layouts.sendVisible()
@@ -181,7 +187,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       case "question.answer":
         return window.answerQuestion(message.tabId, message.requestId, message.answers)
       case "thread.resume":
-        return window.resume(message.tabId, message.threadId, reply)
+        return window.resume(message.tabId, message.agent, message.threadId, reply)
       case "review.get":
         return reply({ type: "review", tabId: message.tabId, scope: message.scope, files: await window.review(message.tabId, message.scope) })
       case "layout.get":
@@ -215,6 +221,12 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     port: 0,
     fetch(request, server) {
       const url = new URL(request.url)
+      // An agent's session calls Desk's tools here, under the token Desk gave that session. A call runs
+      // another agent's whole task, so it may stay open far longer than Bun lets an idle request.
+      if (url.pathname === MCP_PATH) {
+        server.timeout(request, 0)
+        return serveMcp(request, (authorization) => delegations.toolsFor(authorization))
+      }
       if (url.searchParams.get("token") !== token) return new Response("Forbidden", { status: 403 })
       // A project's icon, for its avatar. Only an image inside a project folder is served.
       if (url.pathname === "/project-icon") {
@@ -249,10 +261,13 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     },
   })
 
+  toolsUrl = `http://127.0.0.1:${server.port}${MCP_PATH}`
+
   return {
     port: server.port!,
     stop() {
       window.stop()
+      agents.close()
       plugins.stop()
       for (const found of commands.values()) found.stopAll()
       server.stop(true)

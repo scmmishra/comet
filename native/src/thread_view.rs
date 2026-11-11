@@ -200,8 +200,8 @@ fn hash_row(c: &Ctx, r: &ThreadRow, h: &mut DefaultHasher) {
             // A copied message or one of its code blocks.
             c.s.copied.as_ref().filter(|(copied, _)| copied == id || copied.starts_with(&format!("{id}#"))).map(|(copied, _)| copied).hash(h);
             (c.thread.latest_changes() == Some(id.as_str())).hash(h);
-            // A message's Rewind and Fork follow the session and whether Claude works.
-            (c.thread.busy, c.thread.session_id.is_some()).hash(h);
+            // A message's Rewind and Fork follow the session and whether the agent works.
+            (c.thread.busy, c.thread.session_id.is_some(), c.s.tab_can(c.tab, "rewind"), c.s.tab_can(c.tab, "fork")).hash(h);
             c.s.threads.approval_menu.hash(h);
         }
         ThreadRow::Group { id, steps, live, summary } => {
@@ -241,7 +241,7 @@ fn row_view(c: &Ctx, r: &ThreadRow) -> El {
 fn item_view(c: &Ctx, item: &ThreadItem) -> El {
     let k = c.k;
     match item {
-        // A turn Claude Code started itself opens with a line that says why, not a bubble.
+        // A turn the agent started itself opens with a line that says why, not a bubble.
         ThreadItem::User { text: words, self_started: true, .. } => row()
             .gap(8.0)
             .items_center()
@@ -315,9 +315,9 @@ fn message_meta(c: &Ctx, id: &str, words: &str, at: Option<f64>, actions: impl I
     row().h(24.0).gap(6.0).items_center().group_opacity(0.0, 1.0).child(copy).children(actions).children(time)
 }
 
-/// Rewind and Fork for a message the user sent, after T3 Code. Both need the session Claude Code keeps.
-/// A thread can rewind only while Claude is not working.
-fn message_actions(c: &Ctx, id: &str, words: &str, images: &[crate::protocol::ImageAttachment]) -> Option<[El; 2]> {
+/// Rewind and Fork for a message the user sent, after T3 Code. Both need the session the agent keeps, and
+/// an agent that can do them. A thread can rewind only while the agent is not working.
+fn message_actions(c: &Ctx, id: &str, words: &str, images: &[crate::protocol::ImageAttachment]) -> Option<Vec<El>> {
     c.thread.session_id.as_ref()?;
     let k = c.k;
     let (tab, message) = (c.tab.to_owned(), id.to_owned());
@@ -325,7 +325,7 @@ fn message_actions(c: &Ctx, id: &str, words: &str, images: &[crate::protocol::Im
     let rewind = IconButton::new(&ic::PENCIL_LINE)
         .variant(IconButtonVariant::GhostMuted)
         .label("Rewind to this message")
-        .help(if c.thread.busy { "Stop Claude to rewind" } else { "Rewind and edit" })
+        .help(if c.thread.busy { format!("Stop {} to rewind", c.s.agent_name(c.s.tab_agent(c.tab))) } else { "Rewind and edit".to_owned() })
         .disabled(c.thread.busy)
         .on_press(move |s: &mut Desk| s.ask_rewind(&rewind_tab, &rewind_message, &rewind_words, &rewind_images))
         .build(k);
@@ -335,7 +335,8 @@ fn message_actions(c: &Ctx, id: &str, words: &str, images: &[crate::protocol::Im
         .help("Fork from here")
         .on_press(move |s: &mut Desk| s.fork_from(&tab, &message))
         .build(k);
-    Some([rewind, fork])
+    let can = |feature: &str| c.s.tab_can(c.tab, feature);
+    Some([can("rewind").then_some(rewind), can("fork").then_some(fork)].into_iter().flatten().collect())
 }
 
 /// An image sent with a message, at most `MESSAGE_IMAGE` wide and tall, in its own proportions.
@@ -349,7 +350,7 @@ fn message_image(c: &Ctx, image: &crate::protocol::ImageAttachment) -> El {
     el().size(w, h).radius(BOX_RADIUS).clip_rounded(BOX_RADIUS).border(1.0, k.c.border_base).pixels(decoded.pixels())
 }
 
-/// The head of a running turn: how long Claude has worked on it, counted each second.
+/// The head of a running turn: how long the agent has worked on it, counted each second.
 fn working_view(c: &Ctx, since: Option<f64>) -> El {
     let label = match since {
         Some(since) => format!("Working for {}", format::duration(working_seconds(c.s.now_ms, since) as f64 * 1000.0)),
@@ -358,7 +359,7 @@ fn working_view(c: &Ctx, since: Option<f64>) -> El {
     row().gap(8.0).items_center().child(Spinner::new().size(SPINNER).build(c.k)).child(c.small(label).color(c.k.c.text_faint))
 }
 
-/// Where Claude Code compacted the context, as a line across the thread.
+/// Where the agent compacted the context, as a line across the thread.
 fn compaction_view(c: &Ctx, status: &str, pre: Option<f64>, post: Option<f64>, error: Option<&str>) -> El {
     let k = c.k;
     let failed = status == "failed";
@@ -601,7 +602,7 @@ fn changes_view(c: &Ctx, id: &str, files: &[crate::protocol::ChangedFile]) -> El
     col().w_full().radius(BOX_RADIUS).fill(theme::well(k.dark)).child(head).child(list)
 }
 
-/// A tool call waiting for approval, as a work row after T3 Code: what Claude would run or touch, why,
+/// A tool call waiting for approval, as a work row after T3 Code: what the agent would run or touch, why,
 /// and the answers. The rarer answers sit in a More menu, which the session draws over the thread, since
 /// rows built in `memo` have no overlay layer.
 fn approval_menu_key(request_id: &str) -> String {

@@ -1,6 +1,8 @@
 import type { SDKAPIRetryMessage, SDKAssistantMessage, SDKMessage, SDKMessageOrigin, SDKPartialAssistantMessage, SessionMessage } from "@anthropic-ai/claude-agent-sdk"
 import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, type ThreadItem } from "@desk/protocol"
-import { named } from "./steps"
+import { cutOutput, relativeTo, thought } from "../../steps"
+import { deskToolSummary } from "../../delegate/tools"
+import { deskTool, toolStep } from "./steps"
 
 /** What Claude Code writes into a transcript when the user stops a turn, with or without "for tool use". */
 const INTERRUPTED = /^\[Request interrupted by user/
@@ -10,8 +12,6 @@ const INTERRUPTED = /^\[Request interrupted by user/
  */
 const COMPACT_SUMMARY = /^This session is being continued from a previous conversation/
 
-/** Tool output beyond this many characters is cut. The thread shows a summary, not a log. */
-const MAX_TOOL_OUTPUT = 4000
 /** Inputs that say in short what a tool call does, in the order a summary prefers them. */
 const SUMMARY_FIELDS = ["command", "file_path", "pattern", "path", "url", "query", "description", "skill"]
 
@@ -105,8 +105,7 @@ export class ThreadMapper {
         return [{ type: "text", id, text: block.text, done: true, ...(at !== undefined ? { at } : {}) }]
       }
       if (block.type === "thinking") {
-        const text = block.thinking.trim()
-        return [named({ type: "thinking", id: `${uuid}:${index}`, ...(text ? { text } : {}) })]
+        return [thought(`${uuid}:${index}`, block.thinking)]
       }
       if (block.type === "tool_use") {
         const tool = toolItem(this.dir, block.id, block.name, block.input as Record<string, unknown>)
@@ -122,7 +121,7 @@ export class ThreadMapper {
     if (!Array.isArray(content)) return []
     return content.flatMap((block): ThreadItem[] => {
       const tool = block.type === "tool_result" ? this.tools.get(String(block.tool_use_id)) : undefined
-      return tool ? [named({ ...tool, result: { output: truncate(toolOutputText(block.content)), isError: Boolean(block.is_error) } })] : []
+      return tool ? [toolStep({ ...tool, result: { output: cutOutput(toolOutputText(block.content)), isError: Boolean(block.is_error) } })] : []
     })
   }
 
@@ -193,12 +192,14 @@ const item = (found: ThreadItem): ThreadEvent => ({ kind: "item", item: found })
 /** A tool call as the thread draws it. A call that edits a file carries the file and its edits. */
 export function toolItem(dir: string, id: string, name: string, input: Record<string, unknown>): ToolItem {
   const edits = toolEdits(name, input)
-  const summary = SUMMARY_FIELDS.find((field) => typeof input[field] === "string")
-  return named({
+  const field = SUMMARY_FIELDS.find((found) => typeof input[found] === "string")
+  const desk = deskTool(name)
+  const summary = (desk && deskToolSummary(desk, input)) ?? (field ? relativeTo(dir, String(input[field])) : JSON.stringify(input))
+  return toolStep({
     type: "tool",
     id,
     name,
-    summary: summary ? relativeTo(dir, String(input[summary])) : JSON.stringify(input),
+    summary,
     ...(edits ? { file: relativeTo(dir, String(input.file_path ?? "")), edits } : {}),
   })
 }
@@ -213,16 +214,10 @@ function toolEdits(name: string, input: Record<string, unknown>): TextEdit[] | u
   return undefined
 }
 
-const relativeTo = (dir: string, path: string) => (path.startsWith(`${dir}/`) ? path.slice(dir.length + 1) : path)
-
 function toolOutputText(content: unknown): string {
   if (typeof content === "string") return content
   if (Array.isArray(content)) return content.map((part) => (part.type === "text" ? part.text : `[${part.type}]`)).join("\n")
   return ""
-}
-
-function truncate(text: string) {
-  return text.length > MAX_TOOL_OUTPUT ? `${text.slice(0, MAX_TOOL_OUTPUT)}\n…` : text
 }
 
 /** The images the user sent, as base64. Claude Code stores pasted images in the transcript this way. */

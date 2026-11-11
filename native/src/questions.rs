@@ -1,4 +1,4 @@
-//! Answering Claude's questions, after T3 Code. The questions
+//! Answering the agent's questions, after T3 Code. The questions
 //! come one at a time. Picking an option of a single-choice question answers it, and the composer's
 //! text, when there is any, answers it instead.
 

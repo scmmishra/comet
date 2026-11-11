@@ -1,5 +1,5 @@
 import { query, type Query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
-import { claudeCodePath } from "./claude-code"
+import { claudeCodePath } from "./executable"
 
 const PROBE_TIMEOUT_MS = 20_000
 

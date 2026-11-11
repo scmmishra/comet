@@ -36,6 +36,9 @@ pub struct TabInfo {
     /// The project folder the tab works in.
     pub project: String,
     pub terminals: Vec<TerminalInfo>,
+    /// The agent that runs the tab's thread, such as "claude" or "codex".
+    pub agent: String,
+    /// One of that agent's models, by its value.
     pub model: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
@@ -102,16 +105,24 @@ pub struct AppearanceSettings {
     pub code_font: String,
 }
 
-/// The run settings a new tab starts with.
+/// What a new tab starts an agent with.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ClaudeSettings {
+pub struct AgentDefaults {
     pub model: String,
     pub effort: Option<String>,
     pub permission_mode: String,
-    /// What Enter does while Claude works: "steer" or "queue".
+}
+
+/// How threads start and run, whichever agent runs them.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadSettings {
+    /// The agent a new tab starts with.
+    pub agent: String,
+    /// What Enter does while the agent works: "steer" or "queue".
     pub follow_up: String,
-    /// Whether Claude Code compacts a large thread that sat idle before its next turn.
+    /// Whether an agent that can compacts a large thread that sat idle before its next turn.
     #[serde(default)]
     pub compact_idle: bool,
 }
@@ -130,32 +141,71 @@ pub struct ProjectSettings {
 #[derive(Clone, Debug, Deserialize)]
 pub struct DeskSettings {
     pub appearance: AppearanceSettings,
-    pub claude: ClaudeSettings,
+    pub threads: ThreadSettings,
+    /// What a new tab starts each agent with, by agent.
+    pub agents: std::collections::HashMap<String, AgentDefaults>,
     /// By project folder.
     #[serde(default)]
     pub projects: std::collections::HashMap<String, ProjectSettings>,
 }
 
-/// The Claude Code that Desk runs, and whether a newer one is out.
+/// An agent's version on this Mac, and whether a newer one is out.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct ClaudeCodeVersion {
+pub struct AgentVersion {
     pub installed: Option<String>,
     pub latest: Option<String>,
     pub update_available: bool,
-    /// Whether Desk can update it: only the native install updates itself.
+    /// Whether Desk can update it, with the agent's own updater.
     pub updatable: bool,
 }
 
-/// The Claude account Claude Code is signed in with.
+/// The account an agent is signed in with.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct ClaudeAccount {
+pub struct AgentAccount {
     pub email: Option<String>,
     pub organization: Option<String>,
+    /// Such as "max" or "plus". Absent with an API key.
     pub plan: Option<String>,
-    pub api_provider: Option<String>,
-    pub api_key_source: Option<String>,
+    /// How the agent signs in when not with a subscription, such as "an API key".
+    pub method: Option<String>,
+}
+
+/// Where an agent stands on this Mac.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum AgentState {
+    /// Desk is still reading it.
+    #[default]
+    Checking,
+    Ready,
+    Missing,
+    SignedOut,
+    Installing,
+    SigningIn,
+    Updating,
+}
+
+/// An agent as the core knows it now: whether it is installed and signed in, its models and its plan usage.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentInfo {
+    pub id: String,
+    /// The agent's name, such as "Claude Code".
+    pub name: String,
+    pub state: AgentState,
+    /// What to do about a state that is not ready, in one line.
+    pub problem: Option<String>,
+    pub version: Option<AgentVersion>,
+    pub account: Option<AgentAccount>,
+    /// The agent's models, with its default first. Empty until read.
+    pub models: Vec<ModelOption>,
+    /// What the agent can do beyond a conversation, such as "steer" or "rewind".
+    pub features: Vec<String>,
+    /// Absent until read, and when the account has no plan limits.
+    pub usage: Option<PlanUsage>,
+    /// The page a sign-in that runs waits on, so the user can open it again after closing it.
+    pub sign_in_link: Option<String>,
 }
 
 /// An MCP server Claude Code loads.
@@ -172,24 +222,27 @@ pub struct McpServer {
     pub error: Option<String>,
 }
 
-/// A model Claude Code offers the account.
+/// A model an agent offers the account.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelOption {
-    /// What a session is started with, such as "opus". "default" is Claude Code's own default.
+    /// What a session is started with, such as "opus". "default" is the agent's own default.
     pub value: String,
     pub label: String,
     pub description: String,
-    /// The model that runs, such as "claude-opus-5-5".
-    pub resolved_model: Option<String>,
-    /// The effort levels the model takes. Empty when it takes none.
+    /// The model that runs, by name, when the label does not say: "Default" runs "Opus 5.5".
+    pub runs: Option<String>,
+    /// The effort levels the model takes, from least to most. Empty when it takes none.
     pub efforts: Vec<String>,
-    /// The effort Claude Code uses when the tab sets none.
+    /// The effort the agent uses when the tab sets none.
     pub default_effort: Option<String>,
     /// Whether the model has fast mode.
     pub fast: bool,
-    /// Whether the model takes the Auto permission mode.
-    pub auto_mode: bool,
+    /// The permission modes the model takes.
+    pub permission_modes: Vec<String>,
+    /// Whether the picker keeps the model behind "Show older models".
+    #[serde(default)]
+    pub older: bool,
 }
 
 /// How full a thread's context window is.
@@ -311,8 +364,10 @@ pub struct ProjectSetup {
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ThreadSummary {
-    /// Claude's session id, which resumes the thread.
+    /// The agent's session id, which resumes the thread.
     pub id: String,
+    /// The agent the thread ran on, which a tab that resumes it runs.
+    pub agent: String,
     pub title: String,
     pub branch: Option<String>,
     /// Milliseconds since the epoch.
@@ -369,7 +424,7 @@ pub struct Space {
     pub pr: Option<PullRequest>,
 }
 
-/// A subagent Claude started in a turn, sent whole each time it changes. It runs beside the thread.
+/// A subagent the agent started in a turn, sent whole each time it changes. It runs beside the thread.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Subagent {
@@ -378,6 +433,10 @@ pub struct Subagent {
     /// The kind of agent, such as "Explore".
     #[serde(rename = "type")]
     pub kind: Option<String>,
+    /// The agent that runs it, when the thread's agent handed it work. Absent for the agent's own subagent.
+    pub agent: Option<String>,
+    /// The model it runs on, by name, when it is not the thread's.
+    pub model: Option<String>,
     /// "running", "completed", "failed" or "stopped".
     pub status: String,
     pub started_at: f64,
@@ -509,7 +568,7 @@ pub enum ThreadItem {
         /// Sent into a turn that was still running.
         #[serde(default)]
         steered: bool,
-        /// A turn Claude Code started itself. Its text says why.
+        /// A turn the agent started itself. Its text says why.
         #[serde(default)]
         self_started: bool,
     },
@@ -625,7 +684,7 @@ pub enum ThreadEvent {
     Other,
 }
 
-/// A command Claude left running in the background, such as a long review or a dev server.
+/// A command the agent left running in the background, such as a long review or a dev server.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct BackgroundTask {
@@ -647,8 +706,9 @@ pub enum CoreMessage {
     /// Folders tabs have opened, most recent first.
     #[serde(rename = "recent")]
     Recent { projects: Vec<String> },
-    #[serde(rename = "models")]
-    Models { models: Vec<ModelOption> },
+    /// Every agent as the core knows it now, sent whole each time one changes.
+    #[serde(rename = "agents")]
+    Agents { agents: Vec<AgentInfo> },
     /// A closed tab to add back at `index`.
     #[serde(rename = "tab.reopened")]
     TabReopened { tab: TabInfo, index: usize },
@@ -659,23 +719,25 @@ pub enum CoreMessage {
         tab_id: String,
         title: String,
     },
-    /// The Claude session a tab's thread runs in. It is absent until the thread's first message starts one.
+    /// The session a tab's thread runs in, and the agent it runs on. Both are absent until the thread's first message starts one.
     #[serde(rename = "thread.session", rename_all = "camelCase")]
     ThreadSession {
         tab_id: String,
         #[serde(default)]
         session_id: Option<String>,
+        #[serde(default)]
+        agent: Option<String>,
     },
-    /// A copy of a tab's session, which the app opens in a new tab beside it.
+    /// A copy of a tab's session, on the same agent, which the app opens in a new tab beside it.
     #[serde(rename = "thread.forked", rename_all = "camelCase")]
-    ThreadForked { tab_id: String, thread_id: String, title: String },
+    ThreadForked { tab_id: String, agent: String, thread_id: String, title: String },
     #[serde(rename = "session.event")]
     SessionEvent {
         #[serde(rename = "tabId")]
         tab_id: String,
         event: ThreadEvent,
     },
-    /// A thread read back from Claude's transcript, in one message.
+    /// A thread read back from its agent's transcript, in one message.
     #[serde(rename = "session.history")]
     SessionHistory {
         #[serde(rename = "tabId")]
@@ -737,14 +799,6 @@ pub enum CoreMessage {
     /// Setups across projects, each with the project it opens in.
     #[serde(rename = "setups")]
     Setups { setups: Vec<ProjectSetup> },
-    #[serde(rename = "claude.version")]
-    ClaudeVersion { version: ClaudeCodeVersion },
-    /// Who Claude Code is signed in as. Absent when it is not signed in.
-    #[serde(rename = "account")]
-    Account { account: Option<ClaudeAccount> },
-    /// Plan usage. Absent when Claude has no plan limits, such as with an API key.
-    #[serde(rename = "usage")]
-    Usage { usage: Option<PlanUsage> },
     /// A tab's queued messages, sent whole on each change. `held` means a stop or an error paused them.
     #[serde(rename = "queue")]
     Queue {
@@ -771,25 +825,34 @@ pub enum CoreMessage {
 #[derive(Debug, Serialize)]
 #[serde(tag = "type")]
 pub enum ClientMessage {
-    #[serde(rename = "models.get")]
-    ModelsGet,
+    /// Reads the agents. The core answers with `agents`, again as it learns more.
+    #[serde(rename = "agents.get")]
+    AgentsGet,
+    /// Reads every agent's plan usage again. The core answers with `agents`.
     #[serde(rename = "usage.get")]
     UsageGet,
     /// Changes the named settings. The core saves them and sends them back.
     #[serde(rename = "settings.update")]
     SettingsUpdate { change: Value },
-    #[serde(rename = "claude.version.get")]
-    ClaudeVersionGet,
-    /// Updates Claude Code with its own updater. The core answers with `claude.version` once done.
-    #[serde(rename = "claude.update")]
-    ClaudeUpdate,
+    /// Updates an agent with its own updater. The core answers with `agents` once done.
+    #[serde(rename = "agent.update")]
+    AgentUpdate { agent: String },
+    /// Installs an agent on this Mac. The core answers with `agents` as it goes.
+    #[serde(rename = "agent.install")]
+    AgentInstall { agent: String },
+    /// Starts an agent's sign-in, which opens in the browser. The core answers with `agents` once it ends.
+    #[serde(rename = "agent.signIn")]
+    AgentSignIn { agent: String },
+    /// Stops an agent's install or sign-in. The core answers with `agents`, as the agent was before.
+    #[serde(rename = "agent.cancel")]
+    AgentCancel { agent: String },
     /// Turns an MCP server on or off for the project. Claude Code keeps the choice.
     #[serde(rename = "mcp.toggle")]
     McpToggle { project: String, name: String, enabled: bool },
     /// Reopens the tab closed last. The core answers with `tab.reopened`.
     #[serde(rename = "tab.reopen")]
     TabReopen,
-    /// Sends a message. While Claude works, `followUp` says whether it steers the turn or waits in the queue.
+    /// Sends a message. While the agent works, `followUp` says whether it steers the turn or waits in the queue.
     #[serde(rename = "session.send", rename_all = "camelCase")]
     SessionSend {
         tab_id: String,
@@ -883,9 +946,9 @@ pub enum ClientMessage {
     /// Deletes a tab's session from this Mac, after stopping a running turn. The tab starts afresh.
     #[serde(rename = "thread.delete", rename_all = "camelCase")]
     ThreadDelete { tab_id: String },
-    /// Continues a past thread in a tab that has not started one.
+    /// Continues a past thread in a tab that has not started one, on the agent it ran on.
     #[serde(rename = "thread.resume", rename_all = "camelCase")]
-    ThreadResume { tab_id: String, thread_id: String },
+    ThreadResume { tab_id: String, agent: String, thread_id: String },
     #[serde(rename = "session.interrupt", rename_all = "camelCase")]
     SessionInterrupt { tab_id: String },
     #[serde(rename = "permission.answer", rename_all = "camelCase")]
@@ -961,7 +1024,8 @@ mod tests {
         let messages = core_messages();
         let CoreMessage::Settings { settings } = &messages[0] else { panic!("settings first") };
         assert_eq!(settings.appearance.theme, ThemeChoice::Light);
-        assert_eq!(settings.claude.permission_mode, "auto");
+        assert_eq!(settings.threads.agent, "claude");
+        assert_eq!(settings.agents["claude"].permission_mode, "auto");
         let CoreMessage::Tabs { tabs, active } = &messages[1] else { panic!("tabs second") };
         assert_eq!(tabs.iter().map(|t| t.title.as_str()).collect::<Vec<_>>(), ["Fix the login form", "New session"]);
         assert_eq!(tabs[0].project, "/Users/me/code/web");
@@ -992,11 +1056,13 @@ mod tests {
     fn client_messages_encode_as_the_fixtures() {
         let CoreMessage::Tabs { tabs, active } = core_messages().remove(1) else { panic!("tabs second") };
         let ours = [
-            ClientMessage::ModelsGet,
+            ClientMessage::AgentsGet,
             ClientMessage::UsageGet,
-            ClientMessage::SettingsUpdate { change: serde_json::json!({ "appearance": { "theme": "auto" }, "claude": { "effort": null } }) },
-            ClientMessage::ClaudeVersionGet,
-            ClientMessage::ClaudeUpdate,
+            ClientMessage::SettingsUpdate { change: serde_json::json!({ "appearance": { "theme": "auto" }, "threads": { "agent": "codex" }, "agent": { "id": "claude", "defaults": { "effort": null } } }) },
+            ClientMessage::AgentUpdate { agent: "claude".into() },
+            ClientMessage::AgentInstall { agent: "antigravity".into() },
+            ClientMessage::AgentSignIn { agent: "antigravity".into() },
+            ClientMessage::AgentCancel { agent: "antigravity".into() },
             ClientMessage::McpToggle { project: "/Users/me/code/web".into(), name: "github".into(), enabled: false },
             ClientMessage::TabReopen,
             ClientMessage::TabsSave { tabs, active },
@@ -1011,7 +1077,7 @@ mod tests {
             ClientMessage::QueueResume { tab_id: "tab-1".into() },
             ClientMessage::TasksStop { tab_id: "tab-1".into(), ids: vec!["b1".into()] },
             ClientMessage::ProjectGet { project: "/Users/me/code/web".into(), part: "threads".into() },
-            ClientMessage::ThreadResume { tab_id: "tab-2".into(), thread_id: "s1".into() },
+            ClientMessage::ThreadResume { tab_id: "tab-2".into(), agent: "claude".into(), thread_id: "s1".into() },
             ClientMessage::CommandsSave {
                 project: "/Users/me/code/web".into(),
                 name: "Dev".into(),

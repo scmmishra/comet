@@ -24,15 +24,15 @@ pub struct Thread {
     pub queue_held: bool,
     /// The subagents of the latest turn, and any still running from an earlier one, by id.
     pub subagents: Vec<Subagent>,
-    /// The commands Claude left running in the background.
+    /// The commands the agent left running in the background.
     pub background: Vec<crate::protocol::BackgroundTask>,
-    /// The Claude session the thread runs in, once its first message started one.
+    /// The agent's session the thread runs in, once its first message started one.
     pub session_id: Option<String>,
     /// Whether the end of the thread is out of view, which shows the Scroll to end pill.
     pub away_from_end: bool,
     /// The folds, groups and steps the user opened, by row or item id.
     pub open: HashSet<String>,
-    /// Counts the messages the user sent as they arrive, not those Claude Code started itself.
+    /// Counts the messages the user sent as they arrive, not those the agent started itself.
     sent: u64,
     /// `sent` as the view last followed it to the end.
     followed: u64,
@@ -43,7 +43,7 @@ impl Thread {
         self.index.get(id).map(|&i| &self.items[i])
     }
 
-    /// The questions Claude is waiting on, if any: their request id and the questions.
+    /// The questions the agent is waiting on, if any: their request id and the questions.
     pub fn pending_question(&self) -> Option<(&str, &[Question])> {
         self.items.iter().rev().find_map(|item| match item {
             ThreadItem::Question { request_id, questions, answered: false, .. } => Some((request_id.as_str(), questions.as_slice())),
@@ -208,7 +208,7 @@ mod tests {
         assert!(threads.get_mut("t").take_sent());
         assert!(!threads.get_mut("t").take_sent(), "an update to the same message is not a new one");
         threads.apply("t", ThreadEvent::Item { item: user("task", true) });
-        assert!(!threads.get_mut("t").take_sent(), "a turn Claude Code started is not the user's");
+        assert!(!threads.get_mut("t").take_sent(), "a turn the agent started is not the user's");
     }
 
     #[test]

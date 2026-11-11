@@ -84,7 +84,7 @@ Each view and command gets a `ctx` for its tab:
 | `ctx.$` | Bun's shell, run in the tab's folder. |
 | `ctx.open(panel, params?)` | Opens a panel instance in the tab, or brings the open one to the front. The view pane opens. |
 | `ctx.isOpen(panel, params?)` | Whether that instance is open in the tab. It updates as panels open and close. |
-| `ctx.openThread({ key, title?, prompt? })` | Opens or resumes the tab's Claude thread for `key`. Keys belong to the plugin, so two plugins never share a thread. |
+| `ctx.openThread({ key, title?, prompt? })` | Opens or resumes the tab's thread for `key`, on the tab's agent. Keys belong to the plugin, so two plugins never share a thread. |
 | `ctx.toast(message)` | Shows a short message. |
 
 A view's context also has `ctx.visible()`. It is true while the view is on screen: its tab is the active tab and Desk's window has focus. A panel must also be the panel in front, with the view pane open. It updates as that changes, so an effect can start work when the view shows and stop it when the view hides:
@@ -161,7 +161,7 @@ A panel's context also has `ctx.params` and `ctx.close()`. A command's context h
 
 ## Example
 
-`examples/plugins/support` is a support inbox on made-up conversations. It registers an inbox sidebar, a conversation panel and a setup. Picking a conversation opens its panel and its Claude thread. Link it to `~/.desk/plugins/support` and turn it on for a project.
+`examples/plugins/support` is a support inbox on made-up conversations. It registers an inbox sidebar, a conversation panel and a setup. Picking a conversation opens its panel and its thread. Link it to `~/.desk/plugins/support` and turn it on for a project.
 
 ## Later
 

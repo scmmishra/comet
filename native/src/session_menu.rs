@@ -28,31 +28,33 @@ pub fn button(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Option<E
         .on_press(|s: &mut Desk| s.session_menu.open = !s.session_menu.open)
         .build(k);
     let (rename, fork, delete) = (tab.clone(), tab.id.clone(), tab.id.clone());
-    let menu = Menu::new("session-menu")
-        .trigger(trigger)
-        .open(s.session_menu.open)
-        .placement(Placement::BottomStart)
-        .min_width(200.0)
-        .on_close(|s: &mut Desk| s.session_menu.open = false)
-        .item(MenuItem::new("Rename").icon(&ic::EDIT).on_select(move |s: &mut Desk| {
+    // The menu offers what the tab's agent can do to a thread.
+    let can = |feature: &str| s.account.can(&tab.agent, feature);
+    let mut menu = Menu::new("session-menu").trigger(trigger).open(s.session_menu.open).placement(Placement::BottomStart).min_width(200.0).on_close(|s: &mut Desk| s.session_menu.open = false);
+    if can("rename") {
+        menu = menu.item(MenuItem::new("Rename").icon(&ic::EDIT).on_select(move |s: &mut Desk| {
             s.session_menu.open = false;
             s.session_menu.renaming = Some((rename.id.clone(), TextEdit::new(rename.title.clone())));
-        }))
-        .item(MenuItem::new("Fork").icon(&ic::FORK).on_select(move |s: &mut Desk| {
+        }));
+    }
+    if can("fork") {
+        menu = menu.item(MenuItem::new("Fork").icon(&ic::FORK).on_select(move |s: &mut Desk| {
             s.session_menu.open = false;
             s.core.send(&ClientMessage::ThreadFork { tab_id: fork.clone(), message_id: None });
-        }))
-        .item(MenuItem::new("Copy session ID").icon(&ic::COPY).on_select_tx(move |s: &mut Desk, tx| {
-            s.session_menu.open = false;
-            tx.copy(session.clone());
-            s.toasts.show("Copied the session ID.", false);
-        }))
-        .separator()
-        .item(MenuItem::new("Delete").icon(&ic::TRASH).danger(true).on_select(move |s: &mut Desk| {
+        }));
+    }
+    menu = menu.item(MenuItem::new("Copy session ID").icon(&ic::COPY).on_select_tx(move |s: &mut Desk, tx| {
+        s.session_menu.open = false;
+        tx.copy(session.clone());
+        s.toasts.show("Copied the session ID.", false);
+    }));
+    if can("delete") {
+        menu = menu.separator().item(MenuItem::new("Delete").icon(&ic::TRASH).danger(true).on_select(move |s: &mut Desk| {
             s.session_menu.open = false;
             s.session_menu.deleting = Some(delete.clone());
-        }))
-        .build(k, layer);
+        }));
+    }
+    let menu = menu.build(k, layer);
     rename_dialog(s, tab, k, layer);
     delete_dialog(s, tab, k, layer);
     Some(menu)
@@ -91,7 +93,7 @@ fn delete_dialog(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) {
         .child(crate::theme::button("Cancel").variant(ButtonVariant::Ghost).on_press(|s: &mut Desk| s.session_menu.deleting = None).build(k))
         .child(crate::theme::button("Delete").variant(ButtonVariant::Danger).on_press(|s: &mut Desk| s.delete_session()).build(k));
     // The dialog's description keeps to one line and runs past the panel, so the warning sits in the body, where it wraps.
-    let warning = text(format!("“{}” and its transcript are deleted from this Mac. If Claude is working, it stops. This cannot be undone.", tab.title))
+    let warning = text(format!("“{}” and its transcript are deleted from this Mac. If {} is working, it stops. This cannot be undone.", tab.title, s.agent_name(&tab.agent)))
         .font(crate::theme::text(13.0))
         .color(k.c.text_muted)
         .wrap();
@@ -125,12 +127,13 @@ impl Desk {
         }
     }
 
-    /// Opens a forked session in a new tab beside the one it came from.
-    pub fn open_fork(&mut self, from: &str, thread: String, title: &str) {
+    /// Opens a forked session in a new tab beside the one it came from, on the same agent.
+    pub fn open_fork(&mut self, from: &str, agent: &str, thread: String, title: &str) {
         let Some(project) = self.workspace.tabs.iter().find(|t| t.id == from).map(|t| t.project.clone()) else { return };
         let Ok(tab) = self.workspace.new_tab(Place::Next, Some(project.clone()), &self.account, &self.core) else { return };
         self.workspace.name_tab(&tab, title, &self.core);
-        self.core.send(&ClientMessage::ThreadResume { tab_id: tab, thread_id: thread });
+        self.workspace.set_agent(&tab, agent, &self.account, &self.core);
+        self.core.send(&ClientMessage::ThreadResume { tab_id: tab, agent: agent.to_owned(), thread_id: thread });
         self.core.send(&ClientMessage::ProjectGet { project, part: "threads".into() });
     }
 }
@@ -144,7 +147,7 @@ mod tests {
     fn desk() -> Desk {
         let mut s = Desk::default();
         let messages = serde_json::json!([
-            { "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "Fix the login form", "project": "/code/web", "terminals": [], "model": "default", "permissionMode": "auto" }] }
+            { "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "Fix the login form", "project": "/code/web", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] }
         ]);
         for m in serde_json::from_value::<Vec<CoreMessage>>(messages).unwrap() {
             s.receive(Event::Message(m)).unwrap();
@@ -194,11 +197,12 @@ mod tests {
     #[test]
     fn a_fork_opens_beside_its_tab_and_resumes_there() {
         let mut s = desk();
-        let message = serde_json::json!({ "type": "thread.forked", "tabId": "t", "threadId": "s2", "title": "Fix the login form (fork)" });
+        let message = serde_json::json!({ "type": "thread.forked", "tabId": "t", "agent": "codex", "threadId": "s2", "title": "Fix the login form (fork)" });
         s.receive(Event::Message(serde_json::from_value(message).unwrap())).unwrap();
         let titles: Vec<_> = s.workspace.tabs.iter().map(|t| (t.title.clone(), t.project.clone())).collect();
         assert_eq!(titles, [("Fix the login form".into(), "/code/web".into()), ("Fix the login form (fork)".into(), "/code/web".into())]);
         let forked = s.workspace.tabs[1].id.clone();
-        assert!(s.core.sent().iter().any(|m| m["type"] == "thread.resume" && m["tabId"] == forked.as_str() && m["threadId"] == "s2"));
+        assert_eq!(s.workspace.tabs[1].agent, "codex", "the fork runs on the agent its thread ran on");
+        assert!(s.core.sent().iter().any(|m| m["type"] == "thread.resume" && m["tabId"] == forked.as_str() && m["agent"] == "codex" && m["threadId"] == "s2"));
     }
 }

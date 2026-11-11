@@ -1,22 +1,20 @@
-//! What the core says about Desk's settings and the Claude account.
+//! What the core says about Desk's settings and the agents it runs.
 
-use crate::protocol::{ClaudeAccount, ClaudeCodeVersion, DeskSettings, ModelOption, PlanUsage, ProjectSettings, ThemeChoice};
+use crate::protocol::{AgentDefaults, AgentInfo, DeskSettings, ModelOption, PlanUsage, ProjectSettings, ThemeChoice};
 
 /// The thread's text size before the settings arrive, as `DEFAULT_SETTINGS` has it.
 const DEFAULT_TEXT_SIZE: f32 = 14.0;
+/// The agent a tab runs before the settings arrive, the protocol's `DEFAULT_AGENT`.
+pub const DEFAULT_AGENT: &str = "claude";
+/// An agent's own default model, the protocol's `DEFAULT_MODEL`. Every agent lists it first.
+pub const DEFAULT_MODEL: &str = "default";
 
 #[derive(Default)]
 pub struct Account {
     /// None until the core sends them, which it does first on connect.
     pub settings: Option<DeskSettings>,
-    pub models: Vec<ModelOption>,
-    /// None until read, and when Claude has no plan limits.
-    pub usage: Option<PlanUsage>,
-    /// Who Claude Code is signed in as: None until read, Some(None) when not signed in.
-    pub user: Option<Option<ClaudeAccount>>,
-    pub claude_code: Option<ClaudeCodeVersion>,
-    /// Whether Claude Code is updating itself.
-    pub updating: bool,
+    /// The agents Desk runs, in Desk's order. Empty until the core sends them.
+    pub agents: Vec<AgentInfo>,
 }
 
 impl Account {
@@ -60,7 +58,32 @@ impl Account {
         self.settings.as_ref().map_or(DEFAULT_TEXT_SIZE, |s| s.appearance.font_size)
     }
 
-    pub fn model(&self, value: &str) -> Option<&ModelOption> {
-        self.models.iter().find(|m| m.value == value)
+    pub fn agent(&self, id: &str) -> Option<&AgentInfo> {
+        self.agents.iter().find(|a| a.id == id)
+    }
+
+    /// One of an agent's models, by its value.
+    pub fn model(&self, agent: &str, value: &str) -> Option<&ModelOption> {
+        self.agent(agent)?.models.iter().find(|m| m.value == value)
+    }
+
+    /// Whether an agent can do something beyond a conversation, such as "rewind". An agent not read yet can do nothing.
+    pub fn can(&self, agent: &str, feature: &str) -> bool {
+        self.agent(agent).is_some_and(|a| a.features.iter().any(|f| f == feature))
+    }
+
+    /// The agent a new tab starts with.
+    pub fn default_agent(&self) -> &str {
+        self.settings.as_ref().map_or(DEFAULT_AGENT, |s| s.threads.agent.as_str())
+    }
+
+    /// What a new tab starts an agent with, once the settings have arrived.
+    pub fn defaults(&self, agent: &str) -> Option<&AgentDefaults> {
+        self.settings.as_ref()?.agents.get(agent)
+    }
+
+    /// An agent's plan usage, when it has plan limits and they have been read.
+    pub fn usage(&self, agent: &str) -> Option<&PlanUsage> {
+        self.agent(agent)?.usage.as_ref()
     }
 }
