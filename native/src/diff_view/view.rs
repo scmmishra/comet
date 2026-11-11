@@ -779,12 +779,15 @@ impl<S: 'static> View<S> {
     fn file_header(&self, s: &S, st: &DiffState, f: usize, sticky: bool) -> El {
         let l = &self.look;
         if let Some(custom) = &self.d.file_header {
-            let line = |key: &'static str, c: Color| col().key(key).w_full().h(1.0).fill(c).a11y_hidden();
+            // Desk's change: hairlines, half a point, between files.
+            let line = |key: &'static str, c: Color| col().key(key).w_full().h(0.5).fill(c).a11y_hidden();
             let mut h = col().w_full().h(HEADER_H).fill(l.header_bg).role("heading").label(st.files()[f].path().to_owned());
             if let (false, Some(w)) = (sticky, self.view_w(st, false)) {
                 h = h.w(w).sticky_left(0.0);
             }
-            h = h.child(line("top", if f > 0 && !sticky { l.border } else { l.header_bg }));
+            // Under a folded file, that file's bottom line already divides them, so a second would double it.
+            let divided = f > 0 && !sticky && !st.collapsed(f - 1);
+            h = h.child(line("top", if divided { l.border } else { l.header_bg }));
             return h.child(row().key("inner").w_full().grow(1.0).min_h(0.0).child(custom(s, f, st.collapsed(f)))).child(line("bottom", l.border));
         }
         let file = &st.files()[f];
