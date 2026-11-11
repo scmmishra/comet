@@ -1,13 +1,16 @@
 import type { ThreadItem, ThreadRow } from "@desk/protocol"
 import { expect, test } from "bun:test"
-import { toolStep } from "./agents/claude/steps"
-import { thought as thoughtStep } from "./steps"
+import type { StepKind } from "@desk/protocol"
+import { thought as thoughtStep, tool as toolStep } from "./agents/steps"
 import { ThreadRows, threadRows } from "./thread-rows"
 
 const user = (id: string, at?: number): ThreadItem => ({ type: "user", id, text: id, ...(at ? { at } : {}) })
 const text = (id: string): ThreadItem => ({ type: "text", id, text: id, done: true })
 const thought = (id: string): ThreadItem => thoughtStep(id, `${id}.`)
-const tool = (id: string, done = true): ThreadItem => toolStep({ type: "tool", id, name: "Bash", summary: id, ...(done ? { result: { output: "", isError: false } } : {}) })
+const tool = (id: string, done = true, kind: StepKind = "command"): ThreadItem => toolStep({ type: "tool", id, name: kind, summary: id, ...(done ? { result: { output: "", isError: false } } : {}) }, kind, id)
+/** A finished tool call of `kind` on `target`, such as a read of a file. */
+const did = (kind: StepKind, target: string, id = `${kind}:${target}:${Math.random()}`): ThreadItem => toolStep({ type: "tool", id, name: kind, summary: target, result: { output: "", isError: false } }, kind, target)
+const summaryOf = (...steps: ThreadItem[]) => (threadRows([user("u1", 1000), ...steps, text("x")], true).find((row) => row.type === "group") as { summary: string }).summary
 
 /** Each row's kind, with an item row named by its item's type. */
 const kinds = (rows: readonly { type: string; id: string }[], items: readonly ThreadItem[]) =>
@@ -85,4 +88,11 @@ test("sends rows after every history, and after an event only when they change",
   expect(rows.after({ type: "session.event", tabId: "t", event: { kind: "item", item: user("u2", 5) } })).toMatchObject({ rows: [{ id: "u1" }, { id: "hi" }, { id: "u2" }] })
   expect(rows.after({ type: "session.event", tabId: "t", event: { kind: "status", busy: true } })).toMatchObject({ rows: [{}, {}, {}, { type: "working", id: "working:u2", since: 5 }] })
   expect(rows.after({ type: "settings", settings: undefined as never })).toBeUndefined()
+})
+
+test("sums a group by its two most important kinds, counting files once and thoughts not at all", () => {
+  expect(summaryOf(did("read", "a.ts"), did("read", "b.ts"), did("read", "a.ts"), thought("t1"))).toBe("Read 2 files")
+  expect(summaryOf(did("read", "a.ts"), did("command", "ls"), did("command", "pwd"))).toBe("Read a file and ran 2 commands")
+  expect(summaryOf(did("search", "x"), did("read", "a.ts"), did("command", "ls"), did("web", "u"))).toBe("Read a file, ran a command, and performed 2 other actions")
+  expect(summaryOf(thought("t1"), thought("t2"))).toBe("Thought (×2)")
 })

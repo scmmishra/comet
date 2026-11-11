@@ -1,5 +1,5 @@
 import type { ThreadEvent, ThreadItem } from "@desk/protocol"
-import { thought } from "../../steps"
+import { thought } from "../steps"
 import type { SessionUpdate, ToolCall } from "./protocol"
 import { toolItem, type ToolReader } from "./tools"
 

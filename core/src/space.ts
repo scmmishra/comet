@@ -1,6 +1,6 @@
 import { basename } from "node:path"
 import type { Space } from "@desk/protocol"
-import { git, numstatLine } from "./git"
+import { git } from "./git"
 import { spawn } from "./environment"
 
 /** A part that fails gives undefined, so each part of the card fails on its own. */
@@ -75,4 +75,10 @@ async function readPullRequest(root: string): Promise<NonNullable<Space["pr"]>> 
     else checks.pending++
   }
   return { number: pr.number, title: pr.title, url: pr.url, state: pr.state, draft: pr.isDraft, checks }
+}
+
+/** One line of `git diff --numstat`: its counts and the rest of the line. Binary files show "-" for both counts. */
+function numstatLine(line: string): { additions: number; deletions: number; path: string } {
+  const [added, removed, ...path] = line.split("\t")
+  return { additions: Number(added) || 0, deletions: Number(removed) || 0, path: path.join("\t") }
 }

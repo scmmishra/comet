@@ -1,6 +1,6 @@
 import type { Step, StepKind } from "@desk/protocol"
 import { deskToolLabel, SERVER_NAME } from "../../delegate/tools"
-import { commandLabel, tool, type BareStep } from "../../steps"
+import { commandLabel, tool, type BareStep } from "../steps"
 import { ASK_USER_QUESTION } from "./requests"
 
 type Tool = Extract<Step, { type: "tool" }>

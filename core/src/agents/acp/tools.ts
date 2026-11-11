@@ -1,5 +1,5 @@
 import type { StepKind, TextEdit, ThreadItem } from "@desk/protocol"
-import { commandLabel, cutOutput, relativeTo, tool } from "../../steps"
+import { commandLabel, cutOutput, relativeTo, tool } from "../steps"
 import type { ToolCall, ToolKind } from "./protocol"
 
 type ToolItem = Extract<ThreadItem, { type: "tool" }>

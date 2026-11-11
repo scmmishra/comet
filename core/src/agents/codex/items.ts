@@ -1,7 +1,7 @@
 import type { ThreadItem } from "@desk/protocol"
 import { deskToolLabel, deskToolSummary, SERVER_NAME } from "../../delegate/tools"
 import { firstLine } from "../../text"
-import { commandLabel, cutOutput, relativeTo, thought, tool } from "../../steps"
+import { commandLabel, cutOutput, relativeTo, thought, tool } from "../steps"
 import { fileEdits } from "./diff"
 import type { CodexItem, FileUpdate } from "./protocol"
 import { shellScript } from "./shell"

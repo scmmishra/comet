@@ -1,6 +1,6 @@
 import type { SDKAPIRetryMessage, SDKAssistantMessage, SDKMessage, SDKMessageOrigin, SDKPartialAssistantMessage, SessionMessage } from "@anthropic-ai/claude-agent-sdk"
 import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, type ThreadItem } from "@desk/protocol"
-import { cutOutput, relativeTo, thought } from "../../steps"
+import { cutOutput, relativeTo, thought } from "../steps"
 import { deskToolSummary } from "../../delegate/tools"
 import { modelLabel } from "./models"
 import { deskTool, toolStep } from "./steps"
