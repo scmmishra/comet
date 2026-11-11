@@ -766,7 +766,9 @@ fn queued(s: &Desk, tab: &str, message: &QueuedMessage, k: &Kit) -> El {
         .px(13.0)
         .py(9.0)
         .child(
+            // The column shrinks to the bubble's cap too, else it keeps the text's unwrapped width and the text runs past the border.
             col()
+                .shrink()
                 .min_w(0.0)
                 .gap(6.5)
                 // `size-8 rounded-md`: the message's images as small tiles above its text.

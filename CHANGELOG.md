@@ -2,6 +2,10 @@
 
 All notable changes to Desk are listed here. Changes go under `## Unreleased` until they ship. The release workflow publishes the section for the version in `native/Cargo.toml` as that release's notes.
 
+## Unreleased
+
+- A long queued message wraps inside its dashed box. Its text ran past the box's right edge.
+
 ## 0.0.1
 
 - The first release of Desk, a Mac workspace for coding agents. It is a native app built in Rust with Rune. The thread, tool calls and diffs render as UI, not as a terminal.
