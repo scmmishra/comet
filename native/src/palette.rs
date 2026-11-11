@@ -272,6 +272,7 @@ impl Desk {
                 root.push(action("Open folder…", &ic::FOLDER, Some(&["⌘", "O"]), Action::Run(shell::commands::open_folder)));
                 root.push(action("Open setup…", &ic::WORKSPACE, None, Action::Open(Page::Setups)));
                 root.push(action("Open panel…", &crate::icons::PANEL, None, Action::Open(Page::Panels)));
+                root.push(action("Reload plugins", &ic::REFRESH, None, Action::Run(shell::commands::reload_plugins)));
                 root.push(action("Change theme…", &ic::APPEARANCE, None, Action::Open(Page::Themes)));
                 root.push(action("Open settings…", &ic::SETTINGS_GEAR, None, Action::Open(Page::Settings)));
                 root.extend(self.offered().into_iter().flat_map(|o| o.commands.iter()).map(|c| {

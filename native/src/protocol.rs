@@ -840,6 +840,9 @@ pub enum ClientMessage {
     /// Runs a handler a plugin's node holds, such as a button's onClick.
     #[serde(rename = "plugin.event")]
     PluginEvent { plugin: String, handler: u64, args: Vec<Value> },
+    /// Starts every plugin again from its files, such as after an edit, and lays out every tab again.
+    #[serde(rename = "plugins.reload")]
+    PluginsReload,
     /// Starts a terminal, or reattaches to one already running under this id, which replays its output.
     #[serde(rename = "terminal.open")]
     TerminalOpen { id: String, cols: usize, rows: usize },
@@ -1032,6 +1035,7 @@ mod tests {
             ClientMessage::SetupsGet { project: "/Users/me/code/web".into() },
             ClientMessage::PluginCommand { tab_id: "tab-1".into(), command: "support.search".into(), input: Some("refund".into()) },
             ClientMessage::PluginEvent { plugin: "support".into(), handler: 3, args: vec![serde_json::json!("hi")] },
+            ClientMessage::PluginsReload,
             ClientMessage::TerminalOpen { id: "term-1".into(), cols: 80, rows: 24 },
             ClientMessage::TerminalInput { id: "term-1".into(), data: "ls\r".into() },
             ClientMessage::TerminalResize { id: "term-1".into(), cols: 100, rows: 30 },

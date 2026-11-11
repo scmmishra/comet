@@ -49,7 +49,7 @@ const ownKey = (plugin: string, threadKey: string | undefined) => {
  * The plugins in `~/.desk/plugins`, each in a worker of its own, so a slow plugin never stalls a session
  * or a terminal. A plugin starts the first time a project it is on is read, and stays up after. One
  * worker serves every tab. A plugin that fails to start or stops is reported once and stays off until
- * Desk restarts, as an edited plugin does.
+ * the plugins reload, which is also when an edited plugin takes effect.
  */
 export class Plugins {
   private running = new Map<string, Promise<Running>>()
@@ -57,6 +57,8 @@ export class Plugins {
   /** The last `visible` message each plugin was sent, as JSON, so an unchanged screen sends nothing. */
   private visibleSent = new Map<string, string>()
   private seq = 0
+  /** Counts reloads. A worker from before the last reload is ignored while it shuts down. */
+  private generation = 0
 
   constructor(private readonly hooks: PluginHooks) {}
 
@@ -197,6 +199,26 @@ export class Plugins {
     for (const running of this.running.values()) void running.then((found) => found.worker.terminate())
   }
 
+  /**
+   * Stops every plugin and forgets those that failed, so each starts again from its files the next time
+   * a project asks for it. The app drops each plugin's nodes, since the new worker numbers its own.
+   */
+  reload() {
+    const stopping = [...this.running]
+    this.generation++
+    this.running.clear()
+    this.failed.clear()
+    this.visibleSent.clear()
+    for (const [plugin, running] of stopping) {
+      this.hooks.broadcast({ type: "plugin.ops", plugin, ops: [], reset: true })
+      void running.then((found) => {
+        // The tabs lay out again with the new worker, so what waited on the old one draws nothing.
+        for (const waiting of found.showing.values()) waiting.resolve([])
+        found.worker.terminate()
+      }, () => undefined)
+    }
+  }
+
   private start(plugin: string): Promise<Running> {
     const failure = this.failed.get(plugin)
     if (failure) return Promise.reject(failure)
@@ -204,12 +226,14 @@ export class Plugins {
     if (!running) {
       running = this.launch(plugin)
       this.running.set(plugin, running)
-      running.catch((error: Error) => this.fail(plugin, error, "could not start"))
+      const started = running
+      // A start the plugins reloaded past is not this plugin's failure.
+      running.catch((error: Error) => this.running.get(plugin) === started && this.fail(plugin, error, "could not start"))
     }
     return running
   }
 
-  /** Turns a plugin off until Desk restarts, and tells the user once. */
+  /** Turns a plugin off until the plugins reload, and tells the user once. */
   private fail(plugin: string, error: Error, what: string) {
     this.running.delete(plugin)
     this.visibleSent.delete(plugin)
@@ -225,11 +249,14 @@ export class Plugins {
     // so it would lack the login shell's PATH. It gets a copy, so a plugin finds the user's tools, such as
     // a CLI in ~/.local/bin. A copy, not a shared one, keeps a plugin's changes out of Claude's sessions.
     const env = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined))
+    const generation = this.generation
     const worker = new Worker(await bundlePlugin(plugin, entry), { env })
+    const stale = () => generation !== this.generation
     return new Promise<Running>((resolve, reject) => {
       let running: Running | undefined
       worker.onmessage = (event: MessageEvent<FromPlugin>) => {
         const message = event.data
+        if (stale() && message.type !== "ready" && message.type !== "failed") return
         if (message.type === "ready") {
           running = { worker, offers: message.offers, showing: new Map() }
           resolve(running)
@@ -241,6 +268,7 @@ export class Plugins {
       worker.onerror = (event) => {
         worker.terminate()
         if (!running) return reject(new Error(event.message))
+        if (stale()) return
         const error = new Error(event.message)
         for (const waiting of running.showing.values()) waiting.reject(error)
         this.fail(plugin, error, "stopped")

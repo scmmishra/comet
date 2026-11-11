@@ -196,6 +196,9 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         return plugins.command(message.tabId, window.projectOf(message.tabId), message.command, message.input)
       case "plugin.event":
         return plugins.event(message.plugin, message.handler, message.args)
+      case "plugins.reload":
+        plugins.reload()
+        return layouts.redrawAll()
       case "terminal.open":
         return window.openTerminal(message.id, message.cols, message.rows)
       case "terminal.input":

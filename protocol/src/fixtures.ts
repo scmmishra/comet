@@ -231,6 +231,7 @@ export const CLIENT_MESSAGES = [
   { type: "setups.get", project: "/Users/me/code/web" },
   { type: "plugin.command", tabId: "tab-1", command: "support.search", input: "refund" },
   { type: "plugin.event", plugin: "support", handler: 3, args: ["hi"] },
+  { type: "plugins.reload" },
   { type: "terminal.open", id: "term-1", cols: 80, rows: 24 },
   { type: "terminal.input", id: "term-1", data: "ls\r" },
   { type: "terminal.resize", id: "term-1", cols: 100, rows: 30 },

@@ -275,3 +275,29 @@ test("starts a plugin with the environment the core set, such as the login shell
   delete process.env.DESK_TEST_TOOL
   plugins.stop()
 }, 20_000)
+
+test("a reload starts each plugin again from its files, and gives one that failed another try", async () => {
+  const card = (words: string) => `
+import { definePlugin, Text } from "@desk/plugin"
+export default definePlugin((desk) => {
+  desk.card("status", { title: "Status", view: () => <Text>${words}</Text> })
+})
+`
+  installPlugin("edited", card("Before"))
+  installPlugin("broken", `export default 42`)
+  turnOn({ everywhere: ["edited", "broken"] })
+  const { plugins, layouts, layout, nodes, textOf, errors } = harness()
+  await layouts.send("tab-1")
+  const drawn = () => layout("tab-1")!.cards.map((found) => textOf(found.plugin, found.root))
+  await until(() => drawn().join() === "Before")
+  expect(errors().filter((error) => error.includes("broken plugin could not start"))).toHaveLength(1)
+
+  installPlugin("edited", card("After"))
+  installPlugin("broken", card("Fixed"))
+  plugins.reload()
+  await layouts.redrawAll()
+  await until(() => drawn().join() === "After,Fixed")
+  // The app's copy holds the new worker's nodes only: a card and its text.
+  expect(Object.keys(nodes.edited!)).toHaveLength(3)
+  plugins.stop()
+}, 20_000)

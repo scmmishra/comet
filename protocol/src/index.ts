@@ -858,6 +858,8 @@ export type ClientMessage =
   | { readonly type: "plugin.command"; readonly tabId: string; readonly command: string; readonly input?: string }
   /** Runs a handler a plugin's node holds, such as a button's onClick. */
   | { readonly type: "plugin.event"; readonly plugin: string; readonly handler: number; readonly args: readonly UiValue[] }
+  /** Starts every plugin again from its files, such as after an edit, and lays out every tab again. */
+  | { readonly type: "plugins.reload" }
 
 export type CoreMessage =
   /** Desk's settings, sent on connect and again after every change. */

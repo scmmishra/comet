@@ -278,6 +278,11 @@ pub mod commands {
         s.core.send(&ClientMessage::TabReopen);
     }
 
+    /// Starts every plugin again from its files, so an edit takes effect without restarting Desk.
+    pub fn reload_plugins(s: &mut Desk, _: &mut Tx) {
+        s.core.send(&ClientMessage::PluginsReload);
+    }
+
     /// ⌘1 to ⌘9: a model while the model picker is open, else a tab.
     pub fn show_tab<const INDEX: usize>(s: &mut Desk, _: &mut Tx) {
         if s.pick_model_by_number(INDEX) {

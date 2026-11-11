@@ -153,6 +153,12 @@ export class Layouts {
     await Promise.all([...this.sends.keys()].map((tabId) => this.send(tabId)))
   }
 
+  /** Lays out every tab again after the plugins reloaded. A card that could not be drawn gets another try. */
+  async redrawAll() {
+    this.brokenCards.clear()
+    await this.resendAll()
+  }
+
   dropTab(tabId: string) {
     this.sends.delete(tabId)
     this.brokenCards.delete(tabId)

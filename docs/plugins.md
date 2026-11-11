@@ -151,7 +151,8 @@ A panel's context also has `ctx.params` and `ctx.close()`. A command's context h
 - A worker starts the first time a project it is on is read. Its setup runs, and it reports what it registered.
 - Each view is drawn once per tab and kept while the tab shows it. On every layout change the core tells each plugin the full set of its views a tab shows, and the plugin draws what it lacks and disposes the rest.
 - A sidebar or panel that cannot be drawn is closed. A card that cannot be drawn is left out of the tab. The user is told once.
-- A plugin that fails to start, or stops, is reported once and stays off until Desk restarts. Its views leave every tab.
+- A plugin that fails to start, or stops, is reported once and stays off until the plugins reload. Its views leave every tab.
+- Reload plugins, in the palette, stops every plugin and lays out every tab again. Each plugin starts again from its files, so an edit takes effect without restarting Desk. A plugin loses what it held in memory.
 - The core works out which views are on screen when the tabs, a layout or the window's focus change. It tells each plugin only of its own views, and only when they change.
 - The core tells a plugin which of its threads a tab shows, with each `show` and each time the tab moves to another thread.
 - The core tells a plugin when a turn ends in one of its threads, even when the plugin moved the tab to another thread while the turn ran.
@@ -169,6 +170,6 @@ A panel's context also has `ctx.params` and `ctx.close()`. A command's context h
 - Pinned panels, for a project or a setup, that every new tab opens.
 - Hiding and ordering cards per project.
 - Plugin settings, with a page in Settings.
-- Reloading one plugin without restarting the core.
+- Reloading a plugin when its files change, without the palette.
 - A manifest that lists a plugin's contributions, so Desk can list them without starting the worker.
 - A key per repo, such as its `origin` remote, so clones and worktrees share settings.

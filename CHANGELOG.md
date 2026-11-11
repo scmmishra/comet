@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- Reload plugins, in the palette, starts every plugin again from its files. An edit to a plugin takes effect without restarting Desk, and a plugin that failed gets another try. Open panels and threads stay.
 - In a window too narrow for the cards, the chip in the session header opens plugin cards too. They showed only beside the thread, so a narrow window hid them.
 - A plugin's list row shows its subtitle and detail on one line each. A message with line breaks, such as a Chatwoot reply that starts "Hi David,", made the row many lines tall.
 - A plugin's card matches Desk's own cards. Its title, text and rows sit where the Subagents card's do, and a row's hover fills the card's width. It had wider padding at the edges and between rows.
