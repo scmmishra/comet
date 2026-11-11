@@ -7,7 +7,7 @@ use crate::protocol::{ClientMessage, DrawnView, TabLayout, UiOp};
 use crate::shell::Desk;
 use crate::theme;
 use rune::{El, ScrollSpec, TextEdit, col, el, row, text, text_input};
-use rune_kit::{Badge, ButtonVariant, Kit, Markdown};
+use rune_kit::{ButtonVariant, Kit, Markdown};
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
 
@@ -266,15 +266,16 @@ fn item_view(props: &Map<String, Value>, plugin: String, k: &Kit) -> El {
             Some("orange") => (theme::claude().alpha(0.15), theme::claude()),
             _ => (k.c.layer_02, k.c.text_muted),
         };
-        Badge::new(words).build(k).fill(fill).color(ink)
+        crate::ui::tinted_badge(words, fill, ink)
     });
     let head = row().w_full().gap(8.0).items_center().child(text(prop(props, "title").unwrap_or("").to_owned()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate().grow(1.0)).children(badge);
+    // The Electron app's grid: the title and its badge on one line, the quieter lines under it, no gap
+    // between, rounded to 0.5rem of Desk's 13 pixel root.
     let item = col()
         .w_full()
-        .gap(2.0)
         .px(10.0)
         .py(8.0)
-        .radius(8.0)
+        .radius(6.5)
         .fill(if selected { k.c.layer_02 } else { rune::Color::TRANSPARENT })
         .child(head)
         .children(line("subtitle"))
