@@ -88,7 +88,7 @@ pub fn kit(dark: bool) -> &'static Kit {
 /// The kit Review's DiffView draws with: Desk's kit, with the parts DiffView reads from it set as the
 /// Electron app's @pierre/diffs draws a diff. Pierre's green and red tint the changed lines and their
 /// bars, line numbers take its foreground mixed 65% with the panel, file headers sit on the panel in
-/// regular weight, and files fold with Desk's chevrons. DiffView fixes its row and header heights,
+/// regular weight under faint lines, and files fold with Desk's chevrons. DiffView fixes its row and header heights,
 /// its code size and its header's contents, so those stay as Rune draws them.
 pub fn review_kit(dark: bool) -> &'static Kit {
     static KITS: [OnceLock<Kit>; 2] = [const { OnceLock::new() }; 2];
@@ -99,7 +99,8 @@ pub fn review_kit(dark: bool) -> &'static Kit {
         k.c.danger.icon = color(removed);
         k.c.text_muted = code_foreground(dark).mix(k.c.bg_base, 0.35);
         k.c.layer_01 = k.c.bg_base;
-        k.c.border_weak = k.c.border_base;
+        // The lines under file headers and between files, in Desk's faint outline colour.
+        k.c.border_weak = outline(dark);
         k.ty.ui_medium = text(13.0);
         k.glyph.triangle_down = &rune_theme_opencode::icons::CHEVRON_DOWN;
         k.glyph.triangle_right = &rune_theme_opencode::icons::CHEVRON_RIGHT;
