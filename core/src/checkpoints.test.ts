@@ -97,6 +97,22 @@ test("leaves out what a switch brings in, and keeps what the turn wrote, committ
   expect(paths(await checkpointChanges(dir, from, (await capture(dir))!))).toEqual(["dirty.ts", "mine.ts"])
 })
 
+test("leaves out a branch's earlier work when the turn switches off it to a new branch", async () => {
+  const { dir, git, write } = gitRepo({ "a.ts": "one\n" })
+  git("checkout", "-q", "-b", "export")
+  write("export.ts", "the export branch's own work\n")
+  commitEarlier(dir, "export work")
+  git("checkout", "-q", "main")
+  write("pulled.ts", "a commit the pull brings in\n")
+  commitEarlier(dir, "pulled")
+  git("checkout", "-q", "export")
+  const from = (await capture(dir))!
+  // "Switch to main, pull, and start a new branch."
+  git("checkout", "-q", "main")
+  git("checkout", "-q", "-b", "new")
+  expect(await checkpointChanges(dir, from, (await capture(dir))!)).toEqual([])
+})
+
 test("leaves out a branch merged in cleanly during the turn", async () => {
   const { dir, git, write } = gitRepo({ "a.ts": "one\n" })
   git("checkout", "-q", "-b", "feature")

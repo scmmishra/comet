@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- A turn that switches off a branch no longer lists that branch's earlier work as its changes, in the thread or in Review. Asking Claude to go back to main, pull and start a new branch listed every file the old branch had changed.
 - A Skill step in a thread names the skill, such as "chatwoot-cli". It showed the tool's raw input, `{"skill":"chatwoot-cli"}`.
 - Picking a conversation in a plugin's sidebar starts its thread again. A conversation without a thread yet got its tab title but never sent the plugin's prompt, so the tab stayed on "Pick something in the sidebar to open its thread."
 - On a new tab's start screen, the list that / and @ open shows below the message box. It was cut off above it.
