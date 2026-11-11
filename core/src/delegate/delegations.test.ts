@@ -91,7 +91,7 @@ test("refuses a task it cannot run, in words the asking agent can pass on", asyn
   expect(await refusal({ agent: "codex", task: "x", effort: "max" })).toBe('Fake codex\'s Default has no effort level "max". Its levels are: low, high.')
   expect(codex.sessions).toEqual([])
   const signedOut = await delegations("default", { state: "signed-out", problem: "Sign in to use your ChatGPT plan." })
-  expect(await signedOut.call({ agent: "codex", task: "x" }).catch((error: Error) => error.message)).toBe("Fake codex is not ready: Sign in to use your ChatGPT plan.. The user can set it up in Desk's Settings, under Providers.")
+  expect(await signedOut.call({ agent: "codex", task: "x" }).catch((error: Error) => error.message)).toBe("Fake codex is not ready: Sign in to use your ChatGPT plan. The user can set it up in Desk's Settings, under Providers.")
 })
 
 test("names a model by its value or the name it runs under", async () => {

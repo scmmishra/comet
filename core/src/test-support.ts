@@ -1,7 +1,8 @@
 import { afterAll } from "bun:test"
 import type { AgentFeature, AgentId, ThreadEvent } from "@desk/protocol"
-import type { Agent, AgentHost, AgentSession, SessionOptions } from "./agents/agent"
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs"
+import type { Agent, AgentHost, AgentSession, Rewound, SessionOptions } from "./agents/agent"
+import type { Transport } from "./agents/json-rpc"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 
@@ -40,29 +41,35 @@ export function gitRepo(files: Record<string, string>) {
   return { dir, git, write }
 }
 
-/** One entry of a Claude transcript: a message the user sent, or Claude's text reply. */
-export type TranscriptEntry = { readonly user: string } | { readonly assistant: string }
-
 /**
- * A Claude transcript in a new project, kept in a temporary Claude config folder for the file's tests.
- * Each entry follows the one before it. The project's path is resolved, as Claude Code names its folder
- * after the real path. Answers the project, the session, the transcript's file and each entry's uuid.
+ * A transport in memory, for a test that plays the peer. `write` gets each line the client writes.
+ * `say` sends the client a message, as JSON or as a raw line. `hangUp` ends the lines, as a peer whose
+ * process ends does. Closing the transport hangs up too.
  */
-export function claudeTranscript(entries: readonly TranscriptEntry[]) {
-  process.env.CLAUDE_CONFIG_DIR ??= tempFolder("claude")
-  const project = realpathSync(tempFolder("sessions"))
-  const folder = join(process.env.CLAUDE_CONFIG_DIR, "projects", project.replace(/[^a-zA-Z0-9]/g, "-"))
-  mkdirSync(folder, { recursive: true })
-  const sessionId = crypto.randomUUID()
-  const uuids = entries.map(() => crypto.randomUUID())
-  const lines = entries.map((entry, index) => {
-    const message = "user" in entry ? { role: "user", content: entry.user } : { role: "assistant", content: [{ type: "text", text: entry.assistant }] }
-    const type = "user" in entry ? "user" : "assistant"
-    return JSON.stringify({ type, uuid: uuids[index], parentUuid: uuids[index - 1] ?? null, sessionId, cwd: project, timestamp: new Date(Date.now() + index).toISOString(), message })
-  })
-  const file = join(folder, `${sessionId}.jsonl`)
-  writeFileSync(file, `${lines.join("\n")}\n`)
-  return { project, sessionId, file, uuids }
+export function memoryTransport(write: (line: string) => void) {
+  const queue: string[] = []
+  let wake: (() => void) | undefined
+  let closed = false
+  const say = (message: object | string) => {
+    queue.push(typeof message === "string" ? message : JSON.stringify(message))
+    wake?.()
+  }
+  const hangUp = () => {
+    closed = true
+    wake?.()
+  }
+  const transport: Transport = {
+    lines: (async function* () {
+      while (true) {
+        while (queue.length) yield queue.shift()!
+        if (closed) return
+        await new Promise<void>((resolve) => (wake = resolve))
+      }
+    })(),
+    write,
+    close: hangUp,
+  }
+  return { transport, say, hangUp }
 }
 
 /** What a fake agent's sessions and threads were asked to do, in order, such as "send hello" or "rename s1 New name". */
@@ -129,12 +136,21 @@ export function fakeAgent(id: AgentId, features: readonly AgentFeature[] = [], t
       history: async (_dir, threadId) => [{ type: "user", id: `${threadId}-u1`, text: `From ${id}` }],
       context: async () => undefined,
       ...(has("rename") ? { rename: async (_dir: string, threadId: string, title: string) => void calls.push(`rename ${threadId} ${title}`) } : {}),
-      ...(has("fork") ? { fork: async (_dir: string, threadId: string) => `${threadId}-fork` } : {}),
+      ...(has("fork")
+        ? {
+            fork: async (_dir: string, threadId: string, copy: { readonly messageId?: string }) => {
+              calls.push(["fork", threadId, copy.messageId].filter(Boolean).join(" "))
+              return `${threadId}-fork`
+            },
+          }
+        : {}),
       ...(has("delete") ? { delete: async (_dir: string, threadId: string) => void calls.push(`delete ${threadId}`) } : {}),
-      ...(has("rewind") ? { rewind: async (_dir: string, threadId: string, messageId: string) => (calls.push(`rewind ${threadId} ${messageId}`), { empty: false as const }) } : {}),
+      ...(has("rewind") ? { rewind: async (_dir: string, threadId: string, messageId: string) => (calls.push(`rewind ${threadId} ${messageId}`), fake.rewound) } : {}),
     },
     ...(has("sign-in") ? { signIn: async () => void calls.push("signIn") } : {}),
     close: () => void calls.push("closed"),
   })
-  return { make, calls, sessions }
+  /** `rewound` is what a rewind answers. A test sets it for the case it checks. */
+  const fake: { make: typeof make; calls: FakeCalls; sessions: typeof sessions; rewound: Rewound } = { make, calls, sessions, rewound: { empty: false } }
+  return fake
 }

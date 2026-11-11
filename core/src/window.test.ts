@@ -1,9 +1,8 @@
-import { getSessionMessages, listSessions } from "@anthropic-ai/claude-agent-sdk"
 import { expect, test } from "bun:test"
 import type { CoreMessage, TabInfo } from "@desk/protocol"
-import { existsSync, readFileSync, writeFileSync } from "node:fs"
+import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { claudeTranscript, fakeAgent, gitRepo, tempFolder, type TranscriptEntry, until, useTempHome } from "./test-support"
+import { fakeAgent, gitRepo, tempFolder, until, useTempHome } from "./test-support"
 import { Agents } from "./agents/registry"
 import { Delegations } from "./delegate/delegations"
 import { Window } from "./window"
@@ -130,18 +129,11 @@ test("tells plugins when a tab moves to another key, and not when it opens the k
 
 test("starts a plugin's new thread with its prompt, and leaves a thread it already started alone", async () => {
   const project = tempFolder("plugin-prompt")
-  const { window } = open({ tabs: [tab("a", project)], threads: { a: {} }, keyed: { [`${project}\nconv-2`]: { key: "conv-2", sessionId: "s2" } }, recent: [] })
-  const said: string[] = []
-  window.send = async (_tabId, text) => void said.push(text)
-  // History for a started thread cannot be read here, which does not matter to what is sent.
-  window["history"] = async () => []
-  window["fillContext"] = () => {}
-
+  const { window, claude } = openWithAgents({ tabs: [tab("a", project)], threads: { a: {} }, keyed: { [`${project}\nconv-2`]: { key: "conv-2", sessionId: "c2", agent: "claude" } }, recent: [] })
   await window.openKey("a", { key: "conv-1", prompt: "Draft a reply" })
-  expect(said).toEqual(["Draft a reply"])
-
+  expect(claude.calls).toEqual(["send Draft a reply"])
   await window.openKey("a", { key: "conv-2", prompt: "Draft a reply" })
-  expect(said).toEqual(["Draft a reply"])
+  expect(claude.calls).toEqual(["send Draft a reply"])
 })
 
 test("keeps a closed tab's plugin thread under its key, and gives it back when the tab reopens", async () => {
@@ -154,82 +146,12 @@ test("keeps a closed tab's plugin thread under its key, and gives it back when t
   expect(saved().threads.a).toEqual({ key: "conv-1", sessionId: "s1" })
 })
 
-/**
- * A project with one Claude transcript in it, kept in a temporary Claude config folder. The project's
- * path is resolved, as Claude Code names its folder after the real path.
- */
-function startedThread(entries: readonly TranscriptEntry[] = [{ user: "Fix the login form" }]) {
-  const { project, sessionId, file, uuids } = claudeTranscript(entries)
-  const opened = open({ tabs: [{ ...tab("a", project), title: "Fix the login form" }], threads: { a: { sessionId } }, recent: [] })
-  return { ...opened, project, sessionId, transcript: file, uuids }
-}
-
-test("renames a tab and its session, without a turn", async () => {
-  const { window, sent, project } = startedThread()
-  await window.renameThread("a", "  Login fix ")
-  expect(sent).toContainEqual({ type: "tab.title", tabId: "a", title: "Login fix" })
-  expect((await listSessions({ dir: project })).map((session) => session.summary)).toEqual(["Login fix"])
-  await expect(window.renameThread("a", " ")).rejects.toThrow("needs a name")
-})
-
-test("forks a session into a new one under the tab's name", async () => {
-  const { window, project, sessionId } = startedThread()
-  const replies: CoreMessage[] = []
-  await window.forkThread("a", (message) => replies.push(message))
-  const forked = replies[0] as Extract<CoreMessage, { type: "thread.forked" }>
-  expect(forked).toMatchObject({ type: "thread.forked", tabId: "a", title: "Fix the login form (fork)" })
-  expect(forked.threadId).not.toBe(sessionId)
-  expect((await listSessions({ dir: project })).map((session) => session.sessionId).sort()).toEqual([sessionId, forked.threadId].sort())
-})
-
-test("deletes a session's transcript and starts the tab afresh", async () => {
-  const { window, sent, transcript } = startedThread()
-  await window.deleteThread("a")
-  expect(existsSync(transcript)).toBe(false)
-  expect(saved().threads.a).toEqual({})
-  expect(sent).toContainEqual({ type: "thread.session", tabId: "a" })
-  expect(sent).toContainEqual({ type: "session.history", tabId: "a", items: [] })
-})
-
 test("refuses to rename, fork or delete a thread that has not started", async () => {
   const project = tempFolder("fresh")
   const { window } = open({ tabs: [tab("a", project)], threads: {}, recent: [] })
   await expect(window.renameThread("a", "Name")).rejects.toThrow("not started")
   await expect(window.forkThread("a", () => {})).rejects.toThrow("not started")
   await expect(window.deleteThread("a")).rejects.toThrow("not started")
-})
-
-/** Two turns: the user's message and Claude's reply, twice. */
-const TWO_TURNS: readonly TranscriptEntry[] = [{ user: "Fix the login form" }, { assistant: "Fixed it." }, { user: "Now add a test" }, { assistant: "Added one." }]
-
-test("rewinds a thread to before a message: the thread hides it and what follows, and the next session resumes before it", async () => {
-  const { window, sent, uuids } = startedThread(TWO_TURNS)
-  await window.rewindThread("a", uuids[2]!, false)
-  expect(saved().threads.a.rewind).toEqual({ at: uuids[1], from: uuids[2] })
-  const history = sent.findLast((message): message is Extract<CoreMessage, { type: "session.history" }> => message.type === "session.history")!
-  expect(history.items.filter((item) => item.type === "user").map((item) => item.id)).toEqual([uuids[0]])
-})
-
-test("a rewind to the first message leaves the tab to start a new session", async () => {
-  const { window, sent, uuids } = startedThread(TWO_TURNS)
-  await window.rewindThread("a", uuids[0]!, false)
-  expect(saved().threads.a.sessionId).toBeUndefined()
-  expect(sent).toContainEqual({ type: "thread.session", tabId: "a" })
-  expect(sent).toContainEqual({ type: "session.history", tabId: "a", items: [] })
-})
-
-test("refuses to rewind to a message that is not one the user sent", async () => {
-  const { window, uuids } = startedThread(TWO_TURNS)
-  await expect(window.rewindThread("a", uuids[1]!, false)).rejects.toThrow("could not find that message")
-})
-
-test("forks a thread from a message: the copy ends with that message's turn", async () => {
-  const { window, project, uuids } = startedThread(TWO_TURNS)
-  const replies: CoreMessage[] = []
-  await window.forkThread("a", (message) => replies.push(message), uuids[0])
-  const forked = replies[0] as Extract<CoreMessage, { type: "thread.forked" }>
-  const copy = await getSessionMessages(forked.threadId, { dir: project })
-  expect(copy.map((message) => message.type)).toEqual(["user", "assistant"])
 })
 
 /** A window over fake agents: Claude with every thread feature, and a Codex that can only run turns. */
@@ -322,6 +244,61 @@ test("rewinds through the thread's agent, restoring files first when asked, and 
   expect(claude.calls).toEqual(["restore u1", "close", "rewind c1 u1"])
   expect(saved().threads.a).toMatchObject({ sessionId: "c1", agent: "claude" })
   expect(saved().threads.a.rewind).toBeUndefined()
+})
+
+test("renames a thread through its agent, and tells the app the tab's new title", async () => {
+  const project = tempFolder("agents")
+  const { window, sent, claude } = openWithAgents({ tabs: [tab("a", project)], threads: { a: { sessionId: "c1", agent: "claude" } }, recent: [] })
+  await window.renameThread("a", "  Login fix ")
+  expect(claude.calls).toEqual(["rename c1 Login fix"])
+  expect(sent).toContainEqual({ type: "tab.title", tabId: "a", title: "Login fix" })
+  await expect(window.renameThread("a", " ")).rejects.toThrow("needs a name")
+  expect(claude.calls).toEqual(["rename c1 Login fix"])
+})
+
+test("forks a thread under the tab's name, from a message when given, and answers with the copy", async () => {
+  const project = tempFolder("agents")
+  const { window, claude } = openWithAgents({ tabs: [{ ...tab("a", project), title: "Fix the login form" }], threads: { a: { sessionId: "c1", agent: "claude" } }, recent: [] })
+  const replies: CoreMessage[] = []
+  await window.forkThread("a", (message) => replies.push(message))
+  await window.forkThread("a", (message) => replies.push(message), "u1")
+  expect(claude.calls).toEqual(["fork c1", "fork c1 u1"])
+  expect(replies[0]).toEqual({ type: "thread.forked", tabId: "a", agent: "claude", threadId: "c1-fork", title: "Fix the login form (fork)" })
+})
+
+test("deletes a thread through its agent, and starts the tab afresh", async () => {
+  const project = tempFolder("agents")
+  const { window, sent, claude } = openWithAgents({ tabs: [tab("a", project)], threads: { a: { sessionId: "c1", agent: "claude" } }, recent: [] })
+  await window.deleteThread("a")
+  expect(claude.calls).toEqual(["delete c1"])
+  expect(saved().threads.a).toEqual({})
+  expect(sent).toContainEqual({ type: "thread.session", tabId: "a" })
+  expect(sent).toContainEqual({ type: "session.history", tabId: "a", items: [] })
+})
+
+test("a rewind the agent resumes before hides the rewound messages, and the next session resumes there until its turn ends", async () => {
+  const project = tempFolder("agents")
+  const { window, sent, claude } = openWithAgents({ tabs: [tab("a", project)], threads: { a: { sessionId: "c1", agent: "claude" } }, recent: [] })
+  claude.rewound = { empty: false, resumeAt: "a0" }
+  // The fake's history holds one message, c1-u1, so a rewind to it leaves the thread empty.
+  await window.rewindThread("a", "c1-u1", false)
+  expect(saved().threads.a.rewind).toEqual({ at: "a0", from: "c1-u1" })
+  expect(sent.findLast((message) => message.type === "session.history")).toEqual({ type: "session.history", tabId: "a", items: [] })
+  await window.send("a", "Try again")
+  const { options } = claude.sessions.at(-1)!
+  expect(options).toMatchObject({ resume: "c1", resumeAt: "a0" })
+  options.onResumedAt!()
+  expect(saved().threads.a.rewind).toBeUndefined()
+})
+
+test("a rewind to the first message leaves the tab to start a new session", async () => {
+  const project = tempFolder("agents")
+  const { window, sent, claude } = openWithAgents({ tabs: [tab("a", project)], threads: { a: { sessionId: "c1", agent: "claude" } }, recent: [] })
+  claude.rewound = { empty: true }
+  await window.rewindThread("a", "c1-u1", false)
+  expect(saved().threads.a.sessionId).toBeUndefined()
+  expect(sent).toContainEqual({ type: "thread.session", tabId: "a" })
+  expect(sent).toContainEqual({ type: "session.history", tabId: "a", items: [] })
 })
 
 const codexTab = (id: string, project: string): TabInfo => ({ ...tab(id, project), agent: "codex" })

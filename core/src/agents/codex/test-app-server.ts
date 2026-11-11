@@ -1,3 +1,4 @@
+import { memoryTransport } from "../../test-support"
 import type { Transport } from "../json-rpc"
 import type { CodexModel } from "./protocol"
 
@@ -35,40 +36,20 @@ export function fakeAppServer() {
 
   const launch = (): Transport => {
     launches++
-    const queue: string[] = []
-    let wake: (() => void) | undefined
-    let closed = false
-    const say = (message: Message) => {
-      queue.push(JSON.stringify(message))
-      wake?.()
-    }
-    const hangUp = () => {
-      closed = true
-      wake?.()
-    }
+    const { transport, say, hangUp } = memoryTransport((line) => {
+      const message: Message = JSON.parse(line)
+      written.push(message)
+      const answer = message.method !== undefined && message.id !== undefined ? answers.get(message.method) : undefined
+      if (!answer) return
+      Promise.resolve()
+        .then(() => answer(message.params))
+        .then(
+          (result) => say({ id: message.id, result }),
+          (error: Error) => say({ id: message.id, error: { message: error.message } }),
+        )
+    })
     current = { say, hangUp }
-    return {
-      lines: (async function* () {
-        while (true) {
-          while (queue.length) yield queue.shift()!
-          if (closed) return
-          await new Promise<void>((resolve) => (wake = resolve))
-        }
-      })(),
-      write: (line) => {
-        const message: Message = JSON.parse(line)
-        written.push(message)
-        const answer = message.method !== undefined && message.id !== undefined ? answers.get(message.method) : undefined
-        if (!answer) return
-        Promise.resolve()
-          .then(() => answer(message.params))
-          .then(
-            (result) => say({ id: message.id, result }),
-            (error: Error) => say({ id: message.id, error: { message: error.message } }),
-          )
-      },
-      close: hangUp,
-    }
+    return transport
   }
 
   /** Every reply Desk wrote to the request Codex sent with `id`. */

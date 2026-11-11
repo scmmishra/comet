@@ -138,6 +138,13 @@ test("names the default model and its effort, and takes new settings from the ne
   expect(s.codex.sent("turn/start")[1]).toMatchObject({ model: "gpt-6-luna", effort: "high", serviceTier: null, approvalPolicy: "never", sandboxPolicy: { type: "dangerFullAccess" } })
 })
 
+test("in Auto mode, lets Codex's reviewer answer approvals in a sandbox that can write the project", async () => {
+  const s = setup({ settings: { ...SETTINGS, permissionMode: "auto" } })
+  await started(s)
+  expect(s.codex.sent("thread/start")[0]).toMatchObject({ approvalPolicy: "on-request", approvalsReviewer: "auto_review", sandbox: "workspace-write" })
+  expect(s.codex.sent("turn/start")[0]).toMatchObject({ approvalPolicy: "on-request", approvalsReviewer: "auto_review", sandboxPolicy: { type: "workspaceWrite" } })
+})
+
 test("resumes a saved thread", async () => {
   const s = setup({ resume: THREAD })
   await started(s)

@@ -1,33 +1,12 @@
 import { expect, test } from "bun:test"
-import { until } from "../test-support"
-import { JsonRpc, RpcError, type Transport } from "./json-rpc"
+import { memoryTransport, until } from "../test-support"
+import { JsonRpc, RpcError } from "./json-rpc"
 import { lines } from "./process"
 
 /** A transport a test plays the peer on: `say` sends the client a message, and `written` is what the client sent. */
 function peer() {
   const written: Record<string, unknown>[] = []
-  const queue: string[] = []
-  let wake: (() => void) | undefined
-  let closed = false
-  const transport: Transport = {
-    lines: (async function* () {
-      while (true) {
-        while (queue.length) yield queue.shift()!
-        if (closed) return
-        await new Promise<void>((resolve) => (wake = resolve))
-      }
-    })(),
-    write: (line) => void written.push(JSON.parse(line)),
-    close: () => {
-      closed = true
-      wake?.()
-    },
-  }
-  const say = (message: object | string) => {
-    queue.push(typeof message === "string" ? message : JSON.stringify(message))
-    wake?.()
-  }
-  return { transport, written, say, hangUp: transport.close }
+  return { ...memoryTransport((line) => void written.push(JSON.parse(line))), written }
 }
 
 const noHandlers = { notification: () => {}, request: () => null, closed: () => {} }
