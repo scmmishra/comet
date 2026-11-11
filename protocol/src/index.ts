@@ -399,6 +399,8 @@ export interface AgentInfo {
   readonly features: readonly AgentFeature[]
   /** The account's plan usage. Absent until read, and when the account has no plan limits. */
   readonly usage?: PlanUsage
+  /** The page a sign-in that runs waits on, so the user can open it again after closing it. */
+  readonly signInLink?: string
 }
 
 /** A past thread in a project, as its agent saved it. */
@@ -856,6 +858,8 @@ export type ClientMessage =
   | { readonly type: "agent.install"; readonly agent: AgentId }
   /** Starts an agent's sign-in, which opens in the browser, for an agent that has `sign-in`. The core answers with `agents` once it ends. */
   | { readonly type: "agent.signIn"; readonly agent: AgentId }
+  /** Stops an agent's install or sign-in. The core answers with `agents`, as the agent was before. */
+  | { readonly type: "agent.cancel"; readonly agent: AgentId }
   /** Continues a past thread in a tab that has not started one. The tab runs the thread's agent. */
   | { readonly type: "thread.resume"; readonly tabId: string; readonly agent: AgentId; readonly threadId: string }
   /** Starts a terminal, or reattaches to one already running under this id. */

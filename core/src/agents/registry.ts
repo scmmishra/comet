@@ -24,6 +24,8 @@ export type AgentSettings = Omit<AgentHost, "publish">
 export class Agents {
   private readonly agents: ReadonlyMap<AgentId, Agent>
   private readonly known: Map<AgentId, AgentInfo>
+  /** What each agent does to itself now, with the way to stop it. */
+  private readonly running = new Map<AgentId, { readonly action: AgentAction; readonly abort: AbortController }>()
   private inspected = false
 
   constructor(
@@ -74,18 +76,32 @@ export class Agents {
 
   /**
    * Runs something an agent does to itself, such as its update. The agent's row says so while it runs,
-   * and the agent is read again once it ends, whether it worked or not.
+   * and the agent is read again once it ends, whether it worked, failed or was stopped. An agent does one
+   * such thing at a time. A stop is the user's choice, so it reports no error.
    */
   async run(id: AgentId, action: AgentAction) {
     const agent = this.get(id)
-    const run = agent[action]
-    if (!run) throw new Error(`${agent.name} has no ${ACTIONS[action].name} Desk can run.`)
-    this.learn(id, { state: ACTIONS[action].state, problem: undefined })
+    const { name, state, run } = ACTIONS[action]
+    if (!agent[action]) throw new Error(`${agent.name} has no ${name} Desk can run.`)
+    if (this.running.has(id)) return
+    const abort = new AbortController()
+    this.running.set(id, { action, abort })
+    this.learn(id, { state, problem: undefined })
     try {
-      await run.call(agent)
+      await run(agent, abort.signal)
+    } catch (error) {
+      if (!abort.signal.aborted) throw error
     } finally {
+      this.running.delete(id)
+      if (this.known.get(id)?.signInLink) this.learn(id, { signInLink: undefined })
       await this.inspect(agent)
     }
+  }
+
+  /** Stops an agent's install or sign-in. An update runs to its end. */
+  cancel(id: AgentId) {
+    const running = this.running.get(id)
+    if (running && running.action !== "update") running.abort.abort()
   }
 
   close() {
@@ -111,9 +127,9 @@ export class Agents {
 
 type AgentAction = "update" | "install" | "signIn"
 
-/** What each action is called when an agent lacks it, and the state an agent shows while it runs. */
-const ACTIONS: Record<AgentAction, { readonly name: string; readonly state: AgentInfo["state"] }> = {
-  update: { name: "updater", state: "updating" },
-  install: { name: "installer", state: "installing" },
-  signIn: { name: "sign-in", state: "signing-in" },
+/** What each action is called when an agent lacks it, the state an agent shows while it runs, and how it runs. */
+const ACTIONS: Record<AgentAction, { readonly name: string; readonly state: AgentInfo["state"]; readonly run: (agent: Agent, signal: AbortSignal) => Promise<void> | undefined }> = {
+  update: { name: "updater", state: "updating", run: (agent) => agent.update?.() },
+  install: { name: "installer", state: "installing", run: (agent, signal) => agent.install?.(signal) },
+  signIn: { name: "sign-in", state: "signing-in", run: (agent, signal) => agent.signIn?.(signal) },
 }

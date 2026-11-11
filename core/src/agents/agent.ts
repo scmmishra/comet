@@ -26,18 +26,21 @@ export interface Agent {
   readonly threads: AgentThreads
   /** The slash commands the agent offers in a folder, grouped. Null when the agent could not be asked. An agent without slash commands has no such method. */
   commands?(dir: string): Promise<Skill[] | null>
-  /** Updates the agent with its own updater. */
+  /** Updates the agent with its own updater. It runs to its end, since stopping an updater midway can leave the agent broken. */
   update?(): Promise<void>
-  /** Installs the agent on this Mac. */
-  install?(): Promise<void>
-  /** Signs the user in, in the browser. It resolves once the account is signed in. */
-  signIn?(): Promise<void>
+  /** Installs the agent on this Mac. It stops, and leaves the install as it was, once `signal` aborts. */
+  install?(signal: AbortSignal): Promise<void>
+  /**
+   * Signs the user in, in the browser, and resolves once the account is signed in. It publishes the
+   * page it opened as `signInLink`, so the user can open it again. It stops once `signal` aborts.
+   */
+  signIn?(signal: AbortSignal): Promise<void>
   /** Ends what the agent keeps running between conversations, such as a server process. */
   close(): void
 }
 
 /** What an agent learned about itself. Each field replaces what Desk knew, and absent fields stay. */
-export type AgentReading = Partial<Pick<AgentInfo, "state" | "problem" | "version" | "account" | "models" | "usage">>
+export type AgentReading = Partial<Pick<AgentInfo, "state" | "problem" | "version" | "account" | "models" | "usage" | "signInLink">>
 
 /** What the core gives an agent: where to report what it learns, and the settings it reads. */
 export interface AgentHost {

@@ -1,11 +1,11 @@
 //! How each agent Desk runs looks and reads: its mark, its colour, and the words for where it stands.
 
 use crate::icons;
-use crate::protocol::{AgentAccount, AgentInfo, AgentState};
+use crate::protocol::{AgentAccount, AgentInfo, AgentState, ClientMessage};
 use crate::shell::Desk;
 use crate::theme;
 use rune::{Color, El, Icon, icon};
-use rune_kit::Kit;
+use rune_kit::{ButtonVariant, Kit};
 use rune_theme_opencode::{icons as ic, provider_icons};
 
 impl Desk {
@@ -101,10 +101,48 @@ pub fn account_line(account: &AgentAccount) -> String {
 pub fn status_line(agent: &AgentInfo) -> String {
     match agent.state {
         AgentState::Checking => "Checking the install and the account…".to_owned(),
-        AgentState::Installing => "Downloading and installing. This takes a minute or two.".to_owned(),
-        AgentState::SigningIn => "Finish signing in in your browser.".to_owned(),
         AgentState::Ready | AgentState::Updating => agent.account.as_ref().map_or_else(|| "Ready".to_owned(), account_line),
-        AgentState::Missing | AgentState::SignedOut => state_sentence(agent),
+        AgentState::Installing | AgentState::SigningIn | AgentState::Missing | AgentState::SignedOut => state_sentence(agent),
+    }
+}
+
+/// What to do about an agent that is not ready, or what Desk is doing to get it ready, in a sentence.
+pub fn setup_hint(agent: &AgentInfo) -> Option<String> {
+    match agent.state {
+        AgentState::Installing => Some("Downloading and installing. This takes a minute or two.".to_owned()),
+        AgentState::SigningIn if agent.sign_in_link.is_some() => Some("Finish signing in in your browser. If you closed the page, open it again.".to_owned()),
+        AgentState::SigningIn => Some("Opening the sign-in page in your browser…".to_owned()),
+        _ => agent.problem.clone(),
+    }
+}
+
+/// The buttons that get an agent ready: its install or its sign-in, and a way to stop either while it
+/// runs. Empty when Desk can do nothing, or nothing is needed. `install` names the install button.
+pub fn setup_actions(agent: &AgentInfo, install: String, k: &Kit) -> Vec<El> {
+    let can = |feature: &str| agent.features.iter().any(|f| f == feature);
+    let send = |message: fn(String) -> ClientMessage| {
+        let id = agent.id.clone();
+        move |s: &mut Desk| s.core.send(&message(id.clone()))
+    };
+    let button = |words: String| theme::small_button(words);
+    match agent.state {
+        AgentState::Missing if can("install") => vec![button(install).variant(ButtonVariant::Contrast).on_press(send(|agent| ClientMessage::AgentInstall { agent })).build(k)],
+        AgentState::SignedOut if can("sign-in") => vec![button("Sign in".into()).variant(ButtonVariant::Contrast).on_press(send(|agent| ClientMessage::AgentSignIn { agent })).build(k)],
+        AgentState::Installing => vec![button("Cancel".into()).variant(ButtonVariant::Outline).on_press(send(|agent| ClientMessage::AgentCancel { agent })).build(k)],
+        AgentState::SigningIn => {
+            let reopen = agent.sign_in_link.clone().map(|link| {
+                button("Open the page".into())
+                    .variant(ButtonVariant::Contrast)
+                    .on_press_tx(move |s: &mut Desk, tx| {
+                        if let Err(error) = tx.open_url(&link) {
+                            s.toasts.error("Desk could not open the sign-in page".into(), Some(error.to_string()));
+                        }
+                    })
+                    .build(k)
+            });
+            reopen.into_iter().chain([button("Cancel".into()).variant(ButtonVariant::Outline).on_press(send(|agent| ClientMessage::AgentCancel { agent })).build(k)]).collect()
+        }
+        _ => Vec::new(),
     }
 }
 
@@ -130,7 +168,7 @@ mod tests {
 
     #[test]
     fn an_agent_that_is_not_ready_says_what_to_do() {
-        let mut agent = AgentInfo { id: "codex".into(), name: "Codex".into(), state: AgentState::SignedOut, problem: Some("Sign in to use your ChatGPT plan.".into()), version: None, account: None, models: vec![], features: vec![], usage: None };
+        let mut agent = AgentInfo { id: "codex".into(), name: "Codex".into(), state: AgentState::SignedOut, problem: Some("Run `codex login` in a terminal to sign in.".into()), version: None, account: None, models: vec![], features: vec![], usage: None, sign_in_link: None };
         assert_eq!(status_line(&agent), "Codex is not signed in");
         assert_eq!(state_sentence(&agent), "Codex is not signed in");
         agent.state = AgentState::Ready;

@@ -188,6 +188,7 @@ pub enum AgentState {
 
 /// An agent as the core knows it now: whether it is installed and signed in, its models and its plan usage.
 #[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentInfo {
     pub id: String,
     /// The agent's name, such as "Claude Code".
@@ -203,6 +204,8 @@ pub struct AgentInfo {
     pub features: Vec<String>,
     /// Absent until read, and when the account has no plan limits.
     pub usage: Option<PlanUsage>,
+    /// The page a sign-in that runs waits on, so the user can open it again after closing it.
+    pub sign_in_link: Option<String>,
 }
 
 /// An MCP server Claude Code loads.
@@ -840,6 +843,9 @@ pub enum ClientMessage {
     /// Starts an agent's sign-in, which opens in the browser. The core answers with `agents` once it ends.
     #[serde(rename = "agent.signIn")]
     AgentSignIn { agent: String },
+    /// Stops an agent's install or sign-in. The core answers with `agents`, as the agent was before.
+    #[serde(rename = "agent.cancel")]
+    AgentCancel { agent: String },
     /// Turns an MCP server on or off for the project. Claude Code keeps the choice.
     #[serde(rename = "mcp.toggle")]
     McpToggle { project: String, name: String, enabled: bool },
@@ -1055,7 +1061,8 @@ mod tests {
             ClientMessage::SettingsUpdate { change: serde_json::json!({ "appearance": { "theme": "auto" }, "threads": { "agent": "codex" }, "agent": { "id": "claude", "defaults": { "effort": null } } }) },
             ClientMessage::AgentUpdate { agent: "claude".into() },
             ClientMessage::AgentInstall { agent: "antigravity".into() },
-            ClientMessage::AgentSignIn { agent: "codex".into() },
+            ClientMessage::AgentSignIn { agent: "antigravity".into() },
+            ClientMessage::AgentCancel { agent: "antigravity".into() },
             ClientMessage::McpToggle { project: "/Users/me/code/web".into(), name: "github".into(), enabled: false },
             ClientMessage::TabReopen,
             ClientMessage::TabsSave { tabs, active },

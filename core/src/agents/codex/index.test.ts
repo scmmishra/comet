@@ -4,7 +4,6 @@ import { until } from "../../test-support"
 import { fakeAppServer, MODELS } from "./test-app-server"
 import { codexAgent } from "./index"
 import { AppServer } from "./server"
-import { signIn } from "./sign-in"
 
 // Desk looks for `codex` before it starts one. The fake plays it.
 process.env.DESK_CODEX = "codex"
@@ -32,7 +31,7 @@ test("says how to sign in when Codex has no account, and names other ways of sig
   const { codex, readings, agent: codexDesk } = agent()
   codex.answer("account/read", { account: null, requiresOpenaiAuth: true })
   await codexDesk.inspect()
-  expect(readings.at(-1)).toEqual({ state: "signed-out", problem: "Sign in to use your ChatGPT plan.", account: undefined })
+  expect(readings.at(-1)).toEqual({ state: "signed-out", problem: "Run `codex login` in a terminal to sign in.", account: undefined })
   codex.answer("account/read", { account: { type: "apiKey" }, requiresOpenaiAuth: true })
   codex.answer("model/list", { data: [], nextCursor: null })
   await codexDesk.inspect()
@@ -62,25 +61,4 @@ test("reads plan usage by window, and keeps it current from Codex's updates", as
   codex.answer("account/rateLimits/read", { rateLimits: { limitId: "codex", primary: null, secondary: null } })
   await codexDesk.refreshUsage()
   expect(readings.at(-1)).toEqual({ usage: undefined })
-})
-
-test("signs in with ChatGPT in the browser, and fails with Codex's reason", async () => {
-  const codex = fakeAppServer()
-  const server = new AppServer(codex.launch)
-  const opened: string[] = []
-  codex.answer("account/login/start", { type: "chatgpt", loginId: "l1", authUrl: "https://auth.openai.com/x" })
-  const signedIn = signIn(server, (url) => void opened.push(url))
-  await until(() => opened.length === 1)
-  expect(codex.sent("account/login/start")).toEqual([{ type: "chatgpt" }])
-  codex.notify("account/login/completed", { loginId: "other", success: false, error: "Not this one" })
-  codex.notify("account/login/completed", { loginId: "l1", success: true, error: null })
-  await signedIn
-  expect(opened).toEqual(["https://auth.openai.com/x"])
-
-  codex.answer("account/login/start", { type: "chatgpt", loginId: "l2", authUrl: "https://auth.openai.com/y" })
-  const refused = signIn(server, () => {})
-  await until(() => codex.sent("account/login/start").length === 2)
-  await Bun.sleep(10)
-  codex.notify("account/login/completed", { loginId: "l2", success: false, error: "The browser was closed." })
-  expect(await refused.catch((error: Error) => error.message)).toBe("The browser was closed.")
 })

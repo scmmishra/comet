@@ -11,14 +11,15 @@ const UNZIP = "/usr/bin/unzip"
 const NOTHING_INSTALLED = "Nothing was installed."
 
 /** Saves what `url` serves at `path`. A test passes its own, so it never touches the network. */
-export type Download = (url: string, path: string) => Promise<void>
+export type Download = (url: string, path: string, signal: AbortSignal) => Promise<void>
 
 /**
  * Installs a release of Antigravity's ACP server for Desk: it downloads the archive, checks its size and
  * hash, checks that it holds only the server and its harness, and extracts them. The marker that makes the
- * install usable is written last, so a half-finished install is never run.
+ * install usable is written last, so a half-finished install is never run. Once `signal` aborts it stops
+ * before it touches the install there was, and leaves that one as it was.
  */
-export async function installRuntime(release: Release = RELEASE, download: Download = fetchTo) {
+export async function installRuntime(release: Release = RELEASE, download: Download = fetchTo, signal: AbortSignal = new AbortController().signal) {
   if (`${process.platform}-${process.arch}` !== RELEASE_PLATFORM) throw new Error("Desk installs Antigravity only on a Mac with Apple silicon.")
   mkdirSync(antigravityHome(), { recursive: true })
   const archive = join(antigravityHome(), `download-${crypto.randomUUID()}.zip`)
@@ -26,13 +27,15 @@ export async function installRuntime(release: Release = RELEASE, download: Downl
   // Set once the folder is replaced, so a failed check before then keeps an install that works.
   let replacing = false
   try {
-    await download(release.url, archive)
+    await download(release.url, archive, signal)
     const { bytes, sha256 } = await digest(archive)
     if (bytes !== release.archiveBytes || sha256 !== release.sha256) throw new Error(`The Antigravity download failed its size or SHA-256 check. ${NOTHING_INSTALLED}`)
     // Listing first means nothing outside the folder is ever written, whatever names the archive holds.
     const members = (await unzip(["-Z1", archive])).split("\n").filter(Boolean).sort()
     const expected = [release.executable.name, release.harness.name].sort()
     if (members.join("\n") !== expected.join("\n")) throw new Error(`The Antigravity download holds other files than the server and its harness. ${NOTHING_INSTALLED}`)
+    // The last moment a stop leaves the install there was untouched.
+    signal.throwIfAborted()
     replacing = true
     await rm(folder, { recursive: true, force: true })
     await unzip(["-q", archive, "-d", folder])
@@ -50,8 +53,8 @@ export async function installRuntime(release: Release = RELEASE, download: Downl
   }
 }
 
-async function fetchTo(url: string, path: string) {
-  const response = await fetch(url)
+async function fetchTo(url: string, path: string, signal: AbortSignal) {
+  const response = await fetch(url, { signal })
   if (!response.ok) throw new Error(`The Antigravity download failed with HTTP ${response.status}. ${NOTHING_INSTALLED}`)
   await Bun.write(path, response)
 }

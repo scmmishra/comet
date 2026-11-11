@@ -42,15 +42,19 @@ export function antigravityAgent(host: AgentHost): Agent {
 
     open: (dir, emit, options) => new AcpSession(dir, emit, options, flavor),
 
-    install: () => installRuntime(),
+    install: (signal) => installRuntime(undefined, undefined, signal),
 
-    async signIn() {
+    async signIn(signal) {
       const runtime = resolveRuntime()
       if (!runtime) throw new Error(`Antigravity is not installed. ${INSTALL_PROBLEM}`)
       mkdirSync(signInFolder(), { recursive: true })
       signingIn = launch(runtime, signInFolder())
       try {
-        await signInWithGoogle(signingIn, { clientInfo: flavor.clientInfo, cwd: signInFolder(), open: (link) => void spawn(["open", link]), learn: flavor.learn })
+        const open = (link: string) => {
+          void spawn(["open", link])
+          host.publish({ signInLink: link })
+        }
+        await signInWithGoogle(signingIn, { clientInfo: flavor.clientInfo, cwd: signInFolder(), open, learn: flavor.learn, signal })
       } finally {
         signingIn = undefined
       }

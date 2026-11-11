@@ -8,7 +8,7 @@ use crate::shell::{CoreState, Desk};
 /// A scene: its name, and what it sets in a fresh window.
 type Scene = (&'static str, fn(&mut Desk));
 
-pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("models-other-agent", models_other_agent), ("models-missing-agent", models_missing_agent), ("models-new-tab", models_new_tab), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-codex", settings_codex), ("settings-antigravity", settings_antigravity), ("settings-projects", settings_projects), ("settings-mcp", settings_mcp), ("file", file)];
+pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("models-other-agent", models_other_agent), ("models-missing-agent", models_missing_agent), ("models-new-tab", models_new_tab), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-codex", settings_codex), ("settings-antigravity", settings_antigravity), ("settings-signing-in", settings_signing_in), ("models-signing-in", models_signing_in), ("settings-projects", settings_projects), ("settings-mcp", settings_mcp), ("file", file)];
 
 /// The core messages in the JSON file `DESK_SCENE_FILE` names, with the thread rows in its `open` list
 /// opened.
@@ -167,6 +167,24 @@ fn settings_antigravity(s: &mut Desk) {
     s.show_settings_agent("antigravity");
 }
 
+/// Antigravity signing in, with the page it opened, in Providers and in the picker.
+fn signing_in(s: &mut Desk) {
+    let agents: Vec<serde_json::Value> = s.account.agents.iter().map(|a| serde_json::json!({ "id": a.id, "name": a.name, "state": "ready", "features": a.features, "models": [] })).collect();
+    let mut agents = agents;
+    agents[2] = serde_json::json!({ "id": "antigravity", "name": "Antigravity", "state": "signing-in", "signInLink": "https://accounts.google.com/o/oauth2/v2/auth?state=s", "features": ["delete", "install", "sign-in"], "models": [] });
+    s.receive(Event::Message(serde_json::from_value(serde_json::json!({ "type": "agents", "agents": agents })).expect("the agents decode"))).expect("agents need no folder");
+}
+
+fn settings_signing_in(s: &mut Desk) {
+    settings_antigravity(s);
+    signing_in(s);
+}
+
+fn models_signing_in(s: &mut Desk) {
+    models_missing_agent(s);
+    signing_in(s);
+}
+
 /// The settings and the agents every scene with a picker or a settings page starts from: Claude Code
 /// and Codex ready, each on a plan, and Antigravity not installed.
 fn agents(s: &mut Desk) {
@@ -197,7 +215,7 @@ fn agents(s: &mut Desk) {
                 "id": "codex", "name": "Codex", "state": "ready",
                 "version": { "installed": "0.167.0", "updateAvailable": false, "updatable": false },
                 "account": { "email": "me@example.com", "plan": "plus" },
-                "features": ["steer", "rewind", "fork", "rename", "delete", "sign-in"],
+                "features": ["steer", "rewind", "fork", "rename", "delete"],
                 "usage": { "windows": [{ "id": "primary", "label": "Session", "percent": 9 }, { "id": "secondary", "label": "This week", "percent": 31 }] },
                 "models": [
                     { "value": "default", "label": "Default", "description": "Latest workhorse model for coding and everyday work.", "runs": "GPT-6.1-Sol", "efforts": codex_efforts, "defaultEffort": "low", "fast": true, "permissionModes": modes },

@@ -8,7 +8,7 @@
 use crate::agents::{self, mark, state_label};
 use crate::icons;
 use crate::models::{self, effort_label, option_label, permission, permission_for, permission_modes};
-use crate::protocol::{AgentInfo, AgentState, ClientMessage, ModelOption, TabInfo};
+use crate::protocol::{AgentInfo, AgentState, ModelOption, TabInfo};
 use crate::shell::Desk;
 use crate::theme;
 use crate::workspace::Place;
@@ -338,13 +338,7 @@ fn other_agent_notice(s: &Desk, tab: &TabInfo, agent: &AgentInfo, k: &Kit) -> El
 
 /// An agent with no models to show yet: where it stands, what to do, and the button that does it.
 fn not_ready(agent: &AgentInfo, k: &Kit) -> El {
-    let id = agent.id.clone();
-    let can = |feature: &str| agent.features.iter().any(|f| f == feature);
-    let action = match agent.state {
-        AgentState::Missing if can("install") => Some(crate::theme::small_button(format!("Install {}", agent.name)).variant(ButtonVariant::Contrast).on_press(move |s: &mut Desk| s.core.send(&ClientMessage::AgentInstall { agent: id.clone() })).build(k)),
-        AgentState::SignedOut if can("sign-in") => Some(crate::theme::small_button("Sign in").variant(ButtonVariant::Contrast).on_press(move |s: &mut Desk| s.core.send(&ClientMessage::AgentSignIn { agent: id.clone() })).build(k)),
-        _ => None,
-    };
+    let actions = agents::setup_actions(agent, format!("Install {}", agent.name), k);
     col()
         .w_full()
         .grow(1.0)
@@ -353,8 +347,8 @@ fn not_ready(agent: &AgentInfo, k: &Kit) -> El {
         .px(28.0)
         .child(mark(&agent.id, 28.0, k).opacity(NOT_READY))
         .child(text(agents::state_sentence(agent)).font(crate::theme::medium(13.0)).color(k.c.text_base))
-        .children(agent.problem.clone().map(|problem| text(problem).font(crate::theme::text(12.0).lh(18.0)).color(k.c.text_muted).wrap().align(rune::Align::Center)))
-        .children(action)
+        .children(agents::setup_hint(agent).map(|hint| text(hint).font(crate::theme::text(12.0).lh(18.0)).color(k.c.text_muted).wrap().align(rune::Align::Center)))
+        .children((!actions.is_empty()).then(|| row().gap(8.0).children(actions)))
 }
 
 /// The effort levels of the tab's model. Another agent's models have none to set until one is picked.

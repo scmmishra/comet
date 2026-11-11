@@ -41,6 +41,21 @@ test("installs the server and its harness as programs, and writes the marker las
   expect(readdirSync(antigravityHome()).some((name) => name.startsWith("download-"))).toBe(false)
 })
 
+test("a stopped install keeps the install there was and leaves no download behind", async () => {
+  const before = release({ "agy_acp_server.par": "server", localharness_external: "harness" }, "9.0.5")
+  await installRuntime(before.release, copyFrom(before.archive))
+  const stop = new AbortController()
+  // The download finishes as the user stops, so the stop lands before the folder is replaced.
+  const stopping = async (url: string, path: string, signal: AbortSignal) => {
+    await copyFrom(before.archive)(url, path)
+    stop.abort()
+    signal.throwIfAborted()
+  }
+  await expect(installRuntime(before.release, stopping, stop.signal)).rejects.toThrow()
+  expect(existsSync(join(runtimeFolder("9.0.5"), INSTALLED_MARKER))).toBe(true)
+  expect(readdirSync(antigravityHome()).some((name) => name.startsWith("download-"))).toBe(false)
+})
+
 test("refuses a download whose hash does not match, and keeps the install there was", async () => {
   const built = release({ "agy_acp_server.par": "server", localharness_external: "harness" }, "9.0.1")
   await installRuntime(built.release, copyFrom(built.archive))

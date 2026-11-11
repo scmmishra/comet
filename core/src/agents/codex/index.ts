@@ -5,11 +5,11 @@ import { ModelCatalog, modelOptions } from "./models"
 import type { CodexAccount } from "./protocol"
 import { AppServer, launchCodex, type Launch } from "./server"
 import { CodexSession } from "./session"
-import { signIn } from "./sign-in"
 import { codexThreads } from "./threads"
 import { Usage } from "./usage"
 
-const SIGN_IN = "Sign in to use your ChatGPT plan."
+/** Codex keeps its own login, which its CLI runs. Desk uses whatever account Codex has. */
+const SIGN_IN = "Run `codex login` in a terminal to sign in."
 
 /**
  * OpenAI's Codex, run through its app-server. Desk runs the `codex` installed on this Mac, so it uses the
@@ -23,7 +23,7 @@ export function codexAgent(host: AgentHost, launch: Launch = launchCodex): Agent
   return {
     id: "codex",
     name: "Codex",
-    features: ["steer", "rewind", "fork", "rename", "delete", "sign-in"],
+    features: ["steer", "rewind", "fork", "rename", "delete"],
     threads: codexThreads(server),
 
     async inspect() {
@@ -39,7 +39,6 @@ export function codexAgent(host: AgentHost, launch: Launch = launchCodex): Agent
 
     open: (dir: string, emit: Emit, options: SessionOptions) => new CodexSession(dir, emit, options, server, catalog),
 
-    signIn: () => signIn(server),
 
     close: () => server.close(),
   }

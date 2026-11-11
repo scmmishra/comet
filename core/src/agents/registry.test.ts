@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import type { AgentInfo, CoreMessage } from "@desk/protocol"
-import { fakeAgent } from "../test-support"
+import { fakeAgent, until } from "../test-support"
 import { requireFeature } from "./agent"
 import { Agents } from "./registry"
 
@@ -51,6 +51,45 @@ test("an agent that cannot be read says why in its own row, and the others still
   await Bun.sleep(0)
   expect(row(last(sent), "codex")).toMatchObject({ state: "signed-out", problem: "codex exited with code 1" })
   expect(row(last(sent), "claude").state).toBe("ready")
+})
+
+test("stops a sign-in the user cancels, reports no error, and reads the agent again", async () => {
+  const sent: CoreMessage[] = []
+  const codex = fakeAgent("codex", ["sign-in"])
+  let started = false
+  const agents = new Agents((message) => sent.push(message), settings, {
+    codex: (host) => ({
+      ...codex.make(host),
+      signIn: (signal) => {
+        started = true
+        host.publish({ signInLink: "https://auth.openai.com/x" })
+        return new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("Cancelled."))))
+      },
+    }),
+  })
+  const signingIn = agents.run("codex", "signIn")
+  await until(() => started)
+  expect(row(last(sent), "codex")).toMatchObject({ state: "signing-in", signInLink: "https://auth.openai.com/x" })
+  // A second ask while one runs does nothing.
+  await agents.run("codex", "signIn")
+  agents.cancel("codex")
+  await signingIn
+  expect(row(last(sent), "codex").state).toBe("ready")
+  expect(row(last(sent), "codex").signInLink).toBeUndefined()
+})
+
+test("lets an update run to its end, since stopping an updater can break the agent", async () => {
+  const claude = fakeAgent("claude")
+  let finish = () => {}
+  let done = false
+  const agents = new Agents(() => {}, settings, { claude: (host) => ({ ...claude.make(host), update: () => new Promise<void>((resolve) => (finish = resolve)) }) })
+  const updating = agents.run("claude", "update").then(() => void (done = true))
+  agents.cancel("claude")
+  await Bun.sleep(10)
+  expect(done).toBe(false)
+  finish()
+  await updating
+  expect(done).toBe(true)
 })
 
 test("reads each agent's slash commands, and none from an agent that has none", async () => {

@@ -5,6 +5,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 ## Unreleased
 
 - Desk runs Codex and Antigravity beside Claude Code. Each uses the login and the plan it already has: Codex your ChatGPT plan, through the `codex` on your Mac, and Antigravity your Google account, through Google's own server, which Desk installs from Settings. No API key is needed.
+- Installing Antigravity and signing in to it can be stopped with Cancel. While the sign-in waits, Open the page brings back Google's sign-in page if you closed it. A sign-in that went wrong waited five minutes before the button came back.
 - The model picker has a rail of agents. A new tab can move to any agent and any of its models. Once a thread has started it keeps its agent, and another agent's models show with a button that opens a new tab on that agent. An agent that is not installed or not signed in says so there, with the button that fixes it.
 - One agent can hand a task to another. Ask Claude to have Codex review a change, or Codex to ask Claude for a second opinion. The other agent works in the same folder, with permissions no broader than the thread's, and its answer comes back to the thread. The task shows in the Subagents card with the agent and the model it runs on.
 - Settings > Providers shows what every new tab starts with, then one agent at a time: its account, version, default model, effort and permissions, and its plan usage. The usage meter in the tab bar follows the active tab's agent and lists every agent's limits.

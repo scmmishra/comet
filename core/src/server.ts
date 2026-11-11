@@ -142,6 +142,8 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         return agents.run(message.agent, "install")
       case "agent.signIn":
         return agents.run(message.agent, "signIn")
+      case "agent.cancel":
+        return agents.cancel(message.agent)
       case "tabs.save":
         window.save(message.tabs, message.active)
         return layouts.sendVisible()

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { until } from "../../test-support"
 import { fakeAcpAgent, FAKE_OPTIONS } from "../acp/test-agent"
 import { signInWithGoogle } from "./sign-in"
 import { BROWSER_COMMAND, signInLink } from "./sign-in-link"
@@ -41,7 +42,7 @@ test("opens the link the agent prints once, and is done when a session opens", a
       return {}
     },
   })
-  await signInWithGoogle(agent.process, { clientInfo: { name: "zed", version: "0.0.0" }, cwd: "/tmp/sign-in", open: (link) => void opened.push(link), learn: (options, fresh) => void learned.push([options, fresh]) })
+  await signInWithGoogle(agent.process, { clientInfo: { name: "zed", version: "0.0.0" }, cwd: "/tmp/sign-in", open: (link) => void opened.push(link), learn: (options, fresh) => void learned.push([options, fresh]), signal: new AbortController().signal })
   expect(opened).toEqual([LINK])
   expect(agent.sent("authenticate")).toEqual([{ methodId: "oauth-personal" }])
   expect(agent.sent("session/new")).toEqual([{ cwd: "/tmp/sign-in", mcpServers: [] }])
@@ -50,10 +51,26 @@ test("opens the link the agent prints once, and is done when a session opens", a
 })
 
 test("says so when the account has no plan, and gives up after the timeout", async () => {
-  const options = { clientInfo: { name: "zed", version: "0.0.0" }, cwd: "/tmp", open: () => {}, learn: () => {} }
+  const options = { clientInfo: { name: "zed", version: "0.0.0" }, cwd: "/tmp", open: () => {}, learn: () => {}, signal: new AbortController().signal }
   const refused = fakeAcpAgent({ "session/new": () => Promise.reject({ code: -32603, message: "SUBSCRIPTION_REQUIRED: no plan" }) })
   await expect(signInWithGoogle(refused.process, options)).rejects.toThrow("This Google account has no plan that includes Antigravity.")
   const waiting = fakeAcpAgent({ authenticate: () => new Promise(() => {}) })
   await expect(signInWithGoogle(waiting.process, { ...options, timeoutMs: 20 })).rejects.toThrow("Google sign-in timed out. Start sign-in again.")
+  expect(await waiting.process.exited).toBe(1)
+})
+
+test("stops when the user stops it, and ends the agent's process", async () => {
+  const stop = new AbortController()
+  const opened: string[] = []
+  const waiting = fakeAcpAgent({
+    authenticate: () => {
+      waiting.print(PRINTED)
+      return new Promise(() => {})
+    },
+  })
+  const signingIn = signInWithGoogle(waiting.process, { clientInfo: { name: "zed", version: "0.0.0" }, cwd: "/tmp", open: (link) => void opened.push(link), learn: () => {}, signal: stop.signal })
+  await until(() => opened.length === 1)
+  stop.abort()
+  await expect(signingIn).rejects.toThrow("Cancelled.")
   expect(await waiting.process.exited).toBe(1)
 })

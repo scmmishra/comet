@@ -1,3 +1,4 @@
+import { whenAborted } from "../abort"
 import { AcpConnection } from "../acp/connection"
 import { CANCELLED } from "../acp/permissions"
 import type { ClientInfo, ConfigOption } from "../acp/protocol"
@@ -19,13 +20,16 @@ export interface SignInOptions {
   readonly open: (link: string) => void
   /** The settings the signed-in session reported, such as the account's models. */
   readonly learn: (options: readonly ConfigOption[], opened: boolean) => void
+  /** Aborts when the user stops the sign-in. */
+  readonly signal: AbortSignal
   readonly timeoutMs?: number
 }
 
 /**
  * Signs the user in to Antigravity with their Google account, on a process started for it. The agent
  * announces Google's link once it authenticates, and Desk opens the link after it checks it. The sign-in
- * is done once the agent opens a session, which also reads the account's models. The process ends either way.
+ * is done once the agent opens a session, which also reads the account's models. It stops when the user
+ * stops it or after a timeout. The process ends either way.
  */
 export async function signInWithGoogle(process: Process, options: SignInOptions) {
   let opened = false
@@ -55,7 +59,7 @@ export async function signInWithGoogle(process: Process, options: SignInOptions)
     timer = setTimeout(() => reject(new Error("Google sign-in timed out. Start sign-in again.")), options.timeoutMs ?? SIGN_IN_TIMEOUT_MS)
   })
   try {
-    await Promise.race([signedIn, timedOut])
+    await Promise.race([signedIn, timedOut, whenAborted(options.signal)])
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     throw message.includes(SUBSCRIPTION_REQUIRED) ? new Error("This Google account has no plan that includes Antigravity.") : error

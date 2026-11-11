@@ -259,8 +259,8 @@ fn providers(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
     }
     // One agent shows at a time, so the page stays short however many agents Desk runs.
     if let Some(agent) = s.settings.agent.as_deref().and_then(|id| s.account.agent(id)).or_else(|| s.account.agent(s.account.default_agent())).or(s.account.agents.first()) {
-        // An agent that is not ready says so in its first row, beside the button that gets it ready.
-        let heading = agent_action(agent, k).is_none().then(|| agent_heading(agent, k));
+        // An agent that is not ready says so in its first row, beside what gets it ready.
+        let heading = (!heading_hidden(agent)).then(|| agent_heading(agent, k));
         sections.push(section_with(agent_tabs(s, &agent.id, k), col().w_full().gap(12.0).children(heading).child(agent_settings(s, agent, k, layer))));
     }
     col().w_full().child(header(k, "Providers", "The coding agents Desk runs, and what a new tab starts with.")).child(body(sections))
@@ -316,6 +316,11 @@ fn agent_tabs(s: &Desk, shown: &str, k: &Kit) -> El {
     row().w_full().gap(4.0).role("tablist").label("Agents").children(tabs)
 }
 
+/// Whether an agent stands in the way of its own use, so its rows lead with that instead of its account.
+fn heading_hidden(agent: &AgentInfo) -> bool {
+    matches!(agent.state, AgentState::Missing | AgentState::SignedOut | AgentState::Installing | AgentState::SigningIn)
+}
+
 /// What the agent on show runs on: who is signed in, and where it stands.
 fn agent_heading(agent: &AgentInfo, k: &Kit) -> El {
     let badge = Badge::new(state_label(agent.state)).variant(if agent.state == AgentState::Ready { BadgeVariant::Accent } else { BadgeVariant::Neutral }).build(k);
@@ -326,9 +331,11 @@ fn agent_heading(agent: &AgentInfo, k: &Kit) -> El {
 /// that is not ready shows only what stands in the way, with the button that clears it.
 fn agent_settings(s: &Desk, agent: &AgentInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let mut rows = Vec::new();
-    // An agent that is not ready leads with the button that gets it ready.
-    if let Some(action) = agent_action(agent, k) {
-        rows.push(setting(k, title(k, &crate::agents::state_sentence(agent)), agent.problem.clone(), Some(action)));
+    // An agent that is not ready leads with what stands in the way, and the buttons that clear it.
+    if heading_hidden(agent) {
+        let actions = crate::agents::setup_actions(agent, "Install".into(), k);
+        let buttons = (!actions.is_empty()).then(|| row().gap(8.0).children(actions));
+        rows.push(setting(k, title(k, &crate::agents::state_sentence(agent)), crate::agents::setup_hint(agent), buttons));
     }
     if let Some(version) = agent.version.as_ref().filter(|v| v.installed.is_some()) {
         rows.push(setting(k, title(k, "Version"), Some(version_line(agent, version)), update_button(agent, version, k)));
@@ -353,19 +360,6 @@ fn agent_settings(s: &Desk, agent: &AgentInfo, k: &Kit, layer: &mut Vec<El>) -> 
         return text(agent.problem.clone().unwrap_or_else(|| "Nothing to set yet.".to_owned())).key(format!("agent-rows-{}", agent.id)).font(crate::theme::text(13.0)).color(k.c.text_faint).wrap();
     }
     list(k, rows).key(format!("agent-rows-{}", agent.id))
-}
-
-/// The button that gets an agent ready: its install, or its sign-in. None when Desk can do neither, or nothing is needed.
-fn agent_action(agent: &AgentInfo, k: &Kit) -> Option<El> {
-    let id = agent.id.clone();
-    let can = |feature: &str| agent.features.iter().any(|f| f == feature);
-    match agent.state {
-        AgentState::Missing if can("install") => Some(crate::theme::small_button("Install").variant(ButtonVariant::Contrast).on_press(move |s: &mut Desk| s.core.send(&ClientMessage::AgentInstall { agent: id.clone() })).build(k)),
-        AgentState::SignedOut if can("sign-in") => Some(crate::theme::small_button("Sign in").variant(ButtonVariant::Contrast).on_press(move |s: &mut Desk| s.core.send(&ClientMessage::AgentSignIn { agent: id.clone() })).build(k)),
-        AgentState::Installing => Some(crate::theme::small_button("Installing…").disabled(true).build(k)),
-        AgentState::SigningIn => Some(crate::theme::small_button("Signing in…").disabled(true).build(k)),
-        _ => None,
-    }
 }
 
 fn version_line(agent: &AgentInfo, version: &AgentVersion) -> String {
