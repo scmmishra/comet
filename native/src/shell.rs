@@ -181,7 +181,7 @@ impl Desk {
     /// Closes the popover Desk draws, if one is open, as Escape does: the model picker, the usage popover,
     /// a subagent's detail or the header chip's cards. Rune's menus and selects close themselves.
     pub fn close_popover(&mut self) -> bool {
-        self.close_picker() || self.close_usage() || self.close_cards()
+        self.close_picker() || self.close_usage() || self.close_cards() || self.close_icon_picker()
     }
 
     /// Brings a tab to the front, reading what its start screen and pane show.
@@ -432,7 +432,7 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, window: 
         .shrink()
         .gap(7.0)
         .items_center()
-        .child(project_mark(&s.account, &tab.project, k))
+        .child(project_mark(s, &tab.project, k))
         .child(text(name).font(crate::theme::text(13.0)).color(k.c.text_muted))
         .child(text("/").font(crate::theme::text(13.0)).color(k.c.text_faint))
         .child(text(tab.title.clone()).font(crate::theme::medium(13.0)).color(k.c.text_base).truncate());
@@ -489,20 +489,31 @@ fn thread_composer(s: &Desk, tab: &TabInfo, lane: Option<crate::cards::Lane>, k:
     thread_view::in_lane(col().w_full().pt(6.0).pb(16.0).child(composer::composer(s, tab, composer::ListAt::Above, k, layer)), lane)
 }
 
-/// A project's mark, as `@opencode/ui`'s ProjectAvatar draws it: the initial on a tile in the colour
-/// Settings gave the project, gray without one, lit from the top.
-pub fn project_mark(account: &Account, project: &str, k: &rune_kit::Kit) -> El {
-    let initial = account.project_label(project).chars().next().unwrap_or(' ').to_uppercase().to_string();
-    let color = account.project_color(project).unwrap_or("gray");
+/// A project's mark, as the Electron app's ProjectMark draws it: the icon Settings chose, on its own, else
+/// the initial on a tile in the project's colour.
+pub fn project_mark(s: &Desk, project: &str, k: &rune_kit::Kit) -> El {
+    let icon = s.account.project_icon(project).and_then(|path| s.images.file(&std::path::Path::new(project).join(path)));
+    match icon {
+        // An icon is often a transparent logo, so it shows whole, without the tile.
+        Some(image) => rune::el().size(PROJECT_MARK, PROJECT_MARK).pixels_fit(image.pixels(), rune::SurfaceFit::Fit),
+        None => {
+            let initial = s.account.project_label(project).chars().next().unwrap_or(' ').to_uppercase().to_string();
+            avatar(&initial, s.account.project_color(project).unwrap_or("gray"), PROJECT_MARK, k)
+        }
+    }
+}
+
+/// `@opencode/ui`'s ProjectAvatar: an initial on a tile in one of its colours, lit from the top.
+pub fn avatar(initial: &str, color: &str, size: f32, k: &rune_kit::Kit) -> El {
     let theme = rune_theme_opencode::theme(k.dark);
     row()
-        .size(PROJECT_MARK, PROJECT_MARK)
+        .size(size, size)
         .radius(4.0)
         .center()
         .fill(theme.color(&format!("v2-avatar-bg-{color}")))
         .gradient(Color::WHITE.alpha(0.16), Color::WHITE.alpha(0.0))
         .border(0.5, theme.color(&format!("v2-avatar-border-{color}")))
-        .child(text(initial).font(rune::TextStyle::new(11.0, 530.0).lh(11.0).tracking(0.05)).color(theme.color("v2-avatar-fg")))
+        .child(text(initial.to_owned()).font(rune::TextStyle::new(11.0, 530.0).lh(11.0).tracking(0.05)).color(theme.color("v2-avatar-fg")))
 }
 
 #[cfg(test)]

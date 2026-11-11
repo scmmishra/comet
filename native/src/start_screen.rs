@@ -83,7 +83,7 @@ fn project_switcher(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
         .hover(k.c.hover)
         .role("button")
         .on_press(|s: &mut Desk| s.start.project_menu = !s.start.project_menu)
-        .child(shell::project_mark(&s.account, &tab.project, k))
+        .child(shell::project_mark(s, &tab.project, k))
         .child(text(name).font(crate::theme::text(13.0)).color(k.c.text_muted))
         .child(icon(&ic::CHEVRON_DOWN, crate::icons::SIZE).color(k.c.text_faint));
     let mut menu = Menu::new("project-menu").trigger(trigger).open(s.start.project_menu).placement(Placement::BottomStart).gutter(8.0).min_width(280.0).group_label("Projects").on_close(|s: &mut Desk| s.start.project_menu = false);

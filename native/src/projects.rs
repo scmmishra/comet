@@ -16,6 +16,8 @@ pub struct Project {
     pub commands: Option<Vec<CommandInfo>>,
     /// What the project's plugins offer in the palette.
     pub plugins: Option<PluginContributions>,
+    /// Images in the project that look like its logo, for the icon picker, as paths inside it. None until read.
+    pub icons: Option<Vec<String>>,
     /// The MCP servers Claude Code loads in the project. Some(None) when it could not be asked.
     pub mcp: Option<Option<Vec<McpServer>>>,
 }
@@ -37,6 +39,7 @@ impl Projects {
             "threads" => project.threads = serde_json::from_value(value).ok(),
             "space" => project.space = serde_json::from_value(value).ok(),
             "skills" => project.skills = serde_json::from_value(value).ok(),
+            "icons" => project.icons = serde_json::from_value(value).ok(),
             "commands" => project.commands = serde_json::from_value(value).ok(),
             "plugins" => project.plugins = serde_json::from_value(value).ok(),
             "mcp" => project.mcp = Some(serde_json::from_value(value).ok()),

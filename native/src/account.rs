@@ -41,6 +41,11 @@ impl Account {
         self.project(dir).and_then(|p| p.color.as_deref())
     }
 
+    /// The image Settings gave as a project's icon, as a path inside it, if any.
+    pub fn project_icon(&self, dir: &str) -> Option<&str> {
+        self.project(dir).and_then(|p| p.icon.as_deref())
+    }
+
     fn project(&self, dir: &str) -> Option<&ProjectSettings> {
         self.settings.as_ref()?.projects.get(dir)
     }

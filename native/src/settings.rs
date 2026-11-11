@@ -27,6 +27,8 @@ const PROJECT_COLORS: [&str; 9] = ["orange", "yellow", "cyan", "green", "red", "
 #[derive(Default)]
 pub struct SettingsUi {
     open_select: Option<String>,
+    /// The project whose icon picker is open.
+    icon_picker: Option<String>,
     fields: std::collections::HashMap<String, TextEdit>,
 }
 
@@ -48,6 +50,11 @@ impl Desk {
             }
             _ => {}
         }
+    }
+
+    /// Closes the icon picker, as Escape does. Whether it was open.
+    pub fn close_icon_picker(&mut self) -> bool {
+        self.settings.icon_picker.take().is_some()
     }
 
     /// Returns to the tab.
@@ -155,7 +162,12 @@ fn body(children: Vec<El>) -> El {
 }
 
 fn section(k: &Kit, title: String, child: El) -> El {
-    col().w_full().gap(12.0).child(text(title).font(crate::theme::medium(13.0)).color(k.c.text_base)).child(child)
+    section_with(text(title).font(crate::theme::medium(13.0)).color(k.c.text_base), child)
+}
+
+/// A section under a heading of the caller's making, such as a project's mark, name and folder.
+fn section_with(heading: El, child: El) -> El {
+    col().w_full().gap(12.0).child(heading).child(child)
 }
 
 /// Rows on one raised surface, after OpenCode's SettingsList.
@@ -359,7 +371,7 @@ fn appearance(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
     col().w_full().child(header(k, "Appearance", "How Desk looks. Changes apply at once.")).child(body(vec![list(k, rows)]))
 }
 
-fn projects(s: &Desk, k: &Kit, _layer: &mut Vec<El>) -> El {
+fn projects(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
     let mut dirs: Vec<String> = Vec::new();
     for tab in &s.workspace.tabs {
         if !dirs.contains(&tab.project) {
@@ -372,31 +384,113 @@ fn projects(s: &Desk, k: &Kit, _layer: &mut Vec<El>) -> El {
         let name = field(s, k, format!("name:{dir}"), settings.name.clone().unwrap_or_default(), format::project_name(dir), "Project name", move |s, typed| {
             s.save_project(&save_dir, |p| p.name = (!typed.is_empty()).then_some(typed));
         });
-        let swatches = row().gap(6.0).children(PROJECT_COLORS.iter().map(|color| {
+        // Each colour as the project's letter would draw in it, outlined in the accent when chosen.
+        let initial = s.account.project_label(dir).chars().next().unwrap_or(' ').to_uppercase().to_string();
+        let swatches = row().gap(6.0).role("radiogroup").label("Project color").children(PROJECT_COLORS.iter().map(|color| {
             let picked = settings.color.as_deref() == Some(*color);
             let dir = dir.clone();
-            let fill = rune_theme_opencode::theme(k.dark).color(&format!("v2-avatar-bg-{color}"));
-            el().key(format!("color-{color}"))
-                .size(20.0, 20.0)
-                .radius(5.0)
-                .fill(fill)
-                .border(if picked { 2.0 } else { 0.5 }, if picked { k.c.text_base } else { k.c.border_base })
+            let swatch = row()
+                .key(format!("color-{color}"))
+                .padding(2.0)
+                .radius(6.0)
                 .role("radio")
                 .checked(picked)
                 .label(*color)
+                .help(format!("{}{}", color[..1].to_uppercase(), &color[1..]))
                 .on_press(move |s: &mut Desk| s.save_project(&dir, |p| p.color = Some(color.to_string())))
+                .child(crate::shell::avatar(&initial, color, 24.0, k));
+            if picked { swatch.border(2.0, k.c.text_accent) } else { swatch }
         }));
-        let heading = format!("{} · {}", s.account.project_label(dir), format::short_path(dir));
-        section(
-            k,
+        let heading = row()
+            .w_full()
+            .gap(8.0)
+            .items_center()
+            .child(crate::shell::project_mark(s, dir, k))
+            .child(text(s.account.project_label(dir)).font(crate::theme::medium(13.0)).color(k.c.text_base))
+            .child(text(format::short_path(dir)).font(crate::theme::text(13.0)).color(k.c.text_faint).truncate().min_w(0.0));
+        section_with(
             heading,
             list(k, vec![
                 setting(k, title(k, "Name"), Some("Leave it empty to use the folder's name. Enter saves it.".into()), Some(name)),
                 setting(k, title(k, "Color"), Some("The colour of the project's letter, when it has no icon.".into()), Some(swatches)),
+                setting(k, title(k, "Icon"), Some("An image from the project, such as its logo or favicon.".into()), Some(icon_picker(s, dir, settings.icon.as_deref(), k, layer))),
             ]),
         )
     });
     col().w_full().child(header(k, "Projects", "How each project open in a tab shows in tabs and menus.")).child(body(sections.collect()))
+}
+
+/// The project's logo-like images to choose its icon from, after the Electron app's IconPicker. It asks the
+/// core for them each time it opens, so new files show.
+fn icon_picker(s: &Desk, dir: &str, current: Option<&str>, k: &Kit, layer: &mut Vec<El>) -> El {
+    let key = format!("icon-picker-{dir}");
+    let open = s.settings.icon_picker.as_deref() == Some(dir);
+    let toggle_dir = dir.to_owned();
+    let words = if current.is_some() { "Change" } else { "Choose" };
+    let mark = crate::shell::project_mark(s, dir, k);
+    let trigger = crate::theme::button(words)
+        .variant(ButtonVariant::Outline)
+        .label_with(move |font, ink| row().gap(8.0).items_center().child(mark).child(text(words).font(font).color(ink)))
+        .expanded(open)
+        .on_press(move |s: &mut Desk| {
+            let opening = s.settings.icon_picker.as_deref() != Some(toggle_dir.as_str());
+            s.settings.icon_picker = opening.then(|| toggle_dir.clone());
+            if opening {
+                s.core.send(&ClientMessage::ProjectGet { project: toggle_dir.clone(), part: "icons".into() });
+            }
+        })
+        .build(k);
+    let trigger = row().key(key.clone()).child(trigger);
+    if !open {
+        return trigger;
+    }
+    let faint = |words: &str| text(words.to_owned()).font(crate::theme::text(13.0)).color(k.c.text_faint).wrap().px(4.0).py(8.0);
+    let pick = |icon: Option<String>| {
+        let dir = dir.to_owned();
+        move |s: &mut Desk| {
+            let icon = icon.clone();
+            s.save_project(&dir, |p| p.icon = icon);
+            s.settings.icon_picker = None;
+        }
+    };
+    let found = s.projects.get(dir).and_then(|p| p.icons.as_ref());
+    let content = match found {
+        None => faint("Looking for images…"),
+        Some(files) if files.is_empty() => faint("No logo, icon or favicon images in this project."),
+        Some(files) => {
+            let tiles: Vec<El> = files
+                .iter()
+                .map(|file| {
+                    let image = s.images.file(&std::path::Path::new(dir).join(file));
+                    let tile = row()
+                        .key(format!("icon-{file}"))
+                        .size(44.0, 44.0)
+                        .center()
+                        .radius(7.0)
+                        .fill(k.c.layer_02)
+                        .hover(k.c.hover)
+                        .role("button")
+                        .label(file.clone())
+                        .help(file.clone())
+                        .on_press(pick(Some(file.clone())))
+                        .children(image.map(|image| el().size(28.0, 28.0).pixels_fit(image.pixels(), rune::SurfaceFit::Fit)));
+                    if current == Some(file.as_str()) { tile.border(2.0, k.c.text_accent) } else { tile }
+                })
+                .collect();
+            // Six to a row, as the Electron app's grid lays them out.
+            let mut rows = Vec::new();
+            let mut tiles = tiles.into_iter().peekable();
+            while tiles.peek().is_some() {
+                rows.push(row().gap(6.0).children(tiles.by_ref().take(6).collect::<Vec<_>>()));
+            }
+            col().gap(6.0).max_h(300.0).scroll(ScrollSpec { stick_bottom: false }).children(rows)
+        }
+    };
+    let none = current.map(|_| crate::theme::button("No icon").variant(ButtonVariant::Ghost).on_press(pick(None)).build(k));
+    let body = col().w(340.0).padding(12.0).gap(8.0).items_start().child(content).children(none);
+    layer.insert(0, rune_kit::scrim("icon-picker-scrim", |s: &mut Desk| s.settings.icon_picker = None));
+    layer.push(rune_kit::popover::anchored(k, crate::ui::popover(k, body), &key, rune_kit::Placement::BottomEnd, 6.0));
+    trigger
 }
 
 fn mcps(s: &Desk, k: &Kit) -> El {

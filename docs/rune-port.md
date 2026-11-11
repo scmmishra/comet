@@ -86,9 +86,6 @@ Done:
 - Meters: the context ring and the usage button.
 - Settings (⌘,): Providers, Appearance, Projects, MCP servers and Skills. Showing a tab closes them, as in the Electron app.
 
-Left out, for now:
-
-- A project's icon in Projects. It waits on the project mark (see Open decisions). A project's saved name and colour show already.
 
 ### Phase 5: Switch
 
@@ -101,7 +98,7 @@ Left out, for now:
 ## Open decisions
 
 - **The tab bar.** Rune's `TabStrip` draws OpenCode's tabs: 13 px medium text and OpenCode's widths. The Electron app draws its own: 210 px tabs with 12 px regular text and the project mark. Either Desk builds its own tab bar in Rune, or the theme changes `ui_compact`, which other components also read.
-- **The project mark.** `@opencode/ui`'s avatar draws generated art. The native app draws the project's initial on a tile until it has an equivalent.
+- **The project mark.** `@opencode/ui`'s avatar draws generated art for a project with no colour or icon. The native app draws the initial on a gray tile there.
 
 ## Rune gaps
 

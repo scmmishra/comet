@@ -483,7 +483,7 @@ fn shortcut(keys: &[&str], k: &Kit) -> El {
 
 fn entry_row(s: &Desk, entry: &Entry, index: usize, active: bool, k: &Kit) -> El {
     let lead = match (&entry.project, entry.file_icon, entry.icon) {
-        (Some(project), ..) => Some(shell::project_mark(&s.account, project, k)),
+        (Some(project), ..) => Some(shell::project_mark(s, project, k)),
         (None, Some(file), _) => Some(icon(file, crate::icons::SIZE)),
         (None, None, Some(mark)) => Some(icon(mark, crate::icons::SIZE).color(k.c.text_faint)),
         _ => None,

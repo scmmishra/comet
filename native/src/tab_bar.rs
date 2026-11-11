@@ -68,7 +68,7 @@ pub fn tab_bar(s: &Desk, k: &Kit) -> El {
             .items_center()
             .pl(8.0)
             .pr(28.0)
-            .child(project_mark(&s.account, &tab.project, k))
+            .child(project_mark(s, &tab.project, k))
             .child(title)
             .children(busy.then(|| Spinner::new().size(14.0).color(k.c.text_accent).build(k)));
         let id = tab.id.clone();
