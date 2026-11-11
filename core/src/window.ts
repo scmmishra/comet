@@ -1,12 +1,10 @@
-import { deleteSession, forkSession, renameSession, type SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
-import { Transcript } from "./rewind"
 import type { TurnOutcome } from "@desk/plugin"
-import { followUpFor, type ChangedFile, type CoreMessage, type FileChange, type FollowUp, type ImageAttachment, type PermissionAnswer, type PluginLayout, type QueuedMessage, type ReviewScope, type TabInfo, type ThreadEvent, type ThreadItem } from "@desk/protocol"
+import { followUpFor, type AgentId, type ChangedFile, type CoreMessage, type FileChange, type FollowUp, type ImageAttachment, type PermissionAnswer, type PluginLayout, type QueuedMessage, type ReviewScope, type RunSettings, type TabInfo, type ThreadEvent, type ThreadItem, type ThreadSummary } from "@desk/protocol"
+import { requireFeature, type Agent, type AgentSession } from "./agents/agent"
+import type { Agents } from "./agents/registry"
 import { branchBase, capture, changesSince, checkpointChanges, headTree, keepCheckpoints } from "./checkpoints"
 import { git } from "./git"
-import { threadContext, threadHistory } from "./past-threads"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
-import { sameRunSettings, Session } from "./session"
 import { currentBranch } from "./space"
 import { Terminals } from "./terminals"
 import { loadWindowState, saveWindowState, type ClosedTab, type TabThread, type WindowState } from "./window-state"
@@ -29,9 +27,8 @@ export function outcomeAfter(outcome: TurnOutcome, event: ThreadEvent): TurnOutc
 interface WindowHooks {
   /** Sends to every client. */
   readonly broadcast: Send
-  /** Whether to compact a large thread that sat idle, read at each ask. */
-  readonly compactIdle: () => boolean
-  readonly rateLimit: (info: SDKRateLimitInfo) => void
+  /** The agents that run the tabs' threads. */
+  readonly agents: Agents
   /** A tab closed, so what runs for it can stop. */
   readonly tabClosed: (tabId: string) => void
   /** A turn ended in a plugin's thread, named by its full key, even while the thread was away from its tab. */
@@ -41,18 +38,18 @@ interface WindowHooks {
 }
 
 /**
- * The window's tabs and what runs for them: each tab's Claude session and its panel terminals. The
+ * The window's tabs and what runs for them: each tab's agent session and its panel terminals. The
  * app owns the tabs and sends them on every change. The core keeps each tab's thread: its session,
  * its checkpoints for Review and its last context reading. It also keeps each tab's plugin layout.
  */
 export class Window {
   private state: WindowState = loadWindowState()
-  private sessions = new Map<string, Session>()
+  private sessions = new Map<string, AgentSession>()
   /**
    * Sessions whose turn still runs in a thread a plugin switched the tab away from, by project and key.
    * One rejoins its tab when the thread comes back, and closes once its turn ends while away.
    */
-  private readonly parked = new Map<string, { readonly tabId: string; readonly session: Session }>()
+  private readonly parked = new Map<string, { readonly tabId: string; readonly session: AgentSession }>()
   private terminals: Terminals
   /** Each tab's last turn being ended. Review waits for it, so it reads the checkpoint the turn ends on. */
   private readonly turnEnds = new Map<string, Promise<void>>()
@@ -109,20 +106,21 @@ export class Window {
     await this.sendThread(tab, reply)
   }
 
-  /** Sends a client a tab's queue and thread, read back from Claude's transcript. */
+  /** Sends a client a tab's queue and thread, read back from its agent's transcript. */
   private async sendThread(tab: TabInfo, reply: Send) {
     const thread = this.thread(tab.id)
     if (thread.queue?.length) reply({ type: "queue", tabId: tab.id, messages: thread.queue, held: !!thread.queueHeld })
     if (thread.branch) reply({ type: "thread.branch", tabId: tab.id, branch: thread.branch })
     if (!thread.sessionId) return
-    reply({ type: "thread.session", tabId: tab.id, sessionId: thread.sessionId })
+    reply(sessionMessage(tab.id, thread))
     reply({ type: "session.history", tabId: tab.id, items: await this.history(tab, thread.sessionId), context: thread.context })
     if (!thread.context) this.fillContext(tab.id, thread.sessionId)
   }
 
   /**
    * Takes the app's tabs. A tab that opened a folder makes it the most recent. A tab that moved to
-   * another project starts its session there. A tab that closed ends its session and its shells.
+   * another project, or another agent, starts its session there. A tab that closed ends its session and
+   * its shells. A thread keeps the agent it started on, whatever its tab says later.
    */
   save(tabs: readonly TabInfo[], active: string | undefined) {
     const before = new Map(this.state.tabs.map((tab) => [tab.id, tab]))
@@ -144,7 +142,7 @@ export class Window {
     this.persist({ tabs, active, threads: kept(this.state.threads), layouts: kept(this.state.layouts), closed, keyed })
     for (const tab of tabs) {
       const old = before.get(tab.id)
-      if (old && old.project !== tab.project) this.closeSession(tab.id)
+      if (old && (old.project !== tab.project || old.agent !== tab.agent)) this.closeSession(tab.id)
       else if (old && !sameRunSettings(old, tab))
         this.sessions
           .get(tab.id)
@@ -168,7 +166,8 @@ export class Window {
   async send(tabId: string, text: string, images: readonly ImageAttachment[] = [], followUp: FollowUp = "steer") {
     const running = this.sessions.get(tabId)
     if (running?.busy) {
-      if (followUpFor(text, followUp) === "steer") return running.steer(text, images)
+      // An agent that cannot take a message mid-turn queues it, whatever the user chose.
+      if (followUpFor(text, followUp) === "steer" && this.agent(this.tab(tabId)).features.includes("steer")) return running.steer(text, images)
       return this.setQueue(tabId, [...(this.thread(tabId).queue ?? []), { id: crypto.randomUUID(), text, ...(images.length ? { images } : {}) }])
     }
     const tab = this.tab(tabId)
@@ -182,11 +181,12 @@ export class Window {
     void this.recordBranch(tabId)
   }
 
-  /** Continues a past thread in a tab. The tab may hold a session that never sent a message; the thread replaces it. */
-  async resume(tabId: string, threadId: string, reply: Send) {
+  /** Continues a past thread in a tab, on the agent it ran on. The tab may hold a session that never sent a message; the thread replaces it. */
+  async resume(tabId: string, agent: AgentId, threadId: string, reply: Send) {
     const tab = this.tab(tabId)
+    this.hooks.agents.get(agent)
     this.closeSession(tabId)
-    this.setThread(tabId, { sessionId: threadId })
+    this.setThread(tabId, { sessionId: threadId, agent })
     reply({ type: "session.history", tabId, items: await this.history(tab, threadId) })
     this.fillContext(tabId, threadId)
   }
@@ -282,8 +282,8 @@ export class Window {
   /** The thread for a key that another tab shows, so a second tab opening the key resumes the same session. */
   private shownKeyThread(project: string, key: string): TabThread | undefined {
     const tab = this.state.tabs.find((found) => found.project === project && this.state.threads[found.id]?.key === key)
-    const sessionId = tab && this.state.threads[tab.id]!.sessionId
-    return sessionId ? { key, sessionId } : undefined
+    const shown = tab && this.state.threads[tab.id]!
+    return shown?.sessionId ? { key, sessionId: shown.sessionId, agent: shown.agent } : undefined
   }
 
   /**
@@ -313,7 +313,7 @@ export class Window {
 
   /**
    * Moves a tab's session aside when a plugin switches the tab to another thread. A turn still running goes
-   * on, out of sight, so switching conversations never stops Claude. An idle session closes.
+   * on, out of sight, so switching conversations never stops the agent. An idle session closes.
    */
   private parkSession(tabId: string) {
     const running = this.sessions.get(tabId)
@@ -337,12 +337,13 @@ export class Window {
     this.hooks.broadcast({ type: "session.history", tabId, items: [] })
   }
 
-  /** Names a tab and its session. Claude Code keeps the name in the transcript, so the thread list and `claude --resume` show it. */
+  /** Names a tab and its session. The agent keeps the name with the thread, so the thread list shows it. */
   async renameThread(tabId: string, title: string) {
     const name = title.trim()
     if (!name) throw new Error("A thread needs a name.")
-    const { project, sessionId } = this.started(tabId)
-    await renameSession(sessionId, name, { dir: project })
+    const { agent, project, sessionId } = this.started(tabId)
+    requireFeature(agent, "rename", "rename a thread")
+    await agent.threads.rename!(project, sessionId, name)
     this.hooks.broadcast({ type: "tab.title", tabId, title: name })
   }
 
@@ -351,50 +352,61 @@ export class Window {
    * one of the user's messages, the copy ends with that message's turn.
    */
   async forkThread(tabId: string, reply: Send, messageId?: string) {
-    const { project, sessionId } = this.started(tabId)
-    const end = messageId ? (await Transcript.read(project, sessionId)).turnEnd(messageId) : undefined
+    const { agent, project, sessionId } = this.started(tabId)
+    requireFeature(agent, "fork", "fork a thread")
     const title = `${this.tab(tabId).title} (fork)`
-    const forked = await forkSession(sessionId, { dir: project, title, ...(end ? { upToMessageId: end } : {}) })
-    reply({ type: "thread.forked", tabId, threadId: forked.sessionId, title })
+    const threadId = await agent.threads.fork!(project, sessionId, { title, ...(messageId ? { messageId } : {}) })
+    reply({ type: "thread.forked", tabId, agent: agent.id, threadId, title })
   }
 
   /**
    * Takes a tab's thread back to before one of the user's messages, so the user can send it again,
-   * changed. Claude forgets that message and what followed. With `restoreFiles`, the files Claude's
-   * tools changed since go back as they were. The transcript keeps the old messages until the next
-   * turn runs, so the thread hides them until then.
+   * changed. The agent forgets that message and what followed. With `restoreFiles`, the files the agent's
+   * tools changed since go back as they were. An agent whose transcript keeps the old messages until the
+   * next turn runs names where the thread resumes, and the thread hides them until then.
    */
   async rewindThread(tabId: string, messageId: string, restoreFiles: boolean) {
     const tab = this.tab(tabId)
-    const { sessionId } = this.started(tabId)
-    if (this.sessions.get(tabId)?.busy) throw new Error("Stop Claude before you rewind the thread.")
-    const at = (await Transcript.read(tab.project, sessionId)).before(messageId)
-    if (restoreFiles) await this.session(tab).rewindFiles(messageId)
+    const { agent, sessionId } = this.started(tabId)
+    requireFeature(agent, "rewind", "rewind a thread")
+    if (restoreFiles) requireFeature(agent, "restore-files", "restore the files a thread changed")
+    if (this.sessions.get(tabId)?.busy) throw new Error(`Stop ${agent.name} before you rewind the thread.`)
+    // The files go back first, while the transcript still holds the messages that changed them.
+    if (restoreFiles) await this.session(tab).restoreFiles!(messageId)
     this.closeSession(tabId)
+    const rewound = await agent.threads.rewind!(tab.project, sessionId, messageId)
     // The last turn's checkpoints describe work the rewind took back. The next turn starts from the files as they are now.
     const turnTo = await capture(tab.project)
     const { key, queue, queueHeld, threadStart } = this.thread(tabId)
     const kept = { ...(key ? { key } : {}), ...(queue ? { queue, queueHeld } : {}), ...(threadStart ? { threadStart } : {}), ...(turnTo ? { turnTo } : {}) }
     // A rewind to the first message leaves nothing to resume, so the next message starts a new session.
-    this.setThread(tabId, at ? { ...this.thread(tabId), ...kept, turnFrom: undefined, rewind: { at, from: messageId } } : kept)
-    this.hooks.broadcast({ type: "session.history", tabId, items: at ? await this.history(tab, sessionId) : [] })
+    const rewind = !rewound.empty && rewound.resumeAt ? { at: rewound.resumeAt, from: messageId } : undefined
+    this.setThread(tabId, rewound.empty ? kept : { ...this.thread(tabId), ...kept, turnFrom: undefined, rewind })
+    this.hooks.broadcast({ type: "session.history", tabId, items: rewound.empty ? [] : await this.history(tab, sessionId) })
   }
 
   /**
    * Deletes a tab's session from this Mac and starts the tab afresh. The session closes first, so
-   * Claude Code stops writing to the transcript before it goes. Review's checkpoints go with the thread.
+   * the agent stops writing to the transcript before it goes. Review's checkpoints go with the thread.
    */
   async deleteThread(tabId: string) {
-    const { project, sessionId } = this.started(tabId)
+    const { agent, project, sessionId } = this.started(tabId)
+    requireFeature(agent, "delete", "delete a thread")
     this.clearThread(tabId)
-    await deleteSession(sessionId, { dir: project })
+    await agent.threads.delete!(project, sessionId)
   }
 
-  /** A tab's project and its session, which must have started. */
+  /** A tab's agent, its project and its session, which must have started. */
   private started(tabId: string) {
     const { sessionId } = this.thread(tabId)
     if (!sessionId) throw new Error("The thread has not started yet.")
-    return { project: this.tab(tabId).project, sessionId }
+    const tab = this.tab(tabId)
+    return { agent: this.agent(tab), project: tab.project, sessionId }
+  }
+
+  /** The agent that runs a tab's thread: the one the thread started on, else the one the tab names. */
+  private agent(tab: TabInfo): Agent {
+    return this.hooks.agents.get(this.thread(tab.id).agent ?? tab.agent)
   }
 
   /**
@@ -413,9 +425,18 @@ export class Window {
     return base ? changesSince(project, base).catch(() => []) : []
   }
 
-  /** Which tab has each of a project's threads open, by Claude session id. */
-  openThreads(project: string): ReadonlyMap<string, string> {
-    return new Map(this.state.tabs.flatMap((tab) => (tab.project === project && this.thread(tab.id).sessionId ? [[this.thread(tab.id).sessionId!, tab.id] as const] : [])))
+  /** A project's recent threads across every agent, newest first, each with the tab that has it open. */
+  async recentThreads(project: string): Promise<ThreadSummary[]> {
+    const open = new Map(this.state.tabs.flatMap((tab) => (tab.project === project && this.thread(tab.id).sessionId ? [[threadRef(this.agent(tab).id, this.thread(tab.id).sessionId!), tab.id] as const] : [])))
+    const lists = await Promise.all(
+      this.hooks.agents.all().map(async (agent) =>
+        (await agent.threads.list(project).catch(() => [])).map((thread): ThreadSummary => {
+          const tabId = open.get(threadRef(agent.id, thread.id))
+          return { ...thread, agent: agent.id, ...(tabId ? { tabId } : {}) }
+        }),
+      ),
+    )
+    return lists.flat().sort((a, b) => b.updatedAt - a.updatedAt)
   }
 
   /** Starts a terminal in the project of the tab that lists it, or reattaches to it. */
@@ -523,19 +544,19 @@ export class Window {
         }
       }
       const rewind = this.thread(tab.id).rewind
-      found = new Session(tab.project, emit, {
+      const agent = this.agent(tab)
+      found = agent.open(tab.project, emit, {
         resume: this.thread(tab.id).sessionId,
         ...(rewind ? { resumeAt: rewind.at, onResumedAt: () => current() && this.updateThread(tab.id, { rewind: undefined }) } : {}),
         settings: tab,
-        compactIdle: this.hooks.compactIdle,
         onSessionId: (sessionId) => {
-          if (current()) return this.updateThread(tab.id, { sessionId })
+          // The thread belongs to the agent that started it from here on.
+          if (current()) return this.updateThread(tab.id, { sessionId, agent: agent.id })
           // A parked thread keeps its session under its key, so coming back resumes it.
           const id = key && threadKey(tab.project, key)
           const parked = id ? this.state.keyed[id] : undefined
-          if (id && parked) this.persist({ keyed: { ...this.state.keyed, [id]: { ...parked, sessionId } } })
+          if (id && parked) this.persist({ keyed: { ...this.state.keyed, [id]: { ...parked, sessionId, agent: agent.id } } })
         },
-        onRateLimit: this.hooks.rateLimit,
       })
       const created = found
       this.sessions.set(tab.id, created)
@@ -543,7 +564,7 @@ export class Window {
     return found
   }
 
-  private closeParked(session: Session) {
+  private closeParked(session: AgentSession) {
     for (const [key, parked] of this.parked) {
       if (parked.session !== session) continue
       this.parked.delete(key)
@@ -574,7 +595,7 @@ export class Window {
 
   /** A restored thread, with each turn's saved summary after its result. A thread that cannot be read shows empty, and the user is told. */
   private async history(tab: TabInfo, sessionId: string): Promise<ThreadItem[]> {
-    const items = await threadHistory(tab.project, sessionId).catch((error) => {
+    const items = await this.agent(tab).threads.history(tab.project, sessionId).catch((error) => {
       this.hooks.broadcast({ type: "error", message: `Desk could not read the thread in “${tab.title}”`, detail: message(error) })
       return []
     })
@@ -590,7 +611,7 @@ export class Window {
   private fillContext(tabId: string, sessionId: string) {
     const tab = this.state.tabs.find((found) => found.id === tabId)
     if (!tab) return
-    void threadContext(tab.project, sessionId).then((context) => {
+    void this.agent(tab).threads.context(tab.project, sessionId).catch(() => undefined).then((context) => {
       // The tab may have moved to another thread, or taken a live reading, while the probe ran.
       const thread = this.state.threads[tabId]
       if (!context || thread?.sessionId !== sessionId || thread.context) return
@@ -617,7 +638,7 @@ export class Window {
     if (thread.queue !== before?.queue || !!thread.queueHeld !== !!before?.queueHeld) this.hooks.broadcast({ type: "queue", tabId, messages: thread.queue ?? [], held: !!thread.queueHeld })
     this.persist({ threads: { ...this.state.threads, [tabId]: thread } })
     if (thread.key !== before?.key) this.hooks.threadShown(tabId, thread.key)
-    if (thread.sessionId !== before?.sessionId) this.hooks.broadcast({ type: "thread.session", tabId, ...(thread.sessionId ? { sessionId: thread.sessionId } : {}) })
+    if (thread.sessionId !== before?.sessionId || thread.agent !== before?.agent) this.hooks.broadcast(sessionMessage(tabId, thread))
   }
 
   private persist(change: Partial<WindowState>) {
@@ -628,6 +649,16 @@ export class Window {
 
 /** Thrown by `send` when a plugin moved the tab to another thread before the message went out. */
 const MOVED = "The tab moved to another thread before the message was sent."
+
+/** Whether two tabs run the same way, so a save can skip reconfiguring a session. */
+export const sameRunSettings = (a: RunSettings, b: RunSettings) =>
+  a.agent === b.agent && a.model === b.model && a.effort === b.effort && !!a.fast === !!b.fast && a.permissionMode === b.permissionMode
+
+/** Tells the app which session a tab's thread runs in, and on which agent. A thread that has not started has neither. */
+const sessionMessage = (tabId: string, thread: TabThread): CoreMessage => ({ type: "thread.session", tabId, ...(thread.sessionId ? { sessionId: thread.sessionId, ...(thread.agent ? { agent: thread.agent } : {}) } : {}) })
+
+/** Two agents may give their sessions the same id, so a thread is told apart by both. */
+const threadRef = (agent: AgentId, sessionId: string) => `${agent}\n${sessionId}`
 
 /** Keys belong to a project, so two projects' plugins can use the same key. The plugin names its own keys. */
 const threadKey = (project: string, key: string) => `${project}\n${key}`

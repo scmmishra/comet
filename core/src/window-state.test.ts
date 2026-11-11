@@ -11,8 +11,8 @@ test("an empty window when nothing is saved", () => {
 })
 
 test("saves and loads the window's tabs across projects, with each tab's thread", () => {
-  const desk = { id: "t1", title: "Fix tabs", project: "/work/desk", terminals: [{ id: "x1", title: "Terminal" }], panelActive: "x1", model: "opus", effort: "high" as const, fast: true, permissionMode: "acceptEdits" as const }
-  const chatwoot = { id: "t2", title: "Inbox", project: "/work/chatwoot", terminals: [], model: "default", permissionMode: "default" as const }
+  const desk = { id: "t1", title: "Fix tabs", project: "/work/desk", terminals: [{ id: "x1", title: "Terminal" }], panelActive: "x1", agent: "codex" as const, model: "opus", effort: "high" as const, fast: true, permissionMode: "acceptEdits" as const }
+  const chatwoot = { id: "t2", title: "Inbox", project: "/work/chatwoot", terminals: [], agent: "claude" as const, model: "default", permissionMode: "default" as const }
   const state = { tabs: [desk, chatwoot], active: "t2", threads: { t1: { sessionId: "s1", threadStart: "abc", turnFrom: "def", turnTo: "123" } }, recent: ["/work/chatwoot", "/work/desk"], keyed: { "/work/desk\nconv-1": { key: "conv-1", sessionId: "s1" } }, layouts: { t2: { sidebar: "support.inbox", panels: [{ panel: "support.conversation", params: { id: 1 } }], hiddenCards: [] } }, closed: [] }
   saveWindowState(state)
   expect(loadWindowState()).toEqual(state)

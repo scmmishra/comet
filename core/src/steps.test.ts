@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test"
 import type { Step } from "@desk/protocol"
-import { commandProgram, groupSummary, named, thoughtLine, type BareStep } from "./steps"
+import { toolStep } from "./agents/claude/steps"
+import { commandProgram, groupSummary, thought as thoughtStep, thoughtLine, type BareStep } from "./steps"
 
 const tool = (name: string, summary: string, extra: Partial<Extract<BareStep, { type: "tool" }>> = {}): Step =>
-  named({ type: "tool", id: `${name}:${summary}`, name, summary, result: { output: "", isError: false }, ...extra })
-const thought = (text?: string): Step => named({ type: "thinking", id: `t:${text}`, ...(text ? { text } : {}) })
+  toolStep({ type: "tool", id: `${name}:${summary}`, name, summary, result: { output: "", isError: false }, ...extra })
+const thought = (text?: string): Step => thoughtStep(`t:${text}`, text)
 const stepLabel = (step: Step) => step.label
 
 test("labels a step by what it did, and a command by whether it is running or failed", () => {

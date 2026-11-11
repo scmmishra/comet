@@ -1,6 +1,7 @@
 import type { SDKAPIRetryMessage, SDKAssistantMessage, SDKMessage, SDKMessageOrigin, SDKPartialAssistantMessage, SessionMessage } from "@anthropic-ai/claude-agent-sdk"
 import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, type ThreadItem } from "@desk/protocol"
-import { named } from "./steps"
+import { thought } from "../../steps"
+import { toolStep } from "./steps"
 
 /** What Claude Code writes into a transcript when the user stops a turn, with or without "for tool use". */
 const INTERRUPTED = /^\[Request interrupted by user/
@@ -105,8 +106,7 @@ export class ThreadMapper {
         return [{ type: "text", id, text: block.text, done: true, ...(at !== undefined ? { at } : {}) }]
       }
       if (block.type === "thinking") {
-        const text = block.thinking.trim()
-        return [named({ type: "thinking", id: `${uuid}:${index}`, ...(text ? { text } : {}) })]
+        return [thought(`${uuid}:${index}`, block.thinking)]
       }
       if (block.type === "tool_use") {
         const tool = toolItem(this.dir, block.id, block.name, block.input as Record<string, unknown>)
@@ -122,7 +122,7 @@ export class ThreadMapper {
     if (!Array.isArray(content)) return []
     return content.flatMap((block): ThreadItem[] => {
       const tool = block.type === "tool_result" ? this.tools.get(String(block.tool_use_id)) : undefined
-      return tool ? [named({ ...tool, result: { output: truncate(toolOutputText(block.content)), isError: Boolean(block.is_error) } })] : []
+      return tool ? [toolStep({ ...tool, result: { output: truncate(toolOutputText(block.content)), isError: Boolean(block.is_error) } })] : []
     })
   }
 
@@ -194,7 +194,7 @@ const item = (found: ThreadItem): ThreadEvent => ({ kind: "item", item: found })
 export function toolItem(dir: string, id: string, name: string, input: Record<string, unknown>): ToolItem {
   const edits = toolEdits(name, input)
   const summary = SUMMARY_FIELDS.find((field) => typeof input[field] === "string")
-  return named({
+  return toolStep({
     type: "tool",
     id,
     name,

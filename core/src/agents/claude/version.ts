@@ -1,9 +1,9 @@
-import type { ClaudeCodeVersion } from "@desk/protocol"
+import type { AgentVersion } from "@desk/protocol"
 import { readFileSync, realpathSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import { claudeCodePath } from "./claude-code"
-import { spawn } from "./environment"
+import { claudeCodePath } from "./executable"
+import { spawn } from "../../environment"
 
 /** Where Anthropic publishes the newest Claude Code version of each update channel, as T3 Code reads it. */
 const RELEASES = "https://downloads.claude.ai/claude-code-releases"
@@ -17,7 +17,7 @@ const NATIVE_VERSIONS = "/.local/share/claude/versions/"
  * Claude Code's version and the newest on its update channel. Claude Code updates itself only while it
  * runs, so Desk checks for it, after T3 Code. A version that cannot be read, such as offline, is left out.
  */
-export async function claudeCodeVersion(): Promise<ClaudeCodeVersion> {
+export async function claudeCodeVersion(): Promise<AgentVersion> {
   const path = await claudeCodePath().catch(() => undefined)
   if (!path) return { updateAvailable: false, updatable: false }
   const [installed, latest] = await Promise.all([installedVersion(path), latestVersion()])

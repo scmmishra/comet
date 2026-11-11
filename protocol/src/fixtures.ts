@@ -16,12 +16,13 @@ const TABS: TabInfo[] = [
     panelActive: "term-1",
     reviewScope: "git",
     panelOpen: true,
+    agent: "claude",
     model: "default",
     effort: "high",
     fast: true,
     permissionMode: "auto",
   },
-  { id: "tab-2", title: "New session", project: "/Users/me/code/api", terminals: [], model: "opus", permissionMode: "default" },
+  { id: "tab-2", title: "New session", project: "/Users/me/code/api", terminals: [], agent: "codex", model: "gpt-6-astra", permissionMode: "default" },
 ]
 
 export const CORE_MESSAGES = [
@@ -30,17 +31,35 @@ export const CORE_MESSAGES = [
   { type: "tabs", tabs: [] },
   { type: "recent", projects: ["/Users/me/code/api", "/Users/me/code/web"] },
   {
-    type: "models",
-    models: [
-      { value: "default", label: "Default", description: "The recommended model", resolvedModel: "claude-opus-5-5", efforts: ["low", "high"], defaultEffort: "high", fast: true, autoMode: true },
-      { value: "haiku", label: "Haiku", description: "Fastest", efforts: [], fast: false, autoMode: false },
+    type: "agents",
+    agents: [
+      {
+        id: "claude",
+        name: "Claude Code",
+        state: "ready",
+        version: { installed: "2.5.1", latest: "2.5.3", updateAvailable: true, updatable: true },
+        account: { email: "me@example.com", organization: "Example", plan: "max" },
+        models: [
+          { value: "default", label: "Default", description: "The recommended model", runs: "Opus 5.5", efforts: ["low", "high"], defaultEffort: "high", fast: true, permissionModes: ["default", "acceptEdits", "auto", "bypassPermissions"] },
+          { value: "claude-haiku-4-5", label: "Haiku 4.5", description: "Fastest", efforts: [], fast: false, permissionModes: ["default", "acceptEdits", "bypassPermissions"], older: true },
+        ],
+        features: ["steer", "rewind", "restore-files", "fork", "rename", "delete", "compact-idle"],
+        usage: {
+          windows: [
+            { id: "five_hour", label: "Session", percent: 42, resetsAt: "2026-11-09T20:00:00Z" },
+            { id: "seven_day", label: "This week", percent: 61 },
+          ],
+        },
+      },
+      { id: "codex", name: "Codex", state: "signed-out", problem: "Run `codex login` in a terminal to sign in.", account: { method: "an API key" }, models: [], features: ["steer", "sign-in"] },
+      { id: "antigravity", name: "Antigravity", state: "missing", problem: "Antigravity is not installed.", models: [], features: ["install", "sign-in"] },
     ],
   },
   { type: "tab.reopened", tab: TABS[1]!, index: 0 },
   { type: "tab.title", tabId: "tab-2", title: "Support conversation" },
-  { type: "thread.session", tabId: "tab-1", sessionId: "s1" },
+  { type: "thread.session", tabId: "tab-1", sessionId: "s1", agent: "claude" },
   { type: "thread.session", tabId: "tab-2" },
-  { type: "thread.forked", tabId: "tab-1", threadId: "s2", title: "Fix the login form (fork)" },
+  { type: "thread.forked", tabId: "tab-1", agent: "claude", threadId: "s2", title: "Fix the login form (fork)" },
   {
     type: "session.history",
     tabId: "tab-1",
@@ -72,14 +91,14 @@ export const CORE_MESSAGES = [
   { type: "session.event", tabId: "tab-1", event: { kind: "item", item: { type: "text", id: "x2", text: "", done: false } } },
   { type: "session.event", tabId: "tab-1", event: { kind: "text.delta", id: "x2", delta: "Hel" } },
   { type: "session.event", tabId: "tab-1", event: { kind: "status", busy: true } },
-  { type: "session.event", tabId: "tab-1", event: { kind: "init", model: "claude-opus-5-5" } },
+  { type: "session.event", tabId: "tab-1", event: { kind: "init", model: "Opus 5.5" } },
   { type: "session.event", tabId: "tab-1", event: { kind: "background", tasks: [{ id: "b1", label: "npm run dev", startedAt: 1_700_000_000_000 }] } },
   {
     type: "session.event",
     tabId: "tab-1",
     event: {
       kind: "subagent",
-      subagent: { id: "a1", description: "Find the tests", type: "Explore", status: "running", background: false, startedAt: 1_700_000_000_000, toolUses: 2, prompt: "Find them", items: [] },
+      subagent: { id: "a1", description: "Find the tests", type: "Explore", agent: "codex", model: "GPT-6 Astra", status: "running", background: false, startedAt: 1_700_000_000_000, toolUses: 2, prompt: "Find them", items: [] },
     },
   },
   { type: "session.event", tabId: "tab-1", event: { kind: "context", reading: { percent: 20, tokens: 40_000, maxTokens: 200_000 } } },
@@ -87,7 +106,7 @@ export const CORE_MESSAGES = [
     type: "project",
     project: "/Users/me/code/web",
     part: "threads",
-    value: [{ id: "s1", title: "Fix the login form", branch: "login", updatedAt: 1_700_000_000_000, tabId: "tab-1" }, { id: "s2", title: "Add tests", updatedAt: 1_699_000_000_000 }],
+    value: [{ id: "s1", agent: "claude", title: "Fix the login form", branch: "login", updatedAt: 1_700_000_000_000, tabId: "tab-1" }, { id: "s2", agent: "codex", title: "Add tests", updatedAt: 1_699_000_000_000 }],
   },
   {
     type: "project",
@@ -141,8 +160,6 @@ export const CORE_MESSAGES = [
   { type: "error", message: "The folder does not exist." },
   { type: "error", message: "The support plugin could not start", detail: "desk.onTurnEnd is not a function." },
   { type: "notice", message: "Copied the link." },
-  { type: "claude.version", version: { installed: "2.5.1", latest: "2.5.3", updateAvailable: true, updatable: true } },
-  { type: "account", account: { email: "me@example.com", organization: "Example", plan: "max", apiProvider: "firstParty" } },
   {
     type: "project",
     project: "/Users/me/code/web",
@@ -171,24 +188,16 @@ export const CORE_MESSAGES = [
   },
   { type: "panel.show", tabId: "tab-1", id: "support.conversation?id=1001" },
   { type: "setups", setups: [{ project: "/Users/me/code/web", id: "support.triage", title: "Triage" }] },
-  {
-    type: "usage",
-    usage: {
-      windows: [
-        { id: "five_hour", label: "Five hours", percent: 42, resetsAt: "2023-11-15T03:00:00.000Z" },
-        { id: "seven_day", label: "Week", percent: 12 },
-      ],
-    },
-  },
 ] satisfies CoreMessage[]
 
 /** In the order the native tests build them. */
 export const CLIENT_MESSAGES = [
-  { type: "models.get" },
+  { type: "agents.get" },
   { type: "usage.get" },
-  { type: "settings.update", change: { appearance: { theme: "auto" }, claude: { effort: null } } },
-  { type: "claude.version.get" },
-  { type: "claude.update" },
+  { type: "settings.update", change: { appearance: { theme: "auto" }, threads: { agent: "codex" }, agent: { id: "claude", defaults: { effort: null } } } },
+  { type: "agent.update", agent: "claude" },
+  { type: "agent.install", agent: "antigravity" },
+  { type: "agent.signIn", agent: "codex" },
   { type: "mcp.toggle", project: "/Users/me/code/web", name: "github", enabled: false },
   { type: "tab.reopen" },
   { type: "tabs.save", tabs: TABS, active: "tab-2" },
@@ -203,7 +212,7 @@ export const CLIENT_MESSAGES = [
   { type: "queue.resume", tabId: "tab-1" },
   { type: "tasks.stop", tabId: "tab-1", ids: ["b1"] },
   { type: "project.get", project: "/Users/me/code/web", part: "threads" },
-  { type: "thread.resume", tabId: "tab-2", threadId: "s1" },
+  { type: "thread.resume", tabId: "tab-2", agent: "claude", threadId: "s1" },
   {
     type: "commands.save",
     project: "/Users/me/code/web",

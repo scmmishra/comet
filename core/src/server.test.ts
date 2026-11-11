@@ -34,7 +34,7 @@ async function connect() {
   return { next, send: (message: ClientMessage) => ws.send(JSON.stringify(message)), close: () => ws.close() }
 }
 
-const tab = (project: string) => ({ id: "t1", title: "New session", project, terminals: [], model: "default", permissionMode: "default" as const })
+const tab = (project: string) => ({ id: "t1", title: "New session", project, terminals: [], agent: "claude" as const, model: "default", permissionMode: "default" as const })
 
 test("greets a client with the settings, the saved tabs and the recent folders", async () => {
   const client = await connect()
@@ -74,10 +74,10 @@ test("follows a thread's history with its rows", async () => {
 test("clears the effort when the app sends null", async () => {
   const client = await connect()
   await client.next("settings")
-  client.send({ type: "settings.update", change: { claude: { effort: "high" } } })
-  expect((await client.next("settings")).settings.claude.effort).toBe("high")
-  client.send({ type: "settings.update", change: { claude: { effort: null } } })
-  expect((await client.next("settings")).settings.claude.effort).toBeUndefined()
+  client.send({ type: "settings.update", change: { agent: { id: "codex", defaults: { effort: "high" } } } })
+  expect((await client.next("settings")).settings.agents.codex.effort).toBe("high")
+  client.send({ type: "settings.update", change: { agent: { id: "codex", defaults: { effort: null } } } })
+  expect((await client.next("settings")).settings.agents.codex.effort).toBeUndefined()
   client.close()
 })
 

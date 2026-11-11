@@ -3,12 +3,13 @@ import { expect, test } from "bun:test"
 import type { CoreMessage, TabInfo } from "@desk/protocol"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { claudeTranscript, gitRepo, tempFolder, type TranscriptEntry, useTempHome } from "./test-support"
+import { claudeTranscript, fakeAgent, gitRepo, tempFolder, type TranscriptEntry, useTempHome } from "./test-support"
+import { Agents } from "./agents/registry"
 import { outcomeAfter, Window } from "./window"
 
 useTempHome()
 
-const tab = (id: string, project: string): TabInfo => ({ id, title: "New session", project, terminals: [], model: "default", permissionMode: "default" })
+const tab = (id: string, project: string): TabInfo => ({ id, title: "New session", project, terminals: [], agent: "claude", model: "default", permissionMode: "default" })
 const saved = () => JSON.parse(readFileSync(join(process.env.DESK_HOME!, "window.json"), "utf8"))
 
 /** A window whose saved file holds `state`, the messages it sends, and each thread a tab moved to. */
@@ -18,8 +19,7 @@ function open(state: object) {
   const shown: [string, string | undefined][] = []
   const window = new Window({
     broadcast: (message) => sent.push(message),
-    compactIdle: () => false,
-    rateLimit: () => {},
+    agents: new Agents(() => {}, { compactIdle: () => false }),
     tabClosed: () => {},
     turnEnded: () => {},
     threadShown: (tabId, threadKey) => shown.push([tabId, threadKey]),
@@ -238,4 +238,93 @@ test("forks a thread from a message: the copy ends with that message's turn", as
   const forked = replies[0] as Extract<CoreMessage, { type: "thread.forked" }>
   const copy = await getSessionMessages(forked.threadId, { dir: project })
   expect(copy.map((message) => message.type)).toEqual(["user", "assistant"])
+})
+
+/** A window over fake agents: Claude with every thread feature, and a Codex that can only run turns. */
+function openWithAgents(state: object) {
+  const claude = fakeAgent("claude", ["steer", "rewind", "restore-files", "fork", "rename", "delete"], [{ id: "c1", title: "Older", updatedAt: 1 }])
+  const codex = fakeAgent("codex", [], [{ id: "x1", title: "Newer", updatedAt: 2 }])
+  writeFileSync(join(process.env.DESK_HOME!, "window.json"), JSON.stringify(state))
+  const sent: CoreMessage[] = []
+  const window = new Window({
+    broadcast: (message) => sent.push(message),
+    agents: new Agents(() => {}, { compactIdle: () => false }, { claude: claude.make, codex: codex.make }),
+    tabClosed: () => {},
+    turnEnded: () => {},
+    threadShown: () => {},
+  })
+  return { window, sent, claude, codex }
+}
+
+test("runs a tab on the agent it names, and its thread stays on the agent that started it", async () => {
+  const project = tempFolder("agents")
+  const { window, sent, claude, codex } = openWithAgents({ tabs: [{ ...tab("a", project), agent: "codex" }], threads: {}, recent: [] })
+  await window.send("a", "hello")
+  expect(codex.calls).toEqual(["send hello"])
+  expect(claude.calls).toEqual([])
+  expect(saved().threads.a).toMatchObject({ sessionId: "codex-session", agent: "codex" })
+  expect(sent).toContainEqual({ type: "thread.session", tabId: "a", sessionId: "codex-session", agent: "codex" })
+  // The app may still name another agent for the tab. The thread's own agent answers.
+  window.save([tab("a", project)], "a")
+  await window.send("a", "again")
+  expect(codex.calls).toContain("send again")
+  expect(claude.calls).toEqual([])
+})
+
+test("a tab that changes its agent before its thread starts opens its session on the new one", async () => {
+  const project = tempFolder("agents")
+  const { window, claude, codex } = openWithAgents({ tabs: [tab("a", project)], threads: {}, recent: [] })
+  window.save([{ ...tab("a", project), agent: "codex" }], "a")
+  await window.send("a", "hello")
+  expect(codex.calls).toEqual(["send hello"])
+  expect(claude.calls).toEqual([])
+})
+
+test("a message sent mid-turn steers an agent that takes one, and queues for an agent that does not", async () => {
+  const project = tempFolder("agents")
+  const { window, claude, codex } = openWithAgents({ tabs: [tab("a", project), { ...tab("b", project), agent: "codex" }], threads: {}, recent: [] })
+  await window.send("a", "one")
+  await window.send("a", "two", [], "steer")
+  expect(claude.calls).toEqual(["send one", "steer two"])
+  await window.send("b", "one")
+  await window.send("b", "two", [], "steer")
+  expect(codex.calls).toEqual(["send one"])
+  expect(saved().threads.b.queue).toMatchObject([{ text: "two" }])
+})
+
+test("lists a project's threads across agents, newest first, each with its agent and the tab that shows it", async () => {
+  const project = tempFolder("agents")
+  const { window } = openWithAgents({ tabs: [{ ...tab("a", project), agent: "codex" }], threads: { a: { sessionId: "x1", agent: "codex" } }, recent: [] })
+  expect(await window.recentThreads(project)).toEqual([
+    { id: "x1", title: "Newer", updatedAt: 2, agent: "codex", tabId: "a" },
+    { id: "c1", title: "Older", updatedAt: 1, agent: "claude" },
+  ])
+})
+
+test("resumes a past thread on the agent it ran on, and reads its history from that agent", async () => {
+  const project = tempFolder("agents")
+  const { window } = openWithAgents({ tabs: [tab("a", project)], threads: {}, recent: [] })
+  const replies: CoreMessage[] = []
+  await window.resume("a", "codex", "x1", (message) => replies.push(message))
+  expect(replies).toEqual([{ type: "session.history", tabId: "a", items: [{ type: "user", id: "x1-u1", text: "From codex" }] }])
+  expect(saved().threads.a).toEqual({ sessionId: "x1", agent: "codex" })
+})
+
+test("refuses what a thread's agent cannot do, and says which agent", async () => {
+  const project = tempFolder("agents")
+  const { window, codex } = openWithAgents({ tabs: [{ ...tab("a", project), agent: "codex" }], threads: { a: { sessionId: "x1", agent: "codex" } }, recent: [] })
+  await expect(window.renameThread("a", "Name")).rejects.toThrow("Fake codex cannot rename a thread.")
+  await expect(window.forkThread("a", () => {})).rejects.toThrow("Fake codex cannot fork a thread.")
+  await expect(window.deleteThread("a")).rejects.toThrow("Fake codex cannot delete a thread.")
+  await expect(window.rewindThread("a", "u1", false)).rejects.toThrow("Fake codex cannot rewind a thread.")
+  expect(codex.calls).toEqual([])
+})
+
+test("rewinds through the thread's agent, restoring files first when asked, and keeps a transcript the agent already cut", async () => {
+  const project = tempFolder("agents")
+  const { window, claude } = openWithAgents({ tabs: [tab("a", project)], threads: { a: { sessionId: "c1", agent: "claude" } }, recent: [] })
+  await window.rewindThread("a", "u1", true)
+  expect(claude.calls).toEqual(["restore u1", "close", "rewind c1 u1"])
+  expect(saved().threads.a).toMatchObject({ sessionId: "c1", agent: "claude" })
+  expect(saved().threads.a.rewind).toBeUndefined()
 })

@@ -1,12 +1,14 @@
-import type { ChangedFile, ContextReading, PluginLayout, QueuedMessage, TabInfo } from "@desk/protocol"
+import { DEFAULT_AGENT, type AgentId, type ChangedFile, type ContextReading, type PluginLayout, type QueuedMessage, type TabInfo } from "@desk/protocol"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { instanceHome, writeJsonFile } from "./data-files"
 
 /** What the core keeps about a tab's thread. The app never sees it. */
 export interface TabThread {
-  /** The Claude session to resume. Absent until the tab's first message. */
+  /** The agent's session to resume. Absent until the tab's first message. */
   readonly sessionId?: string
+  /** The agent the session runs on, set with it. A thread saved before Desk ran more than one agent has none, and runs on its tab's. */
+  readonly agent?: AgentId
   /**
    * Checkpoint commits, after T3 Code. Each turn runs from the checkpoint the turn before it ended on,
    * so edits made between turns count toward the next one.
@@ -18,7 +20,7 @@ export interface TabThread {
   readonly turnFrom?: string
   readonly turnTo?: string
   /**
-   * The files each turn changed, by the id of the message that started it. Claude's transcript does not
+   * The files each turn changed, by the id of the message that started it. An agent's transcript does not
    * record them, so a restored thread reads its turns' summaries from here.
    */
   readonly turnChanges?: Readonly<Record<string, readonly ChangedFile[]>>
@@ -78,13 +80,13 @@ export function loadWindowState(): WindowState {
     return { tabs: [], threads: {}, recent: [], keyed: {}, layouts: {}, closed: [] }
   }
   return {
-    tabs: Array.isArray(saved.tabs) ? saved.tabs.filter(isTab) : [],
+    tabs: Array.isArray(saved.tabs) ? saved.tabs.filter(isTab).map(withAgent) : [],
     ...(typeof saved.active === "string" ? { active: saved.active } : {}),
     threads: typeof saved.threads === "object" && saved.threads ? Object.fromEntries(Object.entries(saved.threads).map(([id, thread]) => [id, upgradeThread(thread)])) : {},
     recent: Array.isArray(saved.recent) ? saved.recent.filter((dir) => typeof dir === "string") : [],
     keyed: typeof saved.keyed === "object" && saved.keyed ? saved.keyed : keyedFromSessions(saved as { keys?: unknown }),
     layouts: typeof saved.layouts === "object" && saved.layouts ? saved.layouts : {},
-    closed: Array.isArray(saved.closed) ? saved.closed.filter((closed) => isTab(closed?.tab) && Number.isInteger(closed.index)) : [],
+    closed: Array.isArray(saved.closed) ? saved.closed.filter((closed) => isTab(closed?.tab) && Number.isInteger(closed.index)).map((closed) => ({ ...closed, tab: withAgent(closed.tab) })) : [],
   }
 }
 
@@ -115,6 +117,9 @@ function keyedFromSessions(saved: { keys?: unknown }): Record<string, TabThread>
     }),
   )
 }
+
+/** A tab saved before Desk ran more than one agent names none, and ran Claude Code. */
+const withAgent = (tab: TabInfo): TabInfo => (tab.agent ? tab : { ...tab, agent: DEFAULT_AGENT })
 
 function isTab(value: unknown): value is TabInfo {
   const tab = value as Partial<TabInfo> | null

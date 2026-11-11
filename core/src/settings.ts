@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, EFFORTS, FOLLOW_UPS, FONT_SIZES, PERMISSION_MODES, PROJECT_COLORS, THEMES, type AppearanceSettings, type ClaudeSettings, type DeskSettings, type ProjectSettings, type SettingsChange } from "@desk/protocol"
+import { AGENTS, DEFAULT_SETTINGS, FOLLOW_UPS, FONT_SIZES, PERMISSION_MODES, PROJECT_COLORS, THEMES, type AgentDefaults, type AgentId, type AppearanceSettings, type DeskSettings, type ProjectSettings, type SettingsChange, type ThreadSettings } from "@desk/protocol"
 import { readFileSync } from "node:fs"
 import { isAbsolute, join, relative } from "node:path"
 import { deskHome, writeJsonFile } from "./data-files"
@@ -27,12 +27,19 @@ const APPEARANCE: Record<keyof AppearanceSettings, Rule> = {
   codeFont: { valid: (value) => typeof value === "string", clean: (value: string) => value.trim(), message: "A font is a name." },
 }
 
-const CLAUDE: Record<keyof ClaudeSettings, Rule> = {
-  model: { valid: (value) => typeof value === "string" && !!value.trim(), clean: (value: string) => value.trim(), message: "A model is named by its value, such as opus." },
-  effort: { valid: (value) => EFFORTS.includes(value as never), optional: true, message: `The effort is one of ${EFFORTS.join(", ")}.` },
-  permissionMode: { valid: (value) => PERMISSION_MODES.includes(value as never), message: `The permission mode is one of ${PERMISSION_MODES.join(", ")}.` },
+const THREADS: Record<keyof ThreadSettings, Rule> = {
+  agent: { valid: (value) => AGENTS.includes(value as never), message: `An agent is one of ${AGENTS.join(", ")}.` },
   followUp: { valid: (value) => FOLLOW_UPS.includes(value as never), message: `A follow-up is one of ${FOLLOW_UPS.join(", ")}.` },
   compactIdle: { valid: (value) => typeof value === "boolean", message: "Compacting idle threads is on or off." },
+}
+
+const named = (value: unknown) => typeof value === "string" && !!value.trim()
+
+// Each agent names its own models and effort levels, so Desk only checks that one is named.
+const AGENT_DEFAULTS: Record<keyof AgentDefaults, Rule> = {
+  model: { valid: named, clean: (value: string) => value.trim(), message: "A model is named by its value, such as opus." },
+  effort: { valid: named, clean: (value: string) => value.trim(), optional: true, message: "An effort is named by its level, such as high." },
+  permissionMode: { valid: (value) => PERMISSION_MODES.includes(value as never), message: `The permission mode is one of ${PERMISSION_MODES.join(", ")}.` },
 }
 
 /** A project's icon is checked against its folder, so its rules depend on the project. */
@@ -53,13 +60,15 @@ const settingsPath = () => join(deskHome(), "settings.json")
 export function loadSettings(): DeskSettings {
   let saved: Record<string, unknown>
   try {
-    saved = section(JSON.parse(readFileSync(settingsPath(), "utf8")))
+    saved = upgrade(section(JSON.parse(readFileSync(settingsPath(), "utf8"))))
   } catch {
     return DEFAULT_SETTINGS
   }
+  const agents = section(saved.agents)
   return {
     appearance: apply(DEFAULT_SETTINGS.appearance, section(saved.appearance), APPEARANCE, false),
-    claude: apply(DEFAULT_SETTINGS.claude, section(saved.claude), CLAUDE, false),
+    threads: apply(DEFAULT_SETTINGS.threads, section(saved.threads), THREADS, false),
+    agents: eachAgent((id) => apply(DEFAULT_SETTINGS.agents[id], section(agents[id]), AGENT_DEFAULTS, false)),
     projects: Object.fromEntries(Object.entries(section(saved.projects)).map(([dir, settings]) => [dir, apply({}, section(settings), projectRules(dir), false)])),
   }
 }
@@ -78,9 +87,28 @@ export function updateSettings(current: DeskSettings, change: SettingsChange): D
   }
   return {
     appearance: change.appearance ? apply(current.appearance, section(change.appearance), APPEARANCE, true) : current.appearance,
-    claude: change.claude ? apply(current.claude, section(change.claude), CLAUDE, true) : current.claude,
+    threads: change.threads ? apply(current.threads, section(change.threads), THREADS, true) : current.threads,
+    agents: change.agent ? { ...current.agents, [agentId(change.agent.id)]: apply(current.agents[agentId(change.agent.id)], section(change.agent.defaults), AGENT_DEFAULTS, true) } : current.agents,
     projects,
   }
+}
+
+const eachAgent = <T>(make: (id: AgentId) => T) => Object.fromEntries(AGENTS.map((id) => [id, make(id)])) as Record<AgentId, T>
+
+function agentId(id: unknown): AgentId {
+  if (!AGENTS.includes(id as never)) throw new Error(THREADS.agent.message)
+  return id as AgentId
+}
+
+/**
+ * Settings saved when Desk ran only Claude Code kept everything about a new tab in one `claude` section.
+ * Its model, effort and permission mode become Claude's defaults, and the rest become thread settings.
+ */
+function upgrade(saved: Record<string, unknown>): Record<string, unknown> {
+  if (!("claude" in saved)) return saved
+  const { claude: old, ...rest } = saved
+  const { followUp, compactIdle, ...defaults } = section(old)
+  return { ...rest, threads: { followUp, compactIdle, ...section(saved.threads) }, agents: { claude: defaults, ...section(saved.agents) } }
 }
 
 /**

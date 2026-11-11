@@ -3,67 +3,24 @@ import type { Step, StepKind } from "@desk/protocol"
 /** A step as the mapper makes it, before it is named. */
 export type BareStep = Step extends infer T ? (T extends Step ? Omit<T, "kind" | "label"> : never) : never
 type Tool = Extract<Step, { type: "tool" }>
+type Thought = Extract<Step, { type: "thinking" }>
 
-const KIND_BY_TOOL: Record<string, StepKind> = {
-  Bash: "command",
-  BashOutput: "command",
-  KillShell: "command",
-  Edit: "edit",
-  MultiEdit: "edit",
-  Write: "edit",
-  NotebookEdit: "edit",
-  Read: "read",
-  Grep: "search",
-  Glob: "search",
-  WebSearch: "web",
-  WebFetch: "web",
+/** A label is one line, whatever its target holds, so a long command never spills over the rows below. */
+export const oneLine = (label: string) => label.replace(/\s+/g, " ").trim()
+
+/** A thought as a step, labelled by its first line. Every agent's thinking reads the same way. */
+export function thought(id: string, text?: string): Thought {
+  const words = text?.trim()
+  return { type: "thinking", id, ...(words ? { text: words } : {}), kind: "thought", label: words ? oneLine(thoughtLine(words)) : "Thought" }
 }
 
-
-const stepKind = (step: BareStep): StepKind => (step.type === "thinking" ? "thought" : (KIND_BY_TOOL[step.name] ?? "other"))
-
-/**
- * A step in a few words, after T3 Code: "Ran npm test", "Read core/src/main.ts", or the thought's first
- * line. A command still running reads "Running", and one that failed reads "Failed".
- */
-function stepLabel(step: BareStep): string {
-  // A label is one line, whatever its target holds, so a long command never spills over the rows below.
-  return label(step).replace(/\s+/g, " ").trim()
+/** A tool call as a step. Each agent says what kind its tool is and labels it in its own words. */
+export function tool(step: Extract<BareStep, { type: "tool" }>, kind: StepKind, label: string): Tool {
+  return { ...step, kind, label: oneLine(label) }
 }
 
-function label(step: BareStep): string {
-  if (step.type === "thinking") return step.text ? thoughtLine(step.text) : "Thought"
-  const target = step.file ?? step.summary
-  switch (step.name) {
-    case "Bash":
-      return `${!step.result ? "Running" : step.result.isError ? "Failed" : "Ran"} ${commandProgram(step.summary)}`
-    case "Read":
-      return `Read ${target}`
-    case "Edit":
-    case "MultiEdit":
-    case "NotebookEdit":
-      return `Edited ${target}`
-    case "Write":
-      return `Wrote ${target}`
-    case "Grep":
-      return `Searched ${target}`
-    case "Glob":
-      return `Searched files ${target}`
-    case "WebSearch":
-      return `Searched the web for ${target}`
-    case "WebFetch":
-      return `Fetched ${target}`
-    case "TodoWrite":
-      return "Updated the plan"
-    case "AskUserQuestion":
-      return step.result ? "Asked a question" : "Asking a question"
-    case "Task":
-    case "Agent":
-      return `Started an agent: ${target}`
-    default:
-      return `${step.name} ${target}`.trim()
-  }
-}
+/** A command's label: the program it runs, and whether it is running, ran or failed. */
+export const commandLabel = (command: string, result: Tool["result"]) => `${!result ? "Running" : result.isError ? "Failed" : "Ran"} ${commandProgram(command)}`
 
 /** Words that set up a command rather than run it, so a label names the program after them. */
 const SETUP = /^(cd|pushd|popd|export|source|\.|set|unset|alias)$/
@@ -134,11 +91,4 @@ export function groupSummary(steps: readonly Step[]): string {
   if (others) parts.push(others === 1 ? "performed 1 other action" : `performed ${others} other actions`)
   const joined = parts.length < 3 ? parts.join(" and ") : `${parts.slice(0, -1).join(", ")}, and ${parts.at(-1)}`
   return joined.charAt(0).toUpperCase() + joined.slice(1)
-}
-
-/** A step with its kind and label, as the core sends it. */
-export function named(step: Extract<BareStep, { type: "tool" }>): Extract<Step, { type: "tool" }>
-export function named(step: Extract<BareStep, { type: "thinking" }>): Extract<Step, { type: "thinking" }>
-export function named(step: BareStep): Step {
-  return { ...step, kind: stepKind(step), label: stepLabel(step) } as Step
 }
