@@ -134,14 +134,15 @@ fn recent_threads(s: &Desk, tab: &TabInfo, k: &Kit) -> Option<El> {
             .gap(12.0)
             .items_center()
             .px(8.0)
-            .radius(8.0)
+            .radius(7.0)
             .hover(k.c.hover)
             .hover_group()
             .role("button")
             .on_press_tx(move |s: &mut Desk, tx| s.open_thread(&summary, &dir, tx))
             .child(text(thread.title.clone()).font(crate::theme::text(13.0)).color(k.c.text_muted).group_color(k.c.text_base).truncate().grow(1.0))
             .children(other)
-            .child(text(format::ago(thread.updated_at, now)).font(crate::theme::text(12.0)).color(k.c.text_faint).w(48.0))
+            // `w-12 text-right`: times end on one edge, whatever their length.
+            .child(row().w(48.0).justify_end().child(text(format::ago(thread.updated_at, now)).font(crate::theme::text(12.0)).color(k.c.text_faint)))
     });
     Some(col().w_full().gap(4.0).pt(8.0).child(text("Recent threads").font(crate::theme::text(12.0)).color(k.c.text_faint).px(8.0).pb(4.0)).children(rows))
 }
