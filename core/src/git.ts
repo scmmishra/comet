@@ -1,3 +1,5 @@
+import { spawn } from "./environment"
+
 /** How long a git command may run before Desk stops it, after T3 Code. */
 const TIMEOUT_MS = 30_000
 
@@ -20,7 +22,7 @@ export const TRUNCATED = "\n\n[truncated]"
  */
 export async function git(dir: string, args: readonly string[], options: GitOptions = {}): Promise<string> {
   const stdin = options.input === undefined ? "ignore" : new Blob([options.input])
-  const child = Bun.spawn(["git", ...args], { cwd: dir, stdin, stdout: "pipe", stderr: "pipe", env: gitEnv(options.env), timeout: TIMEOUT_MS })
+  const child = spawn(["git", ...args], { cwd: dir, stdin, stdout: "pipe", stderr: "pipe", env: gitEnv(options.env), timeout: TIMEOUT_MS })
   const [read, error, code] = await Promise.all([readCapped(child.stdout, options.maxBytes), new Response(child.stderr).text(), child.exited])
   if (read.overflowed) {
     if (options.overflow !== "truncate") throw new Error(`git ${args[0]} printed more than ${options.maxBytes} bytes.`)
@@ -32,16 +34,15 @@ export async function git(dir: string, args: readonly string[], options: GitOpti
 }
 
 /**
- * Git's environment for Desk.
+ * What Desk adds to git's environment. `spawn` adds it to the core's own.
  * - Desk never takes Git's optional locks, which would get in the way of the user's own git.
  * - A bare repository inside a project is never used on its own, after T3 Code. Its config could
  *   otherwise run a command, such as `core.fsmonitor`, when Desk reads the project.
  * Git reads config from the environment as GIT_CONFIG_COUNT entries, so Desk adds one after any the user set.
  */
-function gitEnv(extra: Record<string, string> = {}): Record<string, string | undefined> {
+function gitEnv(extra: Record<string, string> = {}): Record<string, string> {
   const count = Number(process.env.GIT_CONFIG_COUNT) || 0
   return {
-    ...process.env,
     GIT_OPTIONAL_LOCKS: "0",
     GIT_CONFIG_COUNT: String(count + 1),
     [`GIT_CONFIG_KEY_${count}`]: "safe.bareRepository",

@@ -3,6 +3,7 @@ import { readFileSync, realpathSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { claudeCodePath } from "./claude-code"
+import { spawn } from "./environment"
 
 /** Where Anthropic publishes the newest Claude Code version of each update channel, as T3 Code reads it. */
 const RELEASES = "https://downloads.claude.ai/claude-code-releases"
@@ -32,7 +33,7 @@ export async function claudeCodeVersion(): Promise<ClaudeCodeVersion> {
 export async function updateClaudeCode() {
   const path = await claudeCodePath()
   if (!isNativeInstall(path)) throw new Error("Desk updates only Claude Code's native install. Update this one the way you installed it.")
-  const child = Bun.spawn([path, "update"], { stdout: "ignore", stderr: "pipe" })
+  const child = spawn([path, "update"], { stdout: "ignore", stderr: "pipe" })
   const [error, code] = await Promise.all([new Response(child.stderr).text(), child.exited])
   if (code !== 0) throw new Error(`Claude Code could not update: ${error.trim() || `exit code ${code}`}`)
 }
@@ -63,7 +64,7 @@ const isNativeInstall = (path: string) => {
 }
 
 async function installedVersion(path: string) {
-  const child = Bun.spawn([path, "--version"], { stdout: "pipe", stderr: "ignore" })
+  const child = spawn([path, "--version"], { stdout: "pipe", stderr: "ignore" })
   return VERSION.exec(await new Response(child.stdout).text())?.[0]
 }
 

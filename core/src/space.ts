@@ -1,6 +1,7 @@
 import { basename } from "node:path"
 import type { Space } from "@desk/protocol"
 import { git, numstatLine } from "./git"
+import { spawn } from "./environment"
 
 /** A part that fails gives undefined, so each part of the card fails on its own. */
 const part = <T>(read: Promise<T>): Promise<T | undefined> => read.catch(() => undefined)
@@ -61,7 +62,7 @@ interface GhPullRequest {
 
 /** The branch's pull request, from `gh`. It throws when there is none or `gh` cannot say. */
 async function readPullRequest(root: string): Promise<NonNullable<Space["pr"]>> {
-  const child = Bun.spawn(["gh", "pr", "view", "--json", "number,title,url,state,isDraft,statusCheckRollup"], { cwd: root, stdout: "pipe", stderr: "ignore" })
+  const child = spawn(["gh", "pr", "view", "--json", "number,title,url,state,isDraft,statusCheckRollup"], { cwd: root, stdout: "pipe", stderr: "ignore" })
   const [json, code] = await Promise.all([new Response(child.stdout).text(), child.exited])
   if (code !== 0) throw new Error("No pull request")
   const pr = JSON.parse(json) as GhPullRequest

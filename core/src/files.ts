@@ -2,6 +2,7 @@ import type { FileView } from "@desk/protocol"
 import { closeSync, openSync, readSync, statSync } from "node:fs"
 import { homedir } from "node:os"
 import { join, resolve } from "node:path"
+import { spawn } from "./environment"
 
 /** The editor command, which takes `path:line`. Zed's CLI does; set DESK_EDITOR for another. */
 const EDITOR = process.env.DESK_EDITOR ?? "zed"
@@ -48,9 +49,9 @@ export function readForView(file: string): FileView {
 export function openInEditor(file: string, line?: number) {
   const target = line ? `${file}:${line}` : file
   try {
-    Bun.spawn([EDITOR, target], { stdout: "ignore", stderr: "ignore" })
+    spawn([EDITOR, target], { stdout: "ignore", stderr: "ignore" })
   } catch {
     // `open -t` always opens a text editor, so a script never runs from here.
-    Bun.spawn(["open", "-t", file], { stdout: "ignore", stderr: "ignore" })
+    spawn(["open", "-t", file], { stdout: "ignore", stderr: "ignore" })
   }
 }

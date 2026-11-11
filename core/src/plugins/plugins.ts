@@ -4,7 +4,6 @@ import { isProjectFolder } from "../project-path"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { deskHome } from "../data-files"
-import { loginShellPath } from "../shell"
 import { bundlePlugin } from "./bundle"
 import { pluginProjects, pluginsOn } from "./config"
 
@@ -180,7 +179,8 @@ export class Plugins {
     const folder = join(pluginsFolder(), plugin)
     const entry = ENTRIES.map((file) => join(folder, file)).find(existsSync)
     if (!entry) throw new Error(`Desk found no plugin at ${folder}. A plugin starts from index.tsx or index.ts.`)
-    const worker = new Worker(await bundlePlugin(plugin, entry), { env: { ...process.env, PATH: await loginShellPath() } })
+    // A Worker takes process.env as it is now, with the login shell's PATH, so a plugin finds the user's tools.
+    const worker = new Worker(await bundlePlugin(plugin, entry))
     return new Promise<Running>((resolve, reject) => {
       let running: Running | undefined
       worker.onmessage = (event: MessageEvent<FromPlugin>) => {

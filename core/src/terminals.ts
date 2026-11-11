@@ -1,4 +1,5 @@
 import type { Subprocess } from "bun"
+import { spawn } from "./environment"
 import { loginShell } from "./shell"
 
 /** Output kept per terminal, so a terminal the page draws again shows what it showed before. */
@@ -31,9 +32,9 @@ export class Terminals {
     const decoder = new TextDecoder()
     const entry: Running = {
       buffer: "",
-      process: Bun.spawn(loginShell(), {
+      process: spawn(loginShell(), {
         cwd: dir,
-        env: { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor", TERM_PROGRAM: "Desk" },
+        env: { TERM: "xterm-256color", COLORTERM: "truecolor", TERM_PROGRAM: "Desk" },
         terminal: {
           cols,
           rows,
