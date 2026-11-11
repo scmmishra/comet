@@ -2,10 +2,10 @@
 //! background, with Run or Stop beside its name. Commands that share a group show as one row. A right-click
 //! edits or deletes a row, and the editor adds, changes or removes commands.
 
-use crate::protocol::{ClientMessage, CommandInfo, CommandProcess, CommandRun};
+use crate::protocol::{ClientMessage, CommandInfo, CommandProcess, CommandRun, CommandSource, FoundCommand};
 use crate::shell::Desk;
 use rune::{El, PointerPress, TextEdit, col, el, icon, row, text};
-use rune_kit::{ButtonVariant, ControlSize, Dialog, IconButton, IconButtonVariant, Kit, MenuItem, TextInput, context_menu};
+use rune_kit::{ButtonVariant, ControlSize, Dialog, IconButton, IconButtonVariant, Kit, Menu, MenuItem, Placement, TextInput, context_menu};
 use rune_theme_opencode::icons as ic;
 use std::collections::HashSet;
 
@@ -50,6 +50,61 @@ pub struct Draft {
     grouped: bool,
     name: TextEdit,
     processes: Vec<(Option<String>, TextEdit, TextEdit)>,
+    /// Whether the menu of commands to import is open.
+    importing: bool,
+}
+
+impl Draft {
+    /// A lone process with no command yet, which an import fills rather than adds to.
+    fn is_blank(&self) -> bool {
+        self.processes.len() == 1 && self.processes[0].2.text.trim().is_empty()
+    }
+
+    /// Adds a process. When a second joins a lone one, the first keeps the command's name, as in the Electron app.
+    fn add_process(&mut self, name: &str, command: &str) {
+        if self.processes.len() == 1 && self.processes[0].1.text.trim().is_empty() {
+            self.processes[0].1 = TextEdit::new(self.name.text.trim());
+        }
+        self.processes.push((None, TextEdit::new(name), TextEdit::new(command)));
+        self.grouped = self.processes.len() > 1;
+    }
+
+    fn remove_process(&mut self, i: usize) {
+        self.processes.remove(i);
+        self.grouped = self.processes.len() > 1;
+    }
+
+    /// A found command fills the blank process, naming the command when it has no name yet, or joins as
+    /// another process.
+    fn import(&mut self, found: &FoundCommand) {
+        if !self.is_blank() {
+            return self.add_process(&found.name, &found.command);
+        }
+        if self.name.text.trim().is_empty() {
+            self.name = TextEdit::new(found.name.clone());
+        }
+        self.processes[0].2 = TextEdit::new(found.command.clone());
+    }
+
+    /// Every command a file defines, as one group named after the file when the command has no name yet.
+    fn import_all(&mut self, source: &CommandSource) {
+        if self.name.text.trim().is_empty() {
+            self.name = TextEdit::new(source.name.clone());
+        }
+        if self.is_blank() {
+            self.processes = source.commands.iter().map(|c| (None, TextEdit::new(c.name.clone()), TextEdit::new(c.command.clone()))).collect();
+            self.grouped = self.processes.len() > 1;
+        } else {
+            for found in &source.commands {
+                self.add_process(&found.name, &found.command);
+            }
+        }
+    }
+
+    /// A name, a command for every process, and a name for each process of a group.
+    fn ready(&self) -> bool {
+        !self.name.text.trim().is_empty() && self.processes.iter().all(|(_, name, command)| !command.text.trim().is_empty() && (!self.grouped || !name.text.trim().is_empty()))
+    }
 }
 
 /// Which group is open, which row's menu shows and where, and the editor's form.
@@ -73,6 +128,7 @@ impl Desk {
             grouped: members.len() > 1,
             name: TextEdit::new(name.unwrap_or("")),
             processes,
+            importing: false,
         });
     }
 
@@ -82,7 +138,6 @@ impl Desk {
         let processes = draft
             .processes
             .iter()
-            .filter(|(_, _, command)| !command.text.trim().is_empty())
             .map(|(id, process, command)| CommandProcess {
                 id: id.clone(),
                 name: if draft.grouped { process.text.trim().to_owned() } else { name.clone() },
@@ -241,7 +296,7 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
         _ => "Add command",
     };
     let field = |label: &str, input: El| col().w_full().gap(6.0).child(text(label.to_owned()).font(crate::theme::medium(12.0)).color(k.c.text_muted)).child(input);
-    let name = TextInput::new(&draft.name).placeholder("Dev server").on_edit(|s: &mut Desk| &mut s.commands_card.draft.as_mut().expect("the editor is open").name).build(k);
+    let name = TextInput::new(&draft.name).placeholder("Dev server").width(None).on_edit(|s: &mut Desk| &mut s.commands_card.draft.as_mut().expect("the editor is open").name).build(k);
     let processes = draft.processes.iter().enumerate().map(|(i, (_, process, command))| {
         let process_name = draft.grouped.then(|| {
             TextInput::new(process).placeholder("Name").label("Process name").width(Some(140.0)).on_edit(move |s: &mut Desk| &mut s.commands_card.draft.as_mut().expect("the editor is open").processes[i].1).build(k)
@@ -250,6 +305,7 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
             .placeholder("bun run dev")
             .label("Command")
             .text_style(crate::theme::mono(12.0))
+            .width(None)
             .on_edit(move |s: &mut Desk| &mut s.commands_card.draft.as_mut().expect("the editor is open").processes[i].2)
             .build(k)
             .grow(1.0);
@@ -260,8 +316,7 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
                 .label("Remove process")
                 .on_press(move |s: &mut Desk| {
                     if let Some(d) = s.commands_card.draft.as_mut() {
-                        d.processes.remove(i);
-                        d.grouped = d.processes.len() > 1;
+                        d.remove_process(i);
                     }
                 })
                 .build(k)
@@ -273,12 +328,16 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
         .icon(&ic::PLUS)
         .on_press(|s: &mut Desk| {
             if let Some(d) = s.commands_card.draft.as_mut() {
-                d.processes.push((None, TextEdit::new(""), TextEdit::new("")));
-                d.grouped = d.processes.len() > 1;
+                d.add_process("", "");
             }
         })
         .build(k);
-    let ready = !draft.name.text.trim().is_empty() && draft.processes.iter().any(|(_, _, c)| !c.text.trim().is_empty());
+    // `w-fit`: the button keeps to its label, at the start of the row.
+    let add = row().w_full().child(add);
+    let ready = draft.ready();
+    // The menu draws above the dialog, so it builds into a layer of its own that goes on after the dialog's.
+    let mut menus = Vec::new();
+    let import = (!editing).then(|| import_menu(s, &draft.project, draft.importing, k, &mut menus));
     let delete = editing.then(|| {
         let (project, ids) = (draft.project.clone(), draft.original.clone());
         crate::theme::button(if draft.grouped { "Delete group" } else { "Delete" })
@@ -294,6 +353,7 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
         .gap(8.0)
         .items_center()
         .children(delete)
+        .children(import)
         .child(row().grow(1.0))
         .child(crate::theme::button("Cancel").variant(ButtonVariant::Ghost).on_press(|s: &mut Desk| s.commands_card.draft = None).build(k))
         .child(crate::theme::button("Save").variant(ButtonVariant::Submit).disabled(!ready).on_press(|s: &mut Desk| s.save_commands()).build(k));
@@ -309,9 +369,67 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
         .description("Runs in the background in the project's folder.")
         .open(true)
         .fit()
+        // A press on the import menu, which draws outside the dialog, must not close it.
+        .click_outside(!draft.importing)
         .on_close(|s: &mut Desk| s.commands_card.draft = None)
         .child(body)
         .build(k, layer);
+    layer.extend(menus);
+}
+
+/// "Import from…": the commands the project's Procfiles, mise tasks and package.json define, by file, as
+/// the Electron app's import menu lists them. Picking one fills a process, and "Import all as a group"
+/// fills one per command. The core leaves out commands already saved.
+fn import_menu(s: &Desk, project: &str, open: bool, k: &Kit, layer: &mut Vec<El>) -> El {
+    let dir = project.to_owned();
+    let trigger = crate::theme::button("Import from…")
+        .variant(ButtonVariant::Ghost)
+        .on_press(move |s: &mut Desk| {
+            let Some(d) = s.commands_card.draft.as_mut() else { return };
+            d.importing = !d.importing;
+            // The files may have changed since the last look, so the menu reads them each time it opens.
+            if d.importing {
+                s.core.send(&ClientMessage::ProjectGet { project: dir.clone(), part: "commandSources".into() });
+            }
+        })
+        .build(k);
+    let close = |s: &mut Desk| {
+        if let Some(d) = s.commands_card.draft.as_mut() {
+            d.importing = false;
+        }
+    };
+    let mut menu = Menu::new("command-import").trigger(trigger).open(open).placement(Placement::TopStart).min_width(360.0).on_close(close);
+    match s.projects.get(project).and_then(|p| p.command_sources.as_ref()) {
+        None => menu = menu.item(MenuItem::new("Looking…").disabled(true)),
+        Some(sources) if sources.is_empty() => menu = menu.item(MenuItem::new("No Procfile, mise task or package.json script to import.").disabled(true)),
+        Some(sources) => {
+            for (i, source) in sources.iter().enumerate() {
+                menu = menu.group_label(source.name.clone());
+                if source.commands.len() > 1 {
+                    let all = source.clone();
+                    menu = menu.item(MenuItem::new("Import all as a group").on_select(move |s: &mut Desk| {
+                        if let Some(d) = s.commands_card.draft.as_mut() {
+                            d.import_all(&all);
+                            d.importing = false;
+                        }
+                    }));
+                }
+                for found in &source.commands {
+                    let found = found.clone();
+                    menu = menu.item(MenuItem::new(found.name.clone()).description(found.command.clone()).on_select(move |s: &mut Desk| {
+                        if let Some(d) = s.commands_card.draft.as_mut() {
+                            d.import(&found);
+                            d.importing = false;
+                        }
+                    }));
+                }
+                if i + 1 < sources.len() {
+                    menu = menu.separator();
+                }
+            }
+        }
+    }
+    menu.build(k, layer)
 }
 
 #[cfg(test)]
@@ -330,6 +448,46 @@ mod tests {
         assert_eq!(rows.len(), 3);
         let Entry::Group(_, members) = &rows[1] else { unreachable!() };
         assert_eq!(group_run(members).state, "running");
+    }
+
+    fn draft() -> Draft {
+        Draft { project: "/code/x".into(), original: vec![], grouped: false, name: TextEdit::new(""), processes: vec![(None, TextEdit::new(""), TextEdit::new(""))], importing: false }
+    }
+
+    fn found(name: &str, command: &str) -> FoundCommand {
+        FoundCommand { name: name.into(), command: command.into() }
+    }
+
+    #[test]
+    fn a_second_process_makes_a_group_and_the_first_keeps_the_command_s_name() {
+        let mut d = draft();
+        d.name = TextEdit::new("Web");
+        d.processes[0].2 = TextEdit::new("bun run dev");
+        assert!(d.ready());
+        d.add_process("", "");
+        assert!(d.grouped);
+        assert_eq!(d.processes[0].1.text, "Web");
+        assert!(!d.ready(), "every process of a group needs a name and a command");
+        d.processes[1].1 = TextEdit::new("Worker");
+        d.processes[1].2 = TextEdit::new("bun run worker");
+        assert!(d.ready());
+        d.remove_process(1);
+        assert!(!d.grouped);
+    }
+
+    #[test]
+    fn an_import_fills_the_blank_process_and_import_all_makes_a_group_named_after_the_file() {
+        let mut one = draft();
+        one.import(&found("dev", "bun run dev"));
+        assert_eq!((one.name.text.as_str(), one.processes.len(), one.processes[0].2.text.as_str()), ("dev", 1, "bun run dev"));
+        one.import(&found("test", "bun test"));
+        assert_eq!(one.processes.len(), 2, "a second import joins as another process");
+
+        let mut all = draft();
+        all.import_all(&CommandSource { name: "Procfile.dev".into(), commands: vec![found("web", "bun run dev"), found("worker", "bun run worker")] });
+        let processes: Vec<(&str, &str)> = all.processes.iter().map(|(_, n, c)| (n.text.as_str(), c.text.as_str())).collect();
+        assert_eq!((all.name.text.as_str(), all.grouped, processes), ("Procfile.dev", true, vec![("web", "bun run dev"), ("worker", "bun run worker")]));
+        assert!(all.ready());
     }
 
     #[test]

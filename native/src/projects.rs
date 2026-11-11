@@ -1,6 +1,6 @@
 //! What the core reads about each project, as `app/src/renderer/projects.ts` keeps it.
 
-use crate::protocol::{CommandInfo, McpServer, PluginContributions, Skill, Space, ThreadSummary};
+use crate::protocol::{CommandInfo, CommandSource, McpServer, PluginContributions, Skill, Space, ThreadSummary};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -14,6 +14,8 @@ pub struct Project {
     pub skills: Option<Vec<Skill>>,
     /// The project's own commands, which the Commands card runs. None until read.
     pub commands: Option<Vec<CommandInfo>>,
+    /// Commands the project's files define, for the command editor's import menu. None until read.
+    pub command_sources: Option<Vec<CommandSource>>,
     /// What the project's plugins offer in the palette.
     pub plugins: Option<PluginContributions>,
     /// Images in the project that look like its logo, for the icon picker, as paths inside it. None until read.
@@ -41,6 +43,7 @@ impl Projects {
             "skills" => project.skills = serde_json::from_value(value).ok(),
             "icons" => project.icons = serde_json::from_value(value).ok(),
             "commands" => project.commands = serde_json::from_value(value).ok(),
+            "commandSources" => project.command_sources = serde_json::from_value(value).ok(),
             "plugins" => project.plugins = serde_json::from_value(value).ok(),
             "mcp" => project.mcp = Some(serde_json::from_value(value).ok()),
             _ => {}

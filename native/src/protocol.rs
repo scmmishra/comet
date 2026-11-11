@@ -406,6 +406,21 @@ pub struct CommandInfo {
     pub run: CommandRun,
 }
 
+/// A file in a project that defines commands, such as a Procfile, and the commands found in it.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct CommandSource {
+    /// What the import menu calls it, such as "Procfile.dev" or "package.json".
+    pub name: String,
+    pub commands: Vec<FoundCommand>,
+}
+
+/// A command a project's file defines, for the command editor's import menu.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct FoundCommand {
+    pub name: String,
+    pub command: String,
+}
+
 /// A process in the command editor. `id` is the saved command it replaces, when it replaces one.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CommandProcess {
