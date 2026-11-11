@@ -312,7 +312,7 @@ pub fn poll(s: &mut Desk, _: f64, tx: &mut Tx) -> bool {
     s.sync_palette();
     s.sync_plugin_inputs();
     crate::tab_bar::follow_active(s, tx);
-    let composed = composer::poll(s, tx) | copied_poll(s, tx) | toasts_poll(s, tx);
+    let composed = composer::poll(s, tx) | copied_poll(s, tx) | toasts_poll(s, tx) | crate::terminal_view::poll(s, tx);
     if s.status == CoreState::Ready {
         let next = s.refresh_usage();
         tx.wake_after(next);
@@ -348,6 +348,11 @@ fn copied_poll(s: &mut Desk, tx: &mut Tx) -> bool {
     }
     tx.wake_after(COPIED - at.elapsed());
     false
+}
+
+/// The input method, for the editors Desk draws itself. Text fields hear it on their own.
+pub fn ime(s: &mut Desk, event: &rune::Ime, _: &mut Tx) -> bool {
+    s.terminal_ime(event)
 }
 
 /// Keys nothing focused took: Escape closes an open popover.

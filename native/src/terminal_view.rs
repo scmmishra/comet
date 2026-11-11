@@ -1,5 +1,5 @@
-//! A terminal in the view pane: its rows on a fixed grid of cells, the cursor, keys, scrolling,
-//! selecting text to copy, and the mouse for programs that track it. The screen comes from
+//! A terminal in the view pane: its rows on a fixed grid of cells, the cursor, keys, the input method,
+//! scrolling, selecting text to copy, and the mouse for programs that track it. The screen comes from
 //! `terminal.rs`, and the shell runs in the core.
 
 use crate::protocol::ClientMessage;
@@ -7,7 +7,7 @@ use crate::shell::Desk;
 use crate::terminal::{FOREGROUND, Mouse, Row, Screen, Size, Spot, key_bytes, mouse_bytes, paste_bytes};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::vte::ansi::Rgb;
-use rune::{Color, Drag, El, Key, KeyEvent, Mods, Phase, Span, TextStyle, Tx, col, el, memo, text};
+use rune::{Color, Drag, El, Ime, Key, KeyEvent, Mods, Phase, Span, TextStyle, Tx, col, el, memo, text};
 use rune_kit::Kit;
 use std::collections::{HashMap, HashSet};
 
@@ -18,6 +18,8 @@ const PAD: f32 = 12.0;
 /// What a shell shows when it ends.
 const EXITED: &[u8] = b"\r\n\x1b[2m[Process exited]\x1b[0m\r\n";
 const START: Size = Size { cols: 80, rows: 24 };
+/// The prefix of a terminal's element key, which tells it apart when it has focus.
+const KEY_PREFIX: &str = "terminal-";
 
 /// Every terminal's screen, by id, and the cell size the font gives.
 #[derive(Default)]
@@ -32,6 +34,10 @@ pub struct Terminals {
     reported: Option<(usize, usize)>,
     /// A press went to the program rather than starting a selection.
     pressed: bool,
+    /// The terminal with the keyboard, which the input method types into.
+    focused: Option<String>,
+    /// What the input method has composed and not yet typed, drawn at the caret.
+    preedit: String,
 }
 
 fn font() -> TextStyle {
@@ -165,6 +171,34 @@ impl Desk {
         }
     }
 
+    /// Notes which terminal has the keyboard. A composition ends when the terminal loses it.
+    /// Returns true when that changed.
+    fn follow_focus(&mut self, focused: Option<&str>) -> bool {
+        let id = focused.and_then(|key| key.strip_prefix(KEY_PREFIX)).filter(|id| self.terminals.screens.contains_key(*id));
+        if self.terminals.focused.as_deref() == id {
+            return false;
+        }
+        self.terminals.focused = id.map(str::to_owned);
+        self.terminals.preedit.clear();
+        true
+    }
+
+    /// The input method's text for the focused terminal: a composition to show at the caret, then the
+    /// text it settles on, typed into the shell. Plain keys arrive through `terminal_key` instead.
+    pub fn terminal_ime(&mut self, event: &Ime) -> bool {
+        let Some(id) = self.terminals.focused.clone() else { return false };
+        match event {
+            Ime::Preedit(text, _) => self.terminals.preedit = text.clone(),
+            Ime::Commit(text) => {
+                self.terminals.preedit.clear();
+                self.type_into(&id, text.clone());
+            }
+            Ime::Enabled => {}
+            Ime::Disabled => self.terminals.preedit.clear(),
+        }
+        true
+    }
+
     fn terminal_key(&mut self, id: &str, event: &KeyEvent, tx: &mut Tx) -> bool {
         let mods = event.mods;
         if mods.cmd && !mods.ctrl {
@@ -223,9 +257,21 @@ pub fn terminal(s: &Desk, id: &str, k: &Kit) -> El {
     });
     let grid = col().absolute(PAD, 0.0).w(screen.size.cols as f32 * cw).children(rows);
     let cursor = screen.cursor.map(|(x, y)| el().absolute(PAD + x as f32 * cw, y as f32 * ch).size(1.5, ch).fill(ink));
+    // While the terminal has the keyboard, the input method works at the caret, and what it composes
+    // shows there, underlined, until it is typed.
+    let has_keyboard = s.terminals.focused.as_deref() == Some(id);
+    let (cx, cy) = screen.caret;
+    let caret = has_keyboard.then(|| {
+        let at = el().key("caret").absolute(PAD + cx as f32 * cw, cy as f32 * ch).h(ch).ime_cursor();
+        let preedit = &s.terminals.preedit;
+        if preedit.is_empty() {
+            return at.w(1.0);
+        }
+        at.fill(k.c.bg_base).child(text(preedit.clone()).font(f).color(ink).spans(vec![Span::new(0, preedit.len()).underline(ink)]))
+    });
     let (resize_id, key_id, wheel_id, drag_id, hover_id) = (id.to_owned(), id.to_owned(), id.to_owned(), id.to_owned(), id.to_owned());
     el()
-        .key(format!("terminal-{id}"))
+        .key(format!("{KEY_PREFIX}{id}"))
         .w_full()
         .grow(1.0)
         .min_h(0.0)
@@ -255,6 +301,12 @@ pub fn terminal(s: &Desk, id: &str, k: &Kit) -> El {
         // Over the cells' own backgrounds, faint enough to read the text through.
         .children(selection)
         .children(cursor)
+        .children(caret)
+}
+
+/// Notes which terminal has the keyboard, from `shell::poll`. True when that changed.
+pub fn poll(s: &mut Desk, tx: &Tx) -> bool {
+    s.follow_focus(tx.focused())
 }
 
 /// One row: background runs under the text, the text with its colours, and wide characters in their cells.
@@ -346,6 +398,22 @@ mod tests {
             s.terminal_drag("t", Phase::Move, *x, *y, 1, Mods::default());
         }
         assert_eq!(sent(&s), ["\x1b[<0;2;1M", "\x1b[<32;3;1M"]);
+    }
+
+    #[test]
+    fn the_input_method_types_into_the_terminal_with_the_keyboard() {
+        let mut s = desk(b"");
+        assert!(!s.terminal_ime(&Ime::Commit("é".into())), "with no terminal focused, the input method goes elsewhere");
+        assert!(s.follow_focus(Some("terminal-t")));
+        assert!(!s.follow_focus(Some("terminal-t")), "the same focus is no change");
+        assert!(s.terminal_ime(&Ime::Preedit("ni".into(), None)));
+        assert_eq!(s.terminals.preedit, "ni");
+        s.terminal_ime(&Ime::Commit("你".into()));
+        assert_eq!(s.terminals.preedit, "");
+        assert_eq!(sent(&s), ["你"]);
+        s.terminal_ime(&Ime::Preedit("ha".into(), None));
+        assert!(s.follow_focus(Some("composer-input")));
+        assert_eq!((s.terminals.focused.as_deref(), s.terminals.preedit.as_str()), (None, ""), "leaving the terminal ends the composition");
     }
 
     #[test]

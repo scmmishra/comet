@@ -77,6 +77,9 @@ pub struct Screen {
     pub versions: Vec<u64>,
     /// The cursor's cell, when it shows on screen.
     pub cursor: Option<(usize, usize)>,
+    /// Where typed text goes, on screen, even while the program hides the cursor: the input method's
+    /// candidate window and the text it composes sit there.
+    pub caret: (usize, usize),
     /// The selected cells on screen, by row: the row, then its first and last selected column.
     pub selection: Vec<(usize, usize, usize)>,
     pub size: Size,
@@ -95,7 +98,7 @@ impl Screen {
     pub fn new(size: Size) -> Screen {
         let replies = Replies::default();
         let config = Config { scrolling_history: SCROLLBACK, ..Config::default() };
-        let mut screen = Screen { term: Term::new(config, &size, replies.clone()), parser: Processor::new(), replies, rows: Vec::new(), versions: Vec::new(), cursor: None, selection: Vec::new(), size };
+        let mut screen = Screen { term: Term::new(config, &size, replies.clone()), parser: Processor::new(), replies, rows: Vec::new(), versions: Vec::new(), cursor: None, caret: (0, 0), selection: Vec::new(), size };
         screen.refresh();
         screen
     }
@@ -234,7 +237,9 @@ impl Screen {
         }
         let cursor = content.cursor.point;
         let y = cursor.line.0 + offset;
-        self.cursor = (self.term.mode().contains(TermMode::SHOW_CURSOR) && y >= 0 && (y as usize) < self.size.rows).then_some((cursor.column.0, y as usize));
+        let on_screen = y >= 0 && (y as usize) < self.size.rows;
+        self.caret = (cursor.column.0, y.clamp(0, self.size.rows as i32 - 1) as usize);
+        self.cursor = (self.term.mode().contains(TermMode::SHOW_CURSOR) && on_screen).then_some(self.caret);
         self.versions.resize(rows.len(), 0);
         for (y, row) in rows.iter().enumerate() {
             if self.rows.get(y) != Some(row) {
