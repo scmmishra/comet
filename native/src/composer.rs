@@ -121,6 +121,8 @@ pub struct Drafts {
     skills_asked: HashSet<String>,
     /// Each tab's attached images. They stay in memory only, since one can run to megabytes.
     images: HashMap<String, Vec<crate::protocol::ImageAttachment>>,
+    /// Where the composer last took focus: the tab, and whether its thread had started.
+    focused_for: Option<(String, bool)>,
 }
 
 impl Drafts {
@@ -525,7 +527,29 @@ pub fn poll(s: &mut Desk, tx: &mut rune::Tx) -> bool {
     if let Some(wait) = sync(s) {
         tx.wake_after(wait);
     }
+    if s.composer_appeared() {
+        tx.focus("composer-input", false);
+    }
     false
+}
+
+impl Desk {
+    /// Whether a composer just appeared, so typing starts there, as the Electron composer focuses itself
+    /// when it mounts: in a new tab, in a tab brought to the front, and at the bottom of a thread the first
+    /// message started. The palette and Settings keep the keyboard while they show.
+    fn composer_appeared(&mut self) -> bool {
+        if self.palette.is_open() || self.workspace.settings_page.is_some() {
+            return false;
+        }
+        let Some(tab) = self.workspace.active.clone() else { return false };
+        let started = self.threads.get(&tab).is_some_and(|t| !t.items.is_empty());
+        let now = Some((tab, started));
+        if self.drafts.focused_for == now {
+            return false;
+        }
+        self.drafts.focused_for = now;
+        true
+    }
 }
 
 /// What `poll` does, without the event loop. Returns how long until the drafts are due to be saved.
@@ -893,6 +917,20 @@ mod tests {
         assert!(s.paste(&rune::ClipboardContent::new("").with_files([text])), "files paste as attachments");
         assert_eq!(s.toasts.messages(), ["desk-paste-note.txt is not a PNG, JPEG, GIF or WebP image."]);
         assert!(!s.paste(&rune::ClipboardContent::new("hello")), "text goes into the message");
+    }
+
+    #[test]
+    fn the_composer_takes_the_keyboard_when_it_appears_and_not_again() {
+        let mut s = desk();
+        assert!(s.composer_appeared(), "a tab's composer takes focus as it shows");
+        assert!(!s.composer_appeared(), "and leaves focus alone after");
+        s.threads.apply("t", ThreadEvent::Item { item: crate::protocol::ThreadItem::User { id: "u".into(), text: "hi".into(), images: vec![], at: None, steered: false, self_started: false } });
+        assert!(s.composer_appeared(), "the first message moves it to the bottom of the thread");
+        s.show_palette(Vec::new());
+        s.workspace.active = Some("other".into());
+        assert!(!s.composer_appeared(), "the palette keeps the keyboard");
+        s.palette = crate::palette::Palette::default();
+        assert!(s.composer_appeared(), "once it closes, the tab it showed takes focus");
     }
 
     #[test]

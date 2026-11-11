@@ -112,6 +112,12 @@ pub struct Palette {
     found: Option<(String, String, Vec<String>)>,
 }
 
+impl Palette {
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
+}
+
 impl Desk {
     /// Opens the palette on `pages`, or closes it when it is open.
     pub fn toggle_palette(&mut self, pages: Vec<Page>, tx: &mut Tx) {
