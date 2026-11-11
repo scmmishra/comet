@@ -39,7 +39,7 @@ Done so far:
 
 - The core lays out each thread's rows and sends them as `session.rows`, after a thread's history and whenever an event changes them. Rows hold item ids. The Electron app puts its items into them (`resolveRows`), and the native app will too.
 
-- The core names each step: tool and thinking items carry their `kind` and `label`, and each group row its `summary`. The rules moved from the app's `work.ts` to `core/src/steps.ts`.
+- The core names each step: tool and thinking items carry their `kind` and `label`, and each group row its `summary`. The rules moved from the app's `work.ts` to the core: `core/src/agents/steps.ts` names the steps, and `core/src/thread-rows.ts` sums each group.
 
 - The thread, read-only: every row kind from the core's rows, drawn as `thread.tsx` draws them, inside `virtual_rows` with each row kept by `memo`. Folds, groups and steps open and close. It follows live events and text deltas, sticks to the bottom while it grows, and counts the working head's seconds. The session's header shows the project and the tab's title.
 - `cargo run -- --snap thread.png --scene thread` renders a sample thread without a core, for checking the look.
