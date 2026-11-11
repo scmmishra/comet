@@ -224,15 +224,35 @@ impl Desk {
 
     /// Adds image files to the active tab's message. A file that is not an image Claude reads says why.
     fn attach(&mut self, paths: &[std::path::PathBuf]) {
-        let Some(tab) = self.workspace.active.clone() else { return };
         for path in paths {
-            match crate::attachments::read(path) {
-                Ok(image) => {
-                    self.images.remember(&image);
-                    self.drafts.images.entry(tab.clone()).or_default().push(image);
-                }
-                Err(reason) => self.toasts.show(reason, true),
+            self.attach_image(crate::attachments::read(path));
+        }
+    }
+
+    fn attach_image(&mut self, image: Result<crate::protocol::ImageAttachment, String>) {
+        let Some(tab) = self.workspace.active.clone() else { return };
+        match image {
+            Ok(image) => {
+                self.images.remember(&image);
+                self.drafts.images.entry(tab).or_default().push(image);
             }
+            Err(reason) => self.toasts.show(reason, true),
+        }
+    }
+
+    /// A paste with files, or an image such as a screenshot, attaches them, as the Electron app's composer
+    /// does. Text pastes as text. True when the paste attached something.
+    fn paste(&mut self, content: &rune::ClipboardContent) -> bool {
+        if !content.files().is_empty() {
+            self.attach(content.files());
+            return true;
+        }
+        match content.image() {
+            Some(image) => {
+                self.attach_image(crate::attachments::from_png(image.png()));
+                true
+            }
+            None => false,
         }
     }
 
@@ -364,8 +384,15 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &
             let alternate = s.cmd_held();
             s.submit(alternate);
         })
+        .on_input_paste(|s: &mut Desk, content, _| s.paste(content))
         .on_input_key(|s: &mut Desk, key: &KeyEvent, tx| {
             let Some(tab) = s.workspace.active.clone() else { return false };
+            // ⌘Enter sends with the other follow-up: it queues while Enter steers, as the Electron app does.
+            // Rune's field submits on Enter alone.
+            if key.key == Key::Enter && key.mods.cmd && !key.mods.shift && !key.mods.alt {
+                s.submit(true);
+                return true;
+            }
             if key.mods.shift || key.mods.cmd || key.mods.alt {
                 return false;
             }
@@ -850,6 +877,22 @@ mod tests {
 
     fn type_text(s: &mut Desk, words: &str) {
         s.drafts.edit("t").text = words.into();
+    }
+
+    #[test]
+    fn a_paste_attaches_a_screenshot_or_files_and_leaves_text_alone() {
+        let mut s = desk();
+        // A 1×1 PNG's signature and header, which is all the clipboard checks.
+        let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+        png.extend([0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]);
+        let shot = rune::ClipboardContent::new("").with_image(rune::ClipboardImage::from_png(png).expect("a PNG"));
+        assert!(s.paste(&shot));
+        assert_eq!(s.drafts.images["t"].iter().map(|i| i.media_type.as_str()).collect::<Vec<_>>(), ["image/png"]);
+        let text = std::env::temp_dir().join("desk-paste-note.txt");
+        std::fs::write(&text, "x").unwrap();
+        assert!(s.paste(&rune::ClipboardContent::new("").with_files([text])), "files paste as attachments");
+        assert_eq!(s.toasts.messages(), ["desk-paste-note.txt is not a PNG, JPEG, GIF or WebP image."]);
+        assert!(!s.paste(&rune::ClipboardContent::new("hello")), "text goes into the message");
     }
 
     #[test]

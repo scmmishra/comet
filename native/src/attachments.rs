@@ -27,6 +27,14 @@ pub fn read(path: &Path) -> Result<ImageAttachment, String> {
     Ok(ImageAttachment { media_type: (*media_type).to_owned(), data: base64::encode(&bytes) })
 }
 
+/// A pasted image, such as a screenshot, which the clipboard holds as PNG.
+pub fn from_png(png: &[u8]) -> Result<ImageAttachment, String> {
+    if png.len() as u64 > MAX_IMAGE_BYTES {
+        return Err(format!("The pasted image is larger than {} MB.", MAX_IMAGE_BYTES / 1024 / 1024));
+    }
+    Ok(ImageAttachment { media_type: "image/png".into(), data: base64::encode(png) })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
