@@ -169,9 +169,30 @@ pub fn thread_text(k: &Kit, size: f32) -> TextStyle {
 const THREAD_LINE_HEIGHT: f32 = 1.625;
 
 /// Replies in the thread: the thread's text, and code a step darker than the panel.
+/// The values follow `.desk-prose` in the Electron app's `index.css`.
 pub fn markdown(k: &Kit, size: f32) -> MarkdownStyle {
     let d = if k.dark { &DARK } else { &LIGHT };
-    MarkdownStyle::from_kit(k).body_font(thread_text(k, size)).code_block(color(d.code), k.c.border_base)
+    let heading = |points: f32| TextStyle::new(points, 600.0).lh((points * 1.3).round());
+    MarkdownStyle::from_kit(k)
+        .body_font(thread_text(k, size))
+        .heading_font(1, heading(20.0))
+        .heading_font(2, heading(18.0))
+        .heading_font(3, heading(16.0))
+        .heading_font(4, heading(size))
+        .heading_font(5, heading(size))
+        .heading_font(6, heading(size))
+        .strong_weight(600.0)
+        // A 20 point indent with the marker centred in it, in the faint text colour, as a disc marker draws there.
+        .list(20.0, 4.0)
+        .muted(k.c.text_faint)
+        .inline_code_font(0.92, 400.0)
+        .inline_code_bg(color(d.raised))
+        .inline_code_pad(5.0)
+        .quote(color(d.line), 2.0, 10.0, k.c.text_muted)
+        .rule(color(d.line))
+        .link(k.c.text_accent)
+        // A code block is one flat surface, with no outline.
+        .code_block(color(d.code), Color::TRANSPARENT)
 }
 
 /// Desk's typefaces, Geist and Geist Mono, as the Electron app loads them. Variable fonts, so every

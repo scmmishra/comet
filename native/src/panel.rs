@@ -308,8 +308,7 @@ fn review_view(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .gap(8.0)
             .items_center()
             .child(text(format::plural(r.files.len(), "file")).font(crate::theme::text(13.0)).color(k.c.text_faint))
-            .child(text(format!("+{added}")).font(crate::theme::text(12.0)).color(k.c.success.fg))
-            .child(text(format!("−{removed}")).font(crate::theme::text(12.0)).color(k.c.danger.fg))
+            .child(crate::ui::diff_changes(k, added, removed))
     });
     let style = SegmentedControl::new(&["Unified", "Split"], Some(usize::from(s.panel.split))).label("Diff view").on_pick(|s: &mut Desk, i, _| s.set_split(i == 1)).build(k);
     let controls = row().w_full().gap(8.0).items_center().px(12.0).pb(8.0).pt(2.0).child(select).children(counts).child(row().grow(1.0)).child(style);

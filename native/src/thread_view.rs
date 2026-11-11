@@ -9,7 +9,7 @@ use crate::theme;
 use crate::cards::Lane;
 use crate::threads::Thread;
 use rune::{El, GrowthSpec, Icon, ScrollSpec, col, el, icon, memo, row, text};
-use rune_kit::{ButtonVariant, IconButton, IconButtonVariant, Kit, Markdown, Spinner};
+use rune_kit::{ButtonVariant, IconButton, IconButtonVariant, Kit, Markdown, Menu, MenuItem, Placement, Spinner};
 use rune_theme_opencode::icons as ic;
 use std::borrow::Cow;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -158,6 +158,8 @@ fn hash_row(c: &Ctx, r: &ThreadRow, h: &mut DefaultHasher) {
             c.thread.revision(id).hash(h);
             open(id, h);
             c.s.copied.as_ref().is_some_and(|(copied, _)| copied == id).hash(h);
+            (c.thread.latest_changes() == Some(id.as_str())).hash(h);
+            c.s.threads.approval_menu.hash(h);
         }
         ThreadRow::Group { id, steps, live, summary } => {
             (live, summary).hash(h);
@@ -246,8 +248,8 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
             .px(12.0)
             .py(8.0)
             .child(text(message.clone()).wrap().font(theme::thread_text(k, c.size)).color(k.c.danger.fg).selectable(true)),
-        ThreadItem::Changes { files, .. } => changes_view(c, files),
-        ThreadItem::Permission { request_id, kind, detail, reason, allow_session, .. } => permission_view(c, request_id, kind, detail, reason.as_deref(), *allow_session),
+        ThreadItem::Changes { id, files } => changes_view(c, id, files),
+        ThreadItem::Permission { request_id, kind, detail, reason, .. } => permission_view(c, request_id, kind, detail, reason.as_deref()),
         ThreadItem::Thinking { .. } | ThreadItem::Tool { .. } => step_view(c, item),
         // Results end turns and questions show in the composer. Neither draws in the thread.
         ThreadItem::Result { .. } | ThreadItem::Question { .. } => el(),
@@ -465,7 +467,7 @@ fn edit_view(c: &Ctx, file: &str, edits: &[crate::protocol::TextEdit]) -> El {
         .py(7.0)
         .child(icon(&ic::EDIT, 15.0).color(k.c.text_muted))
         .child(text(file.to_owned()).font(crate::theme::mono(12.0)).color(k.c.text_base).truncate().grow(1.0))
-        .child(counts(k, added, removed));
+        .child(crate::ui::diff_changes(k, added as u32, removed as u32));
     let body = col().w_full().max_h(EDIT_MAX).py(2.0).scroll(ScrollSpec { stick_bottom: false }).children(lines.iter().map(|(kind, line)| {
         let (mark, fill, ink) = match kind {
             LineKind::Add => ("+", Some(k.c.success.bg), k.c.success.fg),
@@ -481,15 +483,11 @@ fn edit_view(c: &Ctx, file: &str, edits: &[crate::protocol::TextEdit]) -> El {
     col().w_full().radius(BOX_RADIUS).clip_rounded(BOX_RADIUS).fill(k.c.bg_deep).border(1.0, k.c.border_base).child(head).child(body)
 }
 
-/// `+3 −1`, in the add and remove colours.
-fn counts(k: &Kit, added: usize, removed: usize) -> El {
-    row().gap(6.0).child(text(format!("+{added}")).font(crate::theme::text(12.0)).color(k.c.success.fg)).child(text(format!("−{removed}")).font(crate::theme::text(12.0)).color(k.c.danger.fg))
-}
 
 /// The files a turn changed, under its answer: one quiet box with a count, the line totals and the files.
-fn changes_view(c: &Ctx, files: &[crate::protocol::ChangedFile]) -> El {
+fn changes_view(c: &Ctx, id: &str, files: &[crate::protocol::ChangedFile]) -> El {
     let k = c.k;
-    let (added, removed) = files.iter().fold((0, 0), |(a, d), f| (a + f.additions as usize, d + f.deletions as usize));
+    let (added, removed) = files.iter().fold((0, 0), |(a, d), f| (a + f.additions, d + f.deletions));
     let head = row()
         .gap(12.0)
         .items_center()
@@ -497,8 +495,13 @@ fn changes_view(c: &Ctx, files: &[crate::protocol::ChangedFile]) -> El {
         .pt(8.0)
         .pb(4.0)
         .child(text(format::plural(files.len(), "changed file")).font(crate::theme::medium(12.0)).color(k.c.text_base))
-        .child(counts(k, added, removed));
-    let list = col().w_full().px(6.0).pb(6.0).children(files.iter().map(|f| {
+        .child(crate::ui::diff_changes(k, added, removed))
+        .children((c.thread.latest_changes() == Some(id)).then(|| {
+            let tab = c.tab.to_owned();
+            row().grow(1.0).justify_end().child(crate::theme::small_button("Open diff").variant(ButtonVariant::GhostMuted).icon(&ic::REVIEW).on_press(move |s: &mut Desk| s.open_review(&tab, "turn")).build(k))
+        }));
+    // Electron's `max-h-60`: a long list scrolls inside the box.
+    let list = col().w_full().max_h(240.0).scroll(ScrollSpec { stick_bottom: false }).px(6.0).pb(6.0).children(files.iter().map(|f| {
         let (dir, name) = f.path.rsplit_once('/').map_or(("", f.path.as_str()), |(d, n)| (d, n));
         let (tab, path) = (c.tab.to_owned(), f.path.clone());
         row()
@@ -508,10 +511,11 @@ fn changes_view(c: &Ctx, files: &[crate::protocol::ChangedFile]) -> El {
             .items_center()
             .px(6.0)
             .py(4.0)
-            .radius(6.0)
+            .radius(7.0)
             .hover(k.c.hover)
             .role("button")
             .on_press(move |s: &mut Desk| s.open_file(&tab, &path))
+            .child(icon(rune_theme_opencode::file_icons::file(&f.path), 13.0))
             .child(
                 row()
                     .grow(1.0)
@@ -520,7 +524,7 @@ fn changes_view(c: &Ctx, files: &[crate::protocol::ChangedFile]) -> El {
                     .child(text(name.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_base))
                     .children((!dir.is_empty()).then(|| text(dir.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate())),
             )
-            .child(counts(k, f.additions as usize, f.deletions as usize))
+            .child(crate::ui::diff_changes(k, f.additions, f.deletions))
     }));
     col().w_full().radius(BOX_RADIUS).fill(k.c.layer_02).child(head).child(list)
 }
@@ -528,7 +532,36 @@ fn changes_view(c: &Ctx, files: &[crate::protocol::ChangedFile]) -> El {
 /// A tool call waiting for approval, as a work row after T3 Code: what Claude would run or touch, why,
 /// and the answers. Rune's menus need the view's overlay layer, which rows built in `memo` lack, so the
 /// Electron app's "More" choices show as buttons.
-fn permission_view(c: &Ctx, request_id: &str, kind: &str, detail: &str, reason: Option<&str>, allow_session: bool) -> El {
+fn approval_menu_key(request_id: &str) -> String {
+    format!("approval-{request_id}")
+}
+
+/// The open More menu of an approval request in `tab`: always allowing the tool this session, if it can, or stopping the turn.
+pub fn approval_menu(s: &Desk, tab: &str, k: &Kit, layer: &mut Vec<El>) {
+    let Some((menu_tab, request)) = &s.threads.approval_menu else { return };
+    let Some(thread) = s.threads.get(tab).filter(|_| menu_tab == tab) else { return };
+    let Some(allow_session) = thread.items.iter().find_map(|item| match item {
+        ThreadItem::Permission { request_id, allow_session, .. } if request_id == request => Some(*allow_session),
+        _ => None,
+    }) else {
+        return;
+    };
+    let answer = |label: &str, value: &'static str| {
+        let (tab, request) = (tab.to_owned(), request.clone());
+        MenuItem::new(label).on_select(move |s: &mut Desk| {
+            s.threads.approval_menu = None;
+            s.answer_permission(&tab, &request, value);
+        })
+    };
+    let mut menu = Menu::new(approval_menu_key(request)).open(true).placement(Placement::BottomStart).gutter(2.0).min_width(176.0).on_close(|s: &mut Desk| s.threads.approval_menu = None);
+    if allow_session {
+        menu = menu.item(answer("Always allow this session", "allow-session"));
+    }
+    // Only the menu draws here. Its trigger is the More button in the thread's row, which has the same key.
+    let _ = menu.item(answer("Cancel and stop the turn", "cancel")).build(k, layer);
+}
+
+fn permission_view(c: &Ctx, request_id: &str, kind: &str, detail: &str, reason: Option<&str>) -> El {
     let k = c.k;
     let mark = match kind {
         "command" => kind_icon(StepKind::Command),
@@ -540,6 +573,15 @@ fn permission_view(c: &Ctx, request_id: &str, kind: &str, detail: &str, reason: 
         let (tab, request) = (c.tab.to_owned(), request_id.to_owned());
         crate::theme::small_button(label).variant(variant).on_press(move |s: &mut Desk| s.answer_permission(&tab, &request, value)).build(k).key(value)
     };
+    // The rarer answers sit in a menu, which the session draws over the thread: rows built in `memo` have no overlay layer.
+    let open = c.s.threads.approval_menu.as_ref().is_some_and(|(_, r)| r == request_id);
+    let (tab, request) = (c.tab.to_owned(), request_id.to_owned());
+    let more = crate::theme::small_button("More")
+        .variant(ButtonVariant::GhostMuted)
+        .expanded(open)
+        .on_press(move |s: &mut Desk| s.threads.approval_menu = if open { None } else { Some((tab.clone(), request.clone())) })
+        .build(k)
+        .label("More approval options");
     let waiting = row().gap(4.0).items_center().child(icon(&ic::LOCK, 12.0).color(k.c.warning.fg)).child(text("Waiting for approval").font(crate::theme::text(12.0)).color(k.c.warning.fg));
     let answers = row()
         .gap(6.0)
@@ -549,12 +591,11 @@ fn permission_view(c: &Ctx, request_id: &str, kind: &str, detail: &str, reason: 
         .child(text("·").font(crate::theme::text(12.0)).color(k.c.text_faint))
         .child(answer("Decline", "decline", ButtonVariant::GhostMuted))
         .child(answer("Approve", "allow", ButtonVariant::Contrast))
-        .children(allow_session.then(|| answer("Always allow this session", "allow-session", ButtonVariant::GhostMuted)))
-        .child(answer("Cancel and stop the turn", "cancel", ButtonVariant::GhostMuted));
+        .child(row().key(format!("{}-trigger", approval_menu_key(request_id))).child(more));
     col()
         .w_full()
         .gap(4.0)
         .role("group")
-        .child(row().gap(8.0).child(icon(mark, STEP_ICON).color(k.c.text_faint).mt(3.0)).child(text(detail.to_owned()).font(crate::theme::mono(12.0)).color(k.c.text_base).wrap_anywhere().selectable(true).max_h(160.0)))
+        .child(row().gap(8.0).child(row().h(20.0).items_center().child(icon(mark, STEP_ICON).color(k.c.text_faint))).child(text(detail.to_owned()).font(crate::theme::mono(12.0).lh(20.0)).color(k.c.text_base).wrap_anywhere().selectable(true).max_h(160.0)))
         .child(col().pl(DETAIL_INDENT).gap(4.0).children(reason.map(|r| text(r.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint).wrap_anywhere().selectable(true))).child(answers))
 }

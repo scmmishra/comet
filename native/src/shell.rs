@@ -458,6 +458,7 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, layer: &
         (true, Some(lane), Some([_, height]), Some(thread)) => crate::minimap::minimap(s, &tab.id, thread, lane.left, height, k),
         _ => None,
     };
+    crate::thread_view::approval_menu(s, &tab.id, k, layer);
     let body = col().w_full().grow(1.0).min_h(0.0).child(body).children(rail).children(minimap);
     col().key(format!("session-{}", tab.id)).w_full().grow(1.0).min_h(0.0).child(header).child(body)
 }

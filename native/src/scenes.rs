@@ -8,7 +8,23 @@ use crate::shell::{CoreState, Desk};
 /// A scene: its name, and what it sets in a fresh window.
 type Scene = (&'static str, fn(&mut Desk));
 
-pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-projects", settings_projects), ("settings-mcp", settings_mcp)];
+pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-projects", settings_projects), ("settings-mcp", settings_mcp), ("file", file)];
+
+/// The core messages in the JSON file `DESK_SCENE_FILE` names, with the thread rows in its `open` list
+/// opened. The same messages can be sent to the Electron app's renderer, so the two can be compared.
+fn file(s: &mut Desk) {
+    let path = std::env::var("DESK_SCENE_FILE").expect("DESK_SCENE_FILE names the scene's file");
+    let scene: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).expect("the scene's file reads")).expect("the scene's file is JSON");
+    s.status = CoreState::Ready;
+    s.now_ms = crate::format::now_ms();
+    for message in serde_json::from_value::<Vec<CoreMessage>>(scene["messages"].clone()).expect("the scene's messages decode") {
+        s.receive(Event::Message(message)).expect("the scene has a tab");
+    }
+    let tab = s.workspace.active.clone().unwrap_or_default();
+    for id in scene["open"].as_array().into_iter().flatten().filter_map(|v| v.as_str()) {
+        s.threads.toggle(&tab, id);
+    }
+}
 
 /// Settings on Providers, with an update out and plan usage.
 fn settings(s: &mut Desk) {

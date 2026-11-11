@@ -44,6 +44,14 @@ impl Thread {
     }
 
     /// The revision of the item with this id, or 0 before it arrives.
+    /// The latest turn's changed files, whose box opens Review on the turn.
+    pub fn latest_changes(&self) -> Option<&str> {
+        self.items.iter().rev().find_map(|item| match item {
+            ThreadItem::Changes { id, .. } => Some(id.as_str()),
+            _ => None,
+        })
+    }
+
     pub fn revision(&self, id: &str) -> u64 {
         self.index.get(id).map_or(0, |&i| self.revisions[i])
     }
@@ -68,6 +76,8 @@ impl Thread {
 pub struct Threads {
     by_tab: HashMap<String, Thread>,
     revision: u64,
+    /// The approval request whose More menu is open, by tab and request id.
+    pub approval_menu: Option<(String, String)>,
 }
 
 impl Threads {

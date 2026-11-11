@@ -34,6 +34,7 @@ mod terminal_view;
 mod threads;
 mod toasts;
 mod triggers;
+mod ui;
 mod workspace;
 
 use rune::{AppSpec, MenuItem, Titlebar, Tx};

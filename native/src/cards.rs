@@ -114,7 +114,7 @@ fn space_card(space: &Space, tab: &str, k: &Kit) -> El {
     } else if c.additions == 0 && c.deletions == 0 {
         faint(format::plural(c.files as usize, "file"))
     } else {
-        row().gap(6.0).child(text(format!("+{}", c.additions)).font(crate::theme::text(12.0)).color(k.c.success.fg)).child(text(format!("−{}", c.deletions)).font(crate::theme::text(12.0)).color(k.c.danger.fg))
+        crate::ui::diff_changes(k, c.additions, c.deletions)
     };
     let tab = tab.to_owned();
     // The card counts uncommitted work, so it opens Review on the same changes.
