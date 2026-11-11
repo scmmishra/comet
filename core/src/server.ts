@@ -1,10 +1,10 @@
 import { REVIEW_SCOPES, type ClientMessage, type CoreMessage, type ProjectPart, type ProjectParts } from "@desk/protocol"
-import type { ServerWebSocket } from "bun"
 import { Agents } from "./agents/registry"
 import { discoverCommands } from "./command-sources"
 import { Commands } from "./commands"
 import { Delegations } from "./delegate/delegations"
 import { serveMcp } from "./delegate/mcp"
+import { Clients } from "./clients"
 import { errorMessage } from "./errors"
 import { openableFile, openInEditor, readForView } from "./files"
 import { checkImages } from "./images"
@@ -14,7 +14,6 @@ import { findIconFiles, iconFile } from "./project-icons"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { loadSettings, saveSettings, updateSettings } from "./settings"
 import { readSpace } from "./space"
-import { ThreadRows } from "./thread-rows"
 import { Window } from "./window"
 
 type Send = (message: CoreMessage) => void
@@ -33,20 +32,8 @@ export interface CoreServer {
  * tabs work in.
  */
 export function startCore({ token }: { readonly token: string }): CoreServer {
-  const clients = new Set<ServerWebSocket>()
-  // Every thread message passes through here on its way out, so each client gets the rows that follow it.
-  const rows = new ThreadRows()
-  const withRows =
-    (send: Send): Send =>
-    (message) => {
-      send(message)
-      const after = rows.after(message)
-      if (after) send(after)
-    }
-  const broadcast: Send = withRows((message) => {
-    const data = JSON.stringify(message)
-    for (const client of clients) client.send(data)
-  })
+  const clients = new Clients()
+  const broadcast = clients.broadcast
   const project = <K extends ProjectPart>(dir: string, part: K, value: ProjectParts[K]) => ({ type: "project", project: dir, part, value }) as CoreMessage
 
   let settings = loadSettings()
@@ -60,7 +47,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     agents,
     delegations,
     tabClosed: (tabId) => {
-      rows.forget(tabId)
+      clients.forget(tabId)
       ui.dropTab(tabId)
     },
     turnEnded: (tabId, threadKey, outcome) => plugins.turnEnded(tabId, threadKey, outcome),
@@ -231,16 +218,16 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     websocket: {
       open(ws) {
         clients.add(ws)
-        const reply: Send = withRows((message) => ws.send(JSON.stringify(message)))
+        const reply = clients.replyTo(ws)
         reply({ type: "settings", settings })
         plugins.resend()
         void window.greet(reply)
       },
       close(ws) {
-        clients.delete(ws)
+        clients.remove(ws)
       },
       message(ws, raw) {
-        const reply: Send = withRows((message) => ws.send(JSON.stringify(message)))
+        const reply = clients.replyTo(ws)
         let message: ClientMessage
         try {
           message = JSON.parse(String(raw))
