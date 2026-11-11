@@ -1,6 +1,6 @@
 //! The folder `desk <folder>` asks Desk to open. An installed Desk hears it as the link
 //! `desk://open?dir=<folder>`, which the system hands to the running Desk, or to the one it starts. A Desk
-//! run from the repo takes it from `DESK_DIR` at launch, as the Electron app's `bin/desk` sets it.
+//! run from the repo takes it from `DESK_DIR` at launch.
 
 use std::path::Path;
 
@@ -22,7 +22,7 @@ pub fn folder_from_env() -> Option<String> {
     folder(absolute.to_str()?)
 }
 
-/// `path` when it is absolute and a folder, as `folder` in the Electron app's `folders.ts`.
+/// `path` when it is absolute and a folder.
 fn folder(path: &str) -> Option<String> {
     let path = Path::new(path);
     (path.is_absolute() && path.is_dir()).then(|| path.to_string_lossy().into_owned())

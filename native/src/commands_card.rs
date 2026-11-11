@@ -1,4 +1,4 @@
-//! The Commands card, as `app/src/renderer/commands.tsx` draws it: a project's commands, each run in the
+//! The Commands card: a project's commands, each run in the
 //! background, with Run or Stop beside its name. Commands that share a group show as one row. A right-click
 //! edits or deletes a row, and the editor adds, changes or removes commands.
 
@@ -60,7 +60,7 @@ impl Draft {
         self.processes.len() == 1 && self.processes[0].2.text.trim().is_empty()
     }
 
-    /// Adds a process. When a second joins a lone one, the first keeps the command's name, as in the Electron app.
+    /// Adds a process. When a second joins a lone one, the first keeps the command's name.
     fn add_process(&mut self, name: &str, command: &str) {
         if self.processes.len() == 1 && self.processes[0].1.text.trim().is_empty() {
             self.processes[0].1 = TextEdit::new(self.name.text.trim());
@@ -377,8 +377,8 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
     layer.extend(menus);
 }
 
-/// "Import from…": the commands the project's Procfiles, mise tasks and package.json define, by file, as
-/// the Electron app's import menu lists them. Picking one fills a process, and "Import all as a group"
+/// "Import from…": the commands the project's Procfiles, mise tasks and package.json define, by file.
+/// Picking one fills a process, and "Import all as a group"
 /// fills one per command. The core leaves out commands already saved.
 fn import_menu(s: &Desk, project: &str, open: bool, k: &Kit, layer: &mut Vec<El>) -> El {
     let dir = project.to_owned();

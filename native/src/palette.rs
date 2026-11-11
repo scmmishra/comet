@@ -1,4 +1,4 @@
-//! The command palette, as `app/src/renderer/palette.tsx` lays it out after T3 Code: one search over
+//! The command palette, after T3 Code: one search over
 //! actions, tabs and recent threads, with nested lists for threads, files and projects. ⌘K opens it,
 //! ⌘⇧O opens it on the threads and ⌘P on the files.
 
@@ -12,7 +12,7 @@ use rune_theme_opencode::icons as ic;
 
 /// Threads the root list shows before the user types.
 const RECENT_THREADS: usize = 20;
-/// The palette's measures, as the Electron app's Dialog and SearchList draw them: 576 points wide,
+/// The palette's measures, from `@opencode/ui`'s Dialog and SearchList: 576 points wide,
 /// 14% of the window's height from its top, and a list that scrolls past 302 points.
 const WIDTH: f32 = 576.0;
 const TOP: f32 = 0.14;
@@ -421,7 +421,6 @@ impl Desk {
     }
 }
 
-/// `window_height` places the palette, as the Electron app's Dialog sits 14vh down.
 /// A key for the level the palette shows. A page can hold a path, which a key must not, so it is hashed.
 fn level_key(pages: &[Page]) -> String {
     use std::hash::{Hash, Hasher};
@@ -430,6 +429,7 @@ fn level_key(pages: &[Page]) -> String {
     format!("palette-level-{}-{:x}", pages.len(), h.finish())
 }
 
+/// `window_height` places the palette 14% of the way down the window.
 pub fn palette(s: &Desk, window_height: f32, k: &Kit, layer: &mut Vec<El>) {
     if !s.palette.open {
         return;
@@ -503,8 +503,8 @@ pub fn palette(s: &Desk, window_height: f32, k: &Kit, layer: &mut Vec<El>) {
     layer.push(col().key("palette-layer").absolute(0.0, 0.0).w_full().pt(TOP * window_height).items_center().child(surface));
 }
 
-/// A row's shortcut as one word, such as ⌘T, as T3 Code prints it. The Electron app sets the ghost
-/// Keybind's keys with no gap between them, which rune-kit's Keybind does not offer.
+/// A row's shortcut as one word, such as ⌘T, as T3 Code prints it: a ghost Keybind's keys with no gap
+/// between them, which rune-kit's Keybind does not offer.
 fn shortcut(keys: &[&str], k: &Kit) -> El {
     text(keys.concat()).font(rune::TextStyle::new(11.0, 530.0).lh(14.0).tracking(0.05)).color(k.c.text_faint).px(1.0)
 }
@@ -525,7 +525,7 @@ fn entry_row(s: &Desk, entry: &Entry, index: usize, active: bool, k: &Kit) -> El
         .items_center()
         .px(12.0)
         .radius(ROW_RADIUS)
-        // The active row as the Electron app draws it: white at 10% on dark, Desk's hover colour on light.
+        // The active row: white at 10% on dark, Desk's hover colour on light.
         .fill(if !active { rune::Color::TRANSPARENT } else if k.dark { rune::Color::WHITE.alpha(0.1) } else { k.c.hover })
         .role("option")
         .on_press_tx(move |s: &mut Desk, tx| s.select(picked.clone(), tx))

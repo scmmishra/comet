@@ -1,4 +1,4 @@
-//! The window's tabs and which one is in front, as `app/src/renderer/workspace.ts` keeps them. The
+//! The window's tabs and which one is in front. The
 //! core saves the tabs as the app sends them, and sends them back on connect.
 
 use crate::account::Account;

@@ -1,4 +1,4 @@
-//! Images sent with a message, as `app/src/renderer/attachments.ts` reads them: PNG, JPEG, GIF or WebP,
+//! Images sent with a message: PNG, JPEG, GIF or WebP,
 //! up to the size Claude takes.
 
 use crate::base64;
@@ -12,7 +12,7 @@ const TYPES: [(&str, &str); 5] = [("png", "image/png"), ("jpg", "image/jpeg"), (
 /// The extensions the attach dialog offers.
 pub const EXTENSIONS: [&str; 5] = ["png", "jpg", "jpeg", "gif", "webp"];
 
-/// Reads an image file. The error says why it cannot be sent, as the Electron app's toast does.
+/// Reads an image file. The error says why it cannot be sent.
 pub fn read(path: &Path) -> Result<ImageAttachment, String> {
     let name = path.file_name().map_or_else(|| "This file".to_owned(), |n| n.to_string_lossy().into_owned());
     let extension = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();

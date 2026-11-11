@@ -1,4 +1,4 @@
-//! The thread's minimap, a port of `app/src/renderer/minimap.tsx` after T3 Code: a mark per message the
+//! The thread's minimap, after T3 Code: a mark per message the
 //! user sent, evenly spaced down a rail in the thread's left gutter. A mark is darker while its turn is on
 //! screen. Marks near the pointer grow, the nearest previews the message and the start of Claude's answer,
 //! and a click jumps to it. A wide gutter shows the minimap all the time, and a narrow one on hover.

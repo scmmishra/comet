@@ -1,4 +1,4 @@
-//! The composer's model button, as `app/src/renderer/model-picker.tsx` draws it. The popover sets the
+//! The composer's model button. The popover sets the
 //! model on the left and its effort on the right, with speed and the permission mode under them. The
 //! button names the model that runs, so "Default" reads as "Opus 5.5".
 
@@ -47,7 +47,7 @@ impl Desk {
         );
     }
 
-    /// ⌘1 to ⌘9 pick a model alias while the picker is open, as the Electron app's `pickModelByNumber` does.
+    /// ⌘1 to ⌘9 pick a model alias while the picker is open.
     /// Whether the picker took the shortcut.
     pub fn pick_model_by_number(&mut self, index: usize) -> bool {
         if !self.picker.open {

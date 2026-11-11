@@ -1,5 +1,5 @@
 //! A terminal's screen, kept by `alacritty_terminal` until Rune has a terminal of its own. The shell runs
-//! in the core, as for the Electron app: its output arrives here, and keys go back as `terminal.input`.
+//! in the core: its output arrives here, and keys go back as `terminal.input`.
 
 use alacritty_terminal::event::{Event as TermEvent, EventListener};
 use alacritty_terminal::grid::{Dimensions, Scroll};

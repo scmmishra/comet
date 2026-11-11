@@ -1,4 +1,4 @@
-//! What the core says about Desk's settings and the Claude account, as `app/src/renderer/account.ts` keeps it.
+//! What the core says about Desk's settings and the Claude account.
 
 use crate::protocol::{ClaudeAccount, ClaudeCodeVersion, DeskSettings, ModelOption, PlanUsage, ProjectSettings, ThemeChoice};
 

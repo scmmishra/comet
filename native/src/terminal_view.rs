@@ -11,7 +11,7 @@ use rune::{Color, Drag, El, Ime, Key, KeyEvent, Mods, Phase, Span, TextStyle, Tx
 use rune_kit::Kit;
 use std::collections::{HashMap, HashSet};
 
-/// Desk's terminal font size, as the Electron app sets it.
+/// Desk's terminal font size.
 const FONT_SIZE: f32 = 12.0;
 /// The room around the grid, Desk's `px-3 pb-3`.
 const PAD: f32 = 12.0;

@@ -1,4 +1,4 @@
-//! Short messages at the bottom right, as the Electron app shows them with `@opencode/ui`'s toasts:
+//! Short messages at the bottom right, after `@opencode/ui`'s toasts:
 //! errors the core reports, its notices, and hints such as the first Escape.
 
 use crate::shell::Desk;

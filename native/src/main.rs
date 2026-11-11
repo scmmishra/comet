@@ -48,7 +48,7 @@ use rune::{AppSpec, MenuItem, Titlebar, Tx};
 use shell::{Desk, commands};
 use std::cell::RefCell;
 
-/// A menu item: its title and shortcut as `app/src/shared/commands.ts` names them, its menu and what it runs.
+/// A menu item: its title and shortcut, its menu and what it runs.
 type Command = (&'static str, &'static str, &'static str, fn(&mut Desk, &mut Tx));
 
 /// The app menu, Desk's first, which Rune fills when an item names no menu.
@@ -118,7 +118,7 @@ fn main() {
     })
     .on_open_url(shell::open_url)
     .on_ime(shell::ime)
-    // The Electron app draws with `-webkit-font-smoothing: antialiased`, which is Rune's Off.
+    // Desk's text draws with grayscale smoothing, which is Rune's Off.
     .font_smoothing(rune::FontSmoothing::Off)
     .on_modifiers(shell::modifiers)
     .titlebar(Titlebar::new(shell::TITLEBAR_HEIGHT));

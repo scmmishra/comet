@@ -1,4 +1,4 @@
-//! The view pane beside the thread, as `app.tsx` and `review.tsx` draw it: its tabs, Review on the
+//! The view pane beside the thread: its tabs, Review on the
 //! tab's changes, and files open in it.
 
 use crate::format;
@@ -322,7 +322,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
         // The tabs take the free width, so the new terminal button sits at the end, beside the toggle.
         .child(row().grow(1.0))
         .child(new_terminal)
-        // The Electron app pins the toggle to the pane's corner, 11 points past the new terminal button.
+        // The toggle sits in the pane's corner, 11 points past the new terminal button.
         .child(toggle(true, k).ml(7.0));
     // Each tab of the pane is its own element, which swaps in at once: unkeyed, Rune would morph one tab's
     // parts into the next one's, and keyed with its default fade, it would crossfade them.
@@ -412,7 +412,7 @@ fn review_view(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     col().w_full().grow(1.0).min_h(0.0).child(controls).child(content)
 }
 
-/// A file's header in Review, as the Electron app draws it: the chevron, the file's icon, its folder
+/// A file's header in Review: the chevron, the file's icon, its folder
 /// muted and its name, a quiet status, its line counts and a button to open it. The whole header folds
 /// the file.
 fn file_header(tab: String, dark: bool) -> impl Fn(&Desk, usize, bool) -> El + 'static {
@@ -498,7 +498,7 @@ fn file_view(s: &Desk, tab: &TabInfo, path: &str, line: Option<u32>, k: &Kit) ->
     col().w_full().grow(1.0).min_h(0.0).child(head).child(body)
 }
 
-/// A file's text, one numbered line per row, with `line` marked, in the Electron app's code colours.
+/// A file's text, one numbered line per row, with `line` marked, in Desk's code colours.
 /// Rows mount only while on screen.
 fn code(tab: &TabInfo, path: &str, shown: &ShownFile, line: Option<u32>, k: &Kit) -> El {
     let count = shown.lines.len();

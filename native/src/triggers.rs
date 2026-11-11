@@ -1,5 +1,4 @@
-//! Text typed after a trigger, which the composer offers to complete, as `app/src/renderer/triggers.ts`
-//! has it: `@` lists files, and `/` lists commands.
+//! Text typed after a trigger, which the composer offers to complete: `@` lists files, and `/` lists commands.
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TriggerKind {

@@ -1,5 +1,4 @@
-//! Desk's palette under rune-kit's tokens, as `app/src/renderer/index.css` puts it under
-//! `@opencode/ui`'s. Components start from the OpenCode theme, which matches `@opencode/ui`, and
+//! Desk's palette under rune-kit's tokens. Components start from the OpenCode theme, which matches `@opencode/ui`, and
 //! draw in Desk's colours. Desk's colours stay the source.
 
 use rune::{Color, TextStyle};
@@ -8,7 +7,7 @@ use rune_kit::syntax::SyntaxTheme;
 use rune_kit::{Button, ButtonSize, Kit, MarkdownStyle};
 use std::sync::OnceLock;
 
-/// Desk's colours for one appearance, named as in `index.css`.
+/// Desk's colours for one appearance.
 struct Colors {
     ground: &'static str,
     panel: &'static str,
@@ -85,8 +84,8 @@ pub fn kit(dark: bool) -> &'static Kit {
     KITS[dark as usize].get_or_init(|| build(dark, if dark { &DARK } else { &LIGHT }))
 }
 
-/// The kit Review's DiffView draws with: Desk's kit, with the colours DiffView reads from it set as the
-/// Electron app's @pierre/diffs draws a diff. Pierre's green and red tint the changed lines and their
+/// The kit Review's DiffView draws with: Desk's kit, with the colours DiffView reads from it set as
+/// @pierre/diffs draws a diff. Pierre's green and red tint the changed lines and their
 /// bars, line numbers take its foreground mixed 65% with the panel, and file headers sit on the panel
 /// under faint lines.
 pub fn review_kit(dark: bool) -> &'static Kit {
@@ -201,7 +200,7 @@ pub fn fast(dark: bool) -> Color {
     color(if dark { "#f5c542" } else { "#c98a00" })
 }
 
-/// `@opencode/ui`'s small Button, as Desk's Electron app draws it: 24 points tall, padded 9, radius 4.
+/// `@opencode/ui`'s small Button: 24 points tall, padded 9, radius 4.
 /// rune-kit's `ControlSize` sizes follow AppKit's instead, so this keeps its `@opencode/ui` size, which
 /// it marks deprecated.
 #[allow(deprecated)]
@@ -215,7 +214,7 @@ pub fn button(label: impl Into<String>) -> Button {
     Button::new(label).size(ButtonSize::Normal)
 }
 
-/// Desk's own text, as the Electron app sets it: Geist at weight 400, line height 1.5, no tracking.
+/// Desk's own text: Geist at weight 400, line height 1.5, no tracking.
 /// `@opencode/ui`'s components, such as buttons and tags, keep the kit's styles.
 pub const fn text(size: f32) -> TextStyle {
     TextStyle::new(size, 400.0).lh(size * 1.5)
@@ -245,7 +244,7 @@ pub fn composer_text(k: &Kit, size: f32) -> TextStyle {
 const THREAD_LINE_HEIGHT: f32 = 1.625;
 
 /// Replies in the thread: the thread's text, and code a step darker than the panel.
-/// The values follow `.desk-prose` in the Electron app's `index.css`.
+/// Desk's prose: list indents, faint markers, headings, inline code and quotes.
 pub fn markdown(k: &Kit, size: f32) -> MarkdownStyle {
     let d = if k.dark { &DARK } else { &LIGHT };
     let heading = |points: f32| TextStyle::new(points, 600.0).lh((points * 1.3).round());
@@ -263,12 +262,12 @@ pub fn markdown(k: &Kit, size: f32) -> MarkdownStyle {
         .muted(k.c.text_faint)
         .inline_code_font(0.92, 400.0)
         .inline_code_bg(color(d.raised))
-        // rune-kit's 3.5 point pad, short of the Electron app's 5: rune-kit pads code with narrow spaces sized
+        // rune-kit's 3.5 point pad, short of the 5 points Desk's design asks for: rune-kit pads code with narrow spaces sized
         // to the pad, and at 5 points they outgrow the text, which makes a line with code taller than the rest.
         .quote(color(d.line), 2.0, 10.0, k.c.text_muted)
         .rule(color(d.line))
         .link(k.c.text_accent)
-        // Links, file links among them, draw in the accent without an underline, as the Electron app's do.
+        // Links, file links among them, draw in the accent without an underline.
         .link_underline(Color::TRANSPARENT)
         // A code block is one flat surface, with no outline.
         .code_block(color(d.code), Color::TRANSPARENT)
@@ -280,8 +279,7 @@ pub fn code_foreground(dark: bool) -> Color {
     color(if dark { "#fafafa" } else { "#0a0a0a" })
 }
 
-/// The Electron app highlights code with @pierre/diffs' pierre-dark and pierre-light themes. Their
-/// colours, by the kinds rune-kit's highlighter tells apart.
+/// Code is highlighted in @pierre/diffs' pierre-dark and pierre-light themes' colours, by the kinds rune-kit's highlighter tells apart.
 pub fn code_colors(dark: bool) -> SyntaxTheme {
     use rune_kit::syntax::Syntax::*;
     let colors: [(rune_kit::syntax::Syntax, &str); 15] = if dark {
@@ -292,7 +290,7 @@ pub fn code_colors(dark: bool) -> SyntaxTheme {
     colors.into_iter().fold(SyntaxTheme::from_kit(kit(dark)), |theme, (kind, hex)| theme.with(kind, color(hex)))
 }
 
-/// Desk's typefaces, Geist and Geist Mono, as the Electron app loads them. Variable fonts, so every
+/// Desk's typefaces, Geist and Geist Mono. Variable fonts, so every
 /// weight the kit asks for draws. From github.com/vercel/geist-font at ef2597c, under the OFL in `assets/fonts`.
 pub const FONTS: &[&[u8]] = &[include_bytes!("../assets/fonts/Geist-Variable.ttf"), include_bytes!("../assets/fonts/GeistMono-Variable.ttf")];
 pub const FAMILIES: (&str, &str) = ("Geist", "Geist Mono");

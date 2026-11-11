@@ -1,4 +1,4 @@
-//! The models Claude Code offers and how a tab's run settings follow them, as `app/src/renderer/models.ts` has it.
+//! The models Claude Code offers and how a tab's run settings follow them.
 
 use crate::icons;
 use crate::protocol::ModelOption;

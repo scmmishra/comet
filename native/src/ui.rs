@@ -44,8 +44,8 @@ fn arc(value: f32) -> &'static Icon {
     arc
 }
 
-/// `@opencode/ui`'s Badge in colours of the caller's choosing, as the Electron app's checks badge asks
-/// for them with `border-0 bg-del-soft text-del`: 16 points tall, 11 point text at weight 530.
+/// `@opencode/ui`'s Badge in colours of the caller's choosing, as the Space card's checks badge uses it:
+/// 16 points tall, 11 point text at weight 530.
 /// rune-kit's Badge takes only its own variants' colours.
 pub fn tinted_badge(label: impl Into<String>, fill: Color, ink: Color) -> El {
     row()
@@ -57,7 +57,7 @@ pub fn tinted_badge(label: impl Into<String>, fill: Color, ink: Color) -> El {
         .child(text(label.into()).font(TextStyle::new(11.0, 530.0).lh(11.0).tracking(0.05)).color(ink))
 }
 
-/// `@opencode/ui`'s Popover surface, as the Electron app draws it: the raised fill, a 1 point border in
+/// `@opencode/ui`'s Popover surface: the raised fill, a 1 point border in
 /// the outline colour and the medium shadow. Its radius is 0.375rem, which Desk's 13 pixel root makes
 /// 4.875 points. rune-kit's raised surface takes a brighter border and its own radius.
 pub fn popover(k: &Kit, content: El) -> El {
@@ -74,8 +74,8 @@ pub struct Segment {
     pub name: &'static str,
 }
 
-/// `@opencode/ui`'s SegmentedControl with icons in its items, as the Electron app gives Review's diff
-/// view and the model picker's Fast speed. rune-kit's SegmentedControl takes words only, so Desk draws
+/// `@opencode/ui`'s SegmentedControl with icons in its items, for Review's diff view and the model
+/// picker's Fast speed. rune-kit's SegmentedControl takes words only, so Desk draws
 /// this one with its measures: 28 points tall, 12 points in, radius 6, the chosen item raised.
 pub fn segmented<S: 'static>(k: &Kit, name: &str, segments: &[Segment], selected: usize, pick: impl Fn(&mut S, usize) + Clone + 'static) -> El {
     let c = &k.c;

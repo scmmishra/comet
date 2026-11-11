@@ -1,4 +1,4 @@
-//! A tab's thread, as `app/src/renderer/thread.tsx` draws it: rows down the thread's lane, each kept
+//! A tab's thread: rows down the thread's lane, each kept
 //! by `memo` while nothing it shows changes, and mounted only while on screen.
 
 use crate::diff::{LineKind, line_diff};
@@ -122,7 +122,7 @@ pub fn thread(s: &Desk, tab: &str, dark: bool, lane: Option<Lane>) -> El {
     col().w_full().grow(1.0).min_h(0.0).child(scroll).children(thread.away_from_end.then(|| scroll_to_end(&key, k)))
 }
 
-/// As in the Electron app, a message the user sends brings the active thread to its end, even from far
+/// A message the user sends brings the active thread to its end, even from far
 /// up, and the thread follows the end again. True when it scrolled.
 pub fn poll(s: &mut Desk, tx: &mut Tx) -> bool {
     let Some(tab) = s.workspace.active.clone() else { return false };
@@ -485,7 +485,7 @@ fn step_detail(c: &Ctx, item: &ThreadItem) -> El {
                 .max_h(OUTPUT_MAX)
                 .radius(BOX_RADIUS)
                 .fill(k.c.bg_deep)
-                // The Electron app outlines it with a shadow, which takes no room.
+                // An outline that takes no room, as a border in Rune does.
                 .border(1.0, k.c.border_base)
                 .px(12.0)
                 .py(10.0)
@@ -526,7 +526,7 @@ fn edit_view(c: &Ctx, file: &str, edits: &[crate::protocol::TextEdit]) -> El {
             None => line_row,
         }
     }));
-    // The Electron app outlines it with a shadow, which takes no room.
+    // An outline that takes no room, as a border in Rune does.
     col().w_full().radius(BOX_RADIUS).clip_rounded(BOX_RADIUS).fill(k.c.bg_deep).border(1.0, k.c.border_base).child(head).child(body)
 }
 
@@ -547,7 +547,7 @@ fn changes_view(c: &Ctx, id: &str, files: &[crate::protocol::ChangedFile]) -> El
             let tab = c.tab.to_owned();
             row().grow(1.0).justify_end().child(crate::theme::small_button("Open diff").variant(ButtonVariant::GhostMuted).icon(&ic::REVIEW).on_press(move |s: &mut Desk| s.open_review(&tab, "turn")).build(k))
         }));
-    // Electron's `max-h-60`: a long list scrolls inside the box.
+    // A long list scrolls inside the box.
     let list = col().w_full().max_h(240.0).scroll(ScrollSpec { stick_bottom: false }).px(6.0).pb(6.0).children(files.iter().map(|f| {
         let (dir, name) = f.path.rsplit_once('/').map_or(("", f.path.as_str()), |(d, n)| (d, n));
         let (tab, path) = (c.tab.to_owned(), f.path.clone());
@@ -577,8 +577,8 @@ fn changes_view(c: &Ctx, id: &str, files: &[crate::protocol::ChangedFile]) -> El
 }
 
 /// A tool call waiting for approval, as a work row after T3 Code: what Claude would run or touch, why,
-/// and the answers. Rune's menus need the view's overlay layer, which rows built in `memo` lack, so the
-/// Electron app's "More" choices show as buttons.
+/// and the answers. The rarer answers sit in a More menu, which the session draws over the thread, since
+/// rows built in `memo` have no overlay layer.
 fn approval_menu_key(request_id: &str) -> String {
     format!("approval-{request_id}")
 }

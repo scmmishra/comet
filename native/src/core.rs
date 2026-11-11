@@ -1,5 +1,5 @@
 //! The Bun core: starting it, reading its messages and stopping it. The core serves every project,
-//! as it does for the Electron app (`app/src/main/core-process.ts` and `app/src/renderer/core.ts`).
+//! for every tab of the window.
 
 use crate::ids;
 use crate::protocol::{ClientMessage, CoreMessage, CoreReady};
@@ -18,7 +18,7 @@ const STOP_GRACE: Duration = Duration::from_secs(1);
 /// message the app sends waits at most this long.
 const SEND_WAIT: Duration = Duration::from_millis(4);
 /// A Desk run from the repo keeps its window and plugin builds in `~/.desk/native`, apart from the
-/// installed Desk's and from the Electron Desk Dev's `~/.desk/dev`.
+/// installed Desk's `~/.desk`.
 const DEV_INSTANCE: &str = "native";
 
 /// Where the core runs from, and which Desk it serves.

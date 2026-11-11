@@ -11,7 +11,7 @@ type Scene = (&'static str, fn(&mut Desk));
 pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-projects", settings_projects), ("settings-mcp", settings_mcp), ("file", file)];
 
 /// The core messages in the JSON file `DESK_SCENE_FILE` names, with the thread rows in its `open` list
-/// opened. The same messages can be sent to the Electron app's renderer, so the two can be compared.
+/// opened.
 fn file(s: &mut Desk) {
     let path = std::env::var("DESK_SCENE_FILE").expect("DESK_SCENE_FILE names the scene's file");
     let scene: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).expect("the scene's file reads")).expect("the scene's file is JSON");
@@ -195,7 +195,7 @@ fn thread(s: &mut Desk) {
             { "type": "result", "id": "r1", "durationMs": 63_000.0, "isError": false },
             { "type": "changes", "id": "ch1", "files": [{ "path": "src/login.ts", "status": "modified", "additions": 3, "deletions": 1 }] },
             { "type": "compaction", "id": "c1", "status": "done", "preTokens": 180_000.0, "postTokens": 32_000.0 },
-            { "type": "user", "id": "u2", "text": "Now add a test for it. Yes, in phases. The Electron app stays the shipped Desk until the last phase. Each phase should end with something that runs, so we can stop between them.", "at": at(25.0), "steered": true },
+            { "type": "user", "id": "u2", "text": "Now add a test for it. Yes, in phases. The old app stays the shipped one until the last phase. Each phase should end with something that runs, so we can stop between them.", "at": at(25.0), "steered": true },
             { "type": "tool", "id": "t4", "name": "Bash", "summary": "npm test -- login", "kind": "command", "label": "Running npm" },
             { "type": "permission", "id": "p1", "requestId": "r1", "tool": "Bash", "kind": "command", "detail": "rm -rf dist && npm run build", "reason": "It deletes the build folder", "allowSession": true }
         ] },

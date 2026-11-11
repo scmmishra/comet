@@ -1,7 +1,7 @@
-//! The window's tabs, as the Electron app's `TabBar` in `app.tsx` draws them: 210 point tabs with the
+//! The window's tabs: 210 point tabs with the
 //! project's mark, the title in 12 point text and a spinner while Claude works, and a close button
 //! on the active tab and the one under the pointer. Rune's TabStrip sets its titles in the kit's
-//! medium weight and shrinks its tabs to fit, so Desk draws its own, as the Electron app does.
+//! medium weight and shrinks its tabs to fit, so Desk draws its own.
 
 use crate::shell::{Desk, project_mark};
 use crate::workspace::Place;
@@ -26,8 +26,7 @@ pub struct TabBar {
     shown: Option<String>,
 }
 
-/// Keeps the active tab in sight: a tab opened, reopened or chosen past the strip's edge scrolls in,
-/// as the Electron app's tab bar does.
+/// Keeps the active tab in sight: a tab opened, reopened or chosen past the strip's edge scrolls in.
 pub fn follow_active(s: &mut Desk, tx: &mut Tx) {
     if s.workspace.active != s.tab_bar.shown {
         s.tab_bar.shown = s.workspace.active.clone();
@@ -117,7 +116,7 @@ pub fn tab_bar(s: &Desk, k: &Kit) -> El {
 }
 
 /// A press that moves past the threshold drags the tab: it takes the place of the tabs it passes the
-/// middle of, as the Electron app's `dropIndex` places it. A press that does not move selects the tab.
+/// middle of. A press that does not move selects the tab.
 fn drag(s: &mut Desk, id: &str, index: usize, count: usize, d: &mut Drag) {
     let pitch = TAB_WIDTH + GAP;
     match d.phase {

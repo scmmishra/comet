@@ -1,4 +1,4 @@
-//! The cards beside the thread, as `app.tsx` stacks them in its rail: the subagents of the turn, the
+//! The cards beside the thread, stacked in a rail: the subagents of the turn, the
 //! Space card, then plugin cards. The rail shows once the session is wide enough, and the thread's lane
 //! moves aside for it.
 
@@ -83,9 +83,8 @@ pub fn rail(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
 }
 
 /// A project's cards folded into a chip in the session header, for when the session is too narrow for the
-/// rail, as the Electron app's SpaceChip does. A click on the chip opens the Space and Commands cards, and
-/// a click outside them or Escape closes them. The Electron app opens them on hover, but the pointer lost
-/// them crossing the gap between the chip and the cards.
+/// rail. A click on the chip opens the Space and Commands cards, and a click outside them or Escape closes
+/// them. They do not open on hover: the pointer lost them crossing the gap between the chip and the cards.
 pub fn space_chip(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let space = s.projects.get(&tab.project).and_then(|p| p.space.as_ref());
     let words = |w: String, color| text(w).font(crate::theme::text(12.0)).color(color);

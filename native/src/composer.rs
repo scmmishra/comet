@@ -1,4 +1,4 @@
-//! The message box under the thread, as `app/src/renderer/composer.tsx` lays it out after T3 Code: a tall
+//! The message box under the thread, after T3 Code: a tall
 //! text area in a card, then a row with the send button. While Claude works, the button stops the turn,
 //! or sends a follow-up once there is one to send.
 
@@ -242,8 +242,7 @@ impl Desk {
         }
     }
 
-    /// A paste with files, or an image such as a screenshot, attaches them, as the Electron app's composer
-    /// does. Text pastes as text. True when the paste attached something.
+    /// A paste with files, or an image such as a screenshot, attaches them. Text pastes as text. True when the paste attached something.
     fn paste(&mut self, content: &rune::ClipboardContent) -> bool {
         if !content.files().is_empty() {
             self.attach(content.files());
@@ -389,7 +388,7 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &
         .on_input_paste(|s: &mut Desk, content, _| s.paste(content))
         .on_input_key(|s: &mut Desk, key: &KeyEvent, tx| {
             let Some(tab) = s.workspace.active.clone() else { return false };
-            // ⌘Enter sends with the other follow-up: it queues while Enter steers, as the Electron app does.
+            // ⌘Enter sends with the other follow-up: it queues while Enter steers.
             // Rune's field submits on Enter alone.
             if key.key == Key::Enter && key.mods.cmd && !key.mods.shift && !key.mods.alt {
                 s.submit(true);
@@ -442,7 +441,7 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &
         .radius(CARD_RADIUS)
         .clip_rounded(CARD_RADIUS)
         .fill(k.c.layer_01)
-        // The Electron app outlines it with a shadow, which takes no room.
+        // An outline that takes no room, as a border in Rune does.
         .border(1.0, border)
         .children(question.as_ref().map(|(request, questions)| question_panel(s, tab, request, questions, k)))
         .children(thumbs)
@@ -534,8 +533,7 @@ pub fn poll(s: &mut Desk, tx: &mut rune::Tx) -> bool {
 }
 
 impl Desk {
-    /// Whether a composer just appeared, so typing starts there, as the Electron composer focuses itself
-    /// when it mounts: in a new tab, in a tab brought to the front, and at the bottom of a thread the first
+    /// Whether a composer just appeared, so typing starts there: in a new tab, in a tab brought to the front, and at the bottom of a thread the first
     /// message started. The palette and Settings keep the keyboard while they show.
     fn composer_appeared(&mut self) -> bool {
         if self.palette.is_open() || self.workspace.settings_page.is_some() {

@@ -1,4 +1,4 @@
-//! A line diff of a tool's edit, as `app/src/renderer/diff.ts` makes it.
+//! A line diff of a tool's edit.
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum LineKind {

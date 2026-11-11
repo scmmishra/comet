@@ -1,4 +1,4 @@
-//! A new tab, as `app/src/renderer/start-screen.tsx` draws it: the wordmark, the composer, the project and
+//! A new tab: the wordmark, the composer, the project and
 //! branch it works in, and threads to pick up again.
 
 use crate::composer;
@@ -89,7 +89,7 @@ fn project_switcher(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
     let mut menu = Menu::new("project-menu").trigger(trigger).open(s.start.project_menu).placement(Placement::BottomStart).gutter(8.0).min_width(280.0).group_label("Projects").on_close(|s: &mut Desk| s.start.project_menu = false);
     for project in &s.workspace.recent {
         let (id, dir) = (tab.id.clone(), project.clone());
-        // Each project with its mark, as the Electron app's switcher shows it.
+        // Each project with its mark.
         menu = menu.item(MenuItem::new(s.account.project_label(project)).lead(shell::project_mark(s, project, k)).checked(*project == tab.project).on_select(move |s: &mut Desk| {
             let dir = dir.clone();
             s.workspace.change_tab(&id, |t| t.project = dir, &s.core);

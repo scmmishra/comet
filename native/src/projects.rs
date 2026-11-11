@@ -1,4 +1,4 @@
-//! What the core reads about each project, as `app/src/renderer/projects.ts` keeps it.
+//! What the core reads about each project.
 
 use crate::protocol::{CommandInfo, CommandSource, McpServer, PluginContributions, Skill, Space, ThreadSummary};
 use serde_json::Value;

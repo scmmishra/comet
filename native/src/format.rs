@@ -1,4 +1,4 @@
-//! Words for numbers and times, as `app/src/renderer/format.ts` writes them.
+//! Words for numbers and times.
 
 /// "45 s", "2 min", "2 min 5 s".
 pub fn duration(ms: f64) -> String {

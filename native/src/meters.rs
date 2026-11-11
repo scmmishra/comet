@@ -1,5 +1,5 @@
 //! The plan usage button in the tab bar and the context ring in the session header, as
-//! `app/src/renderer/meters.tsx` draws them.
+//! the title bar shows them.
 
 use crate::format;
 use crate::protocol::{ClientMessage, ContextReading, PlanUsage, UsageWindow};
@@ -74,7 +74,7 @@ pub fn usage_button(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
     Some(button)
 }
 
-/// The title bar's small meter: `@opencode/ui`'s Progress, which the Electron app sets 26 by 5 points.
+/// The title bar's small meter: `@opencode/ui`'s Progress, 26 by 5 points.
 fn meter(value: f32, k: &Kit) -> El {
     row()
         .w(26.0)

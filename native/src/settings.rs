@@ -1,4 +1,4 @@
-//! Desk's settings, after OpenCode's settings screen as `app/src/renderer/settings` draws it: a sidebar of
+//! Desk's settings, after OpenCode's settings screen: a sidebar of
 //! pages, and the chosen page beside it, in place of the session. Back, or Escape, returns to it.
 
 use crate::format;
@@ -178,8 +178,8 @@ fn section_with(heading: El, child: El) -> El {
 /// Rows on one raised surface, after OpenCode's SettingsList.
 fn list(k: &Kit, rows: Vec<El>) -> El {
     let count = rows.len();
-    // The list's outline is an inset shadow in the Electron app, which takes no room. A row's bottom border
-    // takes half a point there, which Rune's does not, so the row's padding adds it.
+    // The list's outline takes no room. A row's bottom border takes half a point in Desk's design, which
+    // Rune's does not, so the row's padding adds it.
     col().w_full().radius(8.0).fill(k.c.layer_01).border(0.5, k.c.border_muted).px(20.0).children(rows.into_iter().enumerate().map(|(i, r)| {
         if i + 1 < count { r.pb(18.5).border_sides([0.0, 0.0, 0.5, 0.0], k.c.border_base) } else { r }
     }))
@@ -425,7 +425,7 @@ fn projects(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
     col().w_full().child(header(k, "Projects", "How each project open in a tab shows in tabs and menus.")).child(body(sections.collect()))
 }
 
-/// The project's logo-like images to choose its icon from, after the Electron app's IconPicker. It asks the
+/// The project's logo-like images to choose its icon from. It asks the
 /// core for them each time it opens, so new files show.
 fn icon_picker(s: &Desk, dir: &str, current: Option<&str>, k: &Kit, layer: &mut Vec<El>) -> El {
     let key = format!("icon-picker-{dir}");
@@ -482,7 +482,7 @@ fn icon_picker(s: &Desk, dir: &str, current: Option<&str>, k: &Kit, layer: &mut 
                     if current == Some(file.as_str()) { tile.border(2.0, k.c.text_accent) } else { tile }
                 })
                 .collect();
-            // Six to a row, as the Electron app's grid lays them out.
+            // Six to a row.
             let mut rows = Vec::new();
             let mut tiles = tiles.into_iter().peekable();
             while tiles.peek().is_some() {

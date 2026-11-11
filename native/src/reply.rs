@@ -1,8 +1,8 @@
-//! Claude's Markdown as Desk shows it, after the Electron app's `markdown.tsx`: a single newline breaks
+//! Claude's Markdown as Desk shows it: a single newline breaks
 //! the line, as Claude Code shows it, inline code that names a file opens the file, and each code block
 //! has a header with its language and a Copy button.
 //!
-//! A file link draws as the Electron app's `.desk-file` chip, without its icon: rune-kit's Markdown puts
+//! A file link draws as a chip in the accent, without its icon: rune-kit's Markdown puts
 //! icons only before links to web pages.
 
 use crate::shell::Desk;
@@ -20,8 +20,8 @@ pub struct FileReference {
     pub line: Option<u32>,
 }
 
-/// The file an inline code span names, or None when it is not a file path. The rules follow the
-/// Electron app's `file-links.ts`, after T3 Code's: a file has a folder or a line, and an extension or a line.
+/// The file an inline code span names, or None when it is not a file path. The rules follow T3 Code's:
+/// a file has a folder or a line, and an extension or a line.
 pub fn file_reference(text: &str) -> Option<FileReference> {
     let candidate = text.trim();
     if candidate.is_empty() || candidate.contains(|c: char| c.is_whitespace() || "`<>\"'".contains(c)) || has_url_scheme(candidate) {
@@ -153,7 +153,7 @@ fn link_files(line: &str) -> String {
 }
 
 /// A reply, thought or question as plain Markdown: prepared, with long code lines scrolling sideways
-/// rather than wrapping, as the Electron app's code blocks scroll.
+/// rather than wrapping.
 pub fn document(text: &str) -> Markdown {
     Markdown::new(prepare(text)).scroll_wide(true)
 }

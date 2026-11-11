@@ -17,8 +17,8 @@ use rune_kit::shell::WindowTitlebar;
 pub const TITLEBAR_HEIGHT: f32 = 44.0;
 /// The ground shown around the main panel, on its sides and below it.
 const PANEL_INSET: f32 = 8.0;
-/// The panel toggle's place in the session's corner: the Electron app's `right-2.5 top-[9px]` from the
-/// outside of the card, less the card's border.
+/// The panel toggle's place in the session's corner: 10 and 9 points from the outside of the card, less
+/// the card's border.
 const TOGGLE_INSET: (f32, f32) = (8.0, 9.0);
 /// How fast Rune's animations run: 1.2 plays every entry, exit and fade in five sixths of its time.
 /// Scrolling and growing lists keep their own pace.
@@ -240,7 +240,7 @@ pub fn open_folder(tx: &mut Tx) {
     });
 }
 
-/// What the menus run. Each is the same action as the Electron app's command of that id.
+/// What the menus run.
 pub mod commands {
     use super::*;
 
@@ -377,7 +377,7 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
     let k = theme::kit(s.dark(cx));
     let mut layer = Vec::new();
     let w = &s.workspace;
-    // The Electron app's title bar: its tabs start 84 points in, past the window's buttons, and it ends 10 points in.
+    // The title bar: its tabs start 84 points in, past the window's buttons, and it ends 10 points in.
     let titlebar = WindowTitlebar::from_insets(cx.chrome_insets(), 1.0).leading_padding(8.0).trailing_padding(10.0).gap(4.0).tabs(crate::tab_bar::tab_bar(s, k));
     let titlebar = match crate::meters::usage_button(s, k, &mut layer) {
         Some(usage) => titlebar.trailing(usage),
@@ -495,7 +495,7 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, window: 
     };
     crate::thread_view::approval_menu(s, &tab.id, k, layer);
     let body = col().w_full().grow(1.0).min_h(0.0).child(body).children(rail).children(minimap);
-    // A session shows at once, as the Electron app swaps it in, not crossfading from the last one.
+    // A session shows at once, not crossfading from the last one.
     col().key(format!("session-{}", tab.id)).transition(rune::Transition::none()).w_full().grow(1.0).min_h(0.0).child(header).child(body)
 }
 
@@ -504,7 +504,7 @@ fn thread_composer(s: &Desk, tab: &TabInfo, lane: Option<crate::cards::Lane>, k:
     thread_view::in_lane(col().w_full().pt(6.0).pb(16.0).child(composer::composer(s, tab, composer::ListAt::Above, k, layer)), lane)
 }
 
-/// A project's mark, as the Electron app's ProjectMark draws it: the icon Settings chose, on its own, else
+/// A project's mark: the icon Settings chose, on its own, else
 /// the initial on a tile in the project's colour.
 pub fn project_mark(s: &Desk, project: &str, k: &rune_kit::Kit) -> El {
     let icon = s.account.project_icon(project).and_then(|path| s.images.file(&std::path::Path::new(project).join(path)));

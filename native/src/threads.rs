@@ -1,4 +1,4 @@
-//! Each tab's thread as the core sends it, as `app/src/renderer/threads.ts` keeps it.
+//! Each tab's thread as the core sends it.
 
 use crate::protocol::{ContextReading, Question, QueuedMessage, Subagent, ThreadEvent, ThreadItem, ThreadRow};
 use std::collections::{HashMap, HashSet};

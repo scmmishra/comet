@@ -1,4 +1,4 @@
-//! Plugin views, as `app/src/renderer/plugins.ts` and `plugin-view.tsx` draw them. Plugin code runs in
+//! Plugin views. Plugin code runs in
 //! the core and sends its UI as operations on a tree of nodes. The app keeps each plugin's nodes and
 //! draws each node with Desk's own component for its primitive.
 
@@ -269,7 +269,7 @@ fn item_view(props: &Map<String, Value>, plugin: String, k: &Kit) -> El {
         crate::ui::tinted_badge(words, fill, ink)
     });
     let head = row().w_full().gap(8.0).items_center().child(text(prop(props, "title").unwrap_or("").to_owned()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate().grow(1.0)).children(badge);
-    // The Electron app's grid: the title and its badge on one line, the quieter lines under it, no gap
+    // The title and its badge on one line, the quieter lines under it, no gap
     // between, rounded to 0.5rem of Desk's 13 pixel root.
     let item = col()
         .w_full()
