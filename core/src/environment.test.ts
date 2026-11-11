@@ -27,8 +27,7 @@ async function startFromDock() {
     writeFileSync(join(tools, tool), REPORTER)
     chmodSync(join(tools, tool), 0o755)
   }
-  // zsh reads .zprofile and sh reads .profile, so either login shell finds the tools.
-  for (const profile of [".zprofile", ".profile"]) writeFileSync(join(home, profile), `export PATH="${tools}:$PATH"\n`)
+  writeFileSync(join(home, ".zprofile"), `export PATH="${tools}:$PATH"\n`)
 
   const script = join(dir, "start.ts")
   writeFileSync(
