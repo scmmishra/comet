@@ -358,8 +358,9 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
         // Settings show in place of the tab, in the card the session fills.
         (CoreState::Ready, _) if s.workspace.settings_page.is_some() => row().w_full().grow(1.0).min_h(0.0).child(card("settings-card", crate::settings::screen(s, k, &mut layer))),
         (CoreState::Ready, Some(tab)) => {
-            let size = cx.layout_size("session-card");
-            let session = col().w_full().h_full().min_h(0.0).child(session(s, tab, dark, size, &mut layer));
+            // The room inside the card's border, which the lane and the rail are placed in.
+            let size = cx.layout_size("session-body");
+            let session = col().key("session-body").w_full().h_full().min_h(0.0).child(session(s, tab, dark, size, &mut layer));
             let pane = (tab.panel_open == Some(true)).then(|| card("panel-card", crate::panel::panel(s, tab, k, &mut layer)));
             // A plugin's sidebar sits before the session, as a card of its own.
             let sidebar = s.plugins.layouts.get(&tab.id).and_then(|l| l.sidebar.as_ref()).map(|view| {

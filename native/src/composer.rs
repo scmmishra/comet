@@ -336,7 +336,7 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, lane
     let attached = s.drafts.images.get(tab).map_or(&[][..], Vec::as_slice);
     let empty = edit.text.trim().is_empty() && attached.is_empty();
     let question = s.question(tab);
-    let field = text_input(&edit, theme::thread_text(k, s.account.text_size()))
+    let field = text_input(&edit, theme::composer_text(k, s.account.text_size()))
         .key("composer-input")
         .w_full()
         .color(k.c.text_base)
@@ -382,7 +382,7 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, lane
             });
         })
         .build(k)
-        .radius(16.0);
+        .size(32.0, 32.0).radius(16.0);
     let actions = row().w_full().items_center().gap(4.0).px(10.0).pb(10.0).pt(4.0).child(attach).child(row().grow(1.0)).child(crate::model_picker::model_picker(s, info, k, layer)).child(button);
     let thumbs = (!attached.is_empty()).then(|| row().w_full().gap(8.0).wrap().px(14.0).pt(12.0).children(attached.iter().enumerate().map(|(i, image)| thumbnail(s, tab, i, image, k))));
     let border = if edit.focused { k.c.layer_03 } else { k.c.border_base };
@@ -392,9 +392,8 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, lane
         .radius(CARD_RADIUS)
         .clip_rounded(CARD_RADIUS)
         .fill(k.c.layer_01)
+        // The Electron app outlines it with a shadow, which takes no room.
         .border(1.0, border)
-        // Rune's border takes no room, where CSS's sets the content in by its width.
-        .padding(1.0)
         .children(question.as_ref().map(|(request, questions)| question_panel(s, tab, request, questions, k)))
         .children(thumbs)
         .child(input)
@@ -615,7 +614,7 @@ fn question_panel(s: &Desk, tab: &str, request: &str, questions: &[Question], k:
                 .gap(10.0)
                 .px(6.0)
                 .py(6.0)
-                .radius(8.0)
+                .radius(7.0)
                 .hover(if picked { rune::Color::TRANSPARENT } else { k.c.hover })
                 .role("button")
                 .on_press(move |s: &mut Desk| s.pick(&tab, &request, &label))
@@ -630,14 +629,18 @@ fn question_panel(s: &Desk, tab: &str, request: &str, questions: &[Question], k:
                 )
                 .children((i < NUMBERED_OPTIONS).then(|| Keybind::new(&[(i + 1).to_string()]).build(k)))
         });
+        // The options' hover fill reaches 6 points past the header's edge, so the scroll area widens by as much
+        // and the question takes it back as padding.
         col()
             .w_full()
+            .mx(-6.0)
             .max_h(QUESTION_MAX)
             .scroll(rune::ScrollSpec { stick_bottom: false })
-            .child(col().w_full().pt(6.0).child(Markdown::new(current.question.as_str()).style(theme::markdown(k, s.account.text_size())).build(k)))
+            .child(col().w_full().px(6.0).pt(6.0).child(Markdown::new(current.question.as_str()).style(theme::markdown(k, s.account.text_size())).build(k)))
             .child(col().w_full().mt(6.0).children(options))
     });
-    col().key("question").w_full().px(16.0).pt(10.0).pb(8.0).border_sides([0.0, 0.0, 1.0, 0.0], k.c.border_base).child(head).children(body)
+    // The bottom border takes a point of room in CSS, which Rune's does not.
+    col().key("question").w_full().px(16.0).pt(10.0).pb(9.0).border_sides([0.0, 0.0, 1.0, 0.0], k.c.border_base).child(head).children(body)
 }
 
 /// A radio or checkbox mark, drawn as Desk draws it.
@@ -733,7 +736,7 @@ fn queued(s: &Desk, tab: &str, message: &QueuedMessage, k: &Kit) -> El {
         .px(13.0)
         .py(9.0)
         // The text shrinks and wraps inside the bubble's cap, as `max-w-[80%]` lays it out.
-        .child(text(message.text.clone()).wrap_anywhere().shrink().min_w(0.0).font(theme::thread_text(k, s.account.text_size())).color(k.c.text_muted));
+        .child(text(message.text.clone()).wrap_anywhere().shrink().min_w(0.0).font(theme::composer_text(k, s.account.text_size())).color(k.c.text_muted));
     let (send_tab, send_id) = ids();
     let (edit_tab, edit_id) = ids();
     let (remove_tab, remove_id) = ids();
@@ -781,7 +784,8 @@ impl Desk {
 }
 
 fn send_button(s: &Desk, tab: &str, empty: bool, k: &Kit) -> El {
-    let round = |b: IconButton| b.control_size(ControlSize::Large).build(k).radius(16.0);
+    // `size="large" class="size-8 rounded-full"`: a large button, grown to 32 points and round.
+    let round = |b: IconButton| b.control_size(ControlSize::Large).build(k).size(32.0, 32.0).radius(16.0);
     if !s.busy(tab) {
         return round(IconButton::new(&ic::ARROW_UP).variant(IconButtonVariant::Submit).label("Send").disabled(empty).on_press_tx(|s: &mut Desk, _| {
             let alternate = s.cmd_held();

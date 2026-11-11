@@ -199,6 +199,11 @@ pub fn thread_text(k: &Kit, size: f32) -> TextStyle {
     TextStyle { size, line_height: (size * THREAD_LINE_HEIGHT).round(), ..k.ty.body }
 }
 
+/// The message box's text and queued messages: the thread's size on Desk's `leading-relaxed`, which is 1.5.
+pub fn composer_text(k: &Kit, size: f32) -> TextStyle {
+    TextStyle { size, line_height: size * 1.5, ..k.ty.body }
+}
+
 /// Desk's `leading-[1.625]` for messages and replies.
 const THREAD_LINE_HEIGHT: f32 = 1.625;
 
