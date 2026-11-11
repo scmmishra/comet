@@ -186,16 +186,21 @@ export class Plugins {
 
   /** A closed tab's views and plugin state go. */
   dropTab(tabId: string) {
-    for (const running of this.running.values()) void running.then((found) => this.post(found, { type: "drop", tabId }))
+    this.each((found) => this.post(found, { type: "drop", tabId }))
   }
 
   /** Sends every running plugin's whole UI again, for a client that just connected. */
   resend() {
-    for (const running of this.running.values()) void running.then((found) => this.post(found, { type: "snapshot" }))
+    this.each((found) => this.post(found, { type: "snapshot" }))
   }
 
   stop() {
-    for (const running of this.running.values()) void running.then((found) => found.worker.terminate())
+    this.each((found) => found.worker.terminate())
+  }
+
+  /** Does something with every plugin that runs. One that failed to start has nothing to hear. */
+  private each(act: (running: Running) => void) {
+    for (const running of this.running.values()) void running.then(act, () => undefined)
   }
 
   /**

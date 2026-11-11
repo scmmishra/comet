@@ -407,3 +407,12 @@ test("lists the files a turn changed under its answer, and again when the thread
   expect(await window.review("a", "turn")).toMatchObject([{ path: "a.txt" }])
   expect(saved().threads.a.turnChanges.u1).toMatchObject([{ path: "a.txt" }])
 })
+
+test("stopping the window closes the sessions that run while their thread is away", async () => {
+  const project = tempFolder("parked")
+  const { window, codex } = openWithAgents({ tabs: [codexTab("a", project)], threads: {}, recent: [] })
+  await window.openKey("a", { key: "inbox.conv-1", prompt: "Draft a reply" })
+  await window.openKey("a", { key: "inbox.conv-2" })
+  window.stop()
+  expect(codex.calls).toEqual(["send Draft a reply", "close"])
+})

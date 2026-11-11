@@ -53,7 +53,7 @@ test("lists the agents with their models, and why one is not ready", async () =>
   })
 })
 
-test("runs a task on the agent it names, in the tab's folder, and answers with the agent's final message", async () => {
+test("runs a task on the agent it names, in the caller's folder, and answers with the agent's final message", async () => {
   const { codex, call, last } = await delegations()
   const answer = call({ agent: "codex", task: "Review the login form.\nReport the bugs.", effort: "high", title: "Review login" })
   const [session] = codex.sessions

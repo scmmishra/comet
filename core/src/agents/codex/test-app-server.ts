@@ -21,7 +21,7 @@ const model = (id: string, displayName: string, extra: Partial<CodexModel> = {})
 export const MODELS = [model("gpt-6.1-sol", "GPT-6.1-Sol", { isDefault: true }), model("gpt-6-luna", "GPT-6-Luna", { serviceTiers: [], defaultReasoningEffort: "high" }), model("codex-auto-review", "Auto review", { hidden: true })]
 
 /** The user agent Codex 0.167 answers `initialize` with. */
-export const USER_AGENT = "desk/0.167.0 (Mac OS 26.6.2; arm64) unknown (desk; 0.0.1)"
+const USER_AGENT = "desk/0.167.0 (Mac OS 26.6.2; arm64) unknown (desk; 0.0.1)"
 
 /**
  * A Codex app-server a test plays, over an in-memory transport. It answers each request whose method

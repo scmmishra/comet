@@ -11,7 +11,7 @@ import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { currentBranch } from "./space"
 import { Terminals } from "./terminals"
 import { TurnWatch } from "./turn"
-import { checkpointsOf, loadWindowState, saveWindowState, type ClosedTab, type TabThread, type WindowState } from "./window-state"
+import { checkpointsOf, keyedId, loadWindowState, saveWindowState, type ClosedTab, type TabThread, type WindowState } from "./window-state"
 
 type Send = (message: CoreMessage) => void
 
@@ -197,6 +197,7 @@ export class Window {
   /** Continues a past thread in a tab, on the agent it ran on. The tab may hold a session that never sent a message; the thread replaces it. */
   async resume(tabId: string, agent: AgentId, threadId: string, reply: Send) {
     const tab = this.tab(tabId)
+    // An agent Desk does not run is refused before the tab's own session closes.
     this.hooks.agents.get(agent)
     this.closeSession(tabId)
     this.setThread(tabId, { sessionId: threadId, agent })
@@ -228,6 +229,8 @@ export class Window {
     const back = this.parked.get(id)
     if (back?.tabId === tabId) {
       this.parked.delete(id)
+      // A message sent while the transcript was read opened a session of its own. The one that kept running takes its place.
+      this.closeSession(tabId)
       this.sessions.set(tabId, back.live)
     }
     // A transcript read mid-turn closes that turn with a result timed to its last reply. The turn is still running, so its result is left for the live one.
@@ -504,7 +507,7 @@ export class Window {
   }
 
   stop() {
-    for (const live of this.sessions.values()) close(live)
+    for (const live of [...this.sessions.values(), ...[...this.parked.values()].map((parked) => parked.live)]) close(live)
     this.terminals.closeAll()
   }
 
@@ -681,7 +684,5 @@ const sessionMessage = (tabId: string, thread: TabThread): CoreMessage => ({ typ
 /** Two agents may give their sessions the same id, so a thread is told apart by both. */
 const threadRef = (agent: AgentId, sessionId: string) => `${agent}\n${sessionId}`
 
-/** What names a plugin's thread among every project's: its project and its key. Two projects' plugins can use the same key. */
-const keyedId = (project: string, key: string) => `${project}\n${key}`
 
 const changesItem = (lastMessage: string, files: readonly ChangedFile[]): ThreadItem => ({ type: "changes", id: `changes:${lastMessage}`, files })

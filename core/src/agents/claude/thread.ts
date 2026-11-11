@@ -2,6 +2,7 @@ import type { SDKAPIRetryMessage, SDKAssistantMessage, SDKMessage, SDKMessageOri
 import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, type ThreadItem } from "@desk/protocol"
 import { cutOutput, relativeTo, thought } from "../steps"
 import { deskToolSummary } from "../../delegate/tools"
+import { resultId } from "../turn-items"
 import { modelLabel } from "./models"
 import { deskTool, toolStep } from "./steps"
 
@@ -146,7 +147,7 @@ export class ThreadMapper {
     const add = (found: ThreadItem) => items.set(found.id, found)
     let turn: { id: string; start: number; end?: number; stopped?: boolean } | undefined
     const closeTurn = () => {
-      if (turn?.end !== undefined) add({ type: "result", id: `result:${turn.id}`, durationMs: turn.end - turn.start, isError: false, ...(turn.stopped ? { stopped: true } : {}) })
+      if (turn?.end !== undefined) add({ type: "result", id: resultId(turn.id), durationMs: turn.end - turn.start, isError: false, ...(turn.stopped ? { stopped: true } : {}) })
       turn = undefined
     }
     // A stored compaction is a bare system message, followed by Claude Code's summary as a user message.

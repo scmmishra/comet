@@ -1,4 +1,3 @@
-import { METHOD_NOT_FOUND } from "../agents/json-rpc"
 import { errorMessage } from "../errors"
 
 /**
@@ -30,7 +29,9 @@ export interface ToolSet {
 /** The protocol version Desk speaks when a client names none. Desk answers with the client's own when it names one. */
 const PROTOCOL_VERSION = "2025-03-26"
 const SERVER_INFO = { name: "desk", version: "1" }
+/** JSON-RPC's codes for a message that is no request, and for a method Desk does not have. */
 const INVALID_REQUEST = -32600
+const METHOD_NOT_FOUND = -32601
 
 type Request = { readonly id?: number | string; readonly method?: unknown; readonly params?: Record<string, unknown> }
 

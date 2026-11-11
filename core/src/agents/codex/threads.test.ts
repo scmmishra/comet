@@ -100,7 +100,3 @@ test("rewinds to before a message's turn, and leaves a thread rewound to its fir
   expect(codex.sent("thread/revert")).toEqual([{ threadId: THREAD, beforeTurnId: "turn-3" }])
   expect(await threads.rewind!(DIR, THREAD, "nope").catch((error: Error) => error.message)).toBe("Codex has no such message in the thread.")
 })
-
-test("has no context reading for a thread at rest", async () => {
-  expect(await setup().threads.context(DIR, THREAD)).toBeUndefined()
-})

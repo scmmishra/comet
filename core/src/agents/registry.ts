@@ -89,7 +89,7 @@ export class Agents {
     return found
   }
 
-  /** Reads every agent's plan usage again. */
+  /** Reads every agent's plan usage again. Usage is extra information, so a failed read keeps the last one. */
   refreshUsage() {
     for (const agent of this.agents.values()) void agent.refreshUsage().catch(() => undefined)
   }

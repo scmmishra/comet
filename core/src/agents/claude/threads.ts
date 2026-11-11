@@ -1,16 +1,14 @@
 import { deleteSession, forkSession, getSessionMessages, listSessions, renameSession } from "@anthropic-ai/claude-agent-sdk"
-import type { AgentThreads, Rewound } from "../agent"
+import { THREAD_LIMIT, type AgentThreads, type Rewound } from "../agent"
 import { readContext } from "./context"
 import { probe } from "./probe"
 import { ThreadMapper } from "./thread"
 import { Transcript } from "./transcript"
 
-/** Enough for thread search to reach back months. Listing reads only each transcript's head and tail. */
-const THREAD_LIMIT = 200
-
 /** The conversations Claude Code saved, which it keeps as one transcript per session under the project. */
 export const claudeThreads: AgentThreads = {
   async list(dir) {
+    // Listing reads only each transcript's head and tail.
     const sessions = await listSessions({ dir, limit: THREAD_LIMIT }).catch(() => [])
     return sessions.map((session) => ({
       id: session.sessionId,

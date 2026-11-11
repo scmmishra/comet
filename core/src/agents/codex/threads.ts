@@ -1,11 +1,8 @@
 import { firstLine } from "../../text"
-import type { AgentThreads, Rewound } from "../agent"
+import { THREAD_LIMIT, type AgentThreads, type Rewound } from "../agent"
 import { historyItems, messageId } from "./history"
 import type { CodexThread } from "./protocol"
 import type { AppServer } from "./server"
-
-/** Enough for thread search to reach back months, as Claude's list does. */
-const THREAD_LIMIT = 200
 
 /** The conversations Codex saved, which it keeps in `~/.codex` and lists by project folder. */
 export function codexThreads(server: AppServer): AgentThreads {

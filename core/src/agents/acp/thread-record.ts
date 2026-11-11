@@ -1,3 +1,4 @@
+import { firstLine } from "../../text"
 import type { ThreadItem } from "@desk/protocol"
 import { existsSync, readFileSync } from "node:fs"
 import { readdir, readFile, rm } from "node:fs/promises"
@@ -55,7 +56,7 @@ export class ThreadRecord {
     if (!this.threadId) return
     const items = [...this.items.values()]
     const first = items.find((item) => item.type === "user")
-    const title = first?.type === "user" ? (first.text.split("\n")[0] ?? "").trim() : ""
+    const title = first?.type === "user" ? firstLine(first.text) : ""
     writeJsonFile(threadPath(this.folder, this.threadId), { dir: this.dir, title, updatedAt: Date.now(), items } satisfies SavedThread)
   }
 }

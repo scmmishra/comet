@@ -2,7 +2,7 @@ import type { TurnOutcome } from "@desk/plugin"
 import type { ThreadEvent } from "@desk/protocol"
 
 /** How a turn ended: for the plugin that owns its thread, and whether the messages that wait should hold. */
-export interface TurnEnd {
+interface TurnEnding {
   readonly outcome: TurnOutcome
   /** Whether the user stopped the turn or it failed. Either holds the queue, and any other end sends the next message. */
   readonly held: boolean
@@ -18,18 +18,14 @@ const NO_RESULT: TurnOutcome = "error"
 export class TurnWatch {
   private outcome: TurnOutcome = NO_RESULT
   private held = false
-  private opener?: string
-
   /** The message the running turn answers, which names what Desk keeps about the turn. */
-  get message(): string | undefined {
-    return this.opener
-  }
+  message?: string
 
   /** Takes the session's next event. Returns how the turn ended when the event ends it. */
-  take(event: ThreadEvent): TurnEnd | undefined {
+  take(event: ThreadEvent): TurnEnding | undefined {
     if (event.kind === "item") {
       const item = event.item
-      if (item.type === "user") this.opener = item.id
+      if (item.type === "user") this.message = item.id
       if (item.type === "result") {
         this.outcome = item.stopped ? "interrupted" : item.isError ? "error" : "done"
         this.held = !!item.stopped || item.isError

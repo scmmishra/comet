@@ -73,7 +73,7 @@ export function memoryTransport(write: (line: string) => void) {
 }
 
 /** What a fake agent's sessions and threads were asked to do, in order, such as "send hello" or "rename s1 New name". */
-export type FakeCalls = string[]
+type FakeCalls = string[]
 
 /**
  * An agent that runs no program, for tests of what the core does around agents. Its sessions record what

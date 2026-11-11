@@ -11,7 +11,7 @@ import { changedPaths, threadItems } from "./items"
 import { modelName, turnModel, type ModelCatalog } from "./models"
 import { runPolicy, threadPolicy } from "./permissions"
 import type { CodexItem, CodexModel, CodexTurn, TokenUsage } from "./protocol"
-import { asksApproval, readRequest, type OpenRequest } from "./requests"
+import { asksApproval, readRequest, type CodexRequest } from "./requests"
 import type { AppServer, ThreadOwner, ThreadParams } from "./server"
 
 /** How long Codex may take on a call to Desk's tools, in seconds. A handed-off task can run for an hour. */
@@ -46,7 +46,7 @@ class Turn {
 }
 
 /** A request waiting for the user, with what answers Codex and the request's JSON-RPC id. */
-type WaitingRequest = OpenRequest & { readonly resolve: (reply: unknown) => void; readonly rpcId: RequestId }
+type WaitingRequest = CodexRequest & { readonly resolve: (reply: unknown) => void; readonly rpcId: RequestId }
 
 /**
  * One Codex thread, in one tab. It loads the thread into the shared app-server on its first message, and

@@ -125,6 +125,9 @@ export type Rewound =
    */
   | { readonly empty: false; readonly resumeAt?: string }
 
+/** How many threads an agent lists for a project. Enough for thread search to reach back months. */
+export const THREAD_LIMIT = 200
+
 /** The conversations an agent saved, by the id its sessions report. Each optional method needs the feature of its name. */
 export interface AgentThreads {
   /** A project's newest threads. A failed read gives none, because the list is a convenience. */

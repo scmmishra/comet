@@ -23,7 +23,7 @@ type Answers = Readonly<Record<string, string>> | undefined
  * A request waiting for the user: the item that shows it, Codex's reply for each answer, and the reply
  * for a request nobody answered, such as when the tab closes. That reply declines.
  */
-export type OpenRequest =
+export type CodexRequest =
   | { readonly item: PermissionItem; readonly reply: (answer: PermissionAnswer) => unknown; readonly dismissed: unknown }
   | { readonly item: QuestionItem; readonly reply: (answers: Answers) => unknown; readonly dismissed: unknown }
 
@@ -33,7 +33,7 @@ export interface AnsweredRequest {
 }
 
 /** Whether a request asks for approval, rather than asking questions. */
-export const asksApproval = (request: OpenRequest): request is Extract<OpenRequest, { item: PermissionItem }> => request.item.type === "permission"
+export const asksApproval = (request: CodexRequest): request is Extract<CodexRequest, { item: PermissionItem }> => request.item.type === "permission"
 
 const decide = (answer: PermissionAnswer) => ({ decision: DECISIONS[answer] })
 const review = (answer: PermissionAnswer) => ({ decision: REVIEW_DECISIONS[answer] })
@@ -45,7 +45,7 @@ type Params = Record<string, unknown> & { readonly itemId?: string; readonly rea
  * Desk does not handle. `rpcId` is the id Codex gave the request. `files` gives the paths of a file
  * change Codex has already reported, by its item id.
  */
-export function readRequest(method: string, params: Params, rpcId: RequestId, files: (itemId: string) => readonly string[] | undefined): OpenRequest | AnsweredRequest | undefined {
+export function readRequest(method: string, params: Params, rpcId: RequestId, files: (itemId: string) => readonly string[] | undefined): CodexRequest | AnsweredRequest | undefined {
   switch (method) {
     case "item/commandExecution/requestApproval": {
       const command = typeof params.command === "string" ? shellScript(params.command) : ""
@@ -74,7 +74,7 @@ export function readRequest(method: string, params: Params, rpcId: RequestId, fi
   }
 }
 
-const asking = (item: PermissionItem, reply: (answer: PermissionAnswer) => unknown): OpenRequest => ({ item, reply, dismissed: reply("decline") })
+const asking = (item: PermissionItem, reply: (answer: PermissionAnswer) => unknown): CodexRequest => ({ item, reply, dismissed: reply("decline") })
 
 function permission(requestId: string, tool: string, kind: PermissionKind, detail: string, reason: string | null | undefined): PermissionItem {
   const why = reason?.trim()
@@ -88,7 +88,7 @@ interface Permissions {
 }
 
 /** Allowing grants what Codex asked for, for the turn or the session. A refusal grants nothing. */
-function permissionsRequest(params: Params & { permissions: Permissions }): OpenRequest {
+function permissionsRequest(params: Params & { permissions: Permissions }): CodexRequest {
   const { network, fileSystem } = params.permissions
   const asked = [
     network?.enabled ? "network access" : undefined,
@@ -116,7 +116,7 @@ interface CodexQuestion {
  * Codex's questions. Desk answers by question text, and Codex by question id, so the reply maps one to
  * the other. A dismissal answers every question with nothing.
  */
-function questionRequest(requestId: string, asked: readonly CodexQuestion[]): OpenRequest {
+function questionRequest(requestId: string, asked: readonly CodexQuestion[]): CodexRequest {
   const questions: Question[] = asked.map((entry) => ({
     header: entry.header,
     question: entry.question,
@@ -140,7 +140,7 @@ interface Elicitation {
  * itself: the user chose the thread's permission mode, and work handed to another agent runs no broader
  * than it. An MCP server's question has no item of its own, so the request's own id names it.
  */
-function elicitationRequest(asked: Elicitation, rpcId: RequestId): OpenRequest | AnsweredRequest | undefined {
+function elicitationRequest(asked: Elicitation, rpcId: RequestId): CodexRequest | AnsweredRequest | undefined {
   if (asked.serverName === SERVER_NAME) return { answer: elicitationReply(asked, "allow") }
   if (asked.mode === "url") return undefined
   const message = asked.message?.trim() || `Allow ${asked.serverName} to run a tool`
