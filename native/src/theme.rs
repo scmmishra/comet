@@ -236,9 +236,14 @@ pub fn markdown(k: &Kit, size: f32) -> MarkdownStyle {
         .syntax_theme(code_colors(k.dark))
 }
 
+/// Code's own colour where no token colours it, pierre's editor foreground.
+pub fn code_foreground(dark: bool) -> Color {
+    color(if dark { "#fafafa" } else { "#0a0a0a" })
+}
+
 /// The Electron app highlights code with @pierre/diffs' pierre-dark and pierre-light themes. Their
 /// colours, by the kinds rune-kit's highlighter tells apart.
-fn code_colors(dark: bool) -> SyntaxTheme {
+pub fn code_colors(dark: bool) -> SyntaxTheme {
     use rune_kit::syntax::Syntax::*;
     let colors: [(rune_kit::syntax::Syntax, &str); 15] = if dark {
         [(Keyword, "#ff678d"), (String, "#5ecc71"), (Number, "#68cdf2"), (Comment, "#737373"), (Type, "#d568ea"), (Function, "#9d6afb"), (Property, "#ffa359"), (Punctuation, "#636363"), (Operator, "#08c0ef"), (Variable, "#ffa359"), (Parameter, "#a3a3a3"), (Heading, "#ff855e"), (Link, "#009fff"), (Regex, "#64d1db"), (Attribute, "#60d199")]

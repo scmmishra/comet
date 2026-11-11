@@ -36,13 +36,51 @@ pub struct Review {
 }
 
 /// What the panel has read and how it draws.
+/// A file the panel shows: what the core read, its lines' byte ranges, and its highlights in order,
+/// worked out once when it arrives so each line on screen only looks its own up.
+struct ShownFile {
+    file: FileView,
+    lines: Vec<std::ops::Range<usize>>,
+    highlights: std::rc::Rc<[rune_kit::syntax::Highlight]>,
+}
+
+impl ShownFile {
+    fn new(path: &str, file: FileView) -> ShownFile {
+        let text = file.text.as_deref().unwrap_or("");
+        let mut lines = Vec::new();
+        let mut start = 0;
+        for line in text.split_inclusive('\n') {
+            let end = start + line.trim_end_matches(['\n', '\r']).len();
+            lines.push(start..end);
+            start += line.len();
+        }
+        // The extension names the language, as a fence's info word would.
+        let lang = path.rsplit_once('.').map(|(_, ext)| ext);
+        let highlights = rune_kit::syntax::highlight(lang, text);
+        ShownFile { file, lines, highlights }
+    }
+
+    /// The spans that colour line `i`, measured from its start.
+    fn line_spans(&self, i: usize, theme: &rune_kit::syntax::SyntaxTheme) -> Vec<rune::Span> {
+        let line = &self.lines[i];
+        // The highlights are in order and do not overlap, so the line's start from a binary search.
+        let first = self.highlights.partition_point(|(r, _)| r.end <= line.start);
+        let clipped: Vec<rune_kit::syntax::Highlight> = self.highlights[first..]
+            .iter()
+            .take_while(|(r, _)| r.start < line.end)
+            .map(|(r, p)| (r.start.max(line.start) - line.start..r.end.min(line.end) - line.start, *p))
+            .collect();
+        theme.spans(&clipped, 0)
+    }
+}
+
 #[derive(Default)]
 pub struct Panel {
     reviews: HashMap<String, Review>,
     /// The review last asked for, by tab and scope, so it is asked again only when something changes.
     asked: Option<(String, String)>,
     /// Files read for the panel, by project and path.
-    files: HashMap<(String, String), FileView>,
+    files: HashMap<(String, String), ShownFile>,
     /// The file tab last read, so a file reads again each time it comes to the front.
     file_shown: Option<String>,
     /// How diffs draw, in every tab.
@@ -74,7 +112,8 @@ impl Desk {
     }
 
     pub fn take_file(&mut self, project: String, path: String, file: FileView) {
-        self.panel.files.insert((project, path), file);
+        let shown = ShownFile::new(&path, file);
+        self.panel.files.insert((project, path), shown);
     }
 
     /// A turn ended, so Review reads the changes again.
@@ -378,36 +417,66 @@ fn file_view(s: &Desk, tab: &TabInfo, path: &str, line: Option<u32>, k: &Kit) ->
         );
     let body = match s.panel.files.get(&(tab.project.clone(), path.to_owned())) {
         None => centred(k, "Reading the file…"),
-        Some(file) if file.binary => centred(k, "This is a binary file. Open it in the editor to see it."),
-        Some(file) => code(tab, path, file, line, k),
+        Some(shown) if shown.file.binary => centred(k, "This is a binary file. Open it in the editor to see it."),
+        Some(shown) => code(tab, path, shown, line, k),
     };
     col().w_full().grow(1.0).min_h(0.0).child(head).child(body)
 }
 
-/// A file's text, one numbered line per row, with `line` marked. Rows mount only while on screen.
-fn code(tab: &TabInfo, path: &str, file: &FileView, line: Option<u32>, k: &Kit) -> El {
-    let lines: Vec<String> = file.text.as_deref().unwrap_or("").lines().map(str::to_owned).collect();
-    let width = (lines.len().max(1).to_string().len() as f32) * 8.0 + 16.0;
-    let truncated = file.truncated.then(|| text("The file is long, so only its first megabyte shows.").font(crate::theme::text(12.0)).color(k.c.text_faint).px(12.0).pb(8.0));
-    let count = lines.len();
+/// A file's text, one numbered line per row, with `line` marked, in the Electron app's code colours.
+/// Rows mount only while on screen.
+fn code(tab: &TabInfo, path: &str, shown: &ShownFile, line: Option<u32>, k: &Kit) -> El {
+    let count = shown.lines.len();
+    // Pierre's gutter: 2ch in, the number at least 2ch wide, 1ch after it, and the code 1ch further in.
+    const CH: f32 = 7.2;
+    let width = 2.0 * CH + (count.max(1).to_string().len().max(2) as f32) * CH + CH;
+    let truncated = shown.file.truncated.then(|| text("The file is long, so only its first megabyte shows.").font(crate::theme::text(12.0)).color(k.c.text_faint).px(12.0).pb(8.0));
+    let key = (tab.project.clone(), path.to_owned());
+    let dark = k.dark;
     // The line a file opened at, Desk's `--color-accent-soft`.
     let mark = k.c.text_accent.alpha(0.14);
-    let (dim, ink) = (k.c.text_faint, k.c.text_muted);
+    // Pierre's colours: code in its foreground, numbers in that mixed 65% with the panel.
+    let ink = crate::theme::code_foreground(dark);
+    let dim = ink.mix(k.c.bg_base, 0.35);
     let mono = crate::theme::mono(12.0);
-    let rows = col().w_full().virtual_rows(
+    // Rune virtualizes a list only on an element that grows.
+    let rows = col().w_full().growth(rune::GrowthSpec::default()).virtual_rows(
         count,
         LINE_HEIGHT,
         |_: &Desk, i| std::borrow::Cow::Owned(i.to_string()),
-        move |_: &Desk, i| {
+        move |s: &Desk, i| {
+            let Some(shown) = s.panel.files.get(&key) else { return rune::el() };
+            let words = shown.file.text.as_deref().map_or("", |t| &t[shown.lines[i].clone()]).to_owned();
+            let spans = shown.line_spans(i, &crate::theme::code_colors(dark));
             let number = i as u32 + 1;
             row()
                 .w_full()
                 .h(LINE_HEIGHT)
                 .items_center()
                 .fill(if line == Some(number) { mark } else { rune::Color::TRANSPARENT })
-                .child(row().w(width).pr(12.0).justify_end().child(text(number.to_string()).font(mono).color(dim)))
-                .child(text(lines[i].clone()).font(mono).color(ink).selectable(true))
+                .child(row().w(width).pr(CH).justify_end().child(text(number.to_string()).font(mono).color(dim)))
+                .child(text(words).spans(spans).font(mono).color(ink).selectable(true).pl(CH))
         },
     );
     col().key(format!("file-{}-{path}", tab.id)).w_full().grow(1.0).min_h(0.0).children(truncated).child(col().w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).child(rows))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_line_takes_the_highlights_inside_it_measured_from_its_start() {
+        let text = "let a = 1;\n// two\nlet b = \"x\";\n";
+        let shown = ShownFile::new("main.rs", FileView { path: "main.rs".into(), text: Some(text.into()), binary: false, truncated: false });
+        assert_eq!(shown.lines, vec![0..10, 11..17, 18..30]);
+        let theme = crate::theme::code_colors(true);
+        // The comment covers the whole second line, from its own start.
+        let comment = shown.line_spans(1, &theme);
+        assert!(comment.iter().any(|s| s.start == 0 && s.end == 6));
+        // The third line's string sits where it does in that line, not in the file.
+        let third = shown.line_spans(2, &theme);
+        assert!(third.iter().all(|s| s.end <= 12), "spans stay inside the line: {third:?}");
+        assert!(third.iter().any(|s| s.start == 8 && s.end == 11));
+    }
 }
