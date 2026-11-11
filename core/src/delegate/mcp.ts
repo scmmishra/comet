@@ -1,3 +1,4 @@
+import { METHOD_NOT_FOUND } from "../agents/json-rpc"
 import { errorMessage } from "../errors"
 /**
  * A Model Context Protocol server over HTTP, as much of it as serving tools takes. Every agent Desk runs
@@ -28,7 +29,6 @@ export interface ToolSet {
 /** The protocol version Desk speaks when a client names none. Desk answers with the client's own when it names one. */
 const PROTOCOL_VERSION = "2025-03-26"
 const SERVER_INFO = { name: "desk", version: "1" }
-const METHOD_NOT_FOUND = -32601
 const INVALID_REQUEST = -32600
 
 type Request = { readonly id?: number | string; readonly method?: unknown; readonly params?: Record<string, unknown> }

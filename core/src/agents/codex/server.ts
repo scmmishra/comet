@@ -1,7 +1,7 @@
 import { version as coreVersion } from "../../../package.json"
-import { JsonRpc, RpcError, run, type Transport } from "../json-rpc"
+import { JsonRpc, METHOD_NOT_FOUND, RpcError, type RequestId, type Transport } from "../json-rpc"
+import { run } from "../process"
 import { codexPath, NO_CODEX } from "./executable"
-import type { RequestId } from "./protocol"
 
 /** Starts an app-server and gives its stdio. A test passes its own. */
 export type Launch = () => Transport
@@ -119,9 +119,6 @@ export class AppServer {
     for (const owner of owners) owner.lost(error)
   }
 }
-
-/** JSON-RPC's code for a method the peer does not have. */
-const METHOD_NOT_FOUND = -32601
 
 /** How Desk names itself to Codex. The core does not know Desk's version, so it gives its own. */
 const CLIENT_INFO = { name: "desk", title: "Desk", version: coreVersion }

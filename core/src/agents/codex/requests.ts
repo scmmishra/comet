@@ -1,4 +1,5 @@
 import type { PermissionAnswer, PermissionKind, Question, ThreadItem } from "@desk/protocol"
+import type { RequestId } from "../json-rpc"
 import { answerable, ELICITATION, elicitationItem, elicitationReply, type Elicitation } from "./elicitation"
 import { scriptOfWords, shellScript } from "./shell"
 
@@ -36,7 +37,7 @@ type Params = Record<string, unknown> & { readonly itemId?: string; readonly rea
  * The request Codex asks with `method`, or undefined for one Desk does not handle. `rpcId` is the id
  * Codex gave the request. `files` gives the paths of a file change Codex has already reported, by its item id.
  */
-export function openRequest(method: string, params: Params, rpcId: number | string, files: (itemId: string) => readonly string[] | undefined): OpenRequest | undefined {
+export function openRequest(method: string, params: Params, rpcId: RequestId, files: (itemId: string) => readonly string[] | undefined): OpenRequest | undefined {
   switch (method) {
     case "item/commandExecution/requestApproval": {
       const command = typeof params.command === "string" ? shellScript(params.command) : ""

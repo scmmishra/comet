@@ -2,7 +2,7 @@ import { accessSync, constants, existsSync, mkdirSync, mkdtempSync, readFileSync
 import { readdir, rm } from "node:fs/promises"
 import { basename, delimiter, dirname, join } from "node:path"
 import { which } from "../../environment"
-import { run, type Process } from "../json-rpc"
+import { run, type Process } from "../process"
 import { geminiHome, INSTALLED_MARKER, runtimeFolder, runtimeTemp } from "./home"
 import { RELEASE } from "./release"
 import { BROWSER_COMMAND } from "./sign-in-link"

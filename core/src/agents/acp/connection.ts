@@ -1,4 +1,4 @@
-import { JsonRpc, RpcError, type Transport } from "../json-rpc"
+import { JsonRpc, METHOD_NOT_FOUND, RpcError, type Transport } from "../json-rpc"
 import {
   PROTOCOL_VERSION,
   type ClientInfo,
@@ -12,9 +12,6 @@ import {
   type SessionSetup,
   type StopReason,
 } from "./protocol"
-
-/** JSON-RPC's code for a method the receiver does not have. */
-const METHOD_NOT_FOUND = -32601
 
 /** What the client does with the messages an agent sends it. */
 export interface AcpClient {

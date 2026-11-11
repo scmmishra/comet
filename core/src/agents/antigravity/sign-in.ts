@@ -3,7 +3,7 @@ import { whenAborted } from "../abort"
 import { AcpConnection } from "../acp/connection"
 import { CANCELLED } from "../acp/permissions"
 import type { ClientInfo, ConfigOption } from "../acp/protocol"
-import type { Process } from "../json-rpc"
+import type { Process } from "../process"
 import { signInLink } from "./sign-in-link"
 
 /** How long the user has to finish signing in, as in T3 Code. */

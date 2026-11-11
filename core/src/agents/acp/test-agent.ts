@@ -1,4 +1,4 @@
-import type { Process } from "../json-rpc"
+import type { Process } from "../process"
 import type { ConfigOption, SessionUpdate } from "./protocol"
 
 type Message = { readonly jsonrpc?: string; readonly id?: number | string; readonly method?: string; readonly params?: any; readonly result?: any; readonly error?: any }

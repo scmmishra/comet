@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { until } from "../test-support"
-import { JsonRpc, lines, RpcError, type Transport } from "./json-rpc"
+import { JsonRpc, RpcError, type Transport } from "./json-rpc"
+import { lines } from "./process"
 
 /** A transport a test plays the peer on: `say` sends the client a message, and `written` is what the client sent. */
 function peer() {

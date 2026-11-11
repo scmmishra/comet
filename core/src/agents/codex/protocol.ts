@@ -3,9 +3,6 @@
  * `codex app-server generate-ts` prints. Each type lists only the fields Desk reads.
  */
 
-/** A JSON-RPC id. Codex numbers its own requests from 0. */
-export type RequestId = string | number
-
 export interface CodexTurn {
   readonly id: string
   readonly items: readonly CodexItem[]

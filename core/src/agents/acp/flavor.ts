@@ -1,5 +1,5 @@
 import type { PermissionMode } from "@desk/protocol"
-import type { Process } from "../json-rpc"
+import type { Process } from "../process"
 import type { ClientInfo, ConfigOption, InitializeResult, PermissionRequest } from "./protocol"
 import type { ToolReader } from "./tools"
 
