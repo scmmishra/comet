@@ -20,12 +20,9 @@ const PANEL_INSET: f32 = 8.0;
 /// The panel toggle's place in the session's corner: the Electron app's `right-2.5 top-[9px]` from the
 /// outside of the card, less the card's border.
 const TOGGLE_INSET: (f32, f32) = (8.0, 9.0);
-/// How fast Rune's animations run: 1.5 plays every entry, exit and fade in two thirds of its time.
+/// How fast Rune's animations run: 1.2 plays every entry, exit and fade in five sixths of its time.
 /// Scrolling and growing lists keep their own pace.
-const ANIMATION_SPEED: f32 = 1.5;
-/// How long an overlay takes to fade out when it closes, as a spring's response, before
-/// `ANIMATION_SPEED` scales it.
-const OVERLAY_EXIT: rune::Spring = rune::Spring::new(0.12, 0.0);
+const ANIMATION_SPEED: f32 = 1.2;
 /// The main panel's corners, Desk's `rounded-3xl`.
 const PANEL_RADIUS: f32 = 12.0;
 /// A plugin's sidebar, `w-[320px]`.
@@ -420,9 +417,8 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
             s.refresh_outside();
         }
     });
-    // Popovers, menus, the palette and toasts leave with one quick fade, so closing feels as fast as
-    // opening. Rune's overlays otherwise fade out over a 0.25 spring.
-    rune_kit::root(window, layer).child_exit(rune::Transition::opacity().springs(rune::SpringPair::new(OVERLAY_EXIT, OVERLAY_EXIT)))
+    // Popovers, menus, the palette and toasts leave with one quick fade.
+    rune_kit::root(window, layer).child_exit(theme::quick_exit())
 }
 
 /// A tab's session: its header and its thread.

@@ -150,6 +150,13 @@ fn build(dark: bool, d: &Colors) -> Kit {
     k
 }
 
+/// How things leave when they close, such as a popover or an open fold's steps: one quick fade, so
+/// closing feels as fast as opening. Rune's own exits fade over 0.25 to 0.32 springs.
+pub fn quick_exit() -> rune::Transition {
+    const EXIT: rune::Spring = rune::Spring::new(0.12, 0.0);
+    rune::Transition::opacity().springs(rune::SpringPair::new(EXIT, EXIT))
+}
+
 /// Desk's `--color-tab`, `--color-tab-hover` and `--color-well`.
 pub fn tab(dark: bool) -> Color {
     color(colors(dark).tab)
