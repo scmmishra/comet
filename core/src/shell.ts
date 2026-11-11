@@ -10,7 +10,7 @@ export function loginShell(command?: string): string[] {
 
 let loginPath: Promise<string> | undefined
 
-/** The login shell's PATH, read once. Code that runs commands directly, such as plugins, needs it to find the user's tools. */
+/** The login shell's PATH, read once. The core takes it as its own at start (`main.ts`), so all it runs finds the user's tools. */
 export function loginShellPath(): Promise<string> {
   loginPath ??= (async () => {
     const child = Bun.spawn(loginShell('printf %s "$PATH"'), { stdout: "pipe", stderr: "ignore" })

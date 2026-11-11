@@ -1,5 +1,6 @@
 import type { CoreReady } from "@desk/protocol"
 import { startCore } from "./server"
+import { loginShellPath } from "./shell"
 
 /**
  * What Claude Code sets for the processes it starts. A Desk started from inside a Claude Code session
@@ -16,7 +17,13 @@ if (!token) {
   process.exit(1)
 }
 
+// Desk opened from the Dock or Finder starts with launchd's PATH, which lacks Homebrew, mise and the like, so
+// Claude Code's commands could not find gh or cargo, nor Desk find gh or the user's editor. Everything the
+// core starts takes the login shell's PATH instead. It is read while the server starts, and the app connects
+// only after the line below, so nothing runs before it is in place.
+const path = loginShellPath()
 const core = startCore({ token })
+process.env.PATH = await path
 // The app reads the first line of stdout as this, so nothing may print before it.
 const ready: CoreReady = { port: core.port }
 console.log(JSON.stringify(ready))
