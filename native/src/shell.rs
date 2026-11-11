@@ -383,7 +383,7 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
         }
     };
     let main = col().key("main").w_full().grow(1.0).min_h(0.0).px(PANEL_INSET).pb(PANEL_INSET).child(cards);
-    crate::palette::palette(s, k, &mut layer);
+    crate::palette::palette(s, cx.layout_size("window").map_or(820.0, |size| size[1]), k, &mut layer);
     layer.extend(crate::toasts::region(s, k));
     // Coming back to the window is when files and usage most likely changed outside Desk.
     let window = col().key("window").w_full().h_full().fill(k.c.bg_deep).child(titlebar).child(main).on_window_focus(|s: &mut Desk, focused, _| {

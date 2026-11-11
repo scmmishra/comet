@@ -7,17 +7,20 @@ use crate::protocol::{ClientMessage, ThemeChoice, ThreadSummary};
 use crate::shell::{self, Desk};
 use crate::workspace::Place;
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, icon, row, text, text_input};
-use rune_kit::{Keybind, Kit, popover, scrim};
+use rune_kit::{Keybind, Kit, scrim};
 use rune_theme_opencode::icons as ic;
 
 /// Threads the root list shows before the user types.
 const RECENT_THREADS: usize = 20;
-/// The palette's width, Dialog's large size.
-const WIDTH: f32 = 640.0;
-/// Its list scrolls past this height.
-const LIST_MAX: f32 = 400.0;
-/// Its distance from the window's top.
-const TOP: f32 = 96.0;
+/// The palette's measures, as the Electron app's Dialog and SearchList draw them: 576 points wide,
+/// 14% of the window's height from its top, and a list that scrolls past 302 points.
+const WIDTH: f32 = 576.0;
+const TOP: f32 = 0.14;
+const LIST_MAX: f32 = 302.0;
+const RADIUS: f32 = 12.0;
+/// SearchList's rows: 36 points tall, rounded to 0.5rem of Desk's 13 pixel root.
+const ROW_HEIGHT: f32 = 36.0;
+const ROW_RADIUS: f32 = 8.125;
 
 /// A nested list, by what it lists.
 #[derive(Clone, Debug, PartialEq)]
@@ -382,12 +385,13 @@ impl Desk {
     }
 }
 
-pub fn palette(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
+/// `window_height` places the palette, as the Electron app's Dialog sits 14vh down.
+pub fn palette(s: &Desk, window_height: f32, k: &Kit, layer: &mut Vec<El>) {
     if !s.palette.open {
         return;
     }
     let placeholder = s.palette.pages.last().map_or_else(|| "Search actions, tabs and threads".to_owned(), |p| format!("{}…", p.title(&s.account)));
-    let input = text_input(&s.palette.query, crate::theme::text(13.0))
+    let input = text_input(&s.palette.query, rune::TextStyle::new(14.0, 440.0).lh(16.0))
         .key("palette-input")
         .single_line()
         .w_full()
@@ -399,15 +403,27 @@ pub fn palette(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
             &mut s.palette.query
         })
         .on_input_key(|s: &mut Desk, event: &KeyEvent, tx| s.palette_key(event, tx));
-    let field = row().w_full().h(44.0).gap(10.0).items_center().px(16.0).border_sides([0.0, 0.0, 1.0, 0.0], k.c.border_base).child(icon(&ic::MAGNIFYING_GLASS, 15.0).color(k.c.text_faint)).child(input);
+    // A 40 point field, 6 and 8 points in, over a border that takes a point of room in CSS and none in Rune.
+    let field = row()
+        .w_full()
+        .h(53.0)
+        .gap(12.0)
+        .items_center()
+        .px(20.0)
+        .pb(1.0)
+        .border_sides([0.0, 0.0, 1.0, 0.0], k.c.border_base)
+        .child(icon(&ic::MAGNIFYING_GLASS, crate::icons::SIZE).color(k.c.text_faint))
+        .child(input);
     let matches = s.matches();
     let active = s.palette.active.min(matches.len().saturating_sub(1));
-    let mut list = col().w_full().padding(6.0);
+    // Sections 16 points apart, their rows a point apart, under 26 point headers.
+    let mut list = col().w_full().px(8.0).pt(6.0).pb(8.0).gap(1.0);
     let mut section = None;
     for (i, entry) in matches.iter().enumerate() {
         let heading = s.palette.pages.last().map_or_else(|| entry.section.clone(), |p| p.title(&s.account));
         if section.as_ref() != Some(&heading) {
-            list = list.child(text(heading.clone()).font(crate::theme::text(12.0)).color(k.c.text_faint).px(10.0).pt(8.0).pb(4.0));
+            let top = if section.is_some() { 16.0 } else { 0.0 };
+            list = list.child(row().h(26.0).mt(top).items_center().px(10.0).child(text(heading.clone()).font(rune::TextStyle::new(12.0, 440.0).lh(16.0)).color(k.c.text_muted)));
             section = Some(heading);
         }
         list = list.child(entry_row(s, entry, i, i == active, k));
@@ -417,17 +433,19 @@ pub fn palette(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
         col().w_full().py(24.0).center().child(text(words).font(crate::theme::text(13.0)).color(k.c.text_faint))
     });
     let back = s.palette.pages.len() > s.palette.start;
-    let hint = |keys: &[&str], label: &str| row().gap(6.0).items_center().child(Keybind::new(keys).build(k)).child(text(label.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint));
+    let hint = |keys: &[&str], label: &str| row().gap(6.0).items_center().child(Keybind::new(keys).build(k)).child(text(label.to_owned()).font(rune::TextStyle::new(12.0, 440.0).lh(16.0)).color(k.c.text_muted));
     let footer = row()
         .w_full()
+        .h(35.0)
         .gap(16.0)
         .items_center()
         .px(16.0)
-        .py(10.0)
+        .pt(1.0)
+        .fill(k.c.text_base.alpha(0.025))
         .border_sides([1.0, 0.0, 0.0, 0.0], k.c.border_base)
         .child(hint(&["↑", "↓"], "Navigate"))
         .child(hint(&["↵"], "Select"))
-        .child(hint(&["Esc"], if back { "Back" } else { "Close" }));
+        .child(hint(&["ESC"], if back { "Back" } else { "Close" }));
     let body = col()
         .key("palette")
         .w(WIDTH)
@@ -438,7 +456,14 @@ pub fn palette(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
         .child(footer);
     // The window dims behind the palette, as behind `@opencode/ui`'s dialogs.
     layer.push(scrim("palette-scrim", |s: &mut Desk| s.palette = Palette::default()).fill(k.c.scrim));
-    layer.push(col().key("palette-layer").absolute(0.0, 0.0).w_full().pt(TOP).items_center().child(popover::raised(k, body, 10.0)));
+    let surface = k.elevate(body.radius(RADIUS).clip_rounded(RADIUS).fill(k.c.layer_01).border(1.0, crate::theme::outline(k.dark)), &k.elevation.overlay);
+    layer.push(col().key("palette-layer").absolute(0.0, 0.0).w_full().pt(TOP * window_height).items_center().child(surface));
+}
+
+/// A row's shortcut as one word, such as ⌘T, as T3 Code prints it. The Electron app sets the ghost
+/// Keybind's keys with no gap between them, which rune-kit's Keybind does not offer.
+fn shortcut(keys: &[&str], k: &Kit) -> El {
+    text(keys.concat()).font(rune::TextStyle::new(11.0, 530.0).lh(14.0).tracking(0.05)).color(k.c.text_faint).px(1.0)
 }
 
 fn entry_row(s: &Desk, entry: &Entry, index: usize, active: bool, k: &Kit) -> El {
@@ -450,20 +475,21 @@ fn entry_row(s: &Desk, entry: &Entry, index: usize, active: bool, k: &Kit) -> El
     let picked = entry.clone();
     row()
         .key(format!("palette-{index}"))
-        .h(36.0)
+        .h(ROW_HEIGHT)
         .w_full()
-        .gap(10.0)
+        .gap(12.0)
         .items_center()
-        .px(10.0)
-        .radius(8.0)
-        .fill(if active { k.c.hover } else { rune::Color::TRANSPARENT })
+        .px(12.0)
+        .radius(ROW_RADIUS)
+        // The active row as the Electron app draws it: white at 10% on dark, Desk's hover colour on light.
+        .fill(if !active { rune::Color::TRANSPARENT } else if k.dark { rune::Color::WHITE.alpha(0.1) } else { k.c.hover })
         .role("option")
         .on_press_tx(move |s: &mut Desk, tx| s.select(picked.clone(), tx))
         .children(lead)
         .child(text(entry.title.clone()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate())
         .children(entry.detail.clone().map(|d| text(d).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate()))
         .child(row().grow(1.0))
-        .children(entry.shortcut.map(|keys| Keybind::new(keys).build(k)))
+        .children(entry.shortcut.map(|keys| shortcut(keys, k)))
         .children(entry.checked.then(|| icon(&ic::CHECK, 15.0).color(k.c.text_base)))
         .children(matches!(entry.action, Action::Open(_)).then(|| icon(&ic::OUTLINE_CHEVRON_RIGHT, 15.0).color(k.c.text_faint)))
 }
