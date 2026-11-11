@@ -48,23 +48,21 @@ impl Lane {
     }
 }
 
-/// The open subagent's detail, by id, and whether the header chip's cards show: pinned open by a press on
-/// the chip, or while the pointer is on the chip or its cards.
+/// The open subagent's detail, by id, and whether the header chip's cards are open.
 #[derive(Default)]
 pub struct Cards {
     open_subagent: Option<String>,
-    chip_pinned: bool,
-    on_chip: bool,
-    on_chip_cards: bool,
+    chip_open: bool,
 }
 
 impl Desk {
     /// Closes a subagent's detail or the chip's pinned cards, as Escape does. Whether one was open.
     pub fn close_cards(&mut self) -> bool {
-        let closed = self.cards.open_subagent.take().is_some() || self.cards.chip_pinned;
-        self.cards.chip_pinned = false;
+        let closed = self.cards.open_subagent.take().is_some() || self.cards.chip_open;
+        self.cards.chip_open = false;
         closed
     }
+
 }
 
 /// The rail of cards for a tab, pinned to the session's top right.
@@ -85,12 +83,12 @@ pub fn rail(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
 }
 
 /// A project's cards folded into a chip in the session header, for when the session is too narrow for the
-/// rail, as the Electron app's SpaceChip does. Hovering the chip shows the Space and Commands cards.
+/// rail, as the Electron app's SpaceChip does. A click on the chip opens the Space and Commands cards, and
+/// a click outside them or Escape closes them. The Electron app opens them on hover, but the pointer lost
+/// them crossing the gap between the chip and the cards.
 pub fn space_chip(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let space = s.projects.get(&tab.project).and_then(|p| p.space.as_ref());
     let words = |w: String, color| text(w).font(crate::theme::text(12.0)).color(color);
-    // A press pins the cards open, so the keyboard reaches them too. The Electron app opens them on focus,
-    // which Rune has no handler for.
     let chip = row()
         .key("space-chip")
         .h(28.0)
@@ -101,21 +99,20 @@ pub fn space_chip(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
         .px(10.0)
         .role("button")
         .label("Project cards")
-        .expanded(s.cards.chip_pinned)
-        .on_press(|s: &mut Desk| s.cards.chip_pinned = !s.cards.chip_pinned)
-        .on_hover_change(|s: &mut Desk, on, _| s.cards.on_chip = on);
+        .expanded(s.cards.chip_open)
+        .on_press(|s: &mut Desk| s.cards.chip_open = !s.cards.chip_open);
     let chip = match space {
         Some(space) => chip.child(icon(&ic::BRANCH, icons::SIZE).color(k.c.text_muted)).child(words(space.branch.clone(), k.c.text_base).truncate().max_w(160.0)).child(changes(space, k)),
         None => chip.child(words("Commands".into(), k.c.text_base)),
     };
-    if s.cards.chip_pinned || s.cards.on_chip || s.cards.on_chip_cards {
+    if s.cards.chip_open {
         let cards = col()
             .key("space-chip-cards")
             .w(RAIL_WIDTH)
             .gap(8.0)
-            .on_hover_change(|s: &mut Desk, on, _| s.cards.on_chip_cards = on)
             .children(space.map(|space| space_card(space, &tab.id, k)))
             .children(crate::commands_card::card(s, &tab.project, k, layer));
+        layer.insert(0, scrim("space-chip-scrim", |s: &mut Desk| s.cards.chip_open = false));
         layer.push(popover::anchored(k, cards, "space-chip", Placement::BottomEnd, 4.0));
     }
     chip
