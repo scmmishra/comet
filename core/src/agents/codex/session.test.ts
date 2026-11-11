@@ -22,6 +22,7 @@ function setup(options: Partial<SessionOptions> = {}) {
   codex.answer("turn/start", { turn: turn("inProgress", { startedAt: null }) })
   codex.answer("turn/steer", { turnId: TURN })
   codex.answer("turn/interrupt", {})
+  codex.answer("thread/unsubscribe", { status: "unsubscribed" })
   const server = new AppServer(codex.launch)
   const events: ThreadEvent[] = []
   const sessionIds: string[] = []
@@ -368,6 +369,19 @@ test("closing the tab declines open requests and stops the turn", async () => {
   expect(s.codex.reply(1)).toEqual({ id: 1, result: { answers: { q: { answers: [] } } } })
   expect(s.last("permission")).toMatchObject({ answered: true })
   expect(s.last("question")).toMatchObject({ answered: true })
+})
+
+test("a closed session unsubscribes from its thread, and one that never loaded a thread sends nothing", async () => {
+  const s = setup()
+  await started(s)
+  s.session.close()
+  await until(() => s.codex.sent("thread/unsubscribe").length > 0)
+  expect(s.codex.sent("thread/unsubscribe")).toEqual([{ threadId: THREAD }])
+
+  const unopened = setup()
+  unopened.session.close()
+  await Bun.sleep(20)
+  expect(unopened.codex.sent("thread/unsubscribe")).toEqual([])
 })
 
 test("a turn's end closes the requests it left open", async () => {

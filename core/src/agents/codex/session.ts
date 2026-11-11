@@ -137,13 +137,16 @@ export class CodexSession implements AgentSession, ThreadOwner {
   }
 
   /**
-   * Declines every open request and stops a running turn, since the app-server runs on after the tab
-   * closes. The thread stays loaded there, so another session can resume it at once.
+   * Declines every open request and stops a running turn, since the app-server runs on after the session
+   * closes. It also unsubscribes from the thread, after T3 Code, so Codex unloads it once idle. A resume of
+   * a thread that is still loaded rejoins it with the config it loaded with, which holds this session's
+   * token for Desk's tools. The next session's resume then loads it with its own.
    */
   close() {
     this.dismissRequests()
     const turnId = this.turn?.id
     if (turnId && this.threadId) void this.server.request("turn/interrupt", { threadId: this.threadId, turnId }).catch(() => undefined)
+    if (this.loading && this.threadId) void this.server.request("thread/unsubscribe", { threadId: this.threadId }).catch(() => undefined)
     this.stop.clear()
     this.turn?.end()
     for (const release of this.releases) release()

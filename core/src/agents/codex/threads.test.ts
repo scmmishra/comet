@@ -26,6 +26,7 @@ const TURNS = [
 function setup() {
   const codex = fakeAppServer()
   codex.answer("thread/read", { thread: { id: THREAD, turns: TURNS } })
+  codex.answer("thread/unsubscribe", { status: "unsubscribed" })
   return { codex, threads: codexThreads(new AppServer(codex.launch)) }
 }
 
@@ -87,6 +88,7 @@ test("forks a thread through the turn of a message, and names the copy", async (
   expect(codex.sent("thread/name/set")).toEqual([{ threadId: "copy", name: "Fork of tests" }])
   await threads.fork!(DIR, THREAD, { title: "Whole" })
   expect(codex.sent("thread/fork")[1]).toEqual({ threadId: THREAD, excludeTurns: true })
+  expect(codex.sent("thread/unsubscribe")).toEqual([{ threadId: "copy" }, { threadId: "copy" }])
 })
 
 test("rewinds to before a message's turn, and leaves a thread rewound to its first message empty", async () => {
@@ -98,5 +100,6 @@ test("rewinds to before a message's turn, and leaves a thread rewound to its fir
   expect(await threads.rewind!(DIR, THREAD, "u4")).toEqual({ empty: false })
   expect(codex.sent("thread/resume")).toEqual([{ threadId: THREAD, cwd: DIR, excludeTurns: true }])
   expect(codex.sent("thread/revert")).toEqual([{ threadId: THREAD, beforeTurnId: "turn-3" }])
+  expect(codex.sent("thread/unsubscribe")).toEqual([{ threadId: THREAD }])
   expect(await threads.rewind!(DIR, THREAD, "nope").catch((error: Error) => error.message)).toBe("Codex has no such message in the thread.")
 })
