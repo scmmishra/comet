@@ -1,4 +1,5 @@
 import type { Step, StepKind } from "@desk/protocol"
+import { deskToolLabel, SERVER_NAME } from "../../delegate/tools"
 import { commandLabel, tool, type BareStep } from "../../steps"
 
 type Tool = Extract<Step, { type: "tool" }>
@@ -49,10 +50,18 @@ function label(step: BareTool): string {
     case "Task":
     case "Agent":
       return `Started an agent: ${target}`
-    default:
-      return `${step.name} ${target}`.trim()
+    default: {
+      const desk = deskTool(step.name)
+      return desk ? deskToolLabel(desk, step.summary, !!step.result) : `${step.name} ${target}`.trim()
+    }
   }
 }
+
+/** How Claude Code names a tool of Desk's own MCP server, such as `mcp__desk__delegate`. */
+const DESK_TOOL = `mcp__${SERVER_NAME}__`
+
+/** The tool of Desk's that a tool name stands for, or undefined for any other tool. */
+export const deskTool = (name: string) => (name.startsWith(DESK_TOOL) ? name.slice(DESK_TOOL.length) : undefined)
 
 /** A call of one of Claude Code's tools as a step, with its kind and label. */
 export const toolStep = (step: BareTool): Tool => tool(step, KIND_BY_TOOL[step.name] ?? "other", label(step))

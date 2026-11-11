@@ -1,7 +1,8 @@
 import type { SDKAPIRetryMessage, SDKAssistantMessage, SDKMessage, SDKMessageOrigin, SDKPartialAssistantMessage, SessionMessage } from "@anthropic-ai/claude-agent-sdk"
 import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, type ThreadItem } from "@desk/protocol"
 import { cutOutput, relativeTo, thought } from "../../steps"
-import { toolStep } from "./steps"
+import { deskToolSummary } from "../../delegate/tools"
+import { deskTool, toolStep } from "./steps"
 
 /** What Claude Code writes into a transcript when the user stops a turn, with or without "for tool use". */
 const INTERRUPTED = /^\[Request interrupted by user/
@@ -191,12 +192,14 @@ const item = (found: ThreadItem): ThreadEvent => ({ kind: "item", item: found })
 /** A tool call as the thread draws it. A call that edits a file carries the file and its edits. */
 export function toolItem(dir: string, id: string, name: string, input: Record<string, unknown>): ToolItem {
   const edits = toolEdits(name, input)
-  const summary = SUMMARY_FIELDS.find((field) => typeof input[field] === "string")
+  const field = SUMMARY_FIELDS.find((found) => typeof input[found] === "string")
+  const desk = deskTool(name)
+  const summary = (desk && deskToolSummary(desk, input)) ?? (field ? relativeTo(dir, String(input[field])) : JSON.stringify(input))
   return toolStep({
     type: "tool",
     id,
     name,
-    summary: summary ? relativeTo(dir, String(input[summary])) : JSON.stringify(input),
+    summary,
     ...(edits ? { file: relativeTo(dir, String(input.file_path ?? "")), edits } : {}),
   })
 }

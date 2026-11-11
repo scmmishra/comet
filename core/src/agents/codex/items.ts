@@ -1,4 +1,5 @@
 import type { ThreadItem } from "@desk/protocol"
+import { deskToolLabel, deskToolSummary, SERVER_NAME } from "../../delegate/tools"
 import { commandLabel, cutOutput, relativeTo, thought, tool } from "../../steps"
 import { fileEdits } from "./diff"
 import type { CodexItem, FileUpdate } from "./protocol"
@@ -31,8 +32,10 @@ export function threadItems(dir: string, item: CodexItem, done: boolean, at?: nu
     case "mcpToolCall": {
       const result = done ? (item.error ? { output: item.error.message, isError: true } : { output: cutOutput(contentText(item.result?.content ?? [])), isError: item.status === "failed" }) : undefined
       const name = `${item.server}.${item.tool}`
-      const summary = argumentsSummary(item.arguments)
-      return [tool({ type: "tool", id: item.id, name, summary, ...(result ? { result } : {}) }, "other", `${name} ${summary}`)]
+      // A tool of Desk's own reads the same in every agent's thread.
+      const desk = item.server === SERVER_NAME ? deskToolSummary(item.tool, item.arguments) : undefined
+      const summary = desk ?? argumentsSummary(item.arguments)
+      return [tool({ type: "tool", id: item.id, name, summary, ...(result ? { result } : {}) }, "other", desk === undefined ? `${name} ${summary}` : deskToolLabel(item.tool, summary, done))]
     }
     case "webSearch":
       return [tool({ type: "tool", id: item.id, name: "WebSearch", summary: item.query, ...finished(done, false) }, "web", `Searched the web for ${item.query}`)]
