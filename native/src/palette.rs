@@ -80,6 +80,8 @@ struct Entry {
     title: String,
     detail: Option<String>,
     icon: Option<&'static rune::Icon>,
+    /// A file's icon leads the row, in its own colours.
+    file_icon: Option<&'static rune::Icon>,
     /// A project's mark leads the row.
     project: Option<String>,
     shortcut: Option<&'static [&'static str]>,
@@ -90,7 +92,7 @@ struct Entry {
 
 impl Entry {
     fn new(section: &str, title: impl Into<String>, action: Action) -> Entry {
-        Entry { section: section.into(), title: title.into(), detail: None, icon: None, project: None, shortcut: None, checked: false, action }
+        Entry { section: section.into(), title: title.into(), detail: None, icon: None, file_icon: None, project: None, shortcut: None, checked: false, action }
     }
 }
 
@@ -207,6 +209,7 @@ impl Desk {
                         let (dir, name) = path.rsplit_once('/').map_or(("", path.as_str()), |(d, n)| (d, n));
                         let mut entry = Entry::new(&self.account.project_label(project), name, Action::File(project.clone(), path.clone()));
                         entry.detail = (!dir.is_empty()).then(|| format!("{dir}/"));
+                        entry.file_icon = Some(rune_theme_opencode::file_icons::file(path));
                         entry
                     })
                     .collect(),
@@ -479,9 +482,10 @@ fn shortcut(keys: &[&str], k: &Kit) -> El {
 }
 
 fn entry_row(s: &Desk, entry: &Entry, index: usize, active: bool, k: &Kit) -> El {
-    let lead = match (&entry.project, entry.icon) {
-        (Some(project), _) => Some(shell::project_mark(&s.account, project, k)),
-        (None, Some(mark)) => Some(icon(mark, 15.0).color(k.c.text_faint)),
+    let lead = match (&entry.project, entry.file_icon, entry.icon) {
+        (Some(project), ..) => Some(shell::project_mark(&s.account, project, k)),
+        (None, Some(file), _) => Some(icon(file, crate::icons::SIZE)),
+        (None, None, Some(mark)) => Some(icon(mark, crate::icons::SIZE).color(k.c.text_faint)),
         _ => None,
     };
     let picked = entry.clone();

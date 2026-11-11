@@ -27,6 +27,17 @@ fn file(s: &mut Desk) {
     match scene["palette"].as_str() {
         Some("setups") => s.show_palette(vec![crate::palette::Page::Setups]),
         Some("root") => s.show_palette(Vec::new()),
+        Some("files") => {
+            let project = s.workspace.active_tab().map(|t| t.project.clone()).unwrap_or_default();
+            s.show_palette(vec![crate::palette::Page::Files(project)]);
+            s.sync_palette();
+            // Opening the palette clears found files, so the scene's arrive again, after it asks for them.
+            for message in serde_json::from_value::<Vec<CoreMessage>>(scene["messages"].clone()).expect("the scene's messages decode") {
+                if matches!(message, CoreMessage::FilesFound { .. }) {
+                    s.receive(Event::Message(message)).expect("files need no folder");
+                }
+            }
+        }
         _ => {}
     }
 }
