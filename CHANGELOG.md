@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- Desk is now a native app, built in Rust with Rune, in place of Electron. It talks to the same core, so tabs, threads, settings and plugins carry over. It is about half the size, at 207 MB. `desk <folder>` opens a folder in the running Desk through a `desk://` link.
 - Desk opened from the Dock or Finder finds your tools, such as gh, cargo or your editor, including those your .zshrc adds. Claude's commands ran with macOS's short default PATH, so a command like `gh` failed with "command not found" though it worked in a terminal. Desk reads your shell's environment once and keeps it, so later starts do not wait for your shell.
 - The Space card's folder, branch and changes sit evenly. An extra gap stood between the folder and the branch.
 - A turn that switches off a branch no longer lists that branch's earlier work as its changes, in the thread or in Review. Asking Claude to go back to main, pull and start a new branch listed every file the old branch had changed.

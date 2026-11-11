@@ -29,7 +29,7 @@ What changed from the plan:
 - The fonts were first the OpenCode theme's, Inter and IBM Plex Mono, because Geist's npm package ships only woff2, which Rune does not read. The app now carries Geist's variable TTFs from Vercel's repo, in `native/assets/fonts`.
 - The client does not reconnect. The Electron app's client does not either.
 - The theme is a module in the crate, not a crate of its own.
-- The single instance is a file lock in `~/.desk/native`. Rune's `single_instance` covers only Windows. A second launch exits. It does not hand its folder over yet.
+- The single instance is a file lock in the instance's folder. Rune's `single_instance` covers only Windows, so a second launch exits. `bin/desk` hands a folder to the running Desk through a `desk://open?dir=` link instead, which the bundle declares.
 
 ### Phase 2: Thread
 
@@ -89,11 +89,15 @@ Done:
 
 ### Phase 5: Switch
 
-- Packaging and signing, `mise run install`, the release workflow and `bin/desk`.
-- The core's path in a packaged build. Phase 1 finds the core through the repo path set at build time.
-- The native app takes the main instance, in place of `native`.
-- Rewrite `AGENTS.md`'s testing section for Rune's headless mode.
-- Remove `app/`.
+Done:
+
+- `scripts/package.sh` builds the native Desk.app: the release binary, the core and Bun in `Contents/Resources`, the icon from `Desk.icon` through `actool`, and the `desk:` scheme. It is signed ad hoc. `mise run install`, the CI and Release workflows and `bin/desk` use it.
+- A bundled Desk finds its core in its own resources and serves the main instance, `~/.desk`. Run from the repo, it keeps the `native` instance, since the Electron Desk Dev owns `~/.desk/dev` under a lock of its own.
+- `AGENTS.md` describes the native app, its tasks and Rune's headless checks.
+
+Left:
+
+- Remove `app/`. The native package still reads the version from `app/package.json` and the icon from `app/build/Desk.icon`, so both move first. The dev instance can then take the name `dev`.
 
 ## Open decisions
 
