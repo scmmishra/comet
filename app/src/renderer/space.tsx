@@ -37,7 +37,6 @@ function SpaceCard(props: { space: Space }) {
     <section class="flex flex-col rounded-3xl border border-outline bg-card">
       <div class="p-1.5">
         <Row icon="folder">{shortPath(props.space.root)}</Row>
-        <div class="h-1.5" />
         <Row icon="branch" detail={upstream(props.space)}>
           {props.space.branch}
         </Row>
