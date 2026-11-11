@@ -1,14 +1,16 @@
 import { AGENTS, type AgentId, type AgentInfo, type CoreMessage, type Skill } from "@desk/protocol"
 import type { Agent, AgentHost, AgentReading } from "./agent"
+import { antigravityAgent } from "./antigravity"
 import { claudeAgent } from "./claude"
 import { codexAgent } from "./codex"
 
 type Send = (message: CoreMessage) => void
 
 /** How to make each agent Desk runs. Adding an agent means adding it to `AGENTS` in the protocol, and here. */
-const MAKERS: Partial<Record<AgentId, (host: AgentHost) => Agent>> = {
+const MAKERS: Record<AgentId, (host: AgentHost) => Agent> = {
   claude: claudeAgent,
   codex: codexAgent,
+  antigravity: antigravityAgent,
 }
 
 /** What the core lends every agent, less where each reports what it learns. */
