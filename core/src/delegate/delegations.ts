@@ -194,13 +194,22 @@ export function narrowed(parent: PermissionMode, modes: readonly PermissionMode[
   return PERMISSION_MODES.findLast((mode, rank) => rank <= limit && modes.includes(mode)) ?? PERMISSION_MODES[0]
 }
 
-/** How a task ended, from what it left in its thread: its last text when it finished, else why it did not. */
+/**
+ * How a task ended, from what it left in its thread: its last text when it finished, else why it did not.
+ * A task that failed after it answered keeps that answer, after T3 Code: the work it reports may be done.
+ */
 function taskOutcome(items: readonly ThreadItem[]): { readonly status: "completed" | "failed" | "stopped"; readonly text: string } {
-  const error = items.findLast((item) => item.type === "error")
-  if (error?.type === "error") return { status: "failed", text: `The task failed: ${error.message}` }
+  const lastAnswer = (among: readonly ThreadItem[]) => among.findLast((item) => item.type === "text" && item.text.trim())
+  const errorAt = items.findLastIndex((item) => item.type === "error")
+  const error = items[errorAt]
+  if (error?.type === "error") {
+    const answer = lastAnswer(items.slice(0, errorAt))
+    const report = answer?.type === "text" ? `\n\nIts last report before it failed:\n\n${answer.text}` : ""
+    return { status: "failed", text: `The task failed: ${error.message}${report}` }
+  }
   const result = items.findLast((item) => item.type === "result")
   if (result?.type === "result" && result.stopped) return { status: "stopped", text: "The task was stopped before it finished." }
-  const answer = items.findLast((item) => item.type === "text" && item.text.trim())
+  const answer = lastAnswer(items)
   return answer?.type === "text" ? { status: "completed", text: answer.text } : { status: "failed", text: "The task ended without an answer." }
 }
 

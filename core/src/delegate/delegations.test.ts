@@ -127,6 +127,12 @@ test("a stopped thread stops its tasks, and a task that was stopped or failed sa
   codex.sessions[1]!.emit({ kind: "status", busy: false })
   expect(await failed).toEqual({ text: "The task failed: Rate limited", isError: true })
   expect(last().status).toBe("failed")
+
+  const reported = call({ agent: "codex", task: "Review it." })
+  codex.sessions[2]!.emit({ kind: "item", item: { type: "text", id: "t1", text: "No blocking issues.", done: true } })
+  codex.sessions[2]!.emit({ kind: "item", item: { type: "error", id: "e2", message: "Connection lost" } })
+  codex.sessions[2]!.emit({ kind: "status", busy: false })
+  expect(await reported).toEqual({ text: "The task failed: Connection lost\n\nIts last report before it failed:\n\nNo blocking issues.", isError: true })
 })
 
 test("the asking agent giving up on the call stops the task", async () => {
