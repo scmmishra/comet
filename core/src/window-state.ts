@@ -72,6 +72,9 @@ export interface ClosedTab {
 /** What names a plugin's thread among every project's in `keyed`: its project and its key. Two projects' plugins can use the same key. */
 export const keyedId = (project: string, key: string) => `${project}\n${key}`
 
+/** The project a keyed id names. */
+export const keyedProject = (id: string) => id.slice(0, id.indexOf("\n"))
+
 /** The checkpoint commits a thread still names, which Git must keep. */
 export const checkpointsOf = (thread: TabThread): string[] => [thread.threadStart, thread.turnFrom, thread.turnTo].filter((commit) => commit !== undefined)
 

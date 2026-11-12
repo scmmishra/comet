@@ -6,6 +6,7 @@ import { fakeAgent, gitRepo, tempFolder, until, useTempHome } from "./test-suppo
 import { Agents } from "./agents/registry"
 import { Delegations } from "./delegate/delegations"
 import { Window } from "./window"
+import { capture } from "./checkpoints"
 
 useTempHome()
 
@@ -423,4 +424,15 @@ test("Review says why it could not read a thread's changes, and shows none for a
   const { window } = openWithAgents({ tabs: [codexTab("a", repo.dir), codexTab("b", tempFolder("plain"))], threads: { a: { turnFrom: missing, turnTo: missing } }, recent: [] })
   await expect(window.review("a", "turn")).rejects.toThrow("Review could not read the changes. git ")
   expect(await window.review("b", "git")).toEqual([])
+})
+
+test("keeps the checkpoints of a plugin's thread that no tab shows", async () => {
+  const repo = gitRepo({ "a.txt": "one\n" })
+  const kept = (await capture(repo.dir))!
+  repo.write("a.txt", "two\n")
+  const dropped = (await capture(repo.dir))!
+  openWithAgents({ tabs: [codexTab("a", repo.dir)], threads: {}, keyed: { [`${repo.dir}\ninbox.conv-1`]: { key: "inbox.conv-1", turnTo: kept } }, recent: [] })
+  const refs = () => repo.git("for-each-ref", "--format=%(refname:lstrip=-1)", "refs/desk/")
+  await until(() => !refs().includes(dropped))
+  expect(refs()).toBe(kept)
 })

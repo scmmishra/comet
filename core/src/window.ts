@@ -5,14 +5,14 @@ import type { Agents } from "./agents/registry"
 import { resultMessage } from "./agents/turn-items"
 import type { Delegations, Handoffs } from "./delegate/delegations"
 import type { KeyedThread } from "./plugins/plugins"
-import { branchBase, capture, changesSince, checkpointChanges, headTree, keepCheckpoints } from "./checkpoints"
+import { branchBase, capture, changesSince, checkpointChanges, headTree, releaseCheckpoints } from "./checkpoints"
 import { errorMessage } from "./errors"
 import { git } from "./git"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { currentBranch } from "./space"
 import { Terminals } from "./terminals"
 import { TurnWatch } from "./turn"
-import { checkpointsOf, keyedId, loadWindowState, saveWindowState, type ClosedTab, type TabThread, type WindowState } from "./window-state"
+import { checkpointsOf, keyedId, keyedProject, loadWindowState, saveWindowState, type ClosedTab, type TabThread, type WindowState } from "./window-state"
 
 type Send = (message: CoreMessage) => void
 
@@ -77,17 +77,15 @@ export class Window {
 
   /**
    * Lets Git prune the checkpoints no saved thread names any more, such as those of a cleared thread. It
-   * runs once at start, so it never races a checkpoint being taken. A project it cannot read is skipped.
+   * runs once at start, so it never races a checkpoint being taken.
    */
-  private async releaseCheckpoints() {
-    const threads = [...this.state.tabs.map((tab) => ({ project: tab.project, thread: this.state.threads[tab.id] })), ...this.state.closed.map((closed) => ({ project: closed.tab.project, thread: closed.thread }))]
-    const kept = new Map<string, Set<string>>()
-    for (const { project, thread } of threads) {
-      const commits = kept.get(project) ?? new Set<string>()
-      for (const commit of thread ? checkpointsOf(thread) : []) commits.add(commit)
-      kept.set(project, commits)
-    }
-    for (const [project, commits] of kept) await keepCheckpoints(project, commits).catch(() => undefined)
+  private releaseCheckpoints() {
+    const threads = [
+      ...this.state.tabs.map((tab) => ({ project: tab.project, thread: this.state.threads[tab.id] })),
+      ...this.state.closed.map((closed) => ({ project: closed.tab.project, thread: closed.thread })),
+      ...Object.entries(this.state.keyed).map(([id, thread]) => ({ project: keyedProject(id), thread })),
+    ]
+    return releaseCheckpoints(threads.map(({ project, thread }) => ({ project, commits: thread ? checkpointsOf(thread) : [] })))
   }
 
   /** Sends a client the window: its recent folders, then its tabs, then each tab's thread. */

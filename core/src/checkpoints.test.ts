@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
-import { readFileSync, rmSync, symlinkSync } from "node:fs"
+import { readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { branchBase, capture, changesSince, checkpointChanges, headTree, keepCheckpoints, snapshot } from "./checkpoints"
+import { branchBase, capture, changesSince, checkpointChanges, headTree, releaseCheckpoints, snapshot } from "./checkpoints"
 import { gitRepo, tempFolder } from "./test-support"
 
 test("reports what changed since a snapshot, new and deleted files included", async () => {
@@ -164,7 +164,7 @@ test("keeps checkpoints from git gc under this Desk's refs, and lets go of those
   git("update-ref", `refs/desk/dev/checkpoints/${dropped}`, dropped)
   expect(git("for-each-ref", "--format=%(refname)", "refs/desk/main/checkpoints/").split("\n").sort()).toEqual([`refs/desk/main/checkpoints/${dropped}`, `refs/desk/main/checkpoints/${kept}`].sort())
 
-  await keepCheckpoints(dir, new Set([kept]))
+  await releaseCheckpoints([{ project: dir, commits: [kept] }])
   expect(git("for-each-ref", "--format=%(refname)", "refs/desk/")).toBe([`refs/desk/dev/checkpoints/${dropped}`, `refs/desk/main/checkpoints/${kept}`].join("\n"))
   // The user's branches and log are untouched.
   expect(git("branch", "--format=%(refname:short)")).toBe("main")
@@ -257,4 +257,25 @@ test("a file past the patch's byte limit keeps its status, with no patch", async
   const changes = await changesSince(repo.dir, base!)
   const added = changes.find((change) => change.path === "z-new.txt")
   expect(added).toMatchObject({ status: "added", additions: 1, patch: "" })
+})
+
+test("keeps the checkpoints of every project in a repo, whether a folder or a worktree", async () => {
+  const { dir, git, write } = gitRepo({ "app/a.ts": "one\n", "web/b.ts": "one\n" })
+  const worktree = join(tempFolder("worktree"), "tree")
+  git("worktree", "add", "-q", "-b", "side", worktree)
+  write("app/a.ts", "two\n")
+  write("web/b.ts", "three\n")
+  writeFileSync(join(worktree, "side.ts"), "side\n")
+  const [app, web, side] = [(await capture(join(dir, "app")))!, (await capture(join(dir, "web")))!, (await capture(worktree))!]
+  write("root.ts", "root\n")
+  const gone = (await capture(dir))!
+  await releaseCheckpoints([
+    { project: join(dir, "app"), commits: [app] },
+    { project: join(dir, "web"), commits: [web] },
+    { project: worktree, commits: [side] },
+    { project: tempFolder("not-a-repo"), commits: [] },
+  ])
+  const refs = git("for-each-ref", "--format=%(refname:lstrip=-1)", "refs/desk/").split("\n")
+  expect(refs.sort()).toEqual([app, web, side].sort())
+  expect(refs).not.toContain(gone)
 })

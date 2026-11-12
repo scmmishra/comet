@@ -109,8 +109,25 @@ export async function capture(dir: string): Promise<string | undefined> {
   }
 }
 
-/** Removes the refs of this Desk's checkpoints in a project that `keep` does not name, so Git may prune them. */
-export async function keepCheckpoints(dir: string, keep: ReadonlySet<string>): Promise<void> {
+/**
+ * Lets Git prune the checkpoints no thread names any more. Checkpoint refs belong to a repo, which every
+ * project in one of its folders or worktrees shares, so the commits a repo keeps are gathered from all of
+ * them. A project that is not in a repo, or no longer exists, is skipped.
+ */
+export async function releaseCheckpoints(threads: readonly { readonly project: string; readonly commits: readonly string[] }[]): Promise<void> {
+  const repos = new Map<string, { readonly dir: string; readonly keep: Set<string> }>()
+  for (const { project, commits } of threads) {
+    const repo = (await git(project, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).catch(() => "")).trim()
+    if (!repo) continue
+    const found = repos.get(repo) ?? { dir: project, keep: new Set<string>() }
+    for (const commit of commits) found.keep.add(commit)
+    repos.set(repo, found)
+  }
+  for (const { dir, keep } of repos.values()) await keepCheckpoints(dir, keep).catch(() => undefined)
+}
+
+/** Removes the refs of this Desk's checkpoints in a repo that `keep` does not name, so Git may prune them. */
+async function keepCheckpoints(dir: string, keep: ReadonlySet<string>): Promise<void> {
   const refs = (await git(dir, ["for-each-ref", "--format=%(refname)", refPrefix()])).split("\n").filter(Boolean)
   const stale = refs.filter((ref) => !keep.has(ref.slice(refPrefix().length)))
   if (stale.length) await git(dir, ["update-ref", "--stdin"], { input: stale.map((ref) => `delete ${ref}\n`).join("") })
