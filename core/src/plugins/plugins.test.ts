@@ -300,3 +300,19 @@ export default definePlugin((desk) => {
   expect(Object.keys(nodes.edited!)).toHaveLength(3)
   plugins.stop()
 }, 20_000)
+
+test("a setup that names a view without its plugin stops the plugin, and says why", async () => {
+  installPlugin("loose", `
+import { definePlugin, Text } from "@desk/plugin"
+export default definePlugin((desk) => {
+  desk.sidebar("notes", { title: "Notes", view: () => <Text>Notes</Text> })
+  desk.setup("desk", { title: "Desk", sidebar: "notes" })
+})
+`)
+  turnOn({ everywhere: ["loose"] })
+  const { plugins, project, errors } = harness()
+  expect(await plugins.setups(project)).toEqual([])
+  await until(() => errors().some((error) => error.includes("loose plugin could not start")))
+  expect(errors().find((error) => error.includes("loose plugin"))).toContain("Plugin views are named <plugin>.<name>, not notes.")
+  plugins.stop()
+}, 20_000)

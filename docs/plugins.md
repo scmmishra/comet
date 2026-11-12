@@ -64,6 +64,7 @@ export default definePlugin((desk) => {
 })
 ```
 
+- A setup names its sidebar, panels and hidden cards by full id, such as `support.inbox`, so it can name another plugin's views. A view of a plugin that is off is left out. A name without its plugin is refused.
 - The setup function passed to `definePlugin` runs once per plugin, for every tab. State made there is shared by every tab.
 - Registration happens while the setup function runs. A later call throws. A name is used once in a plugin, across all kinds.
 - `params` names what a panel needs. Parameters are strings, numbers, booleans or null.

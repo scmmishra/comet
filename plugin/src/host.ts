@@ -1,4 +1,4 @@
-import { panelInstanceId, type PanelParams, type PluginLayout, type UiOp, type UiValue } from "@desk/protocol"
+import { panelInstanceId, splitContributionId, type PanelParams, type PluginLayout, type UiOp, type UiValue } from "@desk/protocol"
 import { basename } from "node:path"
 import { createRoot as solidRoot, createSignal, type Accessor, type JSX, type Setter } from "solid-js"
 import type { Desk, PanelContext, PanelOptions, PluginDefinition, SetupOptions, TabContext, TurnEnd, TurnOutcome, ViewContext } from "./index"
@@ -113,7 +113,13 @@ export function startHost(plugin: PluginDefinition) {
     sidebar: register("sidebar", sidebars),
     panel: register("panel", panels) as Desk["panel"],
     card: register("card", cards),
-    setup: register("setup", setups),
+    // A setup may name the views of a plugin that is off in a project, and those are left out. A name
+    // with no plugin can never match, so it is refused here, where the plugin's author sees why.
+    setup: (name, options) => {
+      const named = [options.sidebar, ...(options.panels ?? []).map((open) => (typeof open === "string" ? open : open.panel)), ...(options.hideCards ?? [])]
+      for (const id of named) if (id !== undefined) splitContributionId(id)
+      register("setup", setups)(name, options)
+    },
     command: register("command", commands),
     onTurnEnd: (handler) => {
       if (!registering) throw new Error("A plugin registers onTurnEnd while setup runs, not later.")
