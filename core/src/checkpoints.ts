@@ -36,19 +36,25 @@ const STATUS_OF: Readonly<Record<string, FileChange["status"]>> = { A: "added", 
 const DIFF_FLAGS = ["-M", "--no-ext-diff", "--no-textconv", "--submodule=short"]
 
 /** The tree of the project's folder as it is now, or undefined outside a Git repo or when Git fails. */
-export function snapshot(dir: string): Promise<string | undefined> {
-  return snapshotTree(dir).catch(() => undefined)
+export async function snapshot(dir: string): Promise<string | undefined> {
+  try {
+    return await snapshotTree(dir, (await git(dir, ["rev-parse", "--git-path", "index"])).trim())
+  } catch {
+    return undefined
+  }
 }
 
-/** The tree of the project's folder as it is now. It throws with Git's message when Git fails, as it does outside a repo. */
-async function snapshotTree(dir: string): Promise<string> {
+/**
+ * The tree of the project's folder as it is now, built from a copy of `userIndex`, the user's index as Git
+ * names it from `dir`. It throws with Git's message when Git fails.
+ */
+async function snapshotTree(dir: string, userIndex: string): Promise<string> {
   const scratch = mkdtempSync(join(tmpdir(), "desk-index-"))
   const index = join(scratch, "index")
   const env = { GIT_INDEX_FILE: index }
   try {
     // A copy of the user's index keeps Git's file-stat cache, so `add` hashes only changed files.
     // Without one, as in a repo with no commits, the snapshot starts empty.
-    const userIndex = (await git(dir, ["rev-parse", "--git-path", "index"])).trim()
     let copied = false
     try {
       const source = isAbsolute(userIndex) ? userIndex : join(dir, userIndex)
@@ -94,12 +100,12 @@ async function unhide(dir: string, env: Record<string, string>) {
 
 /** The last commit's tree, for uncommitted changes. A repo with no commits compares with no files. Undefined outside a Git repo. */
 export async function headTree(dir: string): Promise<string | undefined> {
-  try {
-    await git(dir, ["rev-parse", "--git-dir"])
-  } catch {
-    return undefined
-  }
-  return (await git(dir, ["rev-parse", "HEAD^{tree}"]).catch(() => EMPTY_TREE)).trim()
+  // Both run at once: a repo with no commits fails the second, and only the first tells it from no repo.
+  const [inRepo, tree] = await Promise.all([
+    git(dir, ["rev-parse", "--git-dir"]).then(() => true, () => false),
+    git(dir, ["rev-parse", "HEAD^{tree}"]).then((out) => out.trim(), () => EMPTY_TREE),
+  ])
+  return inRepo ? tree : undefined
 }
 
 /**
@@ -127,10 +133,14 @@ const refPrefix = () => `refs/desk/${instanceName()}/checkpoints/`
  * a failure is not a sign that the project has no repo.
  */
 export async function capture(dir: string): Promise<string | undefined> {
-  const inRepo = await git(dir, ["rev-parse", "--is-inside-work-tree"]).then((out) => out.trim() === "true", () => false)
-  if (!inRepo) return undefined
-  const tree = await snapshotTree(dir)
-  const head = (await git(dir, ["rev-parse", "--verify", "--quiet", "HEAD"]).catch(() => "")).trim()
+  // Both run at once. A repo with no commits has no HEAD and fails the second, so HEAD needs a call of its own.
+  const [where, head] = await Promise.all([
+    git(dir, ["rev-parse", "--is-inside-work-tree", "--git-path", "index"]).then((out) => out.trim().split("\n"), () => []),
+    git(dir, ["rev-parse", "--verify", "--quiet", "HEAD"]).then((out) => out.trim(), () => ""),
+  ])
+  const [inWorkTree, userIndex] = where
+  if (inWorkTree !== "true" || !userIndex) return undefined
+  const tree = await snapshotTree(dir, userIndex)
   const commit = (await git(dir, ["commit-tree", tree, ...(head ? ["-p", head] : []), "-m", "Desk checkpoint"], { env: CHECKPOINT_AUTHOR })).trim()
   await git(dir, ["update-ref", `${refPrefix()}${commit}`, commit])
   return commit
@@ -212,10 +222,13 @@ async function pathsOf(dir: string, args: readonly string[]): Promise<string[]> 
 
 const withoutPreviousPath = ({ previousPath: _previous, ...file }: TreeChange): FileChange => file
 
-/** What changed between a snapshot or commit and the working tree now. */
-export async function changesSince(dir: string, base: string): Promise<FileChange[]> {
-  const current = await snapshot(dir)
-  if (!current || current === base) return []
+/**
+ * What changed between the tree `readBase` gives and the working tree now. The base and the snapshot are
+ * read at once. No base, as outside a Git repo, gives no changes.
+ */
+export async function changesSince(dir: string, readBase: (dir: string) => Promise<string | undefined>): Promise<FileChange[]> {
+  const [base, current] = await Promise.all([readBase(dir), snapshot(dir)])
+  if (!base || !current || current === base) return []
   return (await treeChanges(dir, base, current)).map(withoutPreviousPath)
 }
 
