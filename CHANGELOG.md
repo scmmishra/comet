@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- The thread says when a stop waits, and offers Force stop once the agent does not answer. It says when the agent retries a failed request. When the project left the branch the thread last ran on, Restore branch switches back.
 - A Codex thread that a closed session left loaded can hand work to another agent again. Desk now lets Codex unload the thread, so the next session loads it with Desk's tools.
 - Review says why it could not read the changes, such as a diff too large to read. It used to show no changes.
 - Each client connected to the core gets its own thread rows, so what one is sent no longer changes what another is sent next.

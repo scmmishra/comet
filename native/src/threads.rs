@@ -1,7 +1,18 @@
 //! Each tab's thread as the core sends it.
 
-use crate::protocol::{ContextReading, Question, QueuedMessage, Subagent, ThreadEvent, ThreadItem, ThreadRow};
+use crate::protocol::{ContextReading, Question, QueuedMessage, Retry, Subagent, ThreadEvent, ThreadItem, ThreadRow};
 use std::collections::{HashMap, HashSet};
+
+/// A stop that waits for its turn to end.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Stopping {
+    /// When the user asked, in milliseconds since the epoch.
+    pub since: f64,
+    /// Whether the agent has not stopped in time, so Force stop can end it.
+    pub unresponsive: bool,
+    /// Whether the user pressed Force stop.
+    pub forcing: bool,
+}
 
 #[derive(Default)]
 pub struct Thread {
@@ -28,6 +39,12 @@ pub struct Thread {
     pub background: Vec<crate::protocol::BackgroundTask>,
     /// The agent's session the thread runs in, once its first message started one.
     pub session_id: Option<String>,
+    /// The branch the thread last ran on, as the core recorded it.
+    pub branch: Option<String>,
+    /// A stop the user asked of the running turn, until the turn ends.
+    pub stopping: Option<Stopping>,
+    /// The agent's latest retry of a failed request, until the turn's next output or its end.
+    pub retry: Option<Retry>,
     /// Whether the end of the thread is out of view, which shows the Scroll to end pill.
     pub away_from_end: bool,
     /// The folds, groups and steps the user opened, by row or item id.
@@ -121,6 +138,8 @@ impl Threads {
             thread.put(item, revision);
         }
         thread.busy = false;
+        thread.stopping = None;
+        thread.retry = None;
         thread.context = context;
     }
 
@@ -139,9 +158,14 @@ impl Threads {
                 if matches!(item, ThreadItem::User { self_started: false, .. }) && thread.item(item.id()).is_none() {
                     thread.sent += 1;
                 }
+                if matches!(item, ThreadItem::Result { .. }) {
+                    thread.stopping = None;
+                }
+                thread.retry = None;
                 thread.put(item, revision);
             }
             ThreadEvent::TextDelta { id, delta } => {
+                thread.retry = None;
                 if let Some(&i) = thread.index.get(&id)
                     && let ThreadItem::Text { text, .. } = &mut thread.items[i]
                 {
@@ -149,7 +173,13 @@ impl Threads {
                     thread.revisions[i] = revision;
                 }
             }
-            ThreadEvent::Status { busy } => thread.busy = busy,
+            ThreadEvent::Status { busy } => {
+                thread.busy = busy;
+                if !busy {
+                    thread.stopping = None;
+                    thread.retry = None;
+                }
+            }
             ThreadEvent::Context { reading } => thread.context = Some(reading),
             ThreadEvent::Init { model } => thread.model = Some(model),
             ThreadEvent::Subagent { subagent } => match thread.subagents.iter_mut().find(|x| x.id == subagent.id) {
@@ -157,6 +187,12 @@ impl Threads {
                 None => thread.subagents.push(subagent),
             },
             ThreadEvent::Background { tasks } => thread.background = tasks,
+            // Force stop, once pressed, stays pressed while the same stop waits.
+            ThreadEvent::Stopping { since, unresponsive } => {
+                let forcing = thread.stopping.as_ref().is_some_and(|stop| stop.forcing);
+                thread.stopping = Some(Stopping { since, unresponsive, forcing });
+            }
+            ThreadEvent::Retry(retry) => thread.retry = Some(retry),
             ThreadEvent::Other => {}
         }
     }
@@ -165,6 +201,17 @@ impl Threads {
         let thread = self.get_mut(tab);
         thread.queue = messages;
         thread.queue_held = held;
+    }
+
+    /// Notes that the user pressed Force stop. True when a stop waits for it.
+    pub fn force_stopping(&mut self, tab: &str) -> bool {
+        match self.get_mut(tab).stopping.as_mut() {
+            Some(stop) if stop.unresponsive && !stop.forcing => {
+                stop.forcing = true;
+                true
+            }
+            _ => false,
+        }
     }
 
     /// A new turn starts a new set of subagents, and those still running stay.
@@ -233,6 +280,45 @@ mod tests {
         let ids: Vec<&str> = threads.get("t").unwrap().items.iter().map(|i| i.id()).collect();
         assert_eq!(ids, ["a", "b"]);
         assert_eq!(threads.get("t").unwrap().item("a"), Some(&text("a", "done", true)));
+    }
+
+    fn retry(attempt: u32) -> ThreadEvent {
+        ThreadEvent::Retry(Retry { attempt, max_retries: 10, delay_ms: 1500.0, error: "Overloaded".into() })
+    }
+
+    #[test]
+    fn a_stop_lasts_until_the_turn_ends() {
+        let mut threads = Threads::default();
+        threads.apply("t", ThreadEvent::Status { busy: true });
+        threads.apply("t", ThreadEvent::Stopping { since: 5.0, unresponsive: false });
+        assert!(!threads.force_stopping("t"), "Force stop waits for the agent to be unresponsive");
+        threads.apply("t", ThreadEvent::Stopping { since: 5.0, unresponsive: true });
+        assert!(threads.force_stopping("t"));
+        assert!(!threads.force_stopping("t"), "a second press sends nothing more");
+        threads.apply("t", ThreadEvent::Item { item: text("a", "x", true) });
+        assert_eq!(threads.get("t").unwrap().stopping, Some(Stopping { since: 5.0, unresponsive: true, forcing: true }), "output does not end the stop");
+        threads.apply("t", ThreadEvent::Status { busy: false });
+        assert!(threads.get("t").unwrap().stopping.is_none());
+        threads.apply("t", ThreadEvent::Stopping { since: 9.0, unresponsive: false });
+        threads.apply("t", ThreadEvent::Item { item: ThreadItem::Result { id: "r".into(), duration_ms: 1.0, is_error: false, stopped: true } });
+        assert!(threads.get("t").unwrap().stopping.is_none(), "the turn's result ends it too");
+    }
+
+    #[test]
+    fn a_retry_gives_way_to_the_next_retry_and_to_output() {
+        let mut threads = Threads::default();
+        threads.apply("t", ThreadEvent::Item { item: text("a", "", false) });
+        threads.apply("t", retry(1));
+        threads.apply("t", retry(2));
+        assert_eq!(threads.get("t").unwrap().retry.as_ref().map(|r| r.attempt), Some(2));
+        threads.apply("t", ThreadEvent::TextDelta { id: "a".into(), delta: "Hi".into() });
+        assert!(threads.get("t").unwrap().retry.is_none());
+        threads.apply("t", retry(3));
+        threads.apply("t", ThreadEvent::Item { item: text("b", "x", true) });
+        assert!(threads.get("t").unwrap().retry.is_none());
+        threads.apply("t", retry(4));
+        threads.apply("t", ThreadEvent::Status { busy: false });
+        assert!(threads.get("t").unwrap().retry.is_none(), "the turn's end clears it");
     }
 
     #[test]

@@ -47,10 +47,12 @@ Done so far:
 - Sending: the composer, follow-ups while Claude works (steer or queue, ⌘ for the other), Escape twice to stop, permission answers, Claude's questions and the queue. A real turn runs through the core in `cargo test real_turn -- --ignored`.
 - The model picker: model, effort, speed and permission mode, as `model-picker.tsx` has them.
 - The start screen: the wordmark, the composer, the project switcher and branch, and recent threads to continue.
+- What the running turn does now, after T3 Code: a stop that waits, with Force stop once the agent does not answer, and a retry of a failed request. Both show as quiet lines above the composer.
+- The branch notice, after T3 Code. Once the user types, it says the project left the branch the thread last ran on, and Restore branch switches back. With uncommitted changes, it asks first.
 
 Still to do:
 
-- Each message's copy button and time, images in messages, the shimmer on running labels and the retry note.
+- Each message's copy button and time, images in messages and the shimmer on running labels.
 - The permission row's "More" menu: rows are built in `memo`, which has no overlay layer, so its choices show as buttons.
 - The wordmark's fade toward the bottom, and number keys for Claude's options.
 

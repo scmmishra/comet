@@ -80,6 +80,7 @@ pub struct Desk {
     pub tab_bar: crate::tab_bar::TabBar,
     pub session_menu: crate::session_menu::SessionMenu,
     pub rewind: crate::rewind::Rewind,
+    pub branch_notices: crate::branch_notice::BranchNotices,
 }
 
 impl Desk {
@@ -131,6 +132,7 @@ impl Desk {
                 }
             }
             CoreMessage::ThreadForked { tab_id, agent, thread_id, title } => self.open_fork(&tab_id, &agent, thread_id, &title),
+            CoreMessage::ThreadBranch { tab_id, branch } => self.threads.get_mut(&tab_id).branch = branch,
             CoreMessage::SessionHistory { tab_id, items, context } => {
                 for item in &items {
                     self.remember_images(item);
@@ -154,7 +156,12 @@ impl Desk {
                 }
                 self.threads.queue(&tab_id, messages, held);
             }
-            CoreMessage::Project { project, part, value } => self.projects.read(project, &part, value),
+            CoreMessage::Project { project, part, value } => {
+                if part == "space" {
+                    self.branch_notices.space_read(&project);
+                }
+                self.projects.read(project, &part, value);
+            }
             CoreMessage::FilesFound { project, query, paths } => self.found_files(project, query, paths),
             CoreMessage::Review { tab_id, scope, files } => self.take_review(tab_id, scope, files),
             CoreMessage::TerminalOutput { id, data } => self.terminal_output(&id, &data),
@@ -166,7 +173,10 @@ impl Desk {
             }
             CoreMessage::PanelShow { tab_id, id } => self.panel_shown(&tab_id, &id),
             CoreMessage::Setups { setups } => self.plugins.setups = setups,
-            CoreMessage::Error { message, detail } => self.toasts.error(message, detail),
+            CoreMessage::Error { message, detail } => {
+                self.branch_notices.failed();
+                self.toasts.error(message, detail);
+            }
             CoreMessage::Notice { message } => self.toasts.show(message, false),
             CoreMessage::Other => {}
         }
@@ -222,10 +232,10 @@ impl Desk {
         self.core.send(&ClientMessage::PermissionAnswer { tab_id: tab.to_owned(), request_id: request_id.to_owned(), answer: answer.to_owned() });
     }
 
-    /// Whether the active tab's turn or a background command runs, so the times they show count seconds.
+    /// Whether the active tab's turn, its stop or a background command runs, so the times they show count seconds.
     fn working(&self) -> bool {
         let thread = self.workspace.active.as_deref().and_then(|tab| self.threads.get(tab));
-        thread.is_some_and(|t| !t.background.is_empty() || t.rows.iter().any(|r| matches!(r, ThreadRow::Working { .. })))
+        thread.is_some_and(|t| !t.background.is_empty() || t.stopping.is_some() || t.rows.iter().any(|r| matches!(r, ThreadRow::Working { .. })))
     }
 
     fn dark(&self, cx: &Cx<Desk>) -> bool {
@@ -323,6 +333,7 @@ pub mod commands {
 pub fn poll(s: &mut Desk, _: f64, tx: &mut Tx) -> bool {
     s.sync_palette();
     s.sync_plugin_inputs();
+    s.sync_branch_notice();
     crate::tab_bar::follow_active(s, tx);
     let composed = composer::poll(s, tx) | copied_poll(s, tx) | toasts_poll(s, tx) | crate::terminal_view::poll(s, tx) | crate::thread_view::poll(s, tx);
     if s.status == CoreState::Ready {
@@ -485,6 +496,7 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, window: 
         .child(text(tab.title.clone()).font(crate::theme::medium(13.0)).color(k.c.text_base).truncate())
         .children(crate::session_menu::button(s, tab, k, layer));
     crate::rewind::dialog(s, &tab.id, k, layer);
+    crate::branch_notice::dialog(s, &tab.id, k, layer);
     let end = row()
         .gap(4.0)
         .items_center()
@@ -534,9 +546,11 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, window: 
     col().key(format!("session-{}", tab.id)).transition(rune::Transition::none()).w_full().grow(1.0).min_h(0.0).child(header).child(body)
 }
 
-/// The composer under a thread, on its lane, `desk-lane pb-4 pt-1.5`.
+/// The composer under a thread, on its lane, `desk-lane pb-4 pt-1.5`, under the lines on what the running turn does now.
 fn thread_composer(s: &Desk, tab: &TabInfo, lane: Option<crate::cards::Lane>, k: &rune_kit::Kit, layer: &mut Vec<El>) -> El {
-    thread_view::in_lane(col().w_full().pt(6.0).pb(16.0).child(composer::composer(s, tab, composer::ListAt::Above, k, layer)), lane)
+    let now = crate::thread_now::lines(s, &tab.id, k);
+    let now = (!now.is_empty()).then(|| col().w_full().pb(8.0).children(now));
+    thread_view::in_lane(col().w_full().pt(6.0).pb(16.0).children(now).child(composer::composer(s, tab, composer::ListAt::Above, k, layer)), lane)
 }
 
 /// A project's mark: the icon Settings chose, on its own, else

@@ -151,6 +151,11 @@ impl Drafts {
     fn text(&self, tab: &str) -> &str {
         self.by_tab.get(tab).map_or("", |e| e.text.as_str())
     }
+
+    /// Whether the tab's message has text or images to send.
+    pub fn has_content(&self, tab: &str) -> bool {
+        !self.text(tab).trim().is_empty() || self.images.get(tab).is_some_and(|images| !images.is_empty())
+    }
 }
 
 impl Desk {
@@ -448,7 +453,7 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &
         .child(input)
         .child(actions)
         .on_drop_files(|s: &mut Desk, paths: &[std::path::PathBuf], _| s.attach(paths));
-    col().w_full().children(queue_view(s, tab, k)).child(card)
+    col().w_full().children(queue_view(s, tab, k)).children(crate::branch_notice::notice(s, info, k)).child(card)
 }
 
 fn suggestion_name(s: &Suggestion) -> &str {
