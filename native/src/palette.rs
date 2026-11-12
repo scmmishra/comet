@@ -7,7 +7,7 @@ use crate::protocol::{ClientMessage, ThemeChoice, ThreadSummary};
 use crate::shell::{self, Desk};
 use crate::workspace::Place;
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, icon, row, text, text_input};
-use rune_kit::{Keybind, Kit, scrim};
+use rune_kit::{Keybind, Kit};
 use rune_theme_opencode::icons as ic;
 
 /// Threads the root list shows before the user types.
@@ -107,6 +107,9 @@ pub struct Palette {
     /// Rune calls `on_edit` for every key the field sees, the arrows too, so the reset can't sit there.
     typed: String,
     active: usize,
+    /// The query Enter was pressed on while the files listed were an older query's. The pick waits for the
+    /// core's answer to it.
+    pick_waiting: Option<String>,
     /// The file search last sent, by project and query, and what the core found for it.
     asked: Option<(String, String)>,
     found: Option<(String, String, Vec<String>)>,
@@ -119,9 +122,9 @@ impl Palette {
 }
 
 impl Desk {
-    /// Opens the palette on `pages`, or closes it when it is open.
+    /// Opens the palette on `pages`. The shortcut that opened it closes it, and another one switches to its list.
     pub fn toggle_palette(&mut self, pages: Vec<Page>, tx: &mut Tx) {
-        if self.palette.open {
+        if self.palette.open && self.palette.pages[..self.palette.start] == pages[..] {
             self.palette = Palette::default();
             return;
         }
@@ -163,6 +166,26 @@ impl Desk {
     pub fn palette_files(&mut self, project: &str, query: &str, paths: &[String]) {
         if self.palette.asked.as_ref().is_some_and(|(p, q)| p == project && q == query) {
             self.palette.found = Some((project.to_owned(), query.to_owned(), paths.to_vec()));
+        }
+    }
+
+    /// Whether the files listed were found for the query as it stands. Until the core answers, the list
+    /// shows the last query's files.
+    fn files_current(&self) -> bool {
+        match self.palette.pages.last() {
+            Some(Page::Files(project)) => self.palette.found.as_ref().is_some_and(|(p, q, _)| p == project && *q == self.palette.query.text),
+            _ => true,
+        }
+    }
+
+    /// Picks the highlighted file once the core has answered the query Enter was pressed on.
+    pub fn pick_waiting_file(&mut self, tx: &mut Tx) {
+        if self.palette.pick_waiting.as_ref() != Some(&self.palette.query.text) || !self.files_current() {
+            return;
+        }
+        self.palette.pick_waiting = None;
+        if let Some(entry) = self.matches().into_iter().nth(self.palette.active) {
+            self.select(entry, tx);
         }
     }
 
@@ -328,12 +351,7 @@ impl Desk {
         if let Action::Open(page) = entry.action {
             self.load_page(&page);
             self.palette.pages.push(page);
-            self.palette.query = TextEdit::new("");
-            self.palette.active = 0;
-            // A fresh query drops the field's focus. The keys only work there, so it takes focus back.
-            tx.focus("palette-input", false);
-            // A level opens whole, as the keyboard moves between them.
-            tx.instant();
+            self.show_level(tx);
             return;
         }
         self.palette = Palette::default();
@@ -382,6 +400,16 @@ impl Desk {
         }
     }
 
+    /// Shows the level on top of the pages, with an empty query and its first row highlighted.
+    fn show_level(&mut self, tx: &mut Tx) {
+        self.palette.query = TextEdit::new("");
+        self.palette.active = 0;
+        // A fresh query drops the field's focus. The keys only work there, so it takes focus back.
+        tx.focus("palette-input", false);
+        // A level opens whole, as the keyboard moves between them.
+        tx.instant();
+    }
+
     /// Arrows move, Enter picks, and Escape or Backspace in an empty field leaves a nested list before it closes.
     fn palette_key(&mut self, event: &KeyEvent, tx: &mut Tx) -> bool {
         let count = self.matches().len();
@@ -391,6 +419,8 @@ impl Desk {
                 // The list scrolls to keep the highlighted row in sight.
                 tx.scroll_into_view_in("palette", format!("palette-{}", self.palette.active));
             }
+            // The files listed may be the last query's, so the pick waits for this one's.
+            Key::Enter if !self.files_current() => self.palette.pick_waiting = Some(self.palette.query.text.clone()),
             Key::Enter => {
                 if let Some(entry) = self.matches().into_iter().nth(self.palette.active) {
                     self.select(entry, tx);
@@ -398,9 +428,7 @@ impl Desk {
             }
             Key::Escape | Key::Backspace if self.palette.pages.len() > self.palette.start && (event.key == Key::Escape || self.palette.query.text.is_empty()) => {
                 self.palette.pages.pop();
-                self.palette.query = TextEdit::new("");
-                self.palette.active = 0;
-                tx.instant();
+                self.show_level(tx);
             }
             Key::Escape => self.palette = Palette::default(),
             _ => return false,
@@ -414,6 +442,10 @@ impl Desk {
         if self.palette.query.text != self.palette.typed {
             self.palette.typed = self.palette.query.text.clone();
             self.palette.active = 0;
+        }
+        // A key typed after Enter makes a new query, which Enter did not pick from.
+        if self.palette.pick_waiting.as_ref().is_some_and(|q| *q != self.palette.query.text) {
+            self.palette.pick_waiting = None;
         }
         if let Some(Page::Files(project)) = self.palette.pages.last().cloned() {
             let wanted = (project, self.palette.query.text.clone());
@@ -501,10 +533,14 @@ pub fn palette(s: &Desk, window_height: f32, k: &Kit, layer: &mut Vec<El>) {
         .child(field)
         .child(col().w_full().max_h(LIST_MAX).scroll(rune::ScrollSpec { stick_bottom: false }).child(list).children(empty))
         .child(footer);
-    // The window dims behind the palette, as behind `@opencode/ui`'s dialogs.
-    layer.push(scrim("palette-scrim", |s: &mut Desk| s.palette = Palette::default()).fill(k.c.scrim));
+    // The window dims behind the palette, as behind `@opencode/ui`'s dialogs. The palette is a modal, so the rows
+    // under it take no hover, and a press outside it closes it.
+    layer.push(rune::el().key("palette-dim").absolute(0.0, 0.0).w_full().h_full().fill(k.c.scrim));
+    let body = body.modal(true, |s: &mut Desk| s.palette = Palette::default());
     let surface = k.elevate(body.radius(RADIUS).clip_rounded(RADIUS).fill(k.c.layer_01).border(1.0, crate::theme::outline(k.dark)), &k.elevation.overlay);
-    layer.push(col().key("palette-layer").absolute(0.0, 0.0).w_full().pt(TOP * window_height).items_center().child(surface));
+    // On a whole point: Rune snaps a filled row to the pixel grid and leaves a clear one where it is, so on a
+    // fraction the highlighted row's text sat a pixel off the others' and jumped as the arrows moved it.
+    layer.push(col().key("palette-layer").absolute(0.0, 0.0).w_full().pt((TOP * window_height).round()).items_center().child(surface));
 }
 
 /// A row's shortcut as one word, such as ⌘T, as T3 Code prints it: a ghost Keybind's keys with no gap
@@ -532,6 +568,15 @@ fn entry_row(s: &Desk, entry: &Entry, index: usize, active: bool, k: &Kit) -> El
         // The active row: white at 10% on dark, Desk's hover colour on light.
         .fill(if !active { rune::Color::TRANSPARENT } else if k.dark { rune::Color::WHITE.alpha(0.1) } else { k.c.hover })
         .role("option")
+        // The pointer moves the highlight, as in T3 Code's palette. Only a move does: a pointer resting where
+        // the palette opens leaves the top row highlighted. A move within the highlighted row builds nothing.
+        .on_pointer_move_local(move |s: &mut Desk, _, tx| {
+            if s.palette.active == index {
+                tx.live_only();
+            } else {
+                s.palette.active = index;
+            }
+        })
         .on_press_tx(move |s: &mut Desk, tx| s.select(picked.clone(), tx))
         .children(lead)
         .child(text(entry.title.clone()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate())
@@ -614,5 +659,68 @@ mod tests {
         assert_eq!(titles(&s), ["login.ts"]);
         s.found_files("/code/web".into(), "logi".into(), vec![]);
         assert!(titles(&s).is_empty());
+    }
+
+    fn runtime(s: Desk) -> rune::Runtime<Desk> {
+        let mut rt = rune::Runtime::new(s, shell::view, (1280.0, 820.0), rune::Env { system_dark: true, scale: 2.0 });
+        rt.frame(0.0);
+        rt
+    }
+
+    fn key(key: Key) -> KeyEvent {
+        KeyEvent { key, mods: Default::default() }
+    }
+
+    fn found(query: &str, paths: &[&str]) -> Event {
+        Event::Message(CoreMessage::FilesFound { project: "/code/web".into(), query: query.into(), paths: paths.iter().map(|p| p.to_string()).collect() })
+    }
+
+    fn open_files(s: &Desk) -> Vec<String> {
+        s.workspace.active_tab().map(|t| t.files.iter().map(|f| f.path.clone()).collect()).unwrap_or_default()
+    }
+
+    #[test]
+    fn enter_on_the_last_query_s_files_picks_from_the_answer_to_this_one() {
+        let mut rt = runtime(desk());
+        rt.update(|s, tx| {
+            s.show_palette(vec![Page::Files("/code/web".into())]);
+            s.palette.query = TextEdit::new("log");
+            s.sync_palette();
+            s.receive_in(found("log", &["src/login.ts"]), tx);
+            // Enter lands in the frame of the last key, before the poll lines the list up.
+            s.palette.query = TextEdit::new("read");
+            s.palette_key(&key(Key::Enter), tx);
+            s.sync_palette();
+        });
+        assert!(rt.state.palette.is_open() && open_files(&rt.state).is_empty(), "login.ts is the last query's file, so Enter waits");
+        rt.update(|s, tx| s.receive_in(found("read", &["README.md"]), tx));
+        assert!(!rt.state.palette.is_open());
+        assert_eq!(open_files(&rt.state), ["/code/web/README.md"]);
+    }
+
+    #[test]
+    fn a_key_typed_after_enter_cancels_the_waiting_pick() {
+        let mut rt = runtime(desk());
+        rt.update(|s, tx| {
+            s.show_palette(vec![Page::Files("/code/web".into())]);
+            s.palette.query = TextEdit::new("rea");
+            s.sync_palette();
+            s.palette_key(&key(Key::Enter), tx);
+            s.palette.query = TextEdit::new("read");
+            s.sync_palette();
+            s.receive_in(found("read", &["README.md"]), tx);
+        });
+        assert!(rt.state.palette.is_open() && open_files(&rt.state).is_empty());
+    }
+
+    #[test]
+    fn another_list_s_shortcut_switches_the_open_palette_to_it_and_its_own_closes_it() {
+        let mut rt = runtime(desk());
+        rt.update(|s, tx| s.toggle_palette(Vec::new(), tx));
+        rt.update(|s, tx| s.toggle_palette(vec![Page::Files("/code/web".into())], tx));
+        assert!(rt.state.palette.is_open());
+        assert_eq!(rt.state.palette.pages, [Page::Files("/code/web".into())]);
+        rt.update(|s, tx| s.toggle_palette(vec![Page::Files("/code/web".into())], tx));
+        assert!(!rt.state.palette.is_open());
     }
 }

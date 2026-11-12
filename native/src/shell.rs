@@ -101,8 +101,12 @@ impl Desk {
     /// Takes what the core said, as the event loop runs it, asking for a folder when one is needed.
     pub fn receive_in(&mut self, event: Event, tx: &mut Tx) {
         let settings = matches!(event, Event::Message(CoreMessage::Settings { .. }));
+        let files = matches!(event, Event::Message(CoreMessage::FilesFound { .. }));
         if self.receive(event).is_err() {
             open_folder(tx);
+        }
+        if files {
+            self.pick_waiting_file(tx);
         }
         // Rune does nothing when the families have not changed.
         if settings {
