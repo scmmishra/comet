@@ -1,4 +1,4 @@
-//! Rune's diff view (`rune-kit/src/diff` at db69ea3), copied so Desk can draw its own file headers,
+//! Rune's diff view (`rune-kit/src/diff` at bbe7324), copied so Desk can draw its own file headers,
 //! syntax colours and code font, which rune-kit's `DiffView` fixes. anomalyco/rune#576 asks for those
 //! hooks upstream. When it lands, Desk goes back to rune-kit's.
 //!

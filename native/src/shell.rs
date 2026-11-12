@@ -390,7 +390,7 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
     let mut layer = Vec::new();
     let w = &s.workspace;
     // The title bar: its tabs start 84 points in, past the window's buttons, and it ends 10 points in.
-    let titlebar = WindowTitlebar::from_insets(cx.chrome_insets(), 1.0).leading_padding(8.0).trailing_padding(10.0).gap(4.0).tabs(crate::tab_bar::tab_bar(s, k));
+    let titlebar = WindowTitlebar::from_insets(cx.chrome_insets()).leading_padding(8.0).trailing_padding(10.0).gap(4.0).tabs(crate::tab_bar::tab_bar(s, k));
     let titlebar = match crate::meters::usage_button(s, k, &mut layer) {
         Some(usage) => titlebar.trailing(usage),
         None => titlebar,

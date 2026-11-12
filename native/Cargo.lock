@@ -2777,7 +2777,7 @@ dependencies = [
 [[package]]
 name = "rune"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=db69ea31ab9333e6f368649d4d019311720a98eb#db69ea31ab9333e6f368649d4d019311720a98eb"
+source = "git+https://github.com/anomalyco/rune?rev=bbe7324548d46c9d158ea280c31d03c46f37be31#bbe7324548d46c9d158ea280c31d03c46f37be31"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -2847,6 +2847,7 @@ dependencies = [
  "wgpu-hal",
  "wgpu-naga-bridge",
  "windows",
+ "windows-core",
  "windows-sys 0.59.0",
  "winit",
  "x11rb",
@@ -2858,7 +2859,7 @@ dependencies = [
 [[package]]
 name = "rune-highlights"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=db69ea31ab9333e6f368649d4d019311720a98eb#db69ea31ab9333e6f368649d4d019311720a98eb"
+source = "git+https://github.com/anomalyco/rune?rev=bbe7324548d46c9d158ea280c31d03c46f37be31#bbe7324548d46c9d158ea280c31d03c46f37be31"
 dependencies = [
  "unicode-ident",
  "wasmparser",
@@ -2867,7 +2868,7 @@ dependencies = [
 [[package]]
 name = "rune-kit"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=db69ea31ab9333e6f368649d4d019311720a98eb#db69ea31ab9333e6f368649d4d019311720a98eb"
+source = "git+https://github.com/anomalyco/rune?rev=bbe7324548d46c9d158ea280c31d03c46f37be31#bbe7324548d46c9d158ea280c31d03c46f37be31"
 dependencies = [
  "pulldown-cmark",
  "rune",
@@ -2879,12 +2880,12 @@ dependencies = [
 [[package]]
 name = "rune-motion"
 version = "0.1.0"
-source = "git+https://github.com/anomalyco/rune?rev=db69ea31ab9333e6f368649d4d019311720a98eb#db69ea31ab9333e6f368649d4d019311720a98eb"
+source = "git+https://github.com/anomalyco/rune?rev=bbe7324548d46c9d158ea280c31d03c46f37be31#bbe7324548d46c9d158ea280c31d03c46f37be31"
 
 [[package]]
 name = "rune-staging"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=db69ea31ab9333e6f368649d4d019311720a98eb#db69ea31ab9333e6f368649d4d019311720a98eb"
+source = "git+https://github.com/anomalyco/rune?rev=bbe7324548d46c9d158ea280c31d03c46f37be31#bbe7324548d46c9d158ea280c31d03c46f37be31"
 dependencies = [
  "wgpu",
 ]
@@ -2892,7 +2893,7 @@ dependencies = [
 [[package]]
 name = "rune-taffy"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=db69ea31ab9333e6f368649d4d019311720a98eb#db69ea31ab9333e6f368649d4d019311720a98eb"
+source = "git+https://github.com/anomalyco/rune?rev=bbe7324548d46c9d158ea280c31d03c46f37be31#bbe7324548d46c9d158ea280c31d03c46f37be31"
 dependencies = [
  "taffy",
 ]
@@ -2900,7 +2901,7 @@ dependencies = [
 [[package]]
 name = "rune-theme-opencode"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=db69ea31ab9333e6f368649d4d019311720a98eb#db69ea31ab9333e6f368649d4d019311720a98eb"
+source = "git+https://github.com/anomalyco/rune?rev=bbe7324548d46c9d158ea280c31d03c46f37be31#bbe7324548d46c9d158ea280c31d03c46f37be31"
 dependencies = [
  "rune",
  "rune-kit",
