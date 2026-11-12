@@ -196,7 +196,7 @@ impl Desk {
     }
 
     /// Closes the popover Desk draws, if one is open, as Escape does: the model picker, the usage popover,
-    /// a subagent's detail or the header chip's cards. Rune's menus and selects close themselves.
+    /// or a subagent's detail. Rune's menus and selects, and the header chip's cards, close themselves.
     pub fn close_popover(&mut self) -> bool {
         self.close_picker() || self.close_usage() || self.close_cards() || self.close_icon_picker()
     }

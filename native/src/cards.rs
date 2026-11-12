@@ -56,11 +56,10 @@ pub struct Cards {
 }
 
 impl Desk {
-    /// Closes a subagent's detail or the chip's pinned cards, as Escape does. Whether one was open.
+    /// Closes a subagent's detail, as Escape does. Whether one was open. The chip's cards close themselves:
+    /// they are a modal.
     pub fn close_cards(&mut self) -> bool {
-        let closed = self.cards.open_subagent.take().is_some() || self.cards.chip_open;
-        self.cards.chip_open = false;
-        closed
+        self.cards.open_subagent.take().is_some()
     }
 
 }
@@ -86,6 +85,8 @@ pub fn rail(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
 /// A project's cards folded into a chip in the session header, for when the session is too narrow for the
 /// rail. A click on the chip opens the project's cards and the plugin cards, and a click outside them or Escape closes
 /// them. They do not open on hover: the pointer lost them crossing the gap between the chip and the cards.
+/// The cards are a modal: Rune lights a `.hover()` under the pointer even beneath an overlay, unless the
+/// overlay makes it inert, so the thread's rows lit through them.
 pub fn space_chip(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let space = s.projects.get(&tab.project).and_then(|p| p.space.as_ref());
     let words = |w: String, color| text(w).font(crate::theme::text(12.0)).color(color);
@@ -114,8 +115,8 @@ pub fn space_chip(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .children(background_card(s, &tab.id, k))
             .children(space.map(|space| space_card(space, &tab.id, k)))
             .children(crate::commands_card::card(s, &tab.project, k, layer))
-            .children(plugin_cards(s, tab, k));
-        layer.insert(0, scrim("space-chip-scrim", |s: &mut Desk| s.cards.chip_open = false));
+            .children(plugin_cards(s, tab, k))
+            .modal(true, |s: &mut Desk| s.cards.chip_open = false);
         layer.push(popover::anchored(k, cards, "space-chip", Placement::BottomEnd, 4.0));
     }
     chip
