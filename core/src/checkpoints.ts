@@ -101,8 +101,9 @@ export async function headTree(dir: string): Promise<string | undefined> {
 
 /**
  * Where the branch left the default branch, for the branch's changes: the merge base with the remote's
- * default branch, else with a local main or master. On the default branch itself, or without one, it is
- * the last commit, so the branch's changes are its uncommitted ones.
+ * default branch, else with a local main or master. On the default branch, that is where the remote's
+ * copy of it stands, so the branch's changes are its unpushed commits and its uncommitted work. With no
+ * default branch to compare with, it is the last commit, so the changes are the uncommitted ones.
  */
 export async function branchBase(dir: string): Promise<string | undefined> {
   const remoteHead = (await git(dir, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]).catch(() => "")).trim()
