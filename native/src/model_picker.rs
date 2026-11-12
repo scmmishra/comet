@@ -13,7 +13,7 @@ use crate::shell::Desk;
 use crate::theme;
 use crate::workspace::Place;
 use rune::{El, col, el, icon, row, text};
-use rune_kit::{ButtonVariant, Keybind, KeybindVariant, Kit, Menu, MenuItem, Placement, popover, scrim};
+use rune_kit::{ButtonVariant, Keybind, KeybindVariant, Kit, Menu, MenuItem, Placement, popover};
 use rune_theme_opencode::icons as ic;
 
 /// The popover's width, its agent rail and its effort column.
@@ -108,11 +108,6 @@ impl Desk {
         self.picker.show_older = false;
     }
 
-    /// Closes the picker, as Escape does. Whether it was open.
-    pub fn close_picker(&mut self) -> bool {
-        std::mem::take(&mut self.picker).open
-    }
-
     pub fn toggle_picker(&mut self) {
         let opening = !self.picker.open;
         // An older model shows only in the full list, so a tab on one opens the list that way.
@@ -155,8 +150,8 @@ pub fn model_picker(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
     // ahead of its anchor in the layer finds no place for it and opens in the window's corner.
     let mut menus = Vec::new();
     let body = popover_body(s, tab, selected, k, &mut menus).role("dialog").label("Agent, model and effort");
-    layer.insert(0, scrim("model-scrim", |s: &mut Desk| s.picker = Picker::default()));
-    layer.push(popover::anchored(k, crate::ui::popover(k, body), "model-picker", Placement::TopEnd, 8.0));
+    let picker = crate::ui::popover(k, body).modal(true, |s: &mut Desk| s.picker = Picker::default());
+    layer.push(popover::anchored(k, picker, "model-picker", Placement::TopEnd, 8.0));
     layer.extend(menus);
     trigger
 }

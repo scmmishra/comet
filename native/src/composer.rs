@@ -412,10 +412,7 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &
             if key.key != Key::Escape {
                 return false;
             }
-            // An open popover takes Escape before the turn does.
-            if !s.close_popover() {
-                s.escape(&tab);
-            }
+            s.escape(&tab);
             true
         });
     let input = col().w_full().px(16.0).pt(14.0).child(auto_grow(field, 2, MAX_LINES));

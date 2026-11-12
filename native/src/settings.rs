@@ -62,11 +62,6 @@ impl Desk {
         self.settings.open_select = None;
     }
 
-    /// Closes the icon picker, as Escape does. Whether it was open.
-    pub fn close_icon_picker(&mut self) -> bool {
-        self.settings.icon_picker.take().is_some()
-    }
-
     /// Returns to the tab.
     pub fn close_settings(&mut self) {
         self.workspace.settings_page = None;
@@ -588,8 +583,8 @@ fn icon_picker(s: &Desk, dir: &str, current: Option<&str>, k: &Kit, layer: &mut 
     };
     let none = current.map(|_| crate::theme::button("No icon").variant(ButtonVariant::Ghost).on_press(pick(None)).build(k));
     let body = col().w(340.0).padding(12.0).gap(8.0).items_start().child(content).children(none);
-    layer.insert(0, rune_kit::scrim("icon-picker-scrim", |s: &mut Desk| s.settings.icon_picker = None));
-    layer.push(rune_kit::popover::anchored(k, crate::ui::popover(k, body), &key, rune_kit::Placement::BottomEnd, 6.0));
+    let picker = crate::ui::popover(k, body).modal(true, |s: &mut Desk| s.settings.icon_picker = None);
+    layer.push(rune_kit::popover::anchored(k, picker, &key, rune_kit::Placement::BottomEnd, 6.0));
     trigger
 }
 

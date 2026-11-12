@@ -8,7 +8,7 @@ use crate::protocol::{ClientMessage, Space, Subagent, TabInfo, ThreadItem};
 use crate::shell::Desk;
 use crate::theme;
 use rune::{El, ScrollSpec, col, el, icon, row, text};
-use rune_kit::{Badge, BadgeVariant, IconButton, IconButtonVariant, Kit, Placement, popover, scrim};
+use rune_kit::{Badge, BadgeVariant, IconButton, IconButtonVariant, Kit, Placement, popover};
 use rune_theme_opencode::icons as ic;
 
 /// The rail's width, `w-[264px]`, and its distance from the session's edge.
@@ -55,15 +55,6 @@ pub struct Cards {
     chip_open: bool,
 }
 
-impl Desk {
-    /// Closes a subagent's detail, as Escape does. Whether one was open. The chip's cards close themselves:
-    /// they are a modal.
-    pub fn close_cards(&mut self) -> bool {
-        self.cards.open_subagent.take().is_some()
-    }
-
-}
-
 /// The rail of cards for a tab, pinned to the session's top right.
 pub fn rail(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let subagents = subagents_card(s, tab, k, layer);
@@ -85,8 +76,8 @@ pub fn rail(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
 /// A project's cards folded into a chip in the session header, for when the session is too narrow for the
 /// rail. A click on the chip opens the project's cards and the plugin cards, and a click outside them or Escape closes
 /// them. They do not open on hover: the pointer lost them crossing the gap between the chip and the cards.
-/// The cards are a modal: Rune lights a `.hover()` under the pointer even beneath an overlay, unless the
-/// overlay makes it inert, so the thread's rows lit through them.
+/// Like Desk's other popovers, the cards are a modal. Rune lights a `.hover()` under the pointer even beneath an
+/// overlay, unless a modal makes it inert.
 pub fn space_chip(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let space = s.projects.get(&tab.project).and_then(|p| p.space.as_ref());
     let words = |w: String, color| text(w).font(crate::theme::text(12.0)).color(color);
@@ -272,8 +263,8 @@ fn subagents_card(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Opti
         let id = subagent.id.clone();
         let key = format!("subagent-{}", subagent.id);
         if open {
-            layer.insert(0, scrim("subagent-scrim", |s: &mut Desk| s.cards.open_subagent = None));
-            layer.push(popover::anchored(k, crate::ui::popover(k, subagent_detail(s, subagent, &tab.agent, now, k)), &key, Placement::Left, 12.0));
+            let detail = crate::ui::popover(k, subagent_detail(s, subagent, &tab.agent, now, k)).modal(true, |s: &mut Desk| s.cards.open_subagent = None);
+            layer.push(popover::anchored(k, detail, &key, Placement::Left, 12.0));
         }
         row()
             .key(key)

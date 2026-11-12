@@ -5,7 +5,7 @@ use crate::format;
 use crate::protocol::{AgentInfo, ClientMessage, ContextReading, PlanUsage, UsageWindow};
 use crate::shell::Desk;
 use rune::{El, col, el, icon, row, text};
-use rune_kit::{Kit, Placement, Progress, popover, scrim};
+use rune_kit::{Kit, Placement, Progress, popover};
 use std::time::{Duration, Instant};
 
 /// How often the app asks for plan usage. The core probes it at most once a minute.
@@ -19,11 +19,6 @@ pub struct Meters {
 }
 
 impl Desk {
-    /// Closes the usage popover, as Escape does. Whether it was open.
-    pub fn close_usage(&mut self) -> bool {
-        std::mem::take(&mut self.meters.open)
-    }
-
     /// Asks for plan usage, and the active project's Space, as the window comes back: files and usage most
     /// likely changed outside Desk then.
     pub fn refresh_outside(&mut self) {
@@ -72,8 +67,8 @@ pub fn usage_button(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
         .child(meter(fullest.percent as f32 / 100.0, k))
         .child(text(format!("{}%", fullest.percent.round())).font(crate::theme::text(12.0)).color(k.c.text_muted));
     if s.meters.open {
-        layer.insert(0, scrim("usage-scrim", |s: &mut Desk| s.meters.open = false));
-        layer.push(popover::anchored(k, crate::ui::popover(k, usage_popover(&read, k)), "usage-button", Placement::BottomEnd, 8.0));
+        let usage = crate::ui::popover(k, usage_popover(&read, k)).modal(true, |s: &mut Desk| s.meters.open = false);
+        layer.push(popover::anchored(k, usage, "usage-button", Placement::BottomEnd, 8.0));
     }
     Some(button)
 }

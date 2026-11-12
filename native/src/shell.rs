@@ -195,12 +195,6 @@ impl Desk {
         self.sync_start();
     }
 
-    /// Closes the popover Desk draws, if one is open, as Escape does: the model picker, the usage popover,
-    /// or a subagent's detail. Rune's menus and selects, and the header chip's cards, close themselves.
-    pub fn close_popover(&mut self) -> bool {
-        self.close_picker() || self.close_usage() || self.close_cards() || self.close_icon_picker()
-    }
-
     /// Brings a tab to the front, reading what its start screen and pane show.
     pub fn show_tab(&mut self, id: &str) {
         self.workspace.show_tab(id, &self.core);
@@ -383,11 +377,6 @@ pub fn open_url(s: &mut Desk, url: &str, _: &mut Tx) {
 /// The input method, for the editors Desk draws itself. Text fields hear it on their own.
 pub fn ime(s: &mut Desk, event: &rune::Ime, _: &mut Tx) -> bool {
     s.terminal_ime(event)
-}
-
-/// Keys nothing focused took: Escape closes an open popover.
-pub fn key(s: &mut Desk, event: &rune::KeyEvent, _: &mut Tx) -> bool {
-    event.key == rune::Key::Escape && s.close_popover()
 }
 
 /// Hears the modifier keys held down each time they change.
