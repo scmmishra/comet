@@ -279,3 +279,16 @@ test("keeps the checkpoints of every project in a repo, whether a folder or a wo
   expect(refs.sort()).toEqual([app, web, side].sort())
   expect(refs).not.toContain(gone)
 })
+
+test("sees edits to files the user marked assume-unchanged or skip-worktree, and keeps a sparse checkout's absent files", async () => {
+  const repo = gitRepo({ "assumed.txt": "one\n", "skipped.txt": "one\n", "sparse.txt": "one\n" })
+  repo.git("update-index", "--assume-unchanged", "assumed.txt")
+  repo.git("update-index", "--skip-worktree", "skipped.txt", "sparse.txt")
+  const base = await snapshot(repo.dir)
+  repo.write("assumed.txt", "two\n")
+  repo.write("skipped.txt", "two\n")
+  rmSync(join(repo.dir, "sparse.txt"))
+  expect(paths(await changesSince(repo.dir, base!))).toEqual(["assumed.txt", "skipped.txt"])
+  // The user's own index keeps its bits.
+  expect(repo.git("ls-files", "-v")).toBe("h assumed.txt\nS skipped.txt\nS sparse.txt")
+})

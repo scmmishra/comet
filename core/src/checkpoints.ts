@@ -1,5 +1,5 @@
 import type { FileChange } from "@desk/protocol"
-import { copyFileSync, mkdtempSync, rmSync, statSync, utimesSync } from "node:fs"
+import { copyFileSync, existsSync, mkdtempSync, rmSync, statSync, utimesSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { isAbsolute, join } from "node:path"
 import { instanceName } from "./data-files"
@@ -44,6 +44,7 @@ export async function snapshot(dir: string): Promise<string | undefined> {
     // A copy of the user's index keeps Git's file-stat cache, so `add` hashes only changed files.
     // Without one, as in a repo with no commits, the snapshot starts empty.
     const userIndex = (await git(dir, ["rev-parse", "--git-path", "index"])).trim()
+    let copied = false
     try {
       const source = isAbsolute(userIndex) ? userIndex : join(dir, userIndex)
       copyFileSync(source, index)
@@ -52,15 +53,39 @@ export async function snapshot(dir: string): Promise<string | undefined> {
       // Dating the copy a second before its source makes Git check those files, after T3 Code.
       const { mtimeMs } = statSync(source)
       utimesSync(index, new Date(mtimeMs - 1000), new Date(mtimeMs - 1000))
+      copied = true
     } catch {
       await git(dir, ["read-tree", "--empty"], { env })
     }
+    // A copy that keeps its bits still snapshots every other file, so a failure here is not a reason to start empty.
+    if (copied) await unhide(dir, env).catch(() => undefined)
     await git(dir, ["add", "-A", "--", "."], { env })
     return (await git(dir, ["write-tree"], { env })).trim()
   } catch {
     return undefined
   } finally {
     rmSync(scratch, { recursive: true, force: true })
+  }
+}
+
+/**
+ * Clears the bits on a copied index that make `git add` pass over a file, so its edits reach the
+ * snapshot: assume-unchanged on every file, and skip-worktree on every file that is on disk. A sparse
+ * checkout leaves its skip-worktree files off the disk, so those keep the bit and never read as deleted.
+ */
+async function unhide(dir: string, env: Record<string, string>) {
+  const assumed: string[] = []
+  const skipped: string[] = []
+  // `ls-files -v` tags an assume-unchanged file with a lowercase letter, and a skip-worktree file with S.
+  for (const entry of (await git(dir, ["ls-files", "-v", "-z"], { env })).split("\0")) {
+    const [tag = "", path] = [entry.slice(0, 1), entry.slice(2)]
+    if (!path) continue
+    if (tag !== tag.toUpperCase()) assumed.push(path)
+    if (tag.toUpperCase() === "S" && existsSync(join(dir, path))) skipped.push(path)
+  }
+  // Each call locks the index, so they run one after the other.
+  for (const [flag, paths] of [["--no-assume-unchanged", assumed], ["--no-skip-worktree", skipped]] as const) {
+    if (paths.length) await git(dir, ["update-index", flag, "-z", "--stdin"], { env, input: paths.join("\0") })
   }
 }
 
