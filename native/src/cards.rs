@@ -326,7 +326,7 @@ fn background_card(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
             .child(text(format::duration((s.now_ms - task.started_at).max(0.0))).font(crate::theme::text(12.0)).color(k.c.text_faint))
             .child(stop)
     });
-    let waiting = (!thread.busy).then(|| text(format!("{} picks up again when one finishes.", s.agent_name(s.tab_agent(tab)))).font(crate::theme::text(12.0)).color(k.c.text_faint).px(8.0).pt(4.0).pb(4.0));
+    let waiting = (!thread.busy).then(|| text(format!("{} picks up again when one finishes.", s.agent_name(s.tab_agent(tab)))).font(crate::theme::text(12.0)).color(k.c.text_faint).wrap().px(8.0).pt(4.0).pb(4.0));
     Some(
         card(k, 6.0)
             .key("background-card")

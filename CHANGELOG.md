@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- The Background card shows a multi-line command on one line, by its first line. The note that the agent picks up again wraps instead of running past the card.
 - A dragged tab follows the pointer, and the tabs it passes slide aside. On release it slides into its place. The new order is saved once, on release.
 - Review and turn summaries read every changed file right: a path with a tab, a quote or a backslash, a file that changed type, and a file past the size limit. Edits to files marked assume-unchanged or skip-worktree now show.
 - Projects that share a repo, as folders or worktrees, no longer delete each other's checkpoints at start, and a plugin thread's checkpoints are kept while no tab shows it.
