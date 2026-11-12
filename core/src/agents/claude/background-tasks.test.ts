@@ -23,3 +23,10 @@ test("keeps the live background commands, leaving out subagents and housekeeping
   tasks.handle(changed([]), 9000)
   expect(events.at(-1)).toEqual({ kind: "background", tasks: [] })
 })
+
+test("labels a multi-line command by its first line", () => {
+  const events: ThreadEvent[] = []
+  const tasks = new BackgroundTasks((event) => events.push(event))
+  tasks.handle(changed([{ task_id: "b1", task_type: "local_bash", description: "\n  mkdir -p /tmp/clueless && cd /tmp/clueless\nclueless review --pr 16542\n" }]), 1000)
+  expect(events.at(-1)).toEqual({ kind: "background", tasks: [{ id: "b1", label: "mkdir -p /tmp/clueless && cd /tmp/clueless", startedAt: 1000 }] })
+})

@@ -6,7 +6,8 @@ import { isSubagentTask } from "./subagents"
  * The commands a session runs in the background. Claude Code sends the whole set of live tasks each
  * time it changes, so the set is replaced, never patched. Housekeeping tasks it marks ambient stay out,
  * as it asks. Subagents have their own card, so they stay out too. Each task keeps the time Desk first
- * saw it, so its timer does not restart.
+ * saw it, so its timer does not restart. A command's description is the whole command, so the label
+ * keeps its first line: the card draws one line per task.
  */
 export class BackgroundTasks {
   private tasks: BackgroundTask[] = []
@@ -18,7 +19,11 @@ export class BackgroundTasks {
     const seen = new Map(this.tasks.map((task) => [task.id, task.startedAt]))
     this.tasks = message.tasks
       .filter((task) => !task.ambient && !isSubagentTask(task.task_type))
-      .map((task) => ({ id: task.task_id, label: task.description, startedAt: seen.get(task.task_id) ?? now }))
+      .map((task) => ({ id: task.task_id, label: firstLine(task.description), startedAt: seen.get(task.task_id) ?? now }))
     this.emit({ kind: "background", tasks: this.tasks })
   }
+}
+
+function firstLine(text: string) {
+  return text.split("\n").map((line) => line.trim()).find(Boolean) ?? ""
 }
