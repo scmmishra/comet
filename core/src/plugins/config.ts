@@ -12,7 +12,7 @@ import { deskHome } from "../data-files"
  * off and is reported, so a typo never quietly turns one plugin off.
  */
 export function pluginsOn(project: string): string[] {
-  const file = join(deskHome(), "plugins.json")
+  const file = configFile()
   if (!existsSync(file)) return []
   let saved: { everywhere?: unknown; projects?: Record<string, unknown> } | null
   try {
@@ -38,13 +38,14 @@ export function pluginsOn(project: string): string[] {
 
 /** The project folders `plugins.json` turns plugins on for, beyond those on everywhere. A broken file names none. */
 export function pluginProjects(): string[] {
-  const file = join(deskHome(), "plugins.json")
   try {
-    const saved = JSON.parse(readFileSync(file, "utf8")) as { projects?: Record<string, unknown> }
+    const saved = JSON.parse(readFileSync(configFile(), "utf8")) as { projects?: Record<string, unknown> }
     return Object.keys(saved.projects ?? {}).map(expandHome)
   } catch {
     return []
   }
 }
+
+const configFile = () => join(deskHome(), "plugins.json")
 
 const expandHome = (folder: string) => (folder === "~" || folder.startsWith("~/") ? join(homedir(), folder.slice(1)) : folder).replace(/(.)\/+$/, "$1")

@@ -1,10 +1,5 @@
-/**
- * The parts of Codex's app-server protocol that Desk reads, written by hand from the schema that
- * `codex app-server generate-ts` prints. Each type lists only the fields Desk reads.
- */
-
-/** A JSON-RPC id. Codex numbers its own requests from 0. */
-export type RequestId = string | number
+// The parts of Codex's app-server protocol that Desk reads, written by hand from the schema that
+// `codex app-server generate-ts` prints. Each type lists only the fields Desk reads.
 
 export interface CodexTurn {
   readonly id: string

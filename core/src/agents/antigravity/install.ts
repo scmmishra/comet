@@ -2,16 +2,23 @@ import { createHash } from "node:crypto"
 import { chmodSync, mkdirSync, statSync } from "node:fs"
 import { rm } from "node:fs/promises"
 import { join } from "node:path"
-import { writeJsonFile } from "../../data-files"
 import { spawn } from "../../environment"
-import { antigravityHome, INSTALLED_MARKER, runtimeFolder } from "./home"
+import { antigravityHome, markInstalled, runtimeFolder } from "./home"
 import { RELEASE, RELEASE_PLATFORM, type Release } from "./release"
 
 const UNZIP = "/usr/bin/unzip"
 const NOTHING_INSTALLED = "Nothing was installed."
 
-/** Saves what `url` serves at `path`. A test passes its own, so it never touches the network. */
-export type Download = (url: string, path: string, signal: AbortSignal) => Promise<void>
+/** Saves what `url` serves at `path`. */
+type Download = (url: string, path: string, signal: AbortSignal) => Promise<void>
+
+interface InstallOptions {
+  /** Aborts when the user stops the install. */
+  readonly signal?: AbortSignal
+  /** A test installs a release of its own, and downloads it without the network. */
+  readonly release?: Release
+  readonly download?: Download
+}
 
 /**
  * Installs a release of Antigravity's ACP server for Desk: it downloads the archive, checks its size and
@@ -19,7 +26,7 @@ export type Download = (url: string, path: string, signal: AbortSignal) => Promi
  * install usable is written last, so a half-finished install is never run. Once `signal` aborts it stops
  * before it touches the install there was, and leaves that one as it was.
  */
-export async function installRuntime(release: Release = RELEASE, download: Download = fetchTo, signal: AbortSignal = new AbortController().signal) {
+export async function installRuntime({ signal = new AbortController().signal, release = RELEASE, download = fetchTo }: InstallOptions = {}) {
   if (`${process.platform}-${process.arch}` !== RELEASE_PLATFORM) throw new Error("Desk installs Antigravity only on a Mac with Apple silicon.")
   mkdirSync(antigravityHome(), { recursive: true })
   const archive = join(antigravityHome(), `download-${crypto.randomUUID()}.zip`)
@@ -44,7 +51,7 @@ export async function installRuntime(release: Release = RELEASE, download: Downl
       if (statSync(path).size !== file.bytes) throw new Error(`The Antigravity file ${file.name} has the wrong size. ${NOTHING_INSTALLED}`)
       chmodSync(path, 0o755)
     }
-    writeJsonFile(join(folder, INSTALLED_MARKER), { version: release.version })
+    markInstalled(release.version)
   } catch (error) {
     if (replacing) await rm(folder, { recursive: true, force: true })
     throw error

@@ -22,6 +22,7 @@ function setup(options: Partial<SessionOptions> = {}) {
   codex.answer("turn/start", { turn: turn("inProgress", { startedAt: null }) })
   codex.answer("turn/steer", { turnId: TURN })
   codex.answer("turn/interrupt", {})
+  codex.answer("thread/unsubscribe", { status: "unsubscribed" })
   const server = new AppServer(codex.launch)
   const events: ThreadEvent[] = []
   const sessionIds: string[] = []
@@ -42,7 +43,7 @@ async function started(s: ReturnType<typeof setup>) {
 const item = (method: "item/started" | "item/completed", found: object) => [method, { threadId: THREAD, turnId: TURN, item: found }] as const
 
 test("runs a whole turn: the thread, the message with its settings, and every item Codex reports", async () => {
-  const tools = { name: "desk", url: "http://127.0.0.1:4000/mcp", authorization: "Bearer t", instructions: "Hand work to other agents." }
+  const tools = { url: "http://127.0.0.1:4000/mcp", authorization: "Bearer t", instructions: "Hand work to other agents." }
   const s = setup({ settings: { agent: "codex", model: "gpt-6-luna", effort: "high", fast: true, permissionMode: "acceptEdits" }, tools })
   s.session.send("Fix the bug", [{ mediaType: "image/png", data: "iVBOR" }])
   const message = s.items()[0]!
@@ -136,6 +137,13 @@ test("names the default model and its effort, and takes new settings from the ne
   await until(() => s.codex.sent("turn/start").length === 2)
   expect(s.codex.sent("thread/start")).toHaveLength(1)
   expect(s.codex.sent("turn/start")[1]).toMatchObject({ model: "gpt-6-luna", effort: "high", serviceTier: null, approvalPolicy: "never", sandboxPolicy: { type: "dangerFullAccess" } })
+})
+
+test("in Auto mode, lets Codex's reviewer answer approvals in a sandbox that can write the project", async () => {
+  const s = setup({ settings: { ...SETTINGS, permissionMode: "auto" } })
+  await started(s)
+  expect(s.codex.sent("thread/start")[0]).toMatchObject({ approvalPolicy: "on-request", approvalsReviewer: "auto_review", sandbox: "workspace-write" })
+  expect(s.codex.sent("turn/start")[0]).toMatchObject({ approvalPolicy: "on-request", approvalsReviewer: "auto_review", sandboxPolicy: { type: "workspaceWrite" } })
 })
 
 test("resumes a saved thread", async () => {
@@ -298,10 +306,10 @@ test("a request Codex settles itself leaves the thread, and Codex gets no second
   s.codex.ask(7, "item/commandExecution/requestApproval", { kind: "command", threadId: THREAD, turnId: TURN, itemId: "exec-1", command: "ls" })
   await until(() => s.last("permission") !== undefined)
   s.codex.notify("serverRequest/resolved", { threadId: THREAD, requestId: 7 })
-  await until(() => s.last("permission")?.answered === true)
+  await until(() => s.last("permission")?.answered === true && s.codex.reply(7) !== undefined)
   s.session.answerPermission("exec-1", "allow")
-  await until(() => s.codex.reply(7) !== undefined)
-  expect(s.codex.reply(7)).not.toEqual({ id: 7, result: { decision: "accept" } })
+  await Bun.sleep(20)
+  expect(s.codex.replies(7)).toEqual([{ id: 7, result: { decision: "decline" } }])
 })
 
 test("approves a call of Desk's own tools itself, and asks the user about another MCP server's", async () => {
@@ -361,6 +369,19 @@ test("closing the tab declines open requests and stops the turn", async () => {
   expect(s.codex.reply(1)).toEqual({ id: 1, result: { answers: { q: { answers: [] } } } })
   expect(s.last("permission")).toMatchObject({ answered: true })
   expect(s.last("question")).toMatchObject({ answered: true })
+})
+
+test("a closed session unsubscribes from its thread, and one that never loaded a thread sends nothing", async () => {
+  const s = setup()
+  await started(s)
+  s.session.close()
+  await until(() => s.codex.sent("thread/unsubscribe").length > 0)
+  expect(s.codex.sent("thread/unsubscribe")).toEqual([{ threadId: THREAD }])
+
+  const unopened = setup()
+  unopened.session.close()
+  await Bun.sleep(20)
+  expect(unopened.codex.sent("thread/unsubscribe")).toEqual([])
 })
 
 test("a turn's end closes the requests it left open", async () => {

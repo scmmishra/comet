@@ -1,6 +1,6 @@
 import { basename } from "node:path"
 import type { Space } from "@desk/protocol"
-import { git, numstatLine } from "./git"
+import { git } from "./git"
 import { spawn } from "./environment"
 
 /** A part that fails gives undefined, so each part of the card fails on its own. */
@@ -68,11 +68,17 @@ async function readPullRequest(root: string): Promise<NonNullable<Space["pr"]>> 
   const pr = JSON.parse(json) as GhPullRequest
   const checks = { passed: 0, failed: 0, pending: 0 }
   for (const check of pr.statusCheckRollup ?? []) {
-    // Check runs report a conclusion; commit statuses report a state.
+    // Check runs report a conclusion. Commit statuses report a state.
     const outcome = (check.conclusion || check.state || "").toUpperCase()
     if (outcome === "SUCCESS" || outcome === "NEUTRAL" || outcome === "SKIPPED") checks.passed++
     else if (outcome === "FAILURE" || outcome === "ERROR" || outcome === "TIMED_OUT" || outcome === "CANCELLED" || outcome === "ACTION_REQUIRED") checks.failed++
     else checks.pending++
   }
   return { number: pr.number, title: pr.title, url: pr.url, state: pr.state, draft: pr.isDraft, checks }
+}
+
+/** One line of `git diff --numstat`: its counts and the rest of the line. Binary files show "-" for both counts. */
+function numstatLine(line: string): { additions: number; deletions: number; path: string } {
+  const [added, removed, ...path] = line.split("\t")
+  return { additions: Number(added) || 0, deletions: Number(removed) || 0, path: path.join("\t") }
 }

@@ -1,5 +1,6 @@
 import type { McpServerStatus, Query } from "@anthropic-ai/claude-agent-sdk"
 import type { McpServer } from "@desk/protocol"
+import type { AgentMcp } from "../agent"
 import { probe } from "./probe"
 
 /**
@@ -11,29 +12,27 @@ const WATCH_POLL_MS = 500
 /** Where Claude Code configures a server that belongs to one project: its .mcp.json, or its entry in ~/.claude.json. */
 const PROJECT_SCOPES = ["project", "local"]
 
-/** Null means Claude Code could not be asked. */
 type Publish = (servers: McpServer[] | null) => void
 
-/**
- * The MCP servers Claude Code loads in a project. `publish` gets the list as soon as there is one, and
- * again each time it changes while servers connect and join.
- */
-export async function readMcpServers(dir: string, publish: Publish) {
-  if (!(await probe(dir, (running) => watch(running, publish), { loadMcp: true }))) publish(null)
-}
+/** The MCP servers Claude Code loads in a project, read and changed through a probe that starts them. */
+export const claudeMcp: AgentMcp = {
+  async read(dir, publish) {
+    if (!(await probe(dir, (running) => watch(running, publish), { loadMcp: true }))) publish(null)
+  },
 
-/** Turns a server on or off, as Claude Code's /mcp does, then publishes the servers as they change. */
-export async function toggleMcpServer(dir: string, name: string, enabled: boolean, publish: Publish) {
-  const watched = await probe(
-    dir,
-    async (running) => {
-      // Enabling a server that cannot start throws, yet the choice is kept. Its row then shows the failure.
-      await running.toggleMcpServer(name, enabled).catch(() => undefined)
-      return watch(running, publish)
-    },
-    { loadMcp: true },
-  )
-  if (!watched) publish(null)
+  /** Turns a server on or off as Claude Code's /mcp does. */
+  async toggle(dir, name, enabled, publish) {
+    const watched = await probe(
+      dir,
+      async (running) => {
+        // Enabling a server that cannot start throws, yet the choice is kept. Its row then shows the failure.
+        await running.toggleMcpServer(name, enabled).catch(() => undefined)
+        return watch(running, publish)
+      },
+      { loadMcp: true },
+    )
+    if (!watched) publish(null)
+  },
 }
 
 /** Publishes the servers now, and again whenever they change, until the watch ends. Returns the last list. */

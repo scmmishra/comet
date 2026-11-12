@@ -78,18 +78,28 @@ test("stops a sign-in the user cancels, reports no error, and reads the agent ag
   expect(row(last(sent), "codex").signInLink).toBeUndefined()
 })
 
-test("lets an update run to its end, since stopping an updater can break the agent", async () => {
+test("a cancel stops an install, and leaves an update running, so an update that then fails still reports its error", async () => {
+  const sent: CoreMessage[] = []
   const claude = fakeAgent("claude")
-  let finish = () => {}
-  let done = false
-  const agents = new Agents(() => {}, settings, { claude: (host) => ({ ...claude.make(host), update: () => new Promise<void>((resolve) => (finish = resolve)) }) })
-  const updating = agents.run("claude", "update").then(() => void (done = true))
+  let fail = (_error: Error) => {}
+  const agents = new Agents((message) => sent.push(message), settings, {
+    claude: (host) => ({
+      ...claude.make(host),
+      update: () => new Promise<void>((_, reject) => (fail = reject)),
+      install: (signal) => new Promise<void>((_, reject) => signal.addEventListener("abort", () => reject(new Error("Cancelled.")))),
+    }),
+  })
+  const installing = agents.run("claude", "install")
   agents.cancel("claude")
-  await Bun.sleep(10)
-  expect(done).toBe(false)
-  finish()
-  await updating
-  expect(done).toBe(true)
+  await installing
+  expect(row(last(sent), "claude").state).toBe("ready")
+
+  const updating = agents.run("claude", "update")
+  agents.cancel("claude")
+  await Bun.sleep(0)
+  expect(row(last(sent), "claude").state).toBe("updating")
+  fail(new Error("npm failed"))
+  await expect(updating).rejects.toThrow("npm failed")
 })
 
 test("reads each agent's slash commands, and none from an agent that has none", async () => {

@@ -3,10 +3,20 @@ import { threadItems } from "./items"
 
 const DIR = "/p"
 
-test("shows an MCP call by server and tool, with its text result or its error", () => {
-  const call = { type: "mcpToolCall", id: "m1", server: "desk", tool: "hand_off", status: "completed", arguments: { agent: "claude" }, result: { content: [{ type: "text", text: "Done" }, { type: "image" }] }, error: null } as const
+test("shows a call of Desk's tools in the words every agent's thread uses", () => {
+  const delegate = { type: "mcpToolCall", id: "m1", server: "desk", tool: "delegate", status: "completed", arguments: { agent: "antigravity", task: "Check the build." }, result: { content: [{ type: "text", text: "It builds." }] }, error: null } as const
+  expect(threadItems(DIR, delegate, true)).toEqual([
+    { type: "tool", id: "m1", name: "desk.delegate", summary: "antigravity: Check the build.", result: { output: "It builds.", isError: false }, kind: "other", label: "Handed a task to antigravity: Check the build." },
+  ])
+  expect(threadItems(DIR, delegate, false)[0]).toMatchObject({ label: "Handing a task to antigravity: Check the build." })
+  const listAgents = { ...delegate, id: "m2", tool: "list_agents", arguments: {} }
+  expect(threadItems(DIR, listAgents, true)[0]).toMatchObject({ name: "desk.list_agents", summary: "", label: "Listed the agents" })
+})
+
+test("shows another MCP server's call by server and tool, with its text result or its error", () => {
+  const call = { type: "mcpToolCall", id: "m1", server: "github", tool: "search", status: "completed", arguments: { q: "bug" }, result: { content: [{ type: "text", text: "Done" }, { type: "image" }] }, error: null } as const
   expect(threadItems(DIR, call, true)).toEqual([
-    { type: "tool", id: "m1", name: "desk.hand_off", summary: '{"agent":"claude"}', result: { output: "Done\n[image]", isError: false }, kind: "other", label: 'desk.hand_off {"agent":"claude"}' },
+    { type: "tool", id: "m1", name: "github.search", summary: '{"q":"bug"}', result: { output: "Done\n[image]", isError: false }, kind: "other", label: 'github.search {"q":"bug"}' },
   ])
   expect(threadItems(DIR, { ...call, status: "failed", result: null, error: { message: "Timed out" } }, true)[0]).toMatchObject({ result: { output: "Timed out", isError: true } })
   expect(threadItems(DIR, call, false)[0]).not.toHaveProperty("result")

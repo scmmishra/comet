@@ -1,12 +1,15 @@
 import type { ThreadItem } from "@desk/protocol"
 import { deskToolLabel, deskToolSummary, SERVER_NAME } from "../../delegate/tools"
-import { commandLabel, cutOutput, relativeTo, thought, tool } from "../../steps"
+import { firstLine } from "../../text"
+import { commandLabel, cutOutput, relativeTo, thought, tool } from "../steps"
 import { fileEdits } from "./diff"
 import type { CodexItem, FileUpdate } from "./protocol"
 import { shellScript } from "./shell"
 
 /** A tool call's arguments beyond this many characters are cut in its summary. */
 const MAX_SUMMARY = 200
+/** The collab tool that starts one of Codex's own agents. Its other tools, such as waiting for one, are not shown. */
+const SPAWN_AGENT = "spawnAgent"
 
 type ToolItem = Extract<ThreadItem, { type: "tool" }>
 
@@ -52,9 +55,6 @@ export function threadItems(dir: string, item: CodexItem, done: boolean, at?: nu
   }
 }
 
-/** The collab tool that starts one of Codex's own agents. Its other tools, such as waiting for one, are not shown. */
-const SPAWN_AGENT = "spawnAgent"
-
 /** One file of a patch, with its path relative to the project. */
 function fileItem(dir: string, id: string, change: FileUpdate, isError: boolean | undefined): ToolItem {
   const file = relativeTo(dir, change.path)
@@ -71,8 +71,6 @@ const finished = (done: boolean, isError: boolean) => (done ? { result: { output
 
 /** The last part of a subagent's path, such as "say_hello" from "/root/say_hello". */
 const agentName = (path: string) => path.split("/").filter(Boolean).at(-1) ?? path
-
-const firstLine = (text: string) => text.trim().split("\n")[0]!.trim()
 
 function argumentsSummary(args: unknown): string {
   const text = args === null || args === undefined ? "" : JSON.stringify(args)

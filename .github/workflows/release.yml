@@ -47,7 +47,7 @@ jobs:
 
       - run: bun run typecheck
 
-      - run: bun test core
+      - run: bun test core protocol
 
       - run: cargo test --manifest-path native/Cargo.toml
 

@@ -13,6 +13,22 @@ import { git } from "./git"
  * its own folder.
  */
 
+/** Git's tree with no files, which a repo with no commits compares with. */
+const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+/** Who checkpoint commits name as their author, so they never need the user's identity. */
+const CHECKPOINT_AUTHOR = { GIT_AUTHOR_NAME: "Desk", GIT_AUTHOR_EMAIL: "desk@localhost", GIT_COMMITTER_NAME: "Desk", GIT_COMMITTER_EMAIL: "desk@localhost" }
+
+/** The most Desk reads of one diff, after T3 Code. A longer file list fails, and a longer patch is cut. */
+const MAX_DIFF_BYTES = 10_000_000
+
+/**
+ * Settings that change what Git prints, pinned so a user's own config cannot change it: paths from the
+ * repo's root and written out as they are, blank context lines kept as a space, and no signature lines
+ * in a log.
+ */
+const GIT_DEFAULTS = ["-c", "diff.relative=false", "-c", "core.quotePath=false", "-c", "diff.suppressBlankEmpty=false", "-c", "log.showSignature=false"]
+
 /** The tree of the project's folder as it is now, or undefined outside a Git repo. */
 export async function snapshot(dir: string): Promise<string | undefined> {
   const scratch = mkdtempSync(join(tmpdir(), "desk-index-"))
@@ -42,9 +58,6 @@ export async function snapshot(dir: string): Promise<string | undefined> {
   }
 }
 
-/** Git's tree with no files, which a repo with no commits compares with. */
-const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
-
 /** The last commit's tree, for uncommitted changes. A repo with no commits compares with no files. Undefined outside a Git repo. */
 export async function headTree(dir: string): Promise<string | undefined> {
   try {
@@ -71,9 +84,6 @@ export async function branchBase(dir: string): Promise<string | undefined> {
 
 /** Where Desk's checkpoint refs live. Each Desk instance keeps its own, so one never removes another's. */
 const refPrefix = () => `refs/desk/${instanceName()}/checkpoints/`
-
-/** Who checkpoint commits name as their author, so they never need the user's identity. */
-const CHECKPOINT_AUTHOR = { GIT_AUTHOR_NAME: "Desk", GIT_AUTHOR_EMAIL: "desk@localhost", GIT_COMMITTER_NAME: "Desk", GIT_COMMITTER_EMAIL: "desk@localhost" }
 
 /**
  * Takes a checkpoint of the project and returns its commit, or undefined outside a Git repo. The commit
@@ -153,9 +163,6 @@ export async function changesSince(dir: string, base: string): Promise<FileChang
 /** A file's change between two trees, with the path it had before when Git saw it renamed. */
 type TreeChange = FileChange & { readonly previousPath?: string }
 
-/** The most Desk reads of one diff, after T3 Code. A longer file list fails, and a longer patch is cut. */
-const MAX_DIFF_BYTES = 10_000_000
-
 /**
  * Each file in the project's folder that differs between two trees, with its counts and its patch. A
  * submodule shows as one line of commits, so its entry keeps its `diff --git` header.
@@ -172,13 +179,6 @@ async function treeChanges(dir: string, from: string, to: string): Promise<TreeC
     return { path, status: fileStatus(filePatch), additions, deletions, patch: filePatch, ...(previousPath === undefined ? {} : { previousPath }) }
   })
 }
-
-/**
- * Settings that change what Git prints, pinned so a user's own config cannot change it: paths from the
- * repo's root and written out as they are, blank context lines kept as a space, and no signature lines
- * in a log.
- */
-const GIT_DEFAULTS = ["-c", "diff.relative=false", "-c", "core.quotePath=false", "-c", "diff.suppressBlankEmpty=false", "-c", "log.showSignature=false"]
 
 /** `git diff --numstat -z`: each entry is `added\tremoved\tpath`, or for a rename `added\tremoved\t`, then the old and the new path. */
 function numstatEntries(output: string): { additions: number; deletions: number; path: string; previousPath?: string }[] {

@@ -5,7 +5,7 @@ const BROWSER_PREFIX = "DESK_ANTIGRAVITY_SIGN_IN "
 /** The longest link Desk accepts, as in T3 Code. */
 const MAX_LINK_LENGTH = 16_384
 /** Google's sign-in page, which every link must open. */
-const GOOGLE_SIGN_IN = "https://accounts.google.com/o/oauth2/v2/auth"
+const GOOGLE_SIGN_IN_PAGE = "https://accounts.google.com/o/oauth2/v2/auth"
 /** Where Google returns the user: the agent's listener on this Mac, on a port a user may open. */
 const LOOPBACK_REDIRECT = /^http:\/\/127\.0\.0\.1:([1-9][0-9]{0,4})\/$/
 const LOWEST_USER_PORT = 1024
@@ -39,7 +39,7 @@ function isGoogleSignIn(link: string): boolean {
   const state = one("state")
   const port = LOOPBACK_REDIRECT.exec(one("redirect_uri") ?? "")?.[1]
   return (
-    `${url.origin}${url.pathname}` === GOOGLE_SIGN_IN &&
+    `${url.origin}${url.pathname}` === GOOGLE_SIGN_IN_PAGE &&
     !url.username &&
     !url.password &&
     !url.hash &&

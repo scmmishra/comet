@@ -59,7 +59,6 @@ export class Terminals {
     if (cols > 0 && rows > 0) this.running.get(id)?.process.terminal?.resize(cols, rows)
   }
 
-  /** Closes every terminal not in `ids`. */
   retain(ids: ReadonlySet<string>) {
     for (const [id, entry] of [...this.running]) {
       if (ids.has(id)) continue

@@ -69,6 +69,7 @@ export interface TurnEnd {
 }
 
 /** A layout for a new tab: a sidebar and panels, each named `<plugin>.<name>`. A name that is not on is skipped. */
+/** A setup names each view by its full id, such as `support.inbox`, so it can name another plugin's views too. */
 export interface SetupOptions {
   readonly title: string
   readonly sidebar?: string

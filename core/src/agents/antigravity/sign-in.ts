@@ -1,19 +1,19 @@
-import { whenAborted } from "../abort"
-import { AcpConnection } from "../acp/connection"
+import { errorMessage } from "../../errors"
+import { AcpConnection, type ConnectOptions } from "../acp/connection"
 import { CANCELLED } from "../acp/permissions"
-import type { ClientInfo, ConfigOption } from "../acp/protocol"
-import type { Process } from "../json-rpc"
+import type { ConfigOption } from "../acp/protocol"
+import type { Process } from "../process"
+import { whenAborted } from "./abort"
 import { signInLink } from "./sign-in-link"
 
 /** How long the user has to finish signing in, as in T3 Code. */
 const SIGN_IN_TIMEOUT_MS = 5 * 60_000
-/** The method that signs in with a personal Google account, so its Google AI plan is used. */
-export const GOOGLE_SIGN_IN = "oauth-personal"
 /** What Google answers for an account whose plan does not include Antigravity. */
 const SUBSCRIPTION_REQUIRED = "SUBSCRIPTION_REQUIRED"
 
 export interface SignInOptions {
-  readonly clientInfo: ClientInfo
+  /** How to connect. Its auth method is the Google sign-in. */
+  readonly connect: ConnectOptions
   /** The folder the sign-in's session opens in. */
   readonly cwd: string
   /** Opens the Google sign-in link in the browser. */
@@ -48,7 +48,7 @@ export async function signInWithGoogle(process: Process, options: SignInOptions)
           options.open(link)
         },
       },
-      { clientInfo: options.clientInfo, authMethod: GOOGLE_SIGN_IN },
+      options.connect,
     )
     const setup = await connection.newSession({ cwd: options.cwd, mcpServers: [] })
     options.learn(setup.configOptions ?? [], true)
@@ -61,7 +61,7 @@ export async function signInWithGoogle(process: Process, options: SignInOptions)
   try {
     await Promise.race([signedIn, timedOut, whenAborted(options.signal)])
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = errorMessage(error)
     throw message.includes(SUBSCRIPTION_REQUIRED) ? new Error("This Google account has no plan that includes Antigravity.") : error
   } finally {
     clearTimeout(timer)

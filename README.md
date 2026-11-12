@@ -29,7 +29,7 @@ mise run install   # build Desk.app and install it in /Applications
 | Task | What it does |
 |---|---|
 | `mise run dev` | Runs Desk from the repo, beside the installed one. |
-| `mise run test` | Runs the core and native tests. |
+| `mise run test` | Runs the core, protocol and native tests. |
 | `mise run check` | Typechecks, lints and runs every test. |
 | `mise run package` | Builds `Desk.app` in `dist/mac-arm64`. |
 

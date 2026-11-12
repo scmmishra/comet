@@ -1,3 +1,4 @@
+import { firstLine } from "../text"
 import type { Tool } from "./mcp"
 
 /** The name agents know Desk's tools under, such as `mcp__desk__delegate` in Claude Code. */
@@ -39,7 +40,7 @@ export const DELEGATE: Tool = {
 }
 
 /** A task in a few words: the start of its first line. */
-export const firstLine = (text: string) => text.trim().split("\n")[0]!.slice(0, 80)
+export const taskWords = (text: string) => firstLine(text).slice(0, 80)
 
 /**
  * What a call of one of Desk's tools was given, in short, for its row in a thread: the agent and the
@@ -49,7 +50,7 @@ export function deskToolSummary(tool: string, input: unknown): string | undefine
   if (tool === LIST_AGENTS.name) return ""
   if (tool !== DELEGATE.name) return undefined
   const given = typeof input === "object" && input !== null ? (input as Record<string, unknown>) : {}
-  return `${String(given.agent ?? "another agent")}: ${firstLine(typeof given.title === "string" && given.title.trim() ? given.title : String(given.task ?? ""))}`
+  return `${String(given.agent ?? "another agent")}: ${taskWords(typeof given.title === "string" && given.title.trim() ? given.title : String(given.task ?? ""))}`
 }
 
 /** A call of one of Desk's tools in a few words, from its summary, whichever agent made it. */

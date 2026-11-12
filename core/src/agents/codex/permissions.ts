@@ -28,7 +28,7 @@ const POLICIES: Record<PermissionMode, RunPolicy> = {
 const SANDBOX_MODES = { readOnly: "read-only", workspaceWrite: "workspace-write", dangerFullAccess: "danger-full-access" } as const
 
 /** The permissions a turn runs with. Every `turn/start` sends them, so a mode change applies from the next turn. */
-export const runPolicy =(mode: PermissionMode): RunPolicy => POLICIES[mode]
+export const runPolicy = (mode: PermissionMode): RunPolicy => POLICIES[mode]
 
 /** A thread's starting permissions, as `thread/start` and `thread/resume` take them. */
 export function threadPolicy(mode: PermissionMode) {

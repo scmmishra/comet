@@ -1,32 +1,11 @@
 import { expect, test } from "bun:test"
-import { until } from "../test-support"
-import { JsonRpc, lines, RpcError, type Transport } from "./json-rpc"
+import { memoryTransport, until } from "../test-support"
+import { JsonRpc, RpcError } from "./json-rpc"
 
 /** A transport a test plays the peer on: `say` sends the client a message, and `written` is what the client sent. */
 function peer() {
   const written: Record<string, unknown>[] = []
-  const queue: string[] = []
-  let wake: (() => void) | undefined
-  let closed = false
-  const transport: Transport = {
-    lines: (async function* () {
-      while (true) {
-        while (queue.length) yield queue.shift()!
-        if (closed) return
-        await new Promise<void>((resolve) => (wake = resolve))
-      }
-    })(),
-    write: (line) => void written.push(JSON.parse(line)),
-    close: () => {
-      closed = true
-      wake?.()
-    },
-  }
-  const say = (message: object | string) => {
-    queue.push(typeof message === "string" ? message : JSON.stringify(message))
-    wake?.()
-  }
-  return { transport, written, say, hangUp: transport.close }
+  return { ...memoryTransport((line) => void written.push(JSON.parse(line))), written }
 }
 
 const noHandlers = { notification: () => {}, request: () => null, closed: () => {} }
@@ -103,16 +82,4 @@ test("fails every waiting request once the peer is gone, and says so once", asyn
   expect(await waiting).toBe("The agent's process ended.")
   expect(await rpc.request("turn/start").catch((error: Error) => error.message)).toBe("The agent's process ended.")
   expect(closed).toEqual(["The agent's process ended."])
-})
-
-test("splits a byte stream into lines across chunks, and keeps a last line with no newline", async () => {
-  const encode = (text: string) => new TextEncoder().encode(text)
-  const stream = (async function* () {
-    yield encode('{"a":')
-    yield encode('1}\n{"b":2}\n{"c"')
-    yield encode(":3}")
-  })()
-  const found: string[] = []
-  for await (const line of lines(stream)) found.push(line)
-  expect(found).toEqual(['{"a":1}', '{"b":2}', '{"c":3}'])
 })

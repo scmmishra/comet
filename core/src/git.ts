@@ -66,9 +66,3 @@ async function readCapped(stream: ReadableStream<Uint8Array>, maxBytes = Infinit
   }
   return { text: new TextDecoder().decode(Buffer.concat(chunks)), overflowed: false }
 }
-
-/** One line of `git diff --numstat`: its counts and the rest of the line. Binary files show "-" for both counts. */
-export function numstatLine(line: string): { additions: number; deletions: number; path: string } {
-  const [added, removed, ...path] = line.split("\t")
-  return { additions: Number(added) || 0, deletions: Number(removed) || 0, path: path.join("\t") }
-}

@@ -1,10 +1,16 @@
-import { isStep, type CoreMessage, type ItemRow, type Step, type StepGroup, type ThreadItem, type ThreadRow } from "@desk/protocol"
-import { groupSummary } from "./steps"
+import { isStep, type CoreMessage, type ItemRow, type Step, type StepGroup, type StepKind, type ThreadItem, type ThreadRow } from "@desk/protocol"
+
+type Tool = Extract<Step, { type: "tool" }>
+
+/** Which kinds a group summary names first, when it has more than it can name. */
+const PRIORITY: StepKind[] = ["command", "edit", "read", "search", "web", "other"]
+/** A group summary names this many kinds, and counts the rest as other actions. */
+const NAMED_KINDS = 2
 
 /** What a folded turn keeps in view: errors, compactions, and permission requests still waiting for the user. */
 const staysOut = (item: ThreadItem) => item.type === "error" || item.type === "compaction" || item.type === "permission"
 
-/** A message that only asks Claude Code to compact, such as `/compact` or `/compact keep the plan`. */
+/** A message that only asks the agent to compact, such as `/compact` or `/compact keep the plan`. */
 const COMPACT_COMMAND = /^\/compact(\s|$)/
 
 /**
@@ -101,7 +107,6 @@ export class ThreadRows {
     return this.rows(tabId, thread, false)
   }
 
-  /** Drops a closed tab's thread. */
   forget(tabId: string) {
     this.threads.delete(tabId)
   }
@@ -113,4 +118,41 @@ export class ThreadRows {
     thread.rows = key
     return { type: "session.rows", tabId, rows }
   }
+}
+
+const phrase = (kind: StepKind, count: number): string => {
+  const n = (one: string, many: string) => (count === 1 ? one : many.replace("N", String(count)))
+  switch (kind) {
+    case "command":
+      return n("ran a command", "ran N commands")
+    case "edit":
+      return n("changed a file", "changed N files")
+    case "read":
+      return n("read a file", "read N files")
+    case "search":
+      return n("searched code once", "searched code N times")
+    case "web":
+      return n("searched the web once", "searched the web N times")
+    default:
+      return n("used a tool", "used N tools")
+  }
+}
+
+/**
+ * A group of steps in one line, after T3 Code: "Read 3 files and ran 2 commands". Files read or changed
+ * count once each. Thoughts are not counted. It names the two kinds that matter most, in the order they
+ * came, and counts the rest as other actions. A group of thoughts alone reads "Thought".
+ */
+function groupSummary(steps: readonly Step[]): string {
+  const tools = steps.filter((step): step is Tool => step.type === "tool")
+  if (!tools.length) return steps.length > 1 ? `Thought (×${steps.length})` : "Thought"
+  const byKind = new Map<StepKind, Tool[]>()
+  for (const tool of tools) byKind.set(tool.kind, [...(byKind.get(tool.kind) ?? []), tool])
+  const count = (kind: StepKind, found: Tool[]) => (kind === "read" || kind === "edit" ? new Set(found.map((tool) => tool.file ?? tool.summary)).size : found.length)
+  const named = [...byKind.keys()].sort((a, b) => PRIORITY.indexOf(a) - PRIORITY.indexOf(b)).slice(0, NAMED_KINDS)
+  const parts = [...byKind.entries()].filter(([kind]) => named.includes(kind)).map(([kind, found]) => phrase(kind, count(kind, found)))
+  const others = [...byKind.entries()].filter(([kind]) => !named.includes(kind)).reduce((sum, [, found]) => sum + found.length, 0)
+  if (others) parts.push(others === 1 ? "performed 1 other action" : `performed ${others} other actions`)
+  const joined = parts.length < 3 ? parts.join(" and ") : `${parts.slice(0, -1).join(", ")}, and ${parts.at(-1)}`
+  return joined.charAt(0).toUpperCase() + joined.slice(1)
 }

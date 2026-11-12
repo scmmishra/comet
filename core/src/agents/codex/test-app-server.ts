@@ -1,3 +1,4 @@
+import { memoryTransport } from "../../test-support"
 import type { Transport } from "../json-rpc"
 import type { CodexModel } from "./protocol"
 
@@ -20,7 +21,7 @@ const model = (id: string, displayName: string, extra: Partial<CodexModel> = {})
 export const MODELS = [model("gpt-6.1-sol", "GPT-6.1-Sol", { isDefault: true }), model("gpt-6-luna", "GPT-6-Luna", { serviceTiers: [], defaultReasoningEffort: "high" }), model("codex-auto-review", "Auto review", { hidden: true })]
 
 /** The user agent Codex 0.167 answers `initialize` with. */
-export const USER_AGENT = "desk/0.167.0 (Mac OS 26.6.2; arm64) unknown (desk; 0.0.1)"
+const USER_AGENT = "desk/0.167.0 (Mac OS 26.6.2; arm64) unknown (desk; 0.0.1)"
 
 /**
  * A Codex app-server a test plays, over an in-memory transport. It answers each request whose method
@@ -35,41 +36,24 @@ export function fakeAppServer() {
 
   const launch = (): Transport => {
     launches++
-    const queue: string[] = []
-    let wake: (() => void) | undefined
-    let closed = false
-    const say = (message: Message) => {
-      queue.push(JSON.stringify(message))
-      wake?.()
-    }
-    const hangUp = () => {
-      closed = true
-      wake?.()
-    }
+    const { transport, say, hangUp } = memoryTransport((line) => {
+      const message: Message = JSON.parse(line)
+      written.push(message)
+      const answer = message.method !== undefined && message.id !== undefined ? answers.get(message.method) : undefined
+      if (!answer) return
+      Promise.resolve()
+        .then(() => answer(message.params))
+        .then(
+          (result) => say({ id: message.id, result }),
+          (error: Error) => say({ id: message.id, error: { message: error.message } }),
+        )
+    })
     current = { say, hangUp }
-    return {
-      lines: (async function* () {
-        while (true) {
-          while (queue.length) yield queue.shift()!
-          if (closed) return
-          await new Promise<void>((resolve) => (wake = resolve))
-        }
-      })(),
-      write: (line) => {
-        const message: Message = JSON.parse(line)
-        written.push(message)
-        const answer = message.method !== undefined && message.id !== undefined ? answers.get(message.method) : undefined
-        if (!answer) return
-        Promise.resolve()
-          .then(() => answer(message.params))
-          .then(
-            (result) => say({ id: message.id, result }),
-            (error: Error) => say({ id: message.id, error: { message: error.message } }),
-          )
-      },
-      close: hangUp,
-    }
+    return transport
   }
+
+  /** Every reply Desk wrote to the request Codex sent with `id`. */
+  const replies = (id: number | string) => written.filter((message) => message.method === undefined && message.id === id)
 
   return {
     launch,
@@ -82,8 +66,9 @@ export function fakeAppServer() {
     },
     /** The params of each request and notification Desk sent with `method`. */
     sent: (method: string) => written.filter((message) => message.method === method).map((message) => message.params),
-    /** Desk's reply to the request Codex sent with `id`, once it has written one. */
-    reply: (id: number | string) => written.find((message) => message.method === undefined && message.id === id),
+    /** Desk's first reply to the request Codex sent with `id`, once it has written one. */
+    reply: (id: number | string) => replies(id)[0],
+    replies,
     notify: (method: string, params: object) => current!.say({ method, params }),
     /** Codex asks Desk something, such as an approval. */
     ask: (id: number | string, method: string, params: object) => current!.say({ id, method, params }),

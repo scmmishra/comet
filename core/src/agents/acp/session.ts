@@ -1,35 +1,38 @@
-import { DEFAULT_MODEL, type ImageAttachment, type PermissionAnswer, type RunSettings, type ThreadItem } from "@desk/protocol"
+import { DEFAULT_MODEL, type ImageAttachment, type PermissionAnswer, type RunSettings } from "@desk/protocol"
+import { SERVER_NAME } from "../../delegate/tools"
+import { errorMessage } from "../../errors"
 import type { AgentSession, Emit, SessionOptions, ToolServer } from "../agent"
-import { RpcError, type Process } from "../json-rpc"
+import { RpcError } from "../json-rpc"
+import type { Process } from "../process"
+import { Requests, type OpenRequest } from "../requests"
 import { Stop } from "../stopping"
+import { errorItem, resultId, userItem } from "../turn-items"
 import { choices, currentName, modelOption, thoughtOption } from "./config-options"
 import { AcpConnection } from "./connection"
 import type { AcpFlavor } from "./flavor"
 import { CANCELLED, permissionItem, permissionResponse, questionItem, questionResponse } from "./permissions"
 import { promptContent, takesInstructions } from "./prompt"
 import { AUTH_REQUIRED, type ConfigOption, type McpServer, type PermissionRequest, type PermissionResponse, type SessionNotification, type StopReason } from "./protocol"
-import { ThreadRecord } from "./thread-record"
+import type { AcpThreadStore, ThreadRecord } from "./thread-record"
 import { UpdateMapper } from "./updates"
 
 /** Stop reasons that mean the turn did not finish its work. */
 const ERROR_STOPS: ReadonlySet<StopReason> = new Set(["max_tokens", "max_turn_requests", "refusal"])
 
-/** A running agent process with its session open. `mode` is the mode the session is in. */
+/** A running agent process with its session open. */
 interface Live {
   readonly connection: AcpConnection
   readonly sessionId: string
   mode?: string
 }
 
-/** A request waiting for the user: the item that shows it, what the agent asked, and how to answer it. */
-interface OpenRequest {
-  readonly item: Extract<ThreadItem, { type: "permission" | "question" }>
+/** A request waiting for the user, with what the agent asked. */
+interface AcpRequest extends OpenRequest<PermissionResponse> {
   readonly request: PermissionRequest
-  readonly resolve: (response: PermissionResponse) => void
 }
 
 /**
- * One conversation with an ACP agent, in one tab. ACP runs one agent process per connection, so each
+ * One conversation with an ACP agent. ACP runs one agent process per connection, so each
  * session starts its own process on its first message and ends it on close. A process that ends between
  * turns is started again by the next message, which resumes the session.
  */
@@ -39,7 +42,7 @@ export class AcpSession implements AgentSession {
   /** Absent for an ephemeral session, which leaves no saved thread. */
   private readonly record?: ThreadRecord
   private readonly stop: Stop
-  private readonly requests = new Map<string, OpenRequest>()
+  private readonly requests: Requests<PermissionResponse, AcpRequest>
   private settings: RunSettings
   /** The session's settings as the agent last reported them. */
   private configOptions: readonly ConfigOption[] = []
@@ -60,8 +63,9 @@ export class AcpSession implements AgentSession {
     emit: Emit,
     private readonly options: SessionOptions,
     private readonly flavor: AcpFlavor,
+    threads: AcpThreadStore,
   ) {
-    if (!options.ephemeral) this.record = new ThreadRecord(flavor.threadsFolder(), dir, options.resume)
+    if (!options.ephemeral) this.record = threads.record(dir, options.resume)
     // Every item the tab sees is kept, so the thread can be read back later.
     this.emit = (event) => {
       if (event.kind === "item") this.record?.add(event.item)
@@ -69,6 +73,7 @@ export class AcpSession implements AgentSession {
     }
     this.mapper = new UpdateMapper(dir, flavor.tools)
     this.stop = new Stop(this.emit)
+    this.requests = new Requests(this.emit)
     this.sessionId = options.resume
     this.settings = options.settings
     this.instruct = !options.resume && !!options.tools
@@ -80,15 +85,10 @@ export class AcpSession implements AgentSession {
 
   send(text: string, images: readonly ImageAttachment[] = []) {
     const turn = { id: crypto.randomUUID(), start: Date.now() }
-    this.emit({ kind: "item", item: { type: "user", id: turn.id, text, ...(images.length ? { images } : {}), at: turn.start } })
+    this.emit({ kind: "item", item: userItem(turn.id, text, images) })
     this.turn = turn
     this.emit({ kind: "status", busy: true })
     void this.run(turn, text, images)
-  }
-
-  /** ACP has no way into a running turn, so the window holds messages until the turn ends, and this only starts one. */
-  steer(text: string, images: readonly ImageAttachment[] = []) {
-    this.send(text, images)
   }
 
   /** Asks the agent to cancel the turn. Its prompt then answers, and the turn ends as stopped. */
@@ -114,18 +114,15 @@ export class AcpSession implements AgentSession {
   answerPermission(requestId: string, answer: PermissionAnswer) {
     const open = this.requests.get(requestId)
     if (open?.item.type !== "permission") return
-    this.respond(open, permissionResponse(open.request, answer))
+    this.requests.settle(open, permissionResponse(open.request, answer))
     // Cancel also stops the turn, as it does for every agent.
     if (answer === "cancel") void this.interrupt()
   }
 
   answerQuestion(requestId: string, answers: Readonly<Record<string, string>> | undefined) {
     const open = this.requests.get(requestId)
-    if (open?.item.type === "question") this.respond(open, questionResponse(open.request, answers))
+    if (open?.item.type === "question") this.requests.settle(open, questionResponse(open.request, answers))
   }
-
-  /** ACP agents run no commands Desk can see in the background. */
-  async stopTasks() {}
 
   close() {
     this.stop.clear()
@@ -177,7 +174,7 @@ export class AcpSession implements AgentSession {
           process.close()
         },
       },
-      { clientInfo: this.flavor.clientInfo, ...(this.flavor.authMethod ? { authMethod: this.flavor.authMethod } : {}) },
+      this.flavor.connect,
     )
     try {
       const meta = this.flavor.sessionMeta?.(connection.agent)
@@ -247,20 +244,11 @@ export class AcpSession implements AgentSession {
   private ask = (request: PermissionRequest) =>
     new Promise<PermissionResponse>((resolve) => {
       const item = this.flavor.isQuestion?.(request) ? questionItem(request) : permissionItem(request, this.flavor.tools)
-      this.requests.set(item.requestId, { item, request, resolve })
-      this.emit({ kind: "item", item })
+      this.requests.add({ item, request, resolve })
     })
 
-  /** Closes a request once, so its item leaves the thread, and gives the agent its answer. */
-  private respond(open: OpenRequest, response: PermissionResponse) {
-    if (this.requests.get(open.item.requestId) !== open) return
-    this.requests.delete(open.item.requestId)
-    this.emit({ kind: "item", item: { ...open.item, answered: true } })
-    open.resolve(response)
-  }
-
   private cancelRequests() {
-    for (const open of [...this.requests.values()]) this.respond(open, CANCELLED)
+    this.requests.settleAll(() => CANCELLED)
   }
 
   private finish(turn: NonNullable<AcpSession["turn"]>, stopReason: StopReason) {
@@ -273,17 +261,15 @@ export class AcpSession implements AgentSession {
     if (this.turn !== turn) return
     const signIn = this.signInNeeded || (error instanceof RpcError && error.code === AUTH_REQUIRED)
     this.signInNeeded = false
-    if (signIn) {
-      this.flavor.signedOut()
-      this.process?.close()
-    }
-    this.emit({ kind: "item", item: { type: "error", id: `error-${Date.now()}`, message: signIn ? this.flavor.signInProblem : this.explain(error) } })
+    const message = signIn ? this.flavor.signedOut() : this.explain(error)
+    if (signIn) this.process?.close()
+    this.emit({ kind: "item", item: errorItem(message) })
     this.endTurn(turn)
   }
 
   /** An error in a sentence. One from a process that ended carries the end of what it printed, which says why. */
   private explain(error: unknown) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = errorMessage(error)
     const stderr = error instanceof RpcError ? "" : (this.process?.stderr() ?? "")
     return stderr ? `${message}\n\n${stderr}` : message
   }
@@ -292,7 +278,7 @@ export class AcpSession implements AgentSession {
   private endTurn(turn: NonNullable<AcpSession["turn"]>, result?: { readonly isError: boolean; readonly stopped: boolean }) {
     const now = Date.now()
     for (const event of this.mapper.finish(now)) this.emit(event)
-    if (result) this.emit({ kind: "item", item: { type: "result", id: `result:${turn.id}`, durationMs: now - turn.start, isError: result.isError, ...(result.stopped ? { stopped: true } : {}) } })
+    if (result) this.emit({ kind: "item", item: { type: "result", id: resultId(turn.id), durationMs: now - turn.start, isError: result.isError, ...(result.stopped ? { stopped: true } : {}) } })
     this.stop.clear()
     this.turn = undefined
     this.emit({ kind: "status", busy: false })
@@ -302,5 +288,5 @@ export class AcpSession implements AgentSession {
 
 /** Desk's tools as an MCP server the agent connects to over HTTP. */
 const toolServers = (tools: ToolServer | undefined): McpServer[] =>
-  tools ? [{ type: "http", name: tools.name, url: tools.url, headers: [{ name: "Authorization", value: tools.authorization }] }] : []
+  tools ? [{ type: "http", name: SERVER_NAME, url: tools.url, headers: [{ name: "Authorization", value: tools.authorization }] }] : []
 

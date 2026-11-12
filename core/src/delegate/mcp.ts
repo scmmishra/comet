@@ -1,3 +1,5 @@
+import { errorMessage } from "../errors"
+
 /**
  * A Model Context Protocol server over HTTP, as much of it as serving tools takes. Every agent Desk runs
  * connects to an MCP server at a URL, so this is how Desk offers them tools of its own. Each request is
@@ -27,8 +29,9 @@ export interface ToolSet {
 /** The protocol version Desk speaks when a client names none. Desk answers with the client's own when it names one. */
 const PROTOCOL_VERSION = "2025-03-26"
 const SERVER_INFO = { name: "desk", version: "1" }
-const METHOD_NOT_FOUND = -32601
+/** JSON-RPC's codes for a message that is no request, and for a method Desk does not have. */
 const INVALID_REQUEST = -32600
+const METHOD_NOT_FOUND = -32601
 
 type Request = { readonly id?: number | string; readonly method?: unknown; readonly params?: Record<string, unknown> }
 
@@ -53,7 +56,7 @@ export async function serveMcp(request: globalThis.Request, toolsFor: (authoriza
   try {
     return json({ jsonrpc: "2.0", id: message.id, result: await answer(message, tools, request.signal) })
   } catch (error) {
-    return json({ jsonrpc: "2.0", id: message.id, error: { code: METHOD_NOT_FOUND, message: error instanceof Error ? error.message : String(error) } })
+    return json({ jsonrpc: "2.0", id: message.id, error: { code: METHOD_NOT_FOUND, message: errorMessage(error) } })
   }
 }
 
@@ -70,7 +73,7 @@ async function answer(message: Request, tools: ToolSet, signal: AbortSignal): Pr
       // A tool that fails answers the model with why, so the model can change course. It is not a protocol error.
       const result = await tools
         .call(String(message.params?.name), typeof input === "object" && input !== null ? (input as Record<string, unknown>) : {}, signal)
-        .catch((error): ToolResult => ({ text: error instanceof Error ? error.message : String(error), isError: true }))
+        .catch((error): ToolResult => ({ text: errorMessage(error), isError: true }))
       return { content: [{ type: "text", text: result.text }], isError: !!result.isError }
     }
     default:

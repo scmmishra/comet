@@ -1,11 +1,10 @@
-import type { AgentFeature, AgentId, AgentInfo, ContextReading, ImageAttachment, PermissionAnswer, RunSettings, Skill, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
+import type { AgentFeature, AgentId, AgentInfo, ContextReading, ImageAttachment, McpServer, PermissionAnswer, RunSettings, Skill, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
 
 /**
  * What Desk needs from a coding agent, such as Claude Code or Codex. An agent runs conversations, keeps
  * their transcripts, and says who is signed in and which models they may use. The rest of the core talks
- * to agents only through these types, so adding an agent means writing one of these and listing it in
- * `registry.ts`. Each agent turns its own messages into Desk's thread events, so nothing outside its
- * folder reads them.
+ * to agents only through these types. Each agent turns its own messages into Desk's thread events, so
+ * nothing outside its folder reads them. AGENTS.md lists the steps to add one.
  */
 export interface Agent {
   readonly id: AgentId
@@ -15,7 +14,7 @@ export interface Agent {
   readonly features: readonly AgentFeature[]
   /**
    * Reads whether the agent is installed and signed in, its version and its models, and reports each
-   * through the host as it learns it. A failed read reports what to do about it and does not throw.
+   * through the host as it learns it. What it throws shows as the agent's problem.
    */
   inspect(): Promise<void>
   /** Reads the account's plan usage again and reports it through the host. */
@@ -26,6 +25,8 @@ export interface Agent {
   readonly threads: AgentThreads
   /** The slash commands the agent offers in a folder, grouped. Null when the agent could not be asked. An agent without slash commands has no such method. */
   commands?(dir: string): Promise<Skill[] | null>
+  /** The MCP servers the agent loads in a folder. An agent whose servers Desk does not show has none. */
+  readonly mcp?: AgentMcp
   /** Updates the agent with its own updater. It runs to its end, since stopping an updater midway can leave the agent broken. */
   update?(): Promise<void>
   /** Installs the agent on this Mac. It stops, and leaves the install as it was, once `signal` aborts. */
@@ -51,9 +52,18 @@ export interface AgentHost {
 
 export type Emit = (event: ThreadEvent) => void
 
-/** Tools Desk offers a session over MCP, such as handing work to another agent. The agent adds the server to the session under `name`. */
+/**
+ * The MCP servers an agent loads in a folder. Each call publishes the list as soon as there is one, and
+ * again each time it changes while servers connect. Null means the agent could not be asked.
+ */
+export interface AgentMcp {
+  read(dir: string, publish: (servers: McpServer[] | null) => void): Promise<void>
+  /** Turns a server on or off, then publishes the servers as they change. */
+  toggle(dir: string, name: string, enabled: boolean, publish: (servers: McpServer[] | null) => void): Promise<void>
+}
+
+/** Tools Desk offers a session over MCP, such as handing work to another agent. The agent adds the server to the session under `SERVER_NAME`. */
 export interface ToolServer {
-  readonly name: string
   readonly url: string
   /** The Authorization header that names the session to Desk. */
   readonly authorization: string
@@ -88,8 +98,8 @@ export interface AgentSession {
   readonly busy: boolean
   /** Starts a turn with a message. */
   send(text: string, images?: readonly ImageAttachment[]): void
-  /** Sends a message into the running turn. An agent without `steer` starts a turn with it once the running one ends. */
-  steer(text: string, images?: readonly ImageAttachment[]): void
+  /** Sends a message into the running turn. Only an agent with `steer` has it. */
+  steer?(text: string, images?: readonly ImageAttachment[]): void
   /** Asks the turn to stop. A turn that has not stopped in time is reported as unresponsive. */
   interrupt(): Promise<void>
   /** Ends a turn that did not stop when asked, as stopped. Says whether there was a stop to force. */
@@ -98,8 +108,8 @@ export interface AgentSession {
   configure(settings: RunSettings): Promise<void>
   answerPermission(requestId: string, answer: PermissionAnswer): void
   answerQuestion(requestId: string, answers: Readonly<Record<string, string>> | undefined): void
-  /** Stops commands running in the background. */
-  stopTasks(ids: readonly string[]): Promise<void>
+  /** Stops commands running in the background. An agent that shows none has no such method. */
+  stopTasks?(ids: readonly string[]): Promise<void>
   /** Restores the files the agent's tools changed from a message on. Only an agent with `restore-files` has it. */
   restoreFiles?(messageId: string): Promise<void>
   close(): void
@@ -114,6 +124,9 @@ export type Rewound =
    * runs, and the session resumes there. Without it, the transcript is already cut.
    */
   | { readonly empty: false; readonly resumeAt?: string }
+
+/** How many threads an agent lists for a project. Enough for thread search to reach back months. */
+export const THREAD_LIMIT = 200
 
 /** The conversations an agent saved, by the id its sessions report. Each optional method needs the feature of its name. */
 export interface AgentThreads {

@@ -1,5 +1,9 @@
+import { existsSync } from "node:fs"
 import { join } from "node:path"
-import { deskHome, instanceHome } from "../../data-files"
+import { deskHome, instanceHome, writeJsonFile } from "../../data-files"
+
+/** The file an install writes last. A folder without it is never run. */
+const INSTALLED_MARKER = ".installed"
 
 /** Where Desk keeps Antigravity's files: its runtime, its sign-in, its threads and its models. */
 export const antigravityHome = () => join(deskHome(), "agents", "antigravity")
@@ -7,8 +11,11 @@ export const antigravityHome = () => join(deskHome(), "agents", "antigravity")
 /** The folder a runtime version is installed in. */
 export const runtimeFolder = (version: string) => join(antigravityHome(), version)
 
-/** The file an install writes last, with the version it installed. A folder without it is never run. */
-export const INSTALLED_MARKER = ".installed"
+/** Marks a version's folder as installed. The marker holds the version, because an earlier Desk reads it from there. */
+export const markInstalled = (version: string) => writeJsonFile(join(runtimeFolder(version), INSTALLED_MARKER), { version })
+
+/** Whether a version's install finished. */
+export const isInstalled = (version: string) => existsSync(join(runtimeFolder(version), INSTALLED_MARKER))
 
 /**
  * Antigravity's own folder for this Desk, as GEMINI_HOME. It holds the Google sign-in, so the agent never

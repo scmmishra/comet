@@ -13,13 +13,12 @@ printf '%s\\n' "$0" "$PATH" "\${CLAUDECODE-unset}" "\${CLAUDE_CONFIG_DIR-unset}"
 
 /** The core's environment setup, run the way main.ts runs it, reporting what the core then sees. */
 const SCRIPT = `import { takeLoginEnvironment } from ${JSON.stringify(join(import.meta.dir, "login-environment"))}
-import { spawn } from ${JSON.stringify(join(import.meta.dir, "environment"))}
-import { claudeCodePath } from ${JSON.stringify(join(import.meta.dir, "agents/claude/executable"))}
+import { spawn, which } from ${JSON.stringify(join(import.meta.dir, "environment"))}
 const started = performance.now()
 const { ready, refreshed } = takeLoginEnvironment(Number(process.argv[2]))
 await ready
 const readyMs = performance.now() - started
-const claude = await claudeCodePath().catch(() => null)
+const claude = which("claude") ?? null
 await refreshed
 const run = async (command: string[], env?: Record<string, string>) => {
   try {

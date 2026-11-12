@@ -43,7 +43,7 @@ jobs:
 
       - run: bun run typecheck
 
-      - run: bun test core
+      - run: bun test core protocol
 
       - run: cargo clippy --manifest-path native/Cargo.toml --all-targets -- -D warnings
 

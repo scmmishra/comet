@@ -13,10 +13,17 @@ type Send = (message: CoreMessage) => void
 /** The files a plugin folder may start from. */
 const ENTRIES = ["index.tsx", "index.ts"]
 
+/** A thread a plugin opens under a key: the key, a title for its tab, and the prompt a new thread starts with. */
+export interface KeyedThread {
+  readonly key: string
+  readonly title?: string
+  readonly prompt?: string
+}
+
 interface PluginHooks {
   readonly broadcast: Send
   /** A plugin asked to open a tab's thread for a key. */
-  readonly openThread: (tabId: string, thread: { key: string; title?: string; prompt?: string }) => void
+  readonly openThread: (tabId: string, thread: KeyedThread) => void
   /** A plugin asked to open a panel instance in a tab. */
   readonly openPanel: (tabId: string, panel: string, params: PanelParams) => void
   /** A panel asked to close itself. */
@@ -43,7 +50,6 @@ const ownKey = (plugin: string, threadKey: string | undefined) => {
   const { plugin: owner, name } = splitContributionId(threadKey)
   return owner === plugin ? name : undefined
 }
-
 
 /**
  * The plugins in `~/.desk/plugins`, each in a worker of its own, so a slow plugin never stalls a session
@@ -187,16 +193,21 @@ export class Plugins {
 
   /** A closed tab's views and plugin state go. */
   dropTab(tabId: string) {
-    for (const running of this.running.values()) void running.then((found) => this.post(found, { type: "drop", tabId }))
+    this.each((found) => this.post(found, { type: "drop", tabId }))
   }
 
   /** Sends every running plugin's whole UI again, for a client that just connected. */
   resend() {
-    for (const running of this.running.values()) void running.then((found) => this.post(found, { type: "snapshot" }))
+    this.each((found) => this.post(found, { type: "snapshot" }))
   }
 
   stop() {
-    for (const running of this.running.values()) void running.then((found) => found.worker.terminate())
+    this.each((found) => found.worker.terminate())
+  }
+
+  /** Does something with every plugin that runs. One that failed to start has nothing to hear. */
+  private each(act: (running: Running) => void) {
+    for (const running of this.running.values()) void running.then(act, () => undefined)
   }
 
   /**
@@ -247,7 +258,7 @@ export class Plugins {
     if (!entry) throw new Error(`Desk found no plugin at ${folder}. A plugin starts from index.tsx or index.ts.`)
     // A Bun Worker starts with the environment the process started with, not what the core set since,
     // so it would lack the login shell's PATH. It gets a copy, so a plugin finds the user's tools, such as
-    // a CLI in ~/.local/bin. A copy, not a shared one, keeps a plugin's changes out of Claude's sessions.
+    // a CLI in ~/.local/bin. A copy, not a shared one, keeps a plugin's changes out of the agents' sessions.
     const env = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined))
     const generation = this.generation
     const worker = new Worker(await bundlePlugin(plugin, entry), { env })

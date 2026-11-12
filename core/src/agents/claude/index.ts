@@ -1,6 +1,7 @@
 import { homedir } from "node:os"
 import type { Agent, AgentHost, Emit, SessionOptions } from "../agent"
 import { claudeCodePath, NO_CLAUDE_CODE } from "./executable"
+import { claudeMcp } from "./mcp"
 import { claudeAccount, defaultEfforts, modelOptions } from "./models"
 import { probe } from "./probe"
 import { ClaudeSession } from "./session"
@@ -24,6 +25,7 @@ export function claudeAgent(host: AgentHost): Agent {
     features: ["steer", "rewind", "restore-files", "fork", "rename", "delete", "compact-idle"],
     threads: claudeThreads,
     commands: readSkills,
+    mcp: claudeMcp,
 
     /** The models come as soon as the probe starts, then again with each model's default effort, which takes seconds to read. */
     async inspect() {

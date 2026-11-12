@@ -1,21 +1,19 @@
-import type { ClientMessage, CoreMessage, ProjectPart, ProjectParts } from "@desk/protocol"
-import type { ServerWebSocket } from "bun"
-import { readMcpServers, toggleMcpServer } from "./agents/claude/mcp"
+import { REVIEW_SCOPES, type ClientMessage, type CoreMessage, type ProjectPart, type ProjectParts } from "@desk/protocol"
 import { Agents } from "./agents/registry"
 import { discoverCommands } from "./command-sources"
 import { Commands } from "./commands"
 import { Delegations } from "./delegate/delegations"
 import { serveMcp } from "./delegate/mcp"
+import { Clients } from "./clients"
+import { errorMessage } from "./errors"
 import { openableFile, openInEditor, readForView } from "./files"
 import { checkImages } from "./images"
-import { Layouts } from "./plugins/layouts"
-import { Plugins } from "./plugins/plugins"
+import { startPlugins } from "./plugins"
 import { searchFiles } from "./project-files"
 import { findIconFiles, iconFile } from "./project-icons"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { loadSettings, saveSettings, updateSettings } from "./settings"
 import { readSpace } from "./space"
-import { ThreadRows } from "./thread-rows"
 import { Window } from "./window"
 
 type Send = (message: CoreMessage) => void
@@ -34,48 +32,29 @@ export interface CoreServer {
  * tabs work in.
  */
 export function startCore({ token }: { readonly token: string }): CoreServer {
-  const clients = new Set<ServerWebSocket>()
-  // Every thread message passes through here on its way out, so each client gets the rows that follow it.
-  const rows = new ThreadRows()
-  const withRows =
-    (send: Send): Send =>
-    (message) => {
-      send(message)
-      const after = rows.after(message)
-      if (after) send(after)
-    }
-  const broadcast: Send = withRows((message) => {
-    const data = JSON.stringify(message)
-    for (const client of clients) client.send(data)
-  })
+  const clients = new Clients()
+  const broadcast = clients.broadcast
   const project = <K extends ProjectPart>(dir: string, part: K, value: ProjectParts[K]) => ({ type: "project", project: dir, part, value }) as CoreMessage
 
   let settings = loadSettings()
   const agents = new Agents(broadcast, { compactIdle: () => settings.threads.compactIdle })
-  const report = (error: unknown) => broadcast({ type: "error", message: error instanceof Error ? error.message : String(error) })
-  const plugins = new Plugins({
-    broadcast,
-    openThread: (tabId, thread) => void window.openKey(tabId, thread).catch(report),
-    openPanel: (tabId, panel, params) => void layouts.openPanel(tabId, panel, params).catch(report),
-    closePanel: (tabId, id) => void layouts.closePanel(tabId, id).catch(report),
-    stopped: () => void layouts.resendAll().catch(report),
-  })
+  const report = (error: unknown) => broadcast({ type: "error", message: errorMessage(error) })
   // An agent reaches Desk's tools at the server's own port, which is known once it listens.
   let toolsUrl = ""
-  const delegations = new Delegations(agents, { tab: (tabId) => window.running(tabId), emit: (tabId, event) => broadcast({ type: "session.event", tabId, event }) }, () => toolsUrl)
+  const delegations = new Delegations(agents, () => toolsUrl)
   const window = new Window({
     broadcast,
     agents,
     delegations,
     tabClosed: (tabId) => {
-      rows.forget(tabId)
-      plugins.dropTab(tabId)
-      layouts.dropTab(tabId)
+      clients.forget(tabId)
+      ui.dropTab(tabId)
     },
     turnEnded: (tabId, threadKey, outcome) => plugins.turnEnded(tabId, threadKey, outcome),
     threadShown: (tabId, threadKey) => plugins.threadShown(tabId, threadKey),
   })
-  const layouts = new Layouts(plugins, window, broadcast)
+  const ui = startPlugins({ broadcast, openThread: (tabId, thread) => void window.openKey(tabId, thread).catch(report), store: window, report })
+  const { plugins, layouts } = ui
   // Each project's commands, made the first time the project is named. They run as long as the core.
   const commands = new Map<string, Commands>()
   const commandsOf = (dir: string) => {
@@ -87,7 +66,6 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     return found
   }
 
-  /** The file a message names, which must exist. */
   const requireFile = (dir: string, path: string) => {
     const file = openableFile(dir, path)
     if (!file) throw new Error(`Desk can only open a file that exists: ${path}`)
@@ -101,7 +79,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     commandSources: (dir, reply) => discoverCommands(dir, new Set(commandsOf(dir).list().map((command) => command.command))).then(reply),
     threads: (dir, reply) => window.recentThreads(dir).then(reply),
     icons: (dir, reply) => findIconFiles(dir).then(reply),
-    mcp: (dir, reply) => readMcpServers(dir, reply),
+    mcp: (dir, reply) => agents.mcp().read(dir, reply),
     skills: (dir, reply) => agents.commands(dir).then(reply),
     plugins: (dir, reply) => plugins.contributions(dir).then(reply),
   }
@@ -119,7 +97,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       case "project.get":
         return read(message.project, message.part, reply)
       case "mcp.toggle":
-        return toggleMcpServer(message.project, message.name, message.enabled, (servers) => reply(project(message.project, "mcp", servers)))
+        return agents.mcp().toggle(message.project, message.name, message.enabled, (servers) => reply(project(message.project, "mcp", servers)))
       case "file.open":
         return openInEditor(requireFile(message.project, message.path), message.line)
       case "file.read":
@@ -189,6 +167,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       case "thread.resume":
         return window.resume(message.tabId, message.agent, message.threadId, reply)
       case "review.get":
+        if (!REVIEW_SCOPES.includes(message.scope)) throw new Error(`Review has no scope called “${message.scope}”.`)
         return reply({ type: "review", tabId: message.tabId, scope: message.scope, files: await window.review(message.tabId, message.scope) })
       case "layout.get":
         return layouts.send(message.tabId)
@@ -203,8 +182,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       case "plugin.event":
         return plugins.event(message.plugin, message.handler, message.args)
       case "plugins.reload":
-        plugins.reload()
-        return layouts.redrawAll()
+        return ui.reload()
       case "terminal.open":
         return window.openTerminal(message.id, message.cols, message.rows)
       case "terminal.input":
@@ -240,23 +218,23 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     websocket: {
       open(ws) {
         clients.add(ws)
-        const reply: Send = withRows((message) => ws.send(JSON.stringify(message)))
+        const reply = clients.replyTo(ws)
         reply({ type: "settings", settings })
         plugins.resend()
         void window.greet(reply)
       },
       close(ws) {
-        clients.delete(ws)
+        clients.remove(ws)
       },
       message(ws, raw) {
-        const reply: Send = withRows((message) => ws.send(JSON.stringify(message)))
+        const reply = clients.replyTo(ws)
         let message: ClientMessage
         try {
           message = JSON.parse(String(raw))
         } catch {
           return reply({ type: "error", message: "The message is not valid JSON." })
         }
-        handle(message, reply).catch((error) => reply({ type: "error", message: error instanceof Error ? error.message : String(error) }))
+        handle(message, reply).catch((error) => reply({ type: "error", message: errorMessage(error) }))
       },
     },
   })

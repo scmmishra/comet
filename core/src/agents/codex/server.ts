@@ -1,15 +1,18 @@
 import { version as coreVersion } from "../../../package.json"
-import { JsonRpc, RpcError, run, type Transport } from "../json-rpc"
-import { codexPath, NO_CODEX } from "./executable"
-import type { RequestId } from "./protocol"
+import { JsonRpc, METHOD_NOT_FOUND, RpcError, type RequestId, type Transport } from "../json-rpc"
+import { run } from "../process"
+import { codexPath, CodexMissing } from "./executable"
 
 /** Starts an app-server and gives its stdio. A test passes its own. */
 export type Launch = () => Transport
 
-/** Runs `codex app-server`, which speaks one JSON message per line over stdio. */
+/** How Desk names itself to Codex. The core does not know Desk's version, so it gives its own. */
+const CLIENT_INFO = { name: "desk", title: "Desk", version: coreVersion }
+
+/** Runs `codex app-server`, which speaks one JSON message per line over stdio. It throws `CodexMissing` when Desk finds no Codex. */
 export const launchCodex: Launch = () => {
   const path = codexPath()
-  if (!path) throw new Error(NO_CODEX)
+  if (!path) throw new CodexMissing()
   return run([path, "app-server"])
 }
 
@@ -42,7 +45,7 @@ export class AppServer {
   private readonly owners = new Map<string, ThreadOwner>()
   private readonly listeners = new Map<string, Set<Listener>>()
 
-  constructor(private readonly launch: Launch = launchCodex) {}
+  constructor(private readonly launch: Launch) {}
 
   /** Asks the app-server, starting it first if it is not running. */
   async request<T>(method: string, params?: unknown): Promise<T> {
@@ -120,11 +123,5 @@ export class AppServer {
   }
 }
 
-/** JSON-RPC's code for a method the peer does not have. */
-const METHOD_NOT_FOUND = -32601
-
-/** How Desk names itself to Codex. The core does not know Desk's version, so it gives its own. */
-const CLIENT_INFO = { name: "desk", title: "Desk", version: coreVersion }
-
 /** Codex's version from its user agent, such as "desk/0.167.0 (Mac OS 26.6.2; arm64) …". */
-export const installedVersion = (userAgent: string) => /^[^/\s]+\/(\S+)/.exec(userAgent)?.[1]
+const installedVersion = (userAgent: string) => /^[^/\s]+\/(\S+)/.exec(userAgent)?.[1]

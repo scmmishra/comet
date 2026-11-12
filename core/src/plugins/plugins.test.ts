@@ -286,7 +286,7 @@ export default definePlugin((desk) => {
   installPlugin("edited", card("Before"))
   installPlugin("broken", `export default 42`)
   turnOn({ everywhere: ["edited", "broken"] })
-  const { plugins, layouts, layout, nodes, textOf, errors } = harness()
+  const { plugins, reload, layouts, layout, nodes, textOf, errors } = harness()
   await layouts.send("tab-1")
   const drawn = () => layout("tab-1")!.cards.map((found) => textOf(found.plugin, found.root))
   await until(() => drawn().join() === "Before")
@@ -294,10 +294,25 @@ export default definePlugin((desk) => {
 
   installPlugin("edited", card("After"))
   installPlugin("broken", card("Fixed"))
-  plugins.reload()
-  await layouts.redrawAll()
+  await reload()
   await until(() => drawn().join() === "After,Fixed")
   // The app's copy holds the new worker's nodes only: a card and its text.
   expect(Object.keys(nodes.edited!)).toHaveLength(3)
+  plugins.stop()
+}, 20_000)
+
+test("a setup that names a view without its plugin stops the plugin, and says why", async () => {
+  installPlugin("loose", `
+import { definePlugin, Text } from "@desk/plugin"
+export default definePlugin((desk) => {
+  desk.sidebar("notes", { title: "Notes", view: () => <Text>Notes</Text> })
+  desk.setup("desk", { title: "Desk", sidebar: "notes" })
+})
+`)
+  turnOn({ everywhere: ["loose"] })
+  const { plugins, project, errors } = harness()
+  expect(await plugins.setups(project)).toEqual([])
+  await until(() => errors().some((error) => error.includes("loose plugin could not start")))
+  expect(errors().find((error) => error.includes("loose plugin"))).toContain("Plugin views are named <plugin>.<name>, not notes.")
   plugins.stop()
 }, 20_000)

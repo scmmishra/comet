@@ -1,13 +1,16 @@
-import type { AgentThreads, Rewound } from "../agent"
+import { firstLine } from "../../text"
+import { THREAD_LIMIT, type AgentThreads, type Rewound } from "../agent"
 import { historyItems, messageId } from "./history"
 import type { CodexThread } from "./protocol"
 import type { AppServer } from "./server"
 
-/** Enough for thread search to reach back months, as Claude's list does. */
-const THREAD_LIMIT = 200
-
 /** The conversations Codex saved, which it keeps in `~/.codex` and lists by project folder. */
 export function codexThreads(server: AppServer): AgentThreads {
+  /**
+   * Lets Codex unload a thread Desk loaded only to change it. A session resumes a thread with Desk's tools
+   * in its config, and a resume of a thread that is still loaded keeps the config it loaded with.
+   */
+  const release = (threadId: string) => server.request("thread/unsubscribe", { threadId }).catch(() => undefined)
   const read = async (threadId: string) => (await server.request<{ thread: CodexThread }>("thread/read", { threadId, includeTurns: true })).thread
 
   /** The turn a user message opened. Codex keeps the id Desk gave the message, so Desk finds its turn by it. */
@@ -23,7 +26,7 @@ export function codexThreads(server: AppServer): AgentThreads {
       const listed = await server.request<{ data: CodexThread[] }>("thread/list", { cwd: dir, limit: THREAD_LIMIT, sortKey: "updated_at" }).catch(() => ({ data: [] }))
       return listed.data.map((thread) => ({
         id: thread.id,
-        title: thread.name ?? thread.preview.trim().split("\n")[0]!.trim(),
+        title: thread.name ?? firstLine(thread.preview),
         ...(thread.gitInfo?.branch ? { branch: thread.gitInfo.branch } : {}),
         updatedAt: thread.updatedAt * 1000,
       }))
@@ -41,6 +44,7 @@ export function codexThreads(server: AppServer): AgentThreads {
       const lastTurnId = message ? await turnOf(threadId, message).then(({ turns, index }) => turns[index]!.id) : undefined
       const { thread } = await server.request<{ thread: { id: string } }>("thread/fork", { threadId, ...(lastTurnId ? { lastTurnId } : {}), excludeTurns: true })
       await server.request("thread/name/set", { threadId: thread.id, name: title })
+      await release(thread.id)
       return thread.id
     },
 
@@ -56,6 +60,7 @@ export function codexThreads(server: AppServer): AgentThreads {
       if (index === 0) return { empty: true }
       await server.request("thread/resume", { threadId, cwd: dir, excludeTurns: true })
       await server.request("thread/revert", { threadId, beforeTurnId: turns[index]!.id })
+      await release(threadId)
       return { empty: false }
     },
   }

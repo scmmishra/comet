@@ -1,9 +1,9 @@
-import { accessSync, constants, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync } from "node:fs"
+import { accessSync, constants, mkdirSync, mkdtempSync, realpathSync } from "node:fs"
 import { readdir, rm } from "node:fs/promises"
 import { basename, delimiter, dirname, join } from "node:path"
 import { which } from "../../environment"
-import { run, type Process } from "../json-rpc"
-import { geminiHome, INSTALLED_MARKER, runtimeFolder, runtimeTemp } from "./home"
+import { run, type Process } from "../process"
+import { geminiHome, isInstalled, runtimeFolder, runtimeTemp } from "./home"
 import { RELEASE } from "./release"
 import { BROWSER_COMMAND } from "./sign-in-link"
 
@@ -28,13 +28,13 @@ const REMOVED = [
   "AGY_ACP_ENABLE_OAUTH",
 ]
 
-/** An Antigravity Desk can run: the command that serves ACP, the harness the server needs, and its version when Desk installed it. */
-export interface Runtime {
-  readonly command: readonly string[]
-  /** Absent for the `agy` CLI, which needs none. */
-  readonly harness?: string
-  readonly version?: string
-}
+/**
+ * An Antigravity Desk can run, with the command that serves ACP. It is Google's ACP server, which needs its
+ * harness and has a version when Desk installed it, or the `agy` CLI, which has its harness built in.
+ */
+export type Runtime =
+  | { readonly kind: "server"; readonly command: readonly string[]; readonly harness: string; readonly version?: string }
+  | { readonly kind: "cli"; readonly command: readonly string[] }
 
 /**
  * The Antigravity Desk runs: DESK_ANTIGRAVITY when set, else the runtime Desk installed, else the ACP
@@ -47,11 +47,9 @@ export function resolveRuntime(): Runtime | undefined {
 }
 
 function installed(): Runtime | undefined {
+  if (!isInstalled(RELEASE.version)) return undefined
   const folder = runtimeFolder(RELEASE.version)
-  const marker = join(folder, INSTALLED_MARKER)
-  if (!existsSync(marker)) return undefined
-  const { version } = JSON.parse(readFileSync(marker, "utf8")) as { version: string }
-  return { command: [join(folder, RELEASE.executable.name)], harness: join(folder, RELEASE.harness.name), version }
+  return { kind: "server", command: [join(folder, RELEASE.executable.name)], harness: join(folder, RELEASE.harness.name), version: RELEASE.version }
 }
 
 /** The first server on the PATH that has its harness. A server without one is passed over, as T3 Code does. */
@@ -66,10 +64,10 @@ function onPath(): Runtime | undefined {
 /** A runtime Desk did not install: the `agy` CLI, or a server with the harness beside its real path. */
 function external(path: string): Runtime | undefined {
   if (!executable(path)) return undefined
-  if (CLI.test(basename(path))) return { command: [path, "acp"] }
+  if (CLI.test(basename(path))) return { kind: "cli", command: [path, "acp"] }
   const real = realpathSync(path)
   const harness = join(dirname(real), RELEASE.harness.name)
-  return executable(harness) ? { command: [real], harness } : undefined
+  return executable(harness) ? { kind: "server", command: [real], harness } : undefined
 }
 
 function executable(path: string) {
@@ -105,7 +103,7 @@ export function environment(runtime: Runtime, temp: string): Record<string, stri
     PYTHONUNBUFFERED: "1",
     BROWSER: BROWSER_COMMAND,
     TMPDIR: temp,
-    ...(runtime.harness ? { ANTIGRAVITY_HARNESS_PATH: runtime.harness } : {}),
+    ...(runtime.kind === "server" ? { ANTIGRAVITY_HARNESS_PATH: runtime.harness } : {}),
   }
 }
 

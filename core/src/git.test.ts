@@ -9,7 +9,7 @@ test("cuts output at its cap when asked, and fails past it otherwise", async () 
   const whole = await git(dir, ["show", "HEAD:a.ts"])
   expect(whole.length).toBe(4000)
   expect(await git(dir, ["show", "HEAD:a.ts"], { maxBytes: 10, overflow: "truncate" })).toBe(`one\none\non${TRUNCATED}`)
-  expect(git(dir, ["show", "HEAD:a.ts"], { maxBytes: 10 })).rejects.toThrow("more than 10 bytes")
+  await expect(git(dir, ["show", "HEAD:a.ts"], { maxBytes: 10 })).rejects.toThrow("more than 10 bytes")
   expect(await git(dir, ["show", "HEAD:a.ts"], { maxBytes: 4000 })).toBe(whole)
 })
 

@@ -4,9 +4,6 @@ import { writeJsonFile } from "../../data-files"
 import { choices, modelOption, thoughtOption } from "../acp/config-options"
 import type { ConfigOption, SelectChoice } from "../acp/protocol"
 
-/** The modes Antigravity has: it asks, it accepts edits, or it never asks. It has no reviewer for Auto. */
-export const ANTIGRAVITY_MODES: readonly PermissionMode[] = ["default", "acceptEdits", "bypassPermissions"]
-
 /** The models a session last reported, the one it ran by default, and the thinking levels of each model seen selected. */
 interface CachedModels {
   readonly current?: string
@@ -20,7 +17,11 @@ interface CachedModels {
  * model's levels as sessions select it.
  */
 export class ModelCache {
-  constructor(private readonly path: () => string) {}
+  constructor(
+    private readonly path: () => string,
+    /** The permission modes the runtime honours, read at each ask. */
+    private readonly modes: () => readonly PermissionMode[],
+  ) {}
 
   /**
    * Takes what a session reported, and answers the models as Desk lists them. Settings without a model
@@ -39,7 +40,7 @@ export class ModelCache {
 
   /** The models as Desk lists them, with Antigravity's default first. */
   options(): ModelOption[] {
-    return modelOptions(this.read())
+    return modelOptions(this.read(), this.modes())
   }
 
   private read(): CachedModels {
@@ -48,8 +49,8 @@ export class ModelCache {
 }
 
 /** The cached models as Desk lists them. "Default" names the model the account runs by default. */
-export function modelOptions({ current, models, efforts }: CachedModels): ModelOption[] {
-  const option = (value: string, label: string, description: string): ModelOption => ({ value, label, description, efforts: efforts[value] ?? [], fast: false, permissionModes: ANTIGRAVITY_MODES })
+function modelOptions({ current, models, efforts }: CachedModels, permissionModes: readonly PermissionMode[]): ModelOption[] {
+  const option = (value: string, label: string, description: string): ModelOption => ({ value, label, description, efforts: efforts[value] ?? [], fast: false, permissionModes })
   const runs = models.find((model) => model.value === current)?.name
   return [
     { ...option(DEFAULT_MODEL, "Default", ""), efforts: current ? (efforts[current] ?? []) : [], ...(runs ? { runs } : {}) },

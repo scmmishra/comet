@@ -17,31 +17,27 @@ function agentThat(id: AgentId, reading: Partial<AgentInfo> = {}) {
   return { ...fake, make }
 }
 
-/** Delegations for one tab, "a", whose thread runs Claude in `mode`, with Codex to hand work to. */
+/** Delegations for one session, whose thread runs Claude in `mode`, with Codex to hand work to. */
 async function delegations(mode: PermissionMode = "acceptEdits", codexReading: Partial<AgentInfo> = {}) {
   const codex = agentThat("codex", codexReading)
   const agents = new Agents(() => {}, { compactIdle: () => false }, { claude: agentThat("claude").make, codex: codex.make })
   agents.send(() => {})
   await Bun.sleep(0)
   const events: ThreadEvent[] = []
-  const service = new Delegations(
-    agents,
-    { tab: (tabId) => (tabId === "a" ? { project: "/work/app", settings: { agent: "claude", model: "default", permissionMode: mode } } : undefined), emit: (_tabId, event) => void events.push(event) },
-    () => "http://127.0.0.1:4000/mcp",
-  )
-  const server = service.server("a")
+  const service = new Delegations(agents, () => "http://127.0.0.1:4000/mcp")
+  const host = { project: "/work/app", settings: () => ({ agent: "claude" as const, model: "default", permissionMode: mode }), emit: (event: ThreadEvent) => void events.push(event) }
+  const handoffs = service.open(host)
+  const server = handoffs.tools
   const tools = service.toolsFor(server.authorization)!
   const subagents = () => events.flatMap((event) => (event.kind === "subagent" ? [event.subagent] : []))
   const call = (input: Record<string, unknown>, signal = new AbortController().signal) => tools.call("delegate", input, signal)
-  return { service, server, tools, codex, events, call, last: (): Subagent => subagents().at(-1)! }
+  return { service, host, handoffs, server, tools, codex, events, call, last: (): Subagent => subagents().at(-1)! }
 }
 
-test("gives each tab a server under its own token, and knows no other caller", async () => {
-  const { service, server } = await delegations()
-  expect(server).toMatchObject({ name: "desk", url: "http://127.0.0.1:4000/mcp" })
-  expect(server.authorization).toMatch(/^Bearer .{40,}$/)
-  expect(service.server("a").authorization).toBe(server.authorization)
-  expect(service.server("b").authorization).not.toBe(server.authorization)
+test("gives each session a server under its own token, and knows no other caller", async () => {
+  const { service, host, server } = await delegations()
+  expect(server).toMatchObject({ url: "http://127.0.0.1:4000/mcp" })
+  expect(service.open(host).tools.authorization).not.toBe(server.authorization)
   expect(service.toolsFor("Bearer nope")).toBeUndefined()
   expect(service.toolsFor(server.authorization)!.tools.map((tool) => tool.name)).toEqual(["list_agents", "delegate"])
 })
@@ -57,7 +53,7 @@ test("lists the agents with their models, and why one is not ready", async () =>
   })
 })
 
-test("runs a task on the agent it names, in the tab's folder, and answers with the agent's final message", async () => {
+test("runs a task on the agent it names, in the caller's folder, and answers with the agent's final message", async () => {
   const { codex, call, last } = await delegations()
   const answer = call({ agent: "codex", task: "Review the login form.\nReport the bugs.", effort: "high", title: "Review login" })
   const [session] = codex.sessions
@@ -95,7 +91,7 @@ test("refuses a task it cannot run, in words the asking agent can pass on", asyn
   expect(await refusal({ agent: "codex", task: "x", effort: "max" })).toBe('Fake codex\'s Default has no effort level "max". Its levels are: low, high.')
   expect(codex.sessions).toEqual([])
   const signedOut = await delegations("default", { state: "signed-out", problem: "Sign in to use your ChatGPT plan." })
-  expect(await signedOut.call({ agent: "codex", task: "x" }).catch((error: Error) => error.message)).toBe("Fake codex is not ready: Sign in to use your ChatGPT plan.. The user can set it up in Desk's Settings, under Providers.")
+  expect(await signedOut.call({ agent: "codex", task: "x" }).catch((error: Error) => error.message)).toBe("Fake codex is not ready: Sign in to use your ChatGPT plan. The user can set it up in Desk's Settings, under Providers.")
 })
 
 test("names a model by its value or the name it runs under", async () => {
@@ -105,22 +101,24 @@ test("names a model by its value or the name it runs under", async () => {
 })
 
 test("shows a task's permission request in the thread and sends the answer back to the task", async () => {
-  const { service, codex, call, events } = await delegations()
+  const { handoffs, codex, call, events } = await delegations()
   void call({ agent: "codex", task: "Fix it." })
   const request = { type: "permission" as const, id: "permission:r1", requestId: "r1", tool: "Bash", kind: "command" as const, detail: "rm -rf dist", allowSession: true }
   codex.sessions[0]!.emit({ kind: "item", item: request })
   expect(events).toContainEqual({ kind: "item", item: request })
-  expect(service.answerPermission("a", "other", "allow")).toBe(false)
-  expect(service.answerPermission("a", "r1", "allow")).toBe(true)
+  expect(handoffs.pending()).toEqual([request])
+  expect(handoffs.answerPermission("other", "allow")).toBe(false)
+  expect(handoffs.answerPermission("r1", "allow")).toBe(true)
   expect(codex.calls).toContain("permission r1 allow")
   codex.sessions[0]!.emit({ kind: "item", item: { ...request, answered: true } })
-  expect(service.answerPermission("a", "r1", "allow")).toBe(false)
+  expect(handoffs.pending()).toEqual([])
+  expect(handoffs.answerPermission("r1", "allow")).toBe(false)
 })
 
 test("a stopped thread stops its tasks, and a task that was stopped or failed says so", async () => {
-  const { service, codex, call, last } = await delegations()
+  const { handoffs, codex, call, last } = await delegations()
   const stopped = call({ agent: "codex", task: "Long task." })
-  service.stop("a")
+  handoffs.stop()
   expect(await stopped).toEqual({ text: "The task was stopped before it finished.", isError: true })
   expect(last().status).toBe("stopped")
 
@@ -141,9 +139,9 @@ test("the asking agent giving up on the call stops the task", async () => {
 })
 
 test("a closed session ends its tasks and loses its token", async () => {
-  const { service, server, codex, call } = await delegations()
+  const { service, handoffs, server, codex, call } = await delegations()
   void call({ agent: "codex", task: "Long task." })
-  service.drop("a")
+  handoffs.close()
   expect(codex.calls.at(-1)).toBe("close")
   expect(service.toolsFor(server.authorization)).toBeUndefined()
 })

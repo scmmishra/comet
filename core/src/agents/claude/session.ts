@@ -1,13 +1,17 @@
 import { query, type CanUseTool, type PermissionResult, type Query, type SDKMessage, type SDKRateLimitInfo, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
-import type { ImageAttachment, PermissionAnswer, RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
-import type { AgentSession, Emit, SessionOptions, ToolServer } from "../agent"
+import type { ImageAttachment, PermissionAnswer, RunSettings, ThreadEvent } from "@desk/protocol"
+import { SERVER_NAME } from "../../delegate/tools"
+import type { AgentHost, AgentSession, Emit, SessionOptions, ToolServer } from "../agent"
+import { Requests, type OpenRequest } from "../requests"
 import { Stop } from "../stopping"
+import { errorItem, forcedStop, userItem } from "../turn-items"
 import { readContext } from "./context"
-import { modelLabel, sdkEffort, sdkModel } from "./models"
+import { sdkEffort, sdkModel } from "./models"
 import { BackgroundTasks } from "./background-tasks"
 import { claudeCodePath } from "./executable"
 import { Subagents } from "./subagents"
 import { ASK_USER_QUESTION, permissionItem, permissionResult, questionItem, questionResult } from "./requests"
+import { DESK_TOOL } from "./steps"
 import { ThreadMapper } from "./thread"
 
 /** A queue the SDK reads user messages from. A session stays open between turns while it waits. */
@@ -41,34 +45,29 @@ class Inbox implements AsyncIterable<SDKUserMessage> {
 }
 
 /** What a Claude session needs beyond any agent's: where its rate-limit updates go, and the idle-compaction setting. */
-export interface ClaudeSessionOptions extends SessionOptions {
+export interface ClaudeSessionOptions extends SessionOptions, Pick<AgentHost, "compactIdle"> {
   /** Called with each plan rate-limit update Claude sends during a turn. */
   readonly onRateLimit: (info: SDKRateLimitInfo) => void
-  /** Whether to compact a large thread that sat idle, when Claude Code asks on its return. Read at each ask. */
-  readonly compactIdle: () => boolean
 }
 
 type RequestSuggestions = Parameters<CanUseTool>[2]["suggestions"]
 
-/** A request waiting for the user: the item that shows it, what Claude asked with, and how to answer Claude Code. */
-interface OpenRequest {
-  readonly item: Extract<ThreadItem, { type: "permission" | "question" }>
+/** A request waiting for the user, with what Claude asked. */
+interface ClaudeRequest extends OpenRequest<PermissionResult> {
   readonly tool: string
   readonly input: Record<string, unknown>
   readonly suggestions: RequestSuggestions
-  readonly resolve: (result: PermissionResult) => void
 }
 
-/** One Claude conversation, in one tab. It starts on the first message. */
+/** One Claude conversation. It starts on the first message. */
 export class ClaudeSession implements AgentSession {
   /** Each query reads its own inbox. A failed query's input loop may still wait on its inbox, and must not take the next message. */
-  private inbox = new Inbox()
+  private inbox?: Inbox
   private query?: Query
   private mapper: ThreadMapper
   private subagents: Subagents
   private backgroundTasks: BackgroundTasks
-  /** Open requests, permissions and questions, by request id. */
-  private requests = new Map<string, OpenRequest>()
+  private requests: Requests<PermissionResult, ClaudeRequest>
   private sessionId?: string
   /** The stop the user asked for, while its turn winds down, until its result arrives. */
   private stop: Stop
@@ -85,17 +84,18 @@ export class ClaudeSession implements AgentSession {
     private readonly dir: string,
     private readonly emit: Emit,
     private readonly options: ClaudeSessionOptions,
+    private readonly runQuery: typeof query = query,
   ) {
     this.sessionId = options.resume
     this.resumeAt = options.resumeAt
     this.settings = options.settings
     this.mapper = new ThreadMapper(dir)
     this.stop = new Stop(emit)
+    this.requests = new Requests(emit)
     this.subagents = new Subagents(dir, emit)
     this.backgroundTasks = new BackgroundTasks(emit)
   }
 
-  /** Changes how the thread runs. A running thread takes the change from its next reply. */
   async configure(settings: RunSettings) {
     this.settings = settings
     if (!this.query) return
@@ -105,21 +105,18 @@ export class ClaudeSession implements AgentSession {
     await this.query.setPermissionMode(settings.permissionMode)
   }
 
-  /** Whether a turn runs, from a message until its turn's final result. */
   get busy() {
     return this.running
   }
 
-  /** Starts a turn with a message. */
   send(text: string, images: readonly ImageAttachment[] = []) {
     // Claude Code keeps the message's uuid in the transcript, so the item has the same id live and restored.
     const uuid = crypto.randomUUID()
-    this.emit({ kind: "item", item: { type: "user", id: uuid, text, ...(images.length ? { images } : {}), at: Date.now() } })
+    this.emit({ kind: "item", item: userItem(uuid, text, images) })
     this.running = true
     this.emit({ kind: "status", busy: true })
-    if (!this.started) this.inbox = new Inbox()
-    this.inbox.push({ type: "user", message: { role: "user", content: userContent(text, images) }, parent_tool_use_id: null, uuid })
     if (!this.started) void this.start()
+    this.inbox!.push({ type: "user", message: { role: "user", content: userContent(text, images) }, parent_tool_use_id: null, uuid })
   }
 
   /**
@@ -130,37 +127,29 @@ export class ClaudeSession implements AgentSession {
   steer(text: string, images: readonly ImageAttachment[] = []) {
     if (!this.running) return this.send(text, images)
     const uuid = crypto.randomUUID()
-    this.emit({ kind: "item", item: { type: "user", id: uuid, text, ...(images.length ? { images } : {}), at: Date.now(), steered: true } })
+    this.emit({ kind: "item", item: userItem(uuid, text, images, true) })
     this.steering = true
-    this.inbox.push({ type: "user", message: { role: "user", content: userContent(text, images) }, parent_tool_use_id: null, priority: "now", uuid })
+    this.inbox!.push({ type: "user", message: { role: "user", content: userContent(text, images) }, parent_tool_use_id: null, priority: "now", uuid })
   }
 
-  /** Stops commands running in the background. Claude Code reports each as stopped once it ends. */
+  /** Claude Code reports each command as stopped once it ends. */
   async stopTasks(ids: readonly string[]) {
     await Promise.all(ids.map((id) => this.query?.stopTask(id)))
   }
 
-  /**
-   * Asks the turn to stop. If Claude Code has not stopped in time, the tab says so and offers Force
-   * stop, after T3 Code.
-   */
   async interrupt() {
     if (!this.query || !this.stop.begin()) return
     await this.query.interrupt()
   }
 
-  /**
-   * Ends a turn that did not stop when asked, as stopped. The window then closes the session, which ends
-   * Claude Code, and the next message starts a new one on the same thread. Says whether there was a stop to force.
-   */
+  /** After a forced stop, the window closes the session, which ends Claude Code. The next message starts a new one on the same thread. */
   forceStop(): boolean {
     if (!this.stop.pending) return false
-    this.emit({ kind: "item", item: { type: "result", id: `result:forced-${Date.now()}`, durationMs: 0, isError: false, stopped: true } })
+    this.emit({ kind: "item", item: forcedStop() })
     this.endTurn()
     return true
   }
 
-  /** What a turn's end resets, and the status that tells the tab. */
   private endTurn() {
     this.stop.clear()
     this.running = false
@@ -169,9 +158,8 @@ export class ClaudeSession implements AgentSession {
 
   close() {
     this.stop.clear()
-    for (const { resolve } of this.requests.values()) resolve({ behavior: "deny", message: "The tab was closed." })
-    this.requests.clear()
-    this.inbox.close()
+    this.requests.settleAll(() => ({ behavior: "deny", message: "The session was closed." }))
+    this.inbox?.close()
     this.query?.close()
   }
 
@@ -181,10 +169,7 @@ export class ClaudeSession implements AgentSession {
    * Changes made another way, such as through Bash, stay.
    */
   async restoreFiles(messageId: string) {
-    if (!this.started) {
-      this.inbox = new Inbox()
-      await this.start()
-    }
+    if (!this.started) await this.start()
     if (!this.query) throw new Error("Claude Code did not start, so Desk could not restore the files.")
     const result = await this.query.rewindFiles(messageId)
     if (!result.canRewind) throw new Error(result.error ?? "Claude Code kept no copies of the files from that message.")
@@ -199,26 +184,27 @@ export class ClaudeSession implements AgentSession {
   }
 
   /** Answers an open request of `type`. A stale answer, or one for another kind of request, is ignored. */
-  private answer(requestId: string, type: OpenRequest["item"]["type"], result: (input: Record<string, unknown>, tool: string, suggestions: RequestSuggestions) => PermissionResult) {
+  private answer(requestId: string, type: ClaudeRequest["item"]["type"], result: (input: Record<string, unknown>, tool: string, suggestions: RequestSuggestions) => PermissionResult) {
     const request = this.requests.get(requestId)
     if (request?.item.type !== type) return
-    this.respond(request, result(request.input, request.tool, request.suggestions))
+    this.requests.settle(request, result(request.input, request.tool, request.suggestions))
   }
 
   /**
-   * Starts Claude Code on the inbox. It is marked started before it finds Claude Code, so a message sent
+   * Starts Claude Code on a new inbox. It is marked started before it finds Claude Code, so a message sent
    * meanwhile joins this inbox rather than opening a second session.
    */
   private async start() {
     this.started = true
+    const inbox = (this.inbox = new Inbox())
     let executable: string
     try {
       executable = await claudeCodePath()
     } catch (error) {
       return this.fail(error)
     }
-    this.query = query({
-      prompt: this.inbox,
+    this.query = this.runQuery({
+      prompt: inbox,
       options: {
         pathToClaudeCodeExecutable: executable,
         cwd: this.dir,
@@ -227,7 +213,7 @@ export class ClaudeSession implements AgentSession {
         forwardSubagentText: true,
         agentProgressSummaries: true,
         systemPrompt: { type: "preset", preset: "claude_code", ...(this.options.tools ? { append: this.options.tools.instructions } : {}) },
-        ...(this.options.tools ? { mcpServers: toolServers(this.options.tools), allowedTools: [`mcp__${this.options.tools.name}__*`] } : {}),
+        ...(this.options.tools ? { mcpServers: toolServers(this.options.tools), allowedTools: [`${DESK_TOOL}*`] } : {}),
         canUseTool: this.askPermission,
         model: sdkModel(this.settings.model),
         ...(this.settings.effort ? { effort: sdkEffort(this.settings.effort) } : {}),
@@ -260,20 +246,18 @@ export class ClaudeSession implements AgentSession {
         if (message.type === "rate_limit_event") this.options.onRateLimit(message.rate_limit_info)
         this.subagents.handle(message)
         this.backgroundTasks.handle(message)
-        if (message.type === "result" && this.steered(message)) continue
+        const steer = message.type === "result" ? this.takeSteer(message) : undefined
+        if (steer === "cut") continue
         for (const event of this.mapper.map(message, Date.now())) {
-          // The result of a turn the user stopped says so, so the thread can tell it from one that finished.
           // A turn Claude Code starts itself, after a background task, makes the tab busy again.
           if (event.kind === "status" && event.busy) this.running = true
-          this.emit(this.stop.pending ? stoppedEvent(event) : named(event))
+          this.emit(this.stop.pending ? stoppedEvent(event) : event)
         }
         // A compaction changes how much of the context is used.
         if (message.type === "system" && message.subtype === "compact_boundary") void this.reportContext(running)
         if (message.type === "result") {
-          // A steered message that missed the turn starts the next one, so the tab stays busy.
-          if (this.steering) {
+          if (steer === "missed") {
             this.stop.clear()
-            this.steering = false
             continue
           }
           this.endTurn()
@@ -291,22 +275,25 @@ export class ClaudeSession implements AgentSession {
 
   /** Ends the session after an error, which shows in the thread. The next message starts it again. */
   private fail(error: unknown) {
-    this.running = false
     this.steering = false
-    this.stop.clear()
-    this.emit({ kind: "item", item: { type: "error", id: `error-${Date.now()}`, message: error instanceof Error ? error.message : String(error) } })
-    this.emit({ kind: "status", busy: false })
-    this.inbox.close()
+    this.requests.settleAll(() => ({ behavior: "deny", message: "The session failed." }))
+    this.emit({ kind: "item", item: errorItem(error) })
+    this.endTurn()
+    this.inbox?.close()
     this.query = undefined
     this.started = false
   }
 
-  /** Whether a result only ends the step a steered message cut short. The turn goes on with the message. */
-  private steered(result: Extract<SDKMessage, { type: "result" }>) {
-    const cut = result.terminal_reason === "aborted_streaming" || result.terminal_reason === "aborted_tools"
-    if (!cut || !this.steering || this.stop.pending) return false
+  /**
+   * What a result means for a steered message that waits. A result that only ends the step the message
+   * cut short is not the turn's, and the turn goes on with the message. Any other result came before the
+   * message landed, so the message starts the next turn and the tab stays busy.
+   */
+  private takeSteer(result: Extract<SDKMessage, { type: "result" }>): "cut" | "missed" | undefined {
+    if (!this.steering) return undefined
     this.steering = false
-    return true
+    const cut = result.terminal_reason === "aborted_streaming" || result.terminal_reason === "aborted_tools"
+    return cut && !this.stop.pending ? "cut" : "missed"
   }
 
   private async reportContext(running: Query) {
@@ -325,23 +312,11 @@ export class ClaudeSession implements AgentSession {
     new Promise((resolve) => {
       const item = tool === ASK_USER_QUESTION ? questionItem(input, options.toolUseID) : permissionItem(tool, input, options)
       const request = { item, tool, input, suggestions: options.suggestions, resolve }
-      this.requests.set(item.requestId, request)
+      this.requests.add(request)
       // An interrupted turn cancels its request.
-      options.signal.addEventListener("abort", () => this.respond(request, { behavior: "deny", message: "The request was cancelled." }))
-      this.emit({ kind: "item", item })
+      options.signal.addEventListener("abort", () => this.requests.settle(request, { behavior: "deny", message: "The request was cancelled." }))
     })
-
-  /** Closes a request once, so its item leaves the thread, and gives Claude Code its result. */
-  private respond(request: OpenRequest, result: PermissionResult) {
-    if (this.requests.get(request.item.requestId) !== request) return
-    this.requests.delete(request.item.requestId)
-    this.emit({ kind: "item", item: { ...request.item, answered: true } })
-    request.resolve(result)
-  }
 }
-
-/** The model that runs, by the name Desk shows for it. */
-const named = (event: ThreadEvent): ThreadEvent => (event.kind === "init" ? { ...event, model: modelLabel(event.model) } : event)
 
 /**
  * An event of a turn the user is stopping. Its result says it was stopped, so the thread can tell it from
@@ -355,7 +330,7 @@ function stoppedEvent(event: ThreadEvent): ThreadEvent {
 }
 
 /** Desk's tools as an MCP server Claude Code connects to over HTTP. */
-const toolServers = (tools: ToolServer) => ({ [tools.name]: { type: "http" as const, url: tools.url, headers: { Authorization: tools.authorization } } })
+const toolServers = (tools: ToolServer) => ({ [SERVER_NAME]: { type: "http" as const, url: tools.url, headers: { Authorization: tools.authorization } } })
 
 /** A message's content for Claude. Images go before the text, as the API recommends. */
 function userContent(text: string, images: readonly ImageAttachment[]) {

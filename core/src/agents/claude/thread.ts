@@ -1,7 +1,9 @@
 import type { SDKAPIRetryMessage, SDKAssistantMessage, SDKMessage, SDKMessageOrigin, SDKPartialAssistantMessage, SessionMessage } from "@anthropic-ai/claude-agent-sdk"
 import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, type ThreadItem } from "@desk/protocol"
-import { cutOutput, relativeTo, thought } from "../../steps"
+import { cutOutput, relativeTo, thought } from "../steps"
 import { deskToolSummary } from "../../delegate/tools"
+import { resultId } from "../turn-items"
+import { modelLabel } from "./models"
 import { deskTool, toolStep } from "./steps"
 
 /** What Claude Code writes into a transcript when the user stops a turn, with or without "for tool use". */
@@ -14,6 +16,15 @@ const COMPACT_SUMMARY = /^This session is being continued from a previous conver
 
 /** Inputs that say in short what a tool call does, in the order a summary prefers them. */
 const SUMMARY_FIELDS = ["command", "file_path", "pattern", "path", "url", "query", "description", "skill"]
+
+/** Why an API request failed, in a few words, for the retry notice. */
+const RETRY_REASONS: Partial<Record<SDKAPIRetryMessage["error"], string>> = {
+  rate_limit: "Rate limited",
+  overloaded: "The API is overloaded",
+  server_error: "The API had an error",
+  authentication_failed: "Authentication failed",
+  billing_error: "A billing problem",
+}
 
 type ToolItem = Extract<ThreadItem, { type: "tool" }>
 
@@ -34,7 +45,7 @@ export class ThreadMapper {
   map(message: SDKMessage, at?: number): ThreadEvent[] {
     switch (message.type) {
       case "system":
-        if (message.subtype === "init") return [{ kind: "init", model: message.model }]
+        if (message.subtype === "init") return [{ kind: "init", model: modelLabel(message.model) }]
         // A command such as /context answers with text of its own, not a reply from Claude.
         if (message.subtype === "local_command_output") return [item({ type: "text", id: message.uuid, text: message.content, done: true, ...(at !== undefined ? { at } : {}) })]
         if (message.subtype === "status") return this.mapCompactionStatus(message)
@@ -136,7 +147,7 @@ export class ThreadMapper {
     const add = (found: ThreadItem) => items.set(found.id, found)
     let turn: { id: string; start: number; end?: number; stopped?: boolean } | undefined
     const closeTurn = () => {
-      if (turn?.end !== undefined) add({ type: "result", id: `result:${turn.id}`, durationMs: turn.end - turn.start, isError: false, ...(turn.stopped ? { stopped: true } : {}) })
+      if (turn?.end !== undefined) add({ type: "result", id: resultId(turn.id), durationMs: turn.end - turn.start, isError: false, ...(turn.stopped ? { stopped: true } : {}) })
       turn = undefined
     }
     // A stored compaction is a bare system message, followed by Claude Code's summary as a user message.
@@ -245,23 +256,14 @@ function taskSummary(content: unknown): string | undefined {
   return /<summary>([\s\S]*?)<\/summary>/.exec(text)?.[1]?.trim() || "A background task finished."
 }
 
-/**
- * The text the user typed, without any images, or undefined for a tool result. Claude Code also
- * stores messages it writes itself, such as command output and reminders. They start with a tag and stay hidden.
- */
-/** Why an API request failed, in a few words, for the retry notice. */
-const RETRY_REASONS: Partial<Record<SDKAPIRetryMessage["error"], string>> = {
-  rate_limit: "Rate limited",
-  overloaded: "The API is overloaded",
-  server_error: "The API had an error",
-  authentication_failed: "Authentication failed",
-  billing_error: "A billing problem",
-}
-
 function retryReason(error: SDKAPIRetryMessage["error"], status: number | null): string {
   return RETRY_REASONS[error] ?? (status ? `The API answered ${status}` : "The request failed")
 }
 
+/**
+ * The text the user typed, without any images, or undefined for a tool result. Claude Code also
+ * stores messages it writes itself, such as command output and reminders. They start with a tag and stay hidden.
+ */
 function userText(content: unknown): string | undefined {
   const text =
     typeof content === "string"

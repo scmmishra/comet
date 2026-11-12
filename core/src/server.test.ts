@@ -104,7 +104,7 @@ test("serves a project's icon and refuses a path outside it", async () => {
   expect((await fetch(url("logo.svg", "wrong"))).status).toBe(403)
 })
 
-test("serves Desk's tools to an agent's session over MCP, and refuses a caller without a session's token", async () => {
+test("refuses a caller of Desk's tools that has no session's token", async () => {
   await connect()
   const ask = (authorization: string) => fetch(`http://127.0.0.1:${core!.port}/mcp`, { method: "POST", headers: { authorization, "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) })
   expect((await ask("Bearer secret")).status).toBe(401)

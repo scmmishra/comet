@@ -1,6 +1,11 @@
 import type { AccountInfo, EffortLevel, ModelInfo, Query } from "@anthropic-ai/claude-agent-sdk"
 import { DEFAULT_MODEL, PERMISSION_MODES, type AgentAccount, type Effort, type ModelOption, type PermissionMode } from "@desk/protocol"
 
+/** A model pinned to one version, such as "claude-opus-4-8". An alias such as "opus" follows the newest of its family. */
+const PINNED = /^claude-/
+/** The permission modes every Claude model takes. Auto needs a model that supports it. */
+const MODES_WITHOUT_AUTO: readonly PermissionMode[] = PERMISSION_MODES.filter((mode) => mode !== "auto")
+
 /**
  * The SDK's settings read, which it ships without a type. `applied.effort` is the effort the next
  * message would use. Desk only reads it, so a change to it costs the Default label, not a session.
@@ -12,11 +17,6 @@ export const sdkModel = (model: string) => (model === DEFAULT_MODEL ? undefined 
 
 /** Claude Code names its effort levels itself, and a tab holds one of the levels its model listed. */
 export const sdkEffort = (effort: Effort) => effort as EffortLevel
-
-/** A model pinned to one version, such as "claude-opus-4-8". An alias such as "opus" follows the newest of its family. */
-const PINNED = /^claude-/
-/** The permission modes every Claude model takes. Auto needs a model that supports it. */
-const MODES_WITHOUT_AUTO: readonly PermissionMode[] = PERMISSION_MODES.filter((mode) => mode !== "auto")
 
 /** Switches the probe's model to each one in turn and reads the effort Claude Code would use. It takes seconds. */
 export async function defaultEfforts(running: Query, models: readonly ModelInfo[]): Promise<Map<string, Effort>> {

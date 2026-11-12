@@ -679,9 +679,26 @@ pub enum ThreadEvent {
     /// The commands running in the background now, sent whole each time the set changes.
     #[serde(rename = "background")]
     Background { tasks: Vec<BackgroundTask> },
+    /// The user asked the turn to stop, at `since`. `unresponsive` once the agent has not stopped in time. The turn's end clears it.
+    #[serde(rename = "stopping")]
+    Stopping { since: f64, unresponsive: bool },
+    /// A request to the API failed and the agent tries again. More output clears it.
+    #[serde(rename = "retry")]
+    Retry(Retry),
     /// An event the app does not read yet.
     #[serde(other)]
     Other,
+}
+
+/// A failed request to the API that the agent tries again, as attempt `attempt` of `max_retries`, after `delay_ms`.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Retry {
+    pub attempt: u32,
+    pub max_retries: u32,
+    pub delay_ms: f64,
+    /// Why the request failed.
+    pub error: String,
 }
 
 /// A command the agent left running in the background, such as a long review or a dev server.
@@ -731,6 +748,13 @@ pub enum CoreMessage {
     /// A copy of a tab's session, on the same agent, which the app opens in a new tab beside it.
     #[serde(rename = "thread.forked", rename_all = "camelCase")]
     ThreadForked { tab_id: String, agent: String, thread_id: String, title: String },
+    /// The branch a tab's thread last ran on. Absent when it has not run on one.
+    #[serde(rename = "thread.branch", rename_all = "camelCase")]
+    ThreadBranch {
+        tab_id: String,
+        #[serde(default)]
+        branch: Option<String>,
+    },
     #[serde(rename = "session.event")]
     SessionEvent {
         #[serde(rename = "tabId")]
@@ -951,6 +975,12 @@ pub enum ClientMessage {
     ThreadResume { tab_id: String, agent: String, thread_id: String },
     #[serde(rename = "session.interrupt", rename_all = "camelCase")]
     SessionInterrupt { tab_id: String },
+    /// Ends a turn that did not stop when asked. Its session closes, and the next message starts a new one on the thread.
+    #[serde(rename = "session.forceStop", rename_all = "camelCase")]
+    SessionForceStop { tab_id: String },
+    /// Switches the tab's project back to the branch its thread last ran on. The core then sends the project's Space to every client.
+    #[serde(rename = "branch.restore", rename_all = "camelCase")]
+    BranchRestore { tab_id: String },
     #[serde(rename = "permission.answer", rename_all = "camelCase")]
     PermissionAnswer { tab_id: String, request_id: String, answer: String },
     /// Answers Claude's questions, by question text. Without `answers`, the user dismissed them.
@@ -1069,6 +1099,8 @@ mod tests {
             ClientMessage::SessionSend { tab_id: "tab-1".into(), text: "Add a test".into(), images: vec![], follow_up: Some("queue".into()) },
             ClientMessage::SessionSend { tab_id: "tab-1".into(), text: "Hi".into(), images: vec![ImageAttachment { media_type: "image/png".into(), data: "iVBORw==".into() }], follow_up: None },
             ClientMessage::SessionInterrupt { tab_id: "tab-1".into() },
+            ClientMessage::SessionForceStop { tab_id: "tab-1".into() },
+            ClientMessage::BranchRestore { tab_id: "tab-1".into() },
             ClientMessage::PermissionAnswer { tab_id: "tab-1".into(), request_id: "r1".into(), answer: "allow-session".into() },
             ClientMessage::QuestionAnswer { tab_id: "tab-1".into(), request_id: "r2".into(), answers: Some([("Which form?".to_owned(), "Login".to_owned())].into()) },
             ClientMessage::QuestionAnswer { tab_id: "tab-1".into(), request_id: "r2".into(), answers: None },

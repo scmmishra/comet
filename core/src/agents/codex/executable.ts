@@ -1,7 +1,7 @@
 import { which } from "../../environment"
 
 /** What to tell the user when Desk finds no Codex to run. */
-export const NO_CODEX = "Install the Codex CLI so `codex` is on your PATH."
+const NO_CODEX = "Install the Codex CLI so `codex` is on your PATH."
 
 let found: string | undefined
 
@@ -13,4 +13,11 @@ let found: string | undefined
 export function codexPath(): string | undefined {
   found ??= process.env.DESK_CODEX || which("codex") || undefined
   return found
+}
+
+/** Desk found no Codex to run. Its message tells the user what to do. */
+export class CodexMissing extends Error {
+  constructor() {
+    super(NO_CODEX)
+  }
 }

@@ -1,17 +1,15 @@
 import { expect, test } from "bun:test"
 import type { AgentReading } from "../agent"
 import { until } from "../../test-support"
-import { fakeAppServer, MODELS } from "./test-app-server"
+import { CodexMissing } from "./executable"
 import { codexAgent } from "./index"
-import { AppServer } from "./server"
+import type { Launch } from "./server"
+import { fakeAppServer, MODELS } from "./test-app-server"
 
-// Desk looks for `codex` before it starts one. The fake plays it.
-process.env.DESK_CODEX = "codex"
-
-function agent() {
+function agent(launch?: Launch) {
   const codex = fakeAppServer()
   const readings: AgentReading[] = []
-  const made = codexAgent({ publish: (reading) => void readings.push(reading), compactIdle: () => false }, codex.launch)
+  const made = codexAgent({ publish: (reading) => void readings.push(reading), compactIdle: () => false }, launch ?? codex.launch)
   return { codex, readings, agent: made }
 }
 
@@ -25,6 +23,14 @@ test("reads the version, the ChatGPT account and the models", async () => {
   expect(readings[0]).toEqual({ version: { installed: "0.167.0", updateAvailable: false, updatable: false } })
   expect(readings[1]).toEqual({ state: "ready", problem: undefined, account: { email: "ada@example.com", plan: "plus", organization: "Analytical" } })
   expect(readings[2]!.models!.map((model) => model.value)).toEqual(["default", "gpt-6.1-sol", "gpt-6-luna"])
+})
+
+test("says how to install Codex when Desk finds none", async () => {
+  const { readings, agent: codexDesk } = agent(() => {
+    throw new CodexMissing()
+  })
+  await codexDesk.inspect()
+  expect(readings).toEqual([{ state: "missing", problem: "Install the Codex CLI so `codex` is on your PATH." }])
 })
 
 test("says how to sign in when Codex has no account, and names other ways of signing in", async () => {

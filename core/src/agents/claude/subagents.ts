@@ -4,6 +4,7 @@ import { ThreadMapper } from "./thread"
 
 /** Claude Code's task type for a subagent. Its other tasks, such as background shells, are not agents. */
 const AGENT_TASK = "local_agent"
+export const isSubagentTask = (taskType: string | undefined) => taskType === AGENT_TASK
 
 type Tracked = { subagent: Subagent; mapper: ThreadMapper; items: Map<string, ThreadItem> }
 
@@ -36,7 +37,7 @@ export class Subagents {
 
   private handleTask(message: Extract<SDKMessage, { type: "system" }>, now: number) {
     if (message.subtype === "task_started") {
-      if (message.task_type !== AGENT_TASK || message.ambient) return
+      if (!isSubagentTask(message.task_type) || message.ambient) return
       const subagent: Subagent = {
         id: message.task_id,
         description: message.description,

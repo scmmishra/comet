@@ -1,8 +1,10 @@
 import type { StepKind, TextEdit, ThreadItem } from "@desk/protocol"
-import { commandLabel, cutOutput, relativeTo, tool } from "../../steps"
+import { commandLabel, cutOutput, relativeTo, tool } from "../steps"
 import type { ToolCall, ToolKind } from "./protocol"
 
 type ToolItem = Extract<ThreadItem, { type: "tool" }>
+
+const EDIT_VERBS = { edit: "Edited", delete: "Deleted", move: "Moved" } as const
 
 /**
  * Where an agent keeps what a tool call ran and printed. ACP has no field for either, so each agent puts
@@ -63,8 +65,6 @@ export function toolItem(dir: string, call: ToolCall, reader: ToolReader): ToolI
       return step(title, "other", title, title)
   }
 }
-
-const EDIT_VERBS = { edit: "Edited", delete: "Deleted", move: "Moved" } as const
 
 /** The file a call works on: the first place it reports, else the first file it changed. */
 function filePath(call: ToolCall): string | undefined {

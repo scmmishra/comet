@@ -1,4 +1,5 @@
-import type { Process } from "../json-rpc"
+import { memoryTransport } from "../../test-support"
+import type { Process } from "../process"
 import type { ConfigOption, SessionUpdate } from "./protocol"
 
 type Message = { readonly jsonrpc?: string; readonly id?: number | string; readonly method?: string; readonly params?: any; readonly result?: any; readonly error?: any }
@@ -25,9 +26,6 @@ export const FAKE_OPTIONS: ConfigOption[] = [
  */
 export function fakeAcpAgent(handlers: Record<string, Handler> = {}) {
   const written: Message[] = []
-  const queue: string[] = []
-  let wake: (() => void) | undefined
-  let ended = false
   let exit: (code: number) => void = () => {}
   let stderr = ""
   let nextId = 1
@@ -35,17 +33,18 @@ export function fakeAcpAgent(handlers: Record<string, Handler> = {}) {
   let endPrompt: ((stopReason: string) => void) | undefined
   let options = FAKE_OPTIONS
 
-  const say = (message: object | string) => {
-    queue.push(typeof message === "string" ? message : JSON.stringify(message))
-    wake?.()
-  }
+  const { transport, say, hangUp } = memoryTransport((line) => {
+    const message: Message = JSON.parse(line)
+    written.push(message)
+    if (message.method && message.id !== undefined) answer(message)
+    else if (!message.method && message.id !== undefined) waiting.get(message.id)?.(message.result)
+  })
   const end = () => {
-    ended = true
-    wake?.()
+    hangUp()
     exit(1)
   }
   const defaults: Record<string, Handler> = {
-    initialize: () => ({ protocolVersion: 1, agentCapabilities: { sessionCapabilities: { resume: {} } }, agentInfo: { name: "fake-acp", version: "1.4.5" } }),
+    initialize: () => ({ protocolVersion: 1, agentCapabilities: { sessionCapabilities: { resume: {} } }, agentInfo: { name: "fake-acp", version: "1.0.0" } }),
     authenticate: () => ({}),
     "session/new": () => ({ sessionId: "s1", configOptions: options, modes: { currentModeId: "default" } }),
     "session/resume": () => ({ configOptions: options, modes: { currentModeId: "default" } }),
@@ -67,19 +66,7 @@ export function fakeAcpAgent(handlers: Record<string, Handler> = {}) {
   }
 
   const process: Process = {
-    lines: (async function* () {
-      while (true) {
-        while (queue.length) yield queue.shift()!
-        if (ended) return
-        await new Promise<void>((resolve) => (wake = resolve))
-      }
-    })(),
-    write(line) {
-      const message: Message = JSON.parse(line)
-      written.push(message)
-      if (message.method && message.id !== undefined) answer(message)
-      else if (!message.method && message.id !== undefined) waiting.get(message.id)?.(message.result)
-    },
+    ...transport,
     close: end,
     stderr: () => stderr,
     exited: new Promise<number>((resolve) => (exit = resolve)),

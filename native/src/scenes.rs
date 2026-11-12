@@ -8,7 +8,7 @@ use crate::shell::{CoreState, Desk};
 /// A scene: its name, and what it sets in a fresh window.
 type Scene = (&'static str, fn(&mut Desk));
 
-pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("models-other-agent", models_other_agent), ("models-missing-agent", models_missing_agent), ("models-new-tab", models_new_tab), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-codex", settings_codex), ("settings-antigravity", settings_antigravity), ("settings-signing-in", settings_signing_in), ("models-signing-in", models_signing_in), ("settings-projects", settings_projects), ("settings-mcp", settings_mcp), ("file", file)];
+pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("models-other-agent", models_other_agent), ("models-missing-agent", models_missing_agent), ("models-new-tab", models_new_tab), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-codex", settings_codex), ("settings-antigravity", settings_antigravity), ("settings-signing-in", settings_signing_in), ("models-signing-in", models_signing_in), ("settings-projects", settings_projects), ("settings-mcp", settings_mcp), ("stop-notice", stop_notice), ("branch-notice", branch_notice), ("branch-confirm", branch_confirm), ("file", file)];
 
 /// The core messages in the JSON file `DESK_SCENE_FILE` names, with the thread rows in its `open` list
 /// opened.
@@ -259,6 +259,39 @@ fn models_new_tab(s: &mut Desk) {
     agents(s);
     s.toggle_picker();
     s.view_agent("codex");
+}
+
+/// The thread with its stop unanswered for 20 seconds, and the agent retrying a failed request.
+fn stop_notice(s: &mut Desk) {
+    thread(s);
+    let since = s.now_ms - 20_000.0;
+    let messages = serde_json::json!([
+        { "type": "session.event", "tabId": "tab", "event": { "kind": "stopping", "since": since, "unresponsive": true } },
+        { "type": "session.event", "tabId": "tab", "event": { "kind": "retry", "attempt": 2, "maxRetries": 10, "delayMs": 1_500, "error": "The API is overloaded (529)." } }
+    ]);
+    for message in serde_json::from_value::<Vec<CoreMessage>>(messages).expect("the scene's messages decode") {
+        s.receive(Event::Message(message)).expect("events need no folder");
+    }
+}
+
+/// The thread, last run on `login` while the project is on `fix-login`, with a message typed.
+fn branch_notice(s: &mut Desk) {
+    thread(s);
+    let messages = serde_json::json!([
+        { "type": "thread.branch", "tabId": "tab", "branch": "login" },
+        // The question is answered, so the composer takes a message.
+        { "type": "session.event", "tabId": "tab", "event": { "kind": "item", "item": { "type": "question", "id": "q1", "requestId": "rq", "questions": [], "answered": true } } }
+    ]);
+    for message in serde_json::from_value::<Vec<CoreMessage>>(messages).expect("the scene's messages decode") {
+        s.receive(Event::Message(message)).expect("events need no folder");
+    }
+    s.put_in_draft("tab", "Now update the changelog", &[]);
+}
+
+/// Restore branch pressed with uncommitted changes: the confirmation is open.
+fn branch_confirm(s: &mut Desk) {
+    branch_notice(s);
+    s.restore_branch("tab");
 }
 
 /// A tab with a finished turn, a steered message, and a running turn with a live group.

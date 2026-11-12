@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { deskHome, writeJsonFile } from "./data-files"
 import { spawn } from "./environment"
+import { userShell } from "./shell"
 
 /**
  * What Claude Code sets for the processes it starts. A Desk started from inside a Claude Code session
@@ -45,7 +46,7 @@ const cachePath = () => join(deskHome(), "shell-environment.json")
 export function takeLoginEnvironment(interactiveTimeoutMs = INTERACTIVE_TIMEOUT_MS): { ready: Promise<void>; refreshed: Promise<void> } {
   for (const name of Object.keys(process.env)) if (isAgentSessionMarker(name)) delete process.env[name]
   const inherited = { ...process.env }
-  const shell = process.env.SHELL || "/bin/zsh"
+  const shell = userShell()
   // A cache read under another shell or home would describe someone else's terminal.
   const key = JSON.stringify([shell, process.env.HOME ?? "", process.env.ZDOTDIR ?? ""])
   const cached = readCache(key)
