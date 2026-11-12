@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { readFileSync, rmSync } from "node:fs"
+import { readFileSync, rmSync, symlinkSync } from "node:fs"
 import { join } from "node:path"
 import { branchBase, capture, changesSince, checkpointChanges, headTree, keepCheckpoints, snapshot } from "./checkpoints"
 import { gitRepo, tempFolder } from "./test-support"
@@ -214,4 +214,47 @@ test("a project in a subfolder of a repo shows only its own files", async () => 
   write("other/new.ts", "new\n")
   expect(paths(await checkpointChanges(project, from, (await capture(project))!))).toEqual(["app/a.ts", "app/new.ts"])
   expect(paths(await changesSince(project, (await headTree(project))!))).toEqual(["app/a.ts", "app/new.ts"])
+})
+
+test("names a path that holds a tab, and gives quoted paths their patch and status", async () => {
+  const repo = gitRepo({ 'q"uote.txt': "one\n", "back\\slash.txt": "gone\n" })
+  const base = await snapshot(repo.dir)
+  repo.write("a\tb.txt", "tab\n")
+  repo.write('q"uote.txt', "two\n")
+  rmSync(join(repo.dir, "back\\slash.txt"))
+  const changes = await changesSince(repo.dir, base!)
+  expect(changes.map(({ path, status }) => ({ path, status }))).toEqual([
+    { path: "a\tb.txt", status: "added" },
+    { path: "back\\slash.txt", status: "deleted" },
+    { path: 'q"uote.txt', status: "modified" },
+  ])
+  expect(changes[0]!.patch).toContain("+tab")
+  expect(changes[1]!.patch).toContain("-gone")
+  expect(changes[2]!.patch).toContain("+two")
+})
+
+test("gives a file that changed type both halves of its patch, and the next file its own", async () => {
+  const repo = gitRepo({ "z.txt": "one\n" })
+  symlinkSync("target", join(repo.dir, "link"))
+  repo.git("add", "link")
+  repo.git("commit", "-qm", "link")
+  const base = await snapshot(repo.dir)
+  rmSync(join(repo.dir, "link"))
+  repo.write("link", "now a file\n")
+  repo.write("z.txt", "two\n")
+  const [link, z] = await changesSince(repo.dir, base!)
+  expect(link).toMatchObject({ path: "link", status: "modified" })
+  expect(link!.patch).toContain("+now a file")
+  expect(z).toMatchObject({ path: "z.txt", status: "modified" })
+  expect(z!.patch).toContain("+two")
+})
+
+test("a file past the patch's byte limit keeps its status, with no patch", async () => {
+  const repo = gitRepo({ "keep.txt": "one\n" })
+  const base = await snapshot(repo.dir)
+  repo.write("a-large.txt", ("y".repeat(99) + "\n").repeat(110_000))
+  repo.write("z-new.txt", "new\n")
+  const changes = await changesSince(repo.dir, base!)
+  const added = changes.find((change) => change.path === "z-new.txt")
+  expect(added).toMatchObject({ status: "added", additions: 1, patch: "" })
 })

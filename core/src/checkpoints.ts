@@ -29,6 +29,12 @@ const MAX_DIFF_BYTES = 10_000_000
  */
 const GIT_DEFAULTS = ["-c", "diff.relative=false", "-c", "core.quotePath=false", "-c", "diff.suppressBlankEmpty=false", "-c", "log.showSignature=false"]
 
+/** The status each of Git's raw status letters stands for. A copy is a new file. A type change is a change to the file. */
+const STATUS_OF: Readonly<Record<string, FileChange["status"]>> = { A: "added", C: "added", D: "deleted", R: "renamed", M: "modified", T: "modified" }
+
+/** How Git diffs two trees for Desk: renames found, and no external diff tools or text conversion. */
+const DIFF_FLAGS = ["-M", "--no-ext-diff", "--no-textconv", "--submodule=short"]
+
 /** The tree of the project's folder as it is now, or undefined outside a Git repo. */
 export async function snapshot(dir: string): Promise<string | undefined> {
   const scratch = mkdtempSync(join(tmpdir(), "desk-index-"))
@@ -163,65 +169,71 @@ export async function changesSince(dir: string, base: string): Promise<FileChang
 /** A file's change between two trees, with the path it had before when Git saw it renamed. */
 type TreeChange = FileChange & { readonly previousPath?: string }
 
+/** One file's entry in a diff: what happened to it, its paths and its counts, as Git lists them. */
+type DiffEntry = Omit<TreeChange, "patch"> & {
+  /** A file that changed type, such as a link that became a file, prints as two patches: one removes it and one adds it. */
+  readonly patches: 1 | 2
+}
+
 /**
  * Each file in the project's folder that differs between two trees, with its counts and its patch. A
  * submodule shows as one line of commits, so its entry keeps its `diff --git` header.
  */
 async function treeChanges(dir: string, from: string, to: string): Promise<TreeChange[]> {
-  const flags = ["-M", "--no-ext-diff", "--no-textconv", "--submodule=short"]
-  const [numstat, patch] = await Promise.all([
-    git(dir, [...GIT_DEFAULTS, "diff", "--numstat", "-z", ...flags, from, to, "--", "."], { maxBytes: MAX_DIFF_BYTES }),
-    git(dir, [...GIT_DEFAULTS, "diff", "--no-color", ...flags, "--src-prefix=a/", "--dst-prefix=b/", from, to, "--", "."], { maxBytes: MAX_DIFF_BYTES, overflow: "truncate" }),
+  const [entries, patch] = await Promise.all([
+    diffEntries(dir, from, to),
+    git(dir, [...GIT_DEFAULTS, "diff", "--no-color", ...DIFF_FLAGS, "--src-prefix=a/", "--dst-prefix=b/", from, to, "--", "."], { maxBytes: MAX_DIFF_BYTES, overflow: "truncate" }),
   ])
-  const patches = splitPatch(patch)
-  return numstatEntries(numstat).map(({ additions, deletions, path, previousPath }) => {
-    const filePatch = patches.get(path) ?? ""
-    return { path, status: fileStatus(filePatch), additions, deletions, patch: filePatch, ...(previousPath === undefined ? {} : { previousPath }) }
+  // Git prints each file's patch in the order it lists the files. A patch header quotes a path that holds a
+  // tab, a newline, a quote or a backslash, so the patches are matched to the files by position, not by path.
+  // A patch cut at the byte limit leaves the files after the cut with none.
+  const chunks = patch.split(/^(?=diff --git )/m).filter((chunk) => chunk.startsWith("diff --git "))
+  let next = 0
+  return entries.map(({ patches, ...entry }) => {
+    const filePatch = chunks.slice(next, next + patches).join("")
+    next += patches
+    return { ...entry, patch: filePatch }
   })
 }
 
-/** `git diff --numstat -z`: each entry is `added\tremoved\tpath`, or for a rename `added\tremoved\t`, then the old and the new path. */
-function numstatEntries(output: string): { additions: number; deletions: number; path: string; previousPath?: string }[] {
-  const fields = output.split("\0")
-  const entries = []
-  for (let index = 0; index < fields.length; index++) {
-    const [added, removed, path] = fields[index]!.split("\t")
-    if (path === undefined) continue
-    const counts = { additions: Number(added) || 0, deletions: Number(removed) || 0 }
-    if (path) entries.push({ ...counts, path })
-    else {
-      entries.push({ ...counts, previousPath: fields[index + 1]!, path: fields[index + 2]! })
-      index += 2
-    }
-  }
-  return entries
-}
-
-/** Splits a multi-file patch into one patch per file, keyed by the file's new path. */
-function splitPatch(patch: string): Map<string, string> {
-  const files = new Map<string, string>()
-  for (const chunk of patch.split(/^(?=diff --git )/m)) {
-    const path = patchPath(chunk)
-    if (path !== undefined) files.set(path, chunk)
-  }
-  return files
+/** Each file in the project's folder that differs between two trees, with its status, paths and counts. */
+async function diffEntries(dir: string, from: string, to: string): Promise<DiffEntry[]> {
+  return parseDiff(await git(dir, [...GIT_DEFAULTS, "diff", "--raw", "--numstat", "-z", ...DIFF_FLAGS, from, to, "--", "."], { maxBytes: MAX_DIFF_BYTES }))
 }
 
 /**
- * The new path of one file's patch. A rename names it on its own line. Otherwise the header names the
- * same path twice, as `a/<path> b/<path>`, so its second half is the path even when the path holds " b/".
+ * `git diff --raw --numstat -z`: each file's raw entry, then each file's counts, in the same order. A raw
+ * entry is `:<modes> <hashes> <status>` and its path, or for a rename or a copy the old and the new path.
+ * Counts are `added\tremoved\tpath`, or `added\tremoved\t` and then the two paths. A binary file counts
+ * "-". With `-z`, Git writes every path as it is, so a path may hold a tab.
  */
-function patchPath(chunk: string): string | undefined {
-  const renamed = /^rename to (.*)$/m.exec(chunk)
-  if (renamed) return renamed[1]
-  const header = /^diff --git a\/(.*)$/m.exec(chunk)?.[1]
-  if (header === undefined) return undefined
-  return header.slice((header.length - " b/".length) / 2 + " b/".length)
-}
-
-function fileStatus(patch: string): FileChange["status"] {
-  if (/^new file mode/m.test(patch)) return "added"
-  if (/^deleted file mode/m.test(patch)) return "deleted"
-  if (/^rename from/m.test(patch)) return "renamed"
-  return "modified"
+function parseDiff(output: string): DiffEntry[] {
+  const fields = output.split("\0")
+  const raw: { status: string; path: string; previousPath?: string }[] = []
+  let index = 0
+  while (fields[index]?.startsWith(":")) {
+    const status = fields[index]!.split(" ").at(-1)!
+    if (status.startsWith("R") || status.startsWith("C")) {
+      raw.push({ status, previousPath: fields[index + 1]!, path: fields[index + 2]! })
+      index += 3
+    } else {
+      raw.push({ status, path: fields[index + 1]! })
+      index += 2
+    }
+  }
+  return raw.map((entry) => {
+    const counts = fields[index]!
+    const added = counts.slice(0, counts.indexOf("\t"))
+    const removed = counts.slice(added.length + 1, counts.indexOf("\t", added.length + 1))
+    index += entry.previousPath === undefined ? 1 : 3
+    const letter = entry.status[0]!
+    return {
+      path: entry.path,
+      status: STATUS_OF[letter] ?? "modified",
+      additions: Number(added) || 0,
+      deletions: Number(removed) || 0,
+      patches: letter === "T" ? 2 : 1,
+      ...(entry.previousPath === undefined || letter === "C" ? {} : { previousPath: entry.previousPath }),
+    }
+  })
 }
