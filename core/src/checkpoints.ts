@@ -209,6 +209,17 @@ export async function changesSince(dir: string, base: string): Promise<FileChang
   return (await treeChanges(dir, base, current)).map(withoutPreviousPath)
 }
 
+/**
+ * How many files and lines changed since the last commit, as Review's uncommitted scope counts them: the
+ * project's folder only, new files and their lines included. Undefined outside a Git repo.
+ */
+export async function uncommittedCounts(dir: string): Promise<{ files: number; additions: number; deletions: number } | undefined> {
+  const [base, current] = await Promise.all([headTree(dir), snapshot(dir)])
+  if (!base || !current) return undefined
+  const entries = base === current ? [] : await diffEntries(dir, base, current)
+  return { files: entries.length, additions: entries.reduce((sum, entry) => sum + entry.additions, 0), deletions: entries.reduce((sum, entry) => sum + entry.deletions, 0) }
+}
+
 /** A file's change between two trees, with the path it had before when Git saw it renamed. */
 type TreeChange = FileChange & { readonly previousPath?: string }
 

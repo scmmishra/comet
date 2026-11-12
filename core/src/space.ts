@@ -1,5 +1,6 @@
 import { basename } from "node:path"
 import type { Space } from "@desk/protocol"
+import { uncommittedCounts } from "./checkpoints"
 import { git } from "./git"
 import { spawn } from "./environment"
 
@@ -14,11 +15,10 @@ export const currentBranch = async (dir: string): Promise<string | undefined> =>
 export async function readSpace(dir: string): Promise<Space | null> {
   const root = await gitOutput(dir, ["rev-parse", "--show-toplevel"])
   if (!root) return null
-  const [branch, sha, numstat, untracked, counts, pr] = await Promise.all([
+  const [branch, sha, changes, counts, pr] = await Promise.all([
     gitOutput(root, ["branch", "--show-current"]),
     gitOutput(root, ["rev-parse", "--short", "HEAD"]),
-    gitOutput(root, ["diff", "--numstat", "HEAD"]),
-    gitOutput(root, ["ls-files", "--others", "--exclude-standard"]),
+    part(uncommittedCounts(dir)),
     gitOutput(root, ["rev-list", "--left-right", "--count", "@{upstream}...HEAD"]),
     part(readPullRequest(root)),
   ])
@@ -27,23 +27,9 @@ export async function readSpace(dir: string): Promise<Space | null> {
     root,
     branch: branch || (sha ? `detached at ${sha}` : "no commits yet"),
     ...(counts ? { upstream: parseCounts(counts) } : {}),
-    changes: parseChanges(numstat ?? "", untracked ?? ""),
+    changes: changes ?? { files: 0, additions: 0, deletions: 0 },
     ...(pr ? { pr } : {}),
   }
-}
-
-export function parseChanges(numstat: string, untracked: string): Space["changes"] {
-  let additions = 0
-  let deletions = 0
-  let files = 0
-  for (const line of numstat.split("\n").filter(Boolean)) {
-    const counts = numstatLine(line)
-    files++
-    additions += counts.additions
-    deletions += counts.deletions
-  }
-  files += untracked.split("\n").filter(Boolean).length
-  return { files, additions, deletions }
 }
 
 function parseCounts(counts: string): NonNullable<Space["upstream"]> {
@@ -75,10 +61,4 @@ async function readPullRequest(root: string): Promise<NonNullable<Space["pr"]>> 
     else checks.pending++
   }
   return { number: pr.number, title: pr.title, url: pr.url, state: pr.state, draft: pr.isDraft, checks }
-}
-
-/** One line of `git diff --numstat`: its counts and the rest of the line. Binary files show "-" for both counts. */
-function numstatLine(line: string): { additions: number; deletions: number; path: string } {
-  const [added, removed, ...path] = line.split("\t")
-  return { additions: Number(added) || 0, deletions: Number(removed) || 0, path: path.join("\t") }
 }

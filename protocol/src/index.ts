@@ -251,7 +251,7 @@ export interface Space {
   readonly branch: string
   /** Commits ahead of and behind the upstream branch, when there is one. */
   readonly upstream?: { readonly ahead: number; readonly behind: number }
-  /** Uncommitted changes against HEAD, untracked files included. */
+  /** Uncommitted changes in the project's folder against HEAD, as Review's uncommitted scope counts them: new files and their lines included. */
   readonly changes: { readonly files: number; readonly additions: number; readonly deletions: number }
   /** The branch's pull request, when `gh` finds one. */
   readonly pr?: {
