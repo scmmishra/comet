@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { mkdirSync } from "node:fs"
 import { join } from "node:path"
-import { git, TRUNCATED } from "./git"
+import { git, gitBinary, TRUNCATED } from "./git"
 import { gitRepo } from "./test-support"
 
 test("cuts output at its cap when asked, and fails past it otherwise", async () => {
@@ -26,4 +26,18 @@ test("never runs in a bare repository found inside a project, whose config could
 test("reads its input from what Desk writes", async () => {
   const { dir } = gitRepo({ "a.ts": "one\n" })
   expect((await git(dir, ["hash-object", "--stdin"], { input: "one\n" })).trim()).toBe((await git(dir, ["rev-parse", "HEAD:a.ts"])).trim())
+})
+
+test("runs the binary that git on the PATH names, and looks it up again when the PATH changes", async () => {
+  const binary = await gitBinary()
+  expect(binary).toEndWith("/git")
+  expect(Bun.spawnSync([binary, "--version"]).stdout.toString()).toStartWith("git version")
+  const path = process.env.PATH
+  try {
+    process.env.PATH = "/nowhere"
+    expect(await gitBinary()).toBe("git")
+  } finally {
+    process.env.PATH = path
+  }
+  expect(await gitBinary()).toBe(binary)
 })
