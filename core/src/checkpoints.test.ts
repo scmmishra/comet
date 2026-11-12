@@ -292,3 +292,11 @@ test("sees edits to files the user marked assume-unchanged or skip-worktree, and
   // The user's own index keeps its bits.
   expect(repo.git("ls-files", "-v")).toBe("h assumed.txt\nS skipped.txt\nS sparse.txt")
 })
+
+test("keeps a file the turn committed by amending the last commit", async () => {
+  const { dir, git, write } = gitRepo({ "a.ts": "one\n", "b.ts": "one\n" })
+  const from = (await capture(dir))!
+  write("a.ts", "two\n")
+  git("commit", "-q", "--amend", "-am", "init, amended")
+  expect(paths(await checkpointChanges(dir, from, (await capture(dir))!))).toEqual(["a.ts"])
+})

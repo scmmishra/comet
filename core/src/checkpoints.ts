@@ -178,8 +178,9 @@ export async function checkpointChanges(dir: string, from: string, to: string): 
 /**
  * The files the work between two checkpoints could have written while HEAD moved from `startHead` to
  * `endHead`: those uncommitted at either checkpoint, and those touched by commits made after the first
- * checkpoint, on either side of the move. Older commits are not the turn's work: those HEAD reached, such
- * as a pulled branch's, and those it left behind, such as the branch a turn switched off. T3 Code counts
+ * checkpoint on the way to `endHead`, such as the turn's own commits, an amend or a rebase. Older commits
+ * HEAD reached, such as a pulled branch's, are not the turn's work. Commits the turn left behind on
+ * another branch are in neither snapshot, so their files never reach the list this filters. T3 Code counts
  * every commit left behind, so a switch off a branch lists that branch's whole history. A merge commit
  * counts only for the files it had to fix by hand, so a clean merge of another branch brings in nothing.
  */
@@ -188,7 +189,6 @@ async function writtenPaths(dir: string, points: { from: string; startHead: stri
   const lists = await Promise.all([
     pathsOf(dir, ["diff", startHead, from]),
     pathsOf(dir, ["diff", endHead, to]),
-    pathsOf(dir, ["log", "--format=", "--diff-merges=remerge", `--since=@${startedAt}`, `${endHead}..${startHead}`]),
     pathsOf(dir, ["log", "--format=", "--diff-merges=remerge", `--since=@${startedAt}`, `${startHead}..${endHead}`]),
   ])
   return new Set(lists.flat())
