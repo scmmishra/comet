@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- Desk shows its tabs sooner at launch. The core starts beside the window, not after its first frame.
 - When a task one agent hands another fails, the agent that asked gets the task's last report as well as the error.
 - A thread's first message no longer waits on a slow repo. Desk waits up to 5 seconds for the checkpoint the thread's changes are measured from, then sends without one.
 - When Git fails while Desk records what a turn changed, Desk says so. The turn used to show no changes, with no reason.
