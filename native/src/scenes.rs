@@ -323,7 +323,7 @@ fn thread(s: &mut Desk) {
         { "type": "session.event", "tabId": "tab", "event": { "kind": "item", "item": { "type": "question", "id": "q1", "requestId": "rq", "questions": [
             { "header": "Tests", "question": "Which kind of test should I add?", "options": [{ "label": "Unit test", "description": "Fast, mocks the network" }, { "label": "End-to-end test" }], "multiSelect": false }
         ] } } },
-        { "type": "queue", "tabId": "tab", "messages": [{ "id": "m1", "text": "Then update the changelog" }], "held": false },
+        { "type": "queue", "tabId": "tab", "messages": [{ "id": "m1", "text": "Then update the changelog, and keep each line short so the release notes read well on GitHub.\n\nAfter that, bump the version in native/Cargo.toml and push to main." }], "held": false },
         { "type": "project", "project": "/Users/me/code/web", "part": "space", "value": { "name": "web", "root": "/Users/me/code/web", "branch": "fix-login", "upstream": { "ahead": 2, "behind": 0 },
             "changes": { "files": 1, "additions": 3, "deletions": 1 },
             "pr": { "number": 42, "title": "Keep the login error after a retry", "url": "https://example.com/pr/42", "state": "OPEN", "draft": false, "checks": { "passed": 3, "failed": 1, "pending": 0 } } } },

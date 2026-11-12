@@ -11,6 +11,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 - On the agy CLI, the model picker offers only Supervised, the one mode the CLI honours. Accept edits and Bypass used to ask anyway.
 - A task one agent hands another stays with the thread that started it. A plugin thread that runs in the background no longer shows its tasks in the thread the tab moved to, and stopping the visible thread no longer stops them.
 - Send now leaves a queued message in the queue while a turn runs on an agent that cannot take a message mid-turn. It used to start a second turn.
+- A long queued message wraps inside its dashed box. Its text ran past the box's right edge.
 
 ## 0.0.1
 
