@@ -107,6 +107,23 @@ test("a message starts a turn and its result ends it", async () => {
   expect(s.results()).toEqual([{ type: "result", id: "r1", durationMs: 5, isError: false }])
 })
 
+test("a turn Claude Code starts after a background task makes the tab busy until it ends", async () => {
+  const s = setup()
+  const running = await started(s)
+  running.push(result("r1"))
+  await until(() => s.statuses().length === 2)
+  // The order Claude Code sends live, recorded from 2.1.322.
+  running.push({ type: "system", subtype: "task_notification", uuid: "tn1", session_id: "s1", task_id: "b1", status: "completed", summary: "Background command completed" })
+  running.push({ type: "system", subtype: "init", uuid: "i2", session_id: "s1", model: "claude-opus-5-5" })
+  await until(() => s.statuses().length === 3)
+  expect(s.session.busy).toBe(true)
+  expect(s.items().at(-1)).toMatchObject({ type: "user", text: "Background command completed", selfStarted: true })
+
+  running.push(result("r2", { origin: { kind: "task-notification" } }))
+  await until(() => s.statuses().length === 4)
+  expect(s.statuses()).toEqual([true, false, true, false])
+})
+
 test("a steered message that cuts the turn's step keeps the turn going and hides that step's result", async () => {
   const s = setup()
   const running = await started(s)
