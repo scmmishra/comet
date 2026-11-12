@@ -14,6 +14,12 @@ const INTERRUPTED = /^\[Request interrupted by user/
  */
 const COMPACT_SUMMARY = /^This session is being continued from a previous conversation/
 
+/**
+ * The note Claude Code puts before a subagent's result, naming the tools it used. It is for the model that
+ * started the subagent, so the result shows without it, after T3 Code.
+ */
+const TOOLS_USED_NOTE = /^\s*<tools-used-before-summary>[^<]*<\/tools-used-before-summary>\s*/
+
 /** Inputs that say in short what a tool call does, in the order a summary prefers them. */
 const SUMMARY_FIELDS = ["command", "file_path", "pattern", "path", "url", "query", "description", "skill"]
 
@@ -226,8 +232,8 @@ function toolEdits(name: string, input: Record<string, unknown>): TextEdit[] | u
 }
 
 function toolOutputText(content: unknown): string {
-  if (typeof content === "string") return content
-  if (Array.isArray(content)) return content.map((part) => (part.type === "text" ? part.text : `[${part.type}]`)).join("\n")
+  if (typeof content === "string") return content.replace(TOOLS_USED_NOTE, "")
+  if (Array.isArray(content)) return content.map((part) => (part.type === "text" ? part.text : `[${part.type}]`)).join("\n").replace(TOOLS_USED_NOTE, "")
   return ""
 }
 

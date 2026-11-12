@@ -8,6 +8,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 - A thread's first message no longer waits on a slow repo. Desk waits up to 5 seconds for the checkpoint the thread's changes are measured from, then sends without one.
 - When Git fails while Desk records what a turn changed, Desk says so. The turn used to show no changes, with no reason.
 - A Claude session whose stream ends mid-turn ends the turn with an error. The tab used to stay busy, and the next message went nowhere.
+- A subagent's result no longer starts with the list of tools Claude Code adds for the model.
 - In the command palette, the highlighted row's text no longer moves a pixel as the arrows move the highlight. After Escape leaves a nested list, the arrows and Escape work again.
 - The command palette's highlight follows the pointer. The rows under the palette no longer light up on hover.
 - In Search files, Enter pressed before the search for the new query answers opens that query's top file. It used to open the top file of the query before.

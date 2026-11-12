@@ -24,6 +24,14 @@ test("completes a tool call with its result, under the call's id", () => {
   expect(result).toEqual([{ kind: "item", item: { type: "tool", id: "t1", name: "Bash", summary: "ls", result: { output: "README.md", isError: false }, kind: "command", label: "Ran ls" } }])
 })
 
+test("shows a subagent's result without the note Claude Code writes for the model before it", () => {
+  const mapper = new ThreadMapper(DIR)
+  mapper.map(sdk({ type: "assistant", uuid: "a1", parent_tool_use_id: null, message: { content: [{ type: "tool_use", id: "t1", name: "Agent", input: { description: "Review" } }] } }))
+  const content = [{ type: "text", text: "<tools-used-before-summary>Read, Grep</tools-used-before-summary>\n\nNo blocking issues." }]
+  const [event] = mapper.map(sdk({ type: "user", parent_tool_use_id: null, message: { content: [{ type: "tool_result", tool_use_id: "t1", content, is_error: false }] } }))
+  expect(event).toMatchObject({ kind: "item", item: { id: "t1", result: { output: "No blocking issues.", isError: false } } })
+})
+
 test("hides a subagent's own steps", () => {
   const mapper = new ThreadMapper(DIR)
   expect(mapper.map(sdk({ type: "assistant", uuid: "a1", parent_tool_use_id: "task-1", message: { content: [{ type: "text", text: "inner" }] } }))).toEqual([])
