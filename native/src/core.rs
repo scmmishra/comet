@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tungstenite::{Message, WebSocket};
 
 const START_TIMEOUT: Duration = Duration::from_secs(10);
@@ -127,18 +127,27 @@ impl Core {
 
     /// Closing stdin tells the core to exit. The kill is a fallback for a core that hangs.
     pub fn stop(&self) {
-        let Some((mut child, stdin)) = self.process.lock().unwrap().take() else { return };
-        drop(stdin);
-        let deadline = Instant::now() + STOP_GRACE;
-        while Instant::now() < deadline {
-            if let Ok(Some(_)) = child.try_wait() {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(20));
-        }
-        let _ = child.kill();
-        let _ = child.wait();
+        let Some((child, stdin)) = self.process.lock().unwrap().take() else { return };
+        end(child, stdin, STOP_GRACE);
     }
+}
+
+/// Closes a process's stdin and waits until it exits, for at most `grace`, then kills it. A thread waits
+/// on the process, so this returns the moment it exits rather than at the next check of a timer.
+fn end(mut child: Child, stdin: ChildStdin, grace: Duration) {
+    drop(stdin);
+    let pid = child.id() as libc::pid_t;
+    let (exited, exit) = mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = child.wait();
+        let _ = exited.send(());
+    });
+    if exit.recv_timeout(grace).is_ok() {
+        return;
+    }
+    // SAFETY: kill takes no pointers. The waiting thread has not reaped the process, so its pid is still its own.
+    unsafe { libc::kill(pid, libc::SIGKILL) };
+    let _ = exit.recv();
 }
 
 /// The repo this Desk was built from, which a Desk run from the repo starts the core in.
@@ -210,6 +219,31 @@ fn ready_port(stdout: impl Read + Send + 'static) -> Result<u16, String> {
 mod tests {
     use super::*;
     use crate::protocol::{ClientMessage, CoreMessage};
+    use std::time::Instant;
+
+    /// A process to end, with its stdin piped.
+    fn spawn_piped(program: &str, args: &[&str]) -> (Child, ChildStdin) {
+        let mut child = Command::new(program).args(args).stdin(Stdio::piped()).stdout(Stdio::null()).spawn().unwrap();
+        let stdin = child.stdin.take().unwrap();
+        (child, stdin)
+    }
+
+    #[test]
+    fn ending_a_process_returns_once_it_exits_and_kills_one_that_outlasts_its_grace() {
+        let (child, stdin) = spawn_piped("cat", &[]);
+        let started = Instant::now();
+        end(child, stdin, Duration::from_secs(5));
+        assert!(started.elapsed() < Duration::from_millis(500), "cat exits when its stdin closes: {:?}", started.elapsed());
+
+        let (child, stdin) = spawn_piped("sleep", &["30"]);
+        let pid = child.id() as libc::pid_t;
+        let started = Instant::now();
+        end(child, stdin, Duration::from_millis(100));
+        let took = started.elapsed();
+        assert!(took >= Duration::from_millis(100) && took < Duration::from_secs(5), "sleep ignores its stdin, so it is killed: {took:?}");
+        // SAFETY: kill takes no pointers. Signal 0 only asks whether the pid is in use.
+        assert_ne!(unsafe { libc::kill(pid, 0) }, 0, "the killed process is gone");
+    }
 
     #[test]
     fn a_bundled_desk_runs_the_core_in_its_resources_and_one_from_the_repo_runs_its_own() {

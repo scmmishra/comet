@@ -255,7 +255,7 @@ export class ClaudeSession implements AgentSession {
           if (reply) this.emit({ kind: "item", item: reply })
           continue
         }
-        for (const event of this.mapper.map(message, Date.now())) {
+        for (const event of this.mapper.map(message, Date.now(), !this.running)) {
           // A turn Claude Code starts itself, after a background task, makes the tab busy again.
           if (event.kind === "status" && event.busy) this.running = true
           this.emit(this.stop.pending ? stoppedEvent(event) : event)

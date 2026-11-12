@@ -119,12 +119,24 @@ test("shows a command's own output as a reply", () => {
 
 const NOTICE = "<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n<summary>Background command \"Run the review\" completed (exit code 0)</summary>\n</task-notification>"
 
-test("opens a turn of Claude's own when a background task's notice arrives, live and restored", () => {
-  const live = new ThreadMapper(DIR).map({ type: "user", uuid: "n1", session_id: "s", parent_tool_use_id: null, message: { role: "user", content: NOTICE } } as never, 7)
-  expect(live).toEqual([
-    { kind: "item", item: { type: "user", id: "n1", text: 'Background command "Run the review" completed (exit code 0)', selfStarted: true, at: 7 } },
+const init = (uuid: string) => sdk({ type: "system", subtype: "init", uuid, model: "claude-opus-5-5" })
+const finished = (summary: string) => sdk({ type: "system", subtype: "task_notification", uuid: "tn1", task_id: "b1", status: "completed", summary })
+
+// The order Claude Code 2.1.322 sends live: the task's notification, then the turn's init. No user message comes.
+test("opens a turn of Claude's own when a turn starts while none runs, named by the task that finished", () => {
+  const mapper = new ThreadMapper(DIR)
+  expect(mapper.map(finished('Background command "Run the review" completed (exit code 0)'), 6, true)).toEqual([])
+  expect(mapper.map(init("i1"), 7, true).slice(1)).toEqual([
+    { kind: "item", item: { type: "user", id: "self-started:i1", text: 'Background command "Run the review" completed (exit code 0)', selfStarted: true, at: 7 } },
     { kind: "status", busy: true },
   ])
+  // A turn the user started opens with their message, and takes no summary left from an earlier task.
+  mapper.map(finished("An older task completed"), 8, true)
+  expect(mapper.map(init("i2"), 9, false)).toEqual([{ kind: "init", model: expect.any(String) }])
+  expect(mapper.map(init("i3"), 10, true)[1]).toMatchObject({ item: { text: "Claude Code started a turn on its own." } })
+})
+
+test("restores a turn of Claude's own after a background task's notice", () => {
   const restored = new ThreadMapper(DIR).history([
     { type: "user", uuid: "u1", session_id: "s", parent_tool_use_id: null, timestamp: "2026-11-09T10:00:00.000Z", message: { role: "user", content: "Progress?" } },
     { type: "assistant", uuid: "a1", session_id: "s", parent_tool_use_id: null, timestamp: "2026-11-09T10:00:02.000Z", message: { content: [{ type: "text", text: "Still running." }] } },
@@ -136,12 +148,7 @@ test("opens a turn of Claude's own when a background task's notice arrives, live
 
 const HANDBACK = "Another Claude session sent a message:\n<agent-message from=\"t1\">The report is ready.</agent-message>"
 
-test("opens a turn of Claude's own when a subagent or another session sends it a message, live and restored", () => {
-  const live = new ThreadMapper(DIR).map({ type: "user", uuid: "p1", session_id: "s", parent_tool_use_id: null, origin: { kind: "peer", from: "t1", senderTaskId: "t1" }, message: { role: "user", content: HANDBACK } } as never, 7)
-  expect(live).toEqual([
-    { kind: "item", item: { type: "user", id: "p1", text: "A subagent reported back.", selfStarted: true, at: 7 } },
-    { kind: "status", busy: true },
-  ])
+test("restores a turn of Claude's own after a subagent or another session sends it a message", () => {
   const restored = new ThreadMapper(DIR).history([
     { type: "user", uuid: "u1", session_id: "s", parent_tool_use_id: null, timestamp: "2026-11-09T10:00:00.000Z", message: { role: "user", content: "Progress?" } },
     { type: "assistant", uuid: "a1", session_id: "s", parent_tool_use_id: null, timestamp: "2026-11-09T10:00:02.000Z", message: { content: [{ type: "text", text: "Still running." }] } },

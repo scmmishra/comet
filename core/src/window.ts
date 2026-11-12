@@ -462,8 +462,7 @@ export class Window {
       const from = scope === "thread" ? thread.threadStart : thread.turnFrom
       return from && thread.turnTo ? read(checkpointChanges(project, from, thread.turnTo)) : []
     }
-    const base = scope === "git" ? await headTree(project) : await branchBase(project)
-    return base ? read(changesSince(project, base)) : []
+    return read(changesSince(project, scope === "git" ? headTree : branchBase))
   }
 
   /** A project's recent threads across every agent, newest first, each with the tab that has it open. */

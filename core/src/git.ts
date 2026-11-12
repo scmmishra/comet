@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs"
+import { join } from "node:path"
 import { spawn } from "./environment"
 
 /** How long a git command may run before Desk stops it, after T3 Code. */
@@ -22,7 +24,7 @@ export const TRUNCATED = "\n\n[truncated]"
  */
 export async function git(dir: string, args: readonly string[], options: GitOptions = {}): Promise<string> {
   const stdin = options.input === undefined ? "ignore" : new Blob([options.input])
-  const child = spawn(["git", ...args], { cwd: dir, stdin, stdout: "pipe", stderr: "pipe", env: gitEnv(options.env), timeout: TIMEOUT_MS })
+  const child = spawn([await gitBinary(), ...args], { cwd: dir, stdin, stdout: "pipe", stderr: "pipe", env: gitEnv(options.env), timeout: TIMEOUT_MS })
   const [read, error, code] = await Promise.all([readCapped(child.stdout, options.maxBytes), new Response(child.stderr).text(), child.exited])
   if (read.overflowed) {
     if (options.overflow !== "truncate") throw new Error(`git ${args[0]} printed more than ${options.maxBytes} bytes.`)
@@ -31,6 +33,34 @@ export async function git(dir: string, args: readonly string[], options: GitOpti
   if (child.signalCode) throw new Error(`git ${args[0]} took longer than ${TIMEOUT_MS / 1000} s.`)
   if (code !== 0) throw new Error(`git ${args[0]} failed: ${error.trim()}`)
   return read.text
+}
+
+/** The git binary found for the PATH it was looked up on. */
+let found: { readonly path: string | undefined; readonly binary: Promise<string> } | undefined
+
+/**
+ * The binary `git` on the core's PATH runs, by Git's own record of where it lives. On a Mac, `git` is
+ * often Apple's /usr/bin/git, a shim that looks up Xcode's tools on every run: it took 16.8 ms a run here,
+ * against 4.8 ms for the binary it finds. Desk runs that binary. The PATH changes once the login shell's
+ * arrives, so the binary is looked up again for a new PATH. A Git whose record names no binary runs as `git`.
+ */
+export function gitBinary(): Promise<string> {
+  const path = process.env.PATH
+  if (found && found.path === path) return found.binary
+  found = { path, binary: lookUpGit() }
+  return found.binary
+}
+
+async function lookUpGit(): Promise<string> {
+  try {
+    const child = spawn(["git", "--exec-path"], { stdout: "pipe", stderr: "ignore" })
+    const [out, code] = await Promise.all([new Response(child.stdout).text(), child.exited])
+    const binary = join(out.trim(), "git")
+    return code === 0 && existsSync(binary) ? binary : "git"
+  } catch {
+    // No git on PATH. Running `git` then fails with the error the user should see.
+    return "git"
+  }
 }
 
 /**

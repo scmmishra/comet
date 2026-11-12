@@ -51,7 +51,6 @@ mod workspace;
 
 use rune::{AppSpec, MenuItem, Titlebar, Tx};
 use shell::{Desk, commands};
-use std::cell::RefCell;
 
 /// A menu item: its title and shortcut, its menu and what it runs.
 type Command = (&'static str, &'static str, &'static str, fn(&mut Desk, &mut Tx));
@@ -131,16 +130,13 @@ fn main() {
         app = app.menu_item(if menu == APP_MENU { item } else { item.menu(menu) });
     }
 
-    // The core starts once the window shows, so headless runs, which never call on_ready, start none.
-    let handle = app.handle();
-    let starting = RefCell::new(Some(core.clone()));
-    let app = app.on_ready(move |_| {
-        if let Some(core) = starting.borrow_mut().take() {
-            let handle = handle.clone();
-            core.send(&protocol::ClientMessage::AgentsGet);
-            core.start(move |event| handle.update(move |s: &mut Desk, tx| s.receive_in(event, tx)));
-        }
-    });
+    // The core starts beside the window, not after it, so both take their time at once. What it sends
+    // before the loop runs waits in the handle. Headless runs start none.
+    if !headless {
+        let handle = app.handle();
+        core.send(&protocol::ClientMessage::AgentsGet);
+        core.start(move |event| handle.update(move |s: &mut Desk, tx| s.receive_in(event, tx)));
+    }
     app.run();
     core.stop();
 }

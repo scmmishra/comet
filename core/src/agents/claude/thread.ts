@@ -13,6 +13,8 @@ const INTERRUPTED = /^\[Request interrupted by user/
  * summary as a user message, and the SDK drops the flag that marks it, so its opening tells it apart.
  */
 const COMPACT_SUMMARY = /^This session is being continued from a previous conversation/
+/** The opener of a turn Claude Code starts itself when no finished background task says why. */
+const SELF_STARTED = "Claude Code started a turn on its own."
 
 /**
  * The note Claude Code puts before a subagent's result, naming the tools it used. It is for the model that
@@ -46,14 +48,23 @@ export class ThreadMapper {
   private tools = new Map<string, ToolItem>()
   /** The id of the compaction running now, which its result and its boundary update. */
   private compacting?: string
+  /** The summary of the last background task that finished while no turn ran, for the turn it starts. */
+  private wake?: string
 
   constructor(private readonly dir: string) {}
 
-  /** `at` stamps finished text: now for a live message, its own time for a stored one. */
-  map(message: SDKMessage, at?: number): ThreadEvent[] {
+  /**
+   * `at` stamps finished text: now for a live message, its own time for a stored one. `idle` says that no
+   * turn runs, so a turn that starts now is one Claude Code started itself.
+   */
+  map(message: SDKMessage, at?: number, idle = false): ThreadEvent[] {
     switch (message.type) {
       case "system":
-        if (message.subtype === "init") return [{ kind: "init", model: modelLabel(message.model) }]
+        if (message.subtype === "init") return [{ kind: "init", model: modelLabel(message.model) }, ...this.selfStarted(message.uuid, at, idle)]
+        if (message.subtype === "task_notification") {
+          if (idle) this.wake = message.summary
+          return []
+        }
         // A command such as /context answers with text of its own, not a reply from Claude.
         if (message.subtype === "local_command_output") return [item({ type: "text", id: message.uuid, text: message.content, done: true, ...(at !== undefined ? { at } : {}) })]
         if (message.subtype === "status") return this.mapCompactionStatus(message)
@@ -77,9 +88,6 @@ export class ThreadMapper {
         return this.mapAssistant(message.message.content, message.uuid, at).map(item)
       case "user": {
         if (message.parent_tool_use_id) return []
-        // The tab works again until a turn Claude Code started itself ends.
-        const opener = selfStartedText(message.message.content, message.origin)
-        if (opener !== undefined) return [item({ type: "user", id: message.uuid ?? `opener-${at ?? Date.now()}`, text: opener, selfStarted: true, ...(at !== undefined ? { at } : {}) }), { kind: "status", busy: true }]
         return this.mapToolResults(message.message.content).map(item)
       }
       case "result":
@@ -88,6 +96,21 @@ export class ThreadMapper {
       default:
         return []
     }
+  }
+
+  /**
+   * The opener of a turn Claude Code starts itself, after T3 Code. It starts one when a background task
+   * finishes, or when a subagent or another session sends it a message. For a background task, the live
+   * stream sends the task's notification and the turn's init, but no user message. So any turn that starts
+   * while no turn runs opens with this line, and the tab works again until it ends. The stored transcript
+   * does carry the message, which `history` reads.
+   */
+  private selfStarted(uuid: string, at: number | undefined, idle: boolean): ThreadEvent[] {
+    const summary = this.wake
+    this.wake = undefined
+    if (!idle) return []
+    const opener = item({ type: "user", id: `self-started:${uuid}`, text: summary || SELF_STARTED, selfStarted: true, ...(at !== undefined ? { at } : {}) })
+    return [opener, { kind: "status", busy: true }]
   }
 
   /**
@@ -277,8 +300,8 @@ function userImages(content: unknown): ImageAttachment[] {
 }
 
 /**
- * The opening line of a turn Claude Code starts itself, or undefined for any other message. Claude Code
- * starts one when a background task finishes, and when a subagent or another session sends it a message,
+ * The opening line of a stored turn Claude Code started itself, or undefined for any other message. Claude
+ * Code starts one when a background task finishes, and when a subagent or another session sends it a message,
  * after T3 Code. A sent message holds the sender's whole report, so the opener names the sender instead.
  */
 function selfStartedText(content: unknown, origin: SDKMessageOrigin | undefined): string | undefined {

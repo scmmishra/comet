@@ -11,7 +11,7 @@ test("reports what changed since a snapshot, new and deleted files included", as
   repo.write("new.txt", "hello\n")
   rmSync(join(repo.dir, "old.txt"))
 
-  const changes = await changesSince(repo.dir, base!)
+  const changes = await changesSince(repo.dir, async () => base)
   expect(changes.map(({ path, status, additions, deletions }) => ({ path, status, additions, deletions }))).toEqual([
     { path: "a.txt", status: "modified", additions: 1, deletions: 1 },
     { path: "new.txt", status: "added", additions: 1, deletions: 0 },
@@ -24,7 +24,7 @@ test("reports a renamed file under its new path", async () => {
   const repo = gitRepo({ "src/old-name.ts": "export const a = 1\n".repeat(20) })
   const base = await snapshot(repo.dir)
   repo.git("mv", "src/old-name.ts", "src/new-name.ts")
-  const [change] = await changesSince(repo.dir, base!)
+  const [change] = await changesSince(repo.dir, async () => base)
   expect(change).toMatchObject({ path: "src/new-name.ts", status: "renamed" })
 })
 
@@ -41,7 +41,7 @@ test("leaves the user's index alone", async () => {
 test("has no changes when nothing moved", async () => {
   const repo = gitRepo({ "a.txt": "one\n" })
   const base = await snapshot(repo.dir)
-  expect(await changesSince(repo.dir, base!)).toEqual([])
+  expect(await changesSince(repo.dir, async () => base)).toEqual([])
 })
 
 test("compares uncommitted work with the last commit, and a branch's work with where it left main", async () => {
@@ -52,9 +52,9 @@ test("compares uncommitted work with the last commit, and a branch's work with w
   git("commit", "-q", "-m", "branch work")
   write("a.ts", "one\ntwo\n")
 
-  const uncommitted = await changesSince(dir, (await headTree(dir))!)
+  const uncommitted = await changesSince(dir, headTree)
   expect(uncommitted.map((file) => file.path)).toEqual(["a.ts"])
-  const branch = await changesSince(dir, (await branchBase(dir))!)
+  const branch = await changesSince(dir, branchBase)
   expect(branch.map((file) => file.path).sort()).toEqual(["a.ts", "b.ts"])
 })
 
@@ -132,7 +132,7 @@ test("sees a same-size edit made in the second the user's index was written", as
     const { dir, write } = gitRepo({ "a.ts": "one\n" })
     const base = await snapshot(dir)
     write("a.ts", "two\n")
-    expect(paths(await changesSince(dir, base!))).toEqual(["a.ts"])
+    expect(paths(await changesSince(dir, async () => base))).toEqual(["a.ts"])
   }
 })
 
@@ -175,7 +175,7 @@ test("reads paths Git would quote or split", async () => {
   const repo = gitRepo({ "x b/café.ts": "one\n" })
   const base = await snapshot(repo.dir)
   repo.write("x b/café.ts", "changed\n")
-  const [change] = await changesSince(repo.dir, base!)
+  const [change] = await changesSince(repo.dir, async () => base)
   expect(change).toMatchObject({ path: "x b/café.ts", additions: 1, deletions: 1 })
   expect(change!.patch).toContain("+changed")
 })
@@ -185,7 +185,7 @@ test("reads the same patch whatever the user's diff settings", async () => {
   for (const [key, value] of [["diff.noprefix", "true"], ["diff.mnemonicPrefix", "true"], ["diff.suppressBlankEmpty", "true"], ["diff.relative", "true"], ["color.diff", "always"]]) repo.git("config", key!, value!)
   const base = await snapshot(repo.dir)
   repo.write("a.ts", "one\n\n3\n")
-  const [change] = await changesSince(repo.dir, base!)
+  const [change] = await changesSince(repo.dir, async () => base)
   expect(change).toMatchObject({ path: "a.ts", additions: 1, deletions: 1 })
   // A blank context line stays a single space, so the patch still parses.
   expect(change!.patch).toContain("\n one\n \n-three\n+3")
@@ -201,7 +201,7 @@ test("lists a changed submodule even when the user asks diffs for its log", asyn
   inner.write("lib.ts", "two\n")
   inner.git("commit", "-qam", "two")
   Bun.spawnSync(["git", "pull", "-q"], { cwd: join(repo.dir, "vendor") })
-  expect(paths(await changesSince(repo.dir, base!))).toEqual(["vendor"])
+  expect(paths(await changesSince(repo.dir, async () => base))).toEqual(["vendor"])
 })
 
 test("a project in a subfolder of a repo shows only its own files", async () => {
@@ -213,7 +213,7 @@ test("a project in a subfolder of a repo shows only its own files", async () => 
   write("other/b.ts", "changed\n")
   write("other/new.ts", "new\n")
   expect(paths(await checkpointChanges(project, from, (await capture(project))!))).toEqual(["app/a.ts", "app/new.ts"])
-  expect(paths(await changesSince(project, (await headTree(project))!))).toEqual(["app/a.ts", "app/new.ts"])
+  expect(paths(await changesSince(project, headTree))).toEqual(["app/a.ts", "app/new.ts"])
 })
 
 test("names a path that holds a tab, and gives quoted paths their patch and status", async () => {
@@ -222,7 +222,7 @@ test("names a path that holds a tab, and gives quoted paths their patch and stat
   repo.write("a\tb.txt", "tab\n")
   repo.write('q"uote.txt', "two\n")
   rmSync(join(repo.dir, "back\\slash.txt"))
-  const changes = await changesSince(repo.dir, base!)
+  const changes = await changesSince(repo.dir, async () => base)
   expect(changes.map(({ path, status }) => ({ path, status }))).toEqual([
     { path: "a\tb.txt", status: "added" },
     { path: "back\\slash.txt", status: "deleted" },
@@ -242,7 +242,7 @@ test("gives a file that changed type both halves of its patch, and the next file
   rmSync(join(repo.dir, "link"))
   repo.write("link", "now a file\n")
   repo.write("z.txt", "two\n")
-  const [link, z] = await changesSince(repo.dir, base!)
+  const [link, z] = await changesSince(repo.dir, async () => base)
   expect(link).toMatchObject({ path: "link", status: "modified" })
   expect(link!.patch).toContain("+now a file")
   expect(z).toMatchObject({ path: "z.txt", status: "modified" })
@@ -254,7 +254,7 @@ test("a file past the patch's byte limit keeps its status, with no patch", async
   const base = await snapshot(repo.dir)
   repo.write("a-large.txt", ("y".repeat(99) + "\n").repeat(110_000))
   repo.write("z-new.txt", "new\n")
-  const changes = await changesSince(repo.dir, base!)
+  const changes = await changesSince(repo.dir, async () => base)
   const added = changes.find((change) => change.path === "z-new.txt")
   expect(added).toMatchObject({ status: "added", additions: 1, patch: "" })
 })
@@ -288,7 +288,7 @@ test("sees edits to files the user marked assume-unchanged or skip-worktree, and
   repo.write("assumed.txt", "two\n")
   repo.write("skipped.txt", "two\n")
   rmSync(join(repo.dir, "sparse.txt"))
-  expect(paths(await changesSince(repo.dir, base!))).toEqual(["assumed.txt", "skipped.txt"])
+  expect(paths(await changesSince(repo.dir, async () => base))).toEqual(["assumed.txt", "skipped.txt"])
   // The user's own index keeps its bits.
   expect(repo.git("ls-files", "-v")).toBe("h assumed.txt\nS skipped.txt\nS sparse.txt")
 })
@@ -320,4 +320,20 @@ test("a capture outside a repo gives none, and one that Git fails in a repo says
   } finally {
     chmodSync(objects, 0o755)
   }
+})
+
+test("a capture in a repo with no commits has no parent, and one from a subfolder finds the repo's index", async () => {
+  const dir = tempFolder("fresh")
+  Bun.spawnSync(["git", "init", "-q", dir])
+  writeFileSync(join(dir, "a.txt"), "one\n")
+  const commit = (await capture(dir))!
+  const show = (...args: string[]) => Bun.spawnSync(["git", ...args], { cwd: dir }).stdout.toString().trim()
+  expect(show("log", "--format=%P", "-1", commit)).toBe("")
+  expect(show("ls-tree", "--name-only", commit)).toBe("a.txt")
+
+  const repo = gitRepo({ "app/a.ts": "one\n", "other.ts": "one\n" })
+  repo.write("app/new.ts", "new\n")
+  const inApp = (await capture(join(repo.dir, "app")))!
+  expect(repo.git("log", "--format=%P", "-1", inApp)).toBe(repo.git("rev-parse", "HEAD"))
+  expect(repo.git("ls-tree", "-r", "--name-only", inApp)).toBe("app/a.ts\napp/new.ts\nother.ts")
 })
