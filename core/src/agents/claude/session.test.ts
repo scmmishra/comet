@@ -15,6 +15,7 @@ class FakeQuery implements AsyncIterable<SDKMessage> {
   interrupts = 0
   private messages: SDKMessage[] = []
   private failure?: Error
+  private ended = false
   private waiting?: { resolve: (result: IteratorResult<SDKMessage>) => void; reject: (error: Error) => void }
 
   constructor(readonly options: Options) {}
@@ -24,6 +25,14 @@ class FakeQuery implements AsyncIterable<SDKMessage> {
     this.waiting = undefined
     if (waiting) waiting.resolve({ value: message as SDKMessage, done: false })
     else this.messages.push(message as SDKMessage)
+  }
+
+  /** Ends the stream without an error, as Claude Code's does when its process exits. */
+  end() {
+    this.ended = true
+    const waiting = this.waiting
+    this.waiting = undefined
+    waiting?.resolve({ value: undefined, done: true })
   }
 
   fail(error: Error) {
@@ -39,6 +48,7 @@ class FakeQuery implements AsyncIterable<SDKMessage> {
         const message = this.messages.shift()
         if (message) return Promise.resolve({ value: message, done: false })
         if (this.failure) return Promise.reject(this.failure)
+        if (this.ended) return Promise.resolve({ value: undefined, done: true })
         return new Promise((resolve, reject) => (this.waiting = { resolve, reject }))
       },
     }
@@ -54,7 +64,9 @@ class FakeQuery implements AsyncIterable<SDKMessage> {
   async getContextUsage() {
     return { percentage: 10, totalTokens: 20_000, maxTokens: 200_000 }
   }
-  close() {}
+  close() {
+    this.end()
+  }
 }
 
 function setup() {
@@ -159,6 +171,39 @@ test("a permission request shows an item, and the first answer settles it", asyn
   s.session.answerPermission("call1", "decline")
   expect(await reply).toEqual({ behavior: "allow", updatedInput: { command: "ls" } })
   expect(s.items().filter((item) => item.type === "permission" && item.answered)).toHaveLength(1)
+})
+
+test("a stream that ends mid-turn fails the turn, and the next message starts Claude Code again", async () => {
+  const s = setup()
+  const running = await started(s)
+  running.end()
+  await until(() => s.statuses().length === 2)
+  expect(s.items().at(-1)).toMatchObject({ type: "error", message: "Claude Code exited before it finished the turn." })
+  expect(s.session.busy).toBe(false)
+
+  s.session.send("Again")
+  await until(() => s.queries.length === 2)
+})
+
+test("a stream that ends between turns shows nothing, and the next message starts Claude Code again", async () => {
+  const s = setup()
+  const running = await started(s)
+  running.push(result("r1"))
+  await until(() => s.statuses().length === 2)
+  running.end()
+  await Bun.sleep(10)
+  expect(s.items().some((item) => item.type === "error")).toBe(false)
+
+  s.session.send("Again")
+  await until(() => s.queries.length === 2)
+})
+
+test("closing the session ends its stream without an error", async () => {
+  const s = setup()
+  await started(s)
+  s.session.close()
+  await Bun.sleep(10)
+  expect(s.items().some((item) => item.type === "error")).toBe(false)
 })
 
 test("a failure shows an error and ends the turn, and the next message starts again", async () => {

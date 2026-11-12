@@ -74,6 +74,8 @@ export class ClaudeSession implements AgentSession {
   private running = false
   /** Set from the first message, while Claude Code is found and started, until the session fails. */
   private started = false
+  /** Set once the window closes the session. Closing ends Claude Code's stream, which is no failure. */
+  private closed = false
   /** Set from a steered message until Claude Code takes it in, or its turn ends without it. */
   private steering = false
   private settings: RunSettings
@@ -157,6 +159,7 @@ export class ClaudeSession implements AgentSession {
   }
 
   close() {
+    this.closed = true
     this.stop.clear()
     this.requests.settleAll(() => ({ behavior: "deny", message: "The session was closed." }))
     this.inbox?.close()
@@ -268,9 +271,21 @@ export class ClaudeSession implements AgentSession {
           }
         }
       }
+      this.streamEnded(running)
     } catch (error) {
       this.fail(error)
     }
+  }
+
+  /**
+   * Claude Code ended its stream without an error, so its process is gone, after T3 Code. A turn it was
+   * running would stay busy, and the next message would go to an inbox nothing reads, so the session lets
+   * the query go and the next message starts Claude Code again.
+   */
+  private streamEnded(running: Query) {
+    if (this.closed || this.query !== running) return
+    if (this.running) return this.fail(new Error("Claude Code exited before it finished the turn."))
+    this.release()
   }
 
   /** Ends the session after an error, which shows in the thread. The next message starts it again. */
@@ -279,6 +294,11 @@ export class ClaudeSession implements AgentSession {
     this.requests.settleAll(() => ({ behavior: "deny", message: "The session failed." }))
     this.emit({ kind: "item", item: errorItem(error) })
     this.endTurn()
+    this.release()
+  }
+
+  /** Lets the query go, so the next message starts Claude Code again. */
+  private release() {
     this.inbox?.close()
     this.query = undefined
     this.started = false
