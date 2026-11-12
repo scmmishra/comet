@@ -35,8 +35,13 @@ const STATUS_OF: Readonly<Record<string, FileChange["status"]>> = { A: "added", 
 /** How Git diffs two trees for Desk: renames found, and no external diff tools or text conversion. */
 const DIFF_FLAGS = ["-M", "--no-ext-diff", "--no-textconv", "--submodule=short"]
 
-/** The tree of the project's folder as it is now, or undefined outside a Git repo. */
-export async function snapshot(dir: string): Promise<string | undefined> {
+/** The tree of the project's folder as it is now, or undefined outside a Git repo or when Git fails. */
+export function snapshot(dir: string): Promise<string | undefined> {
+  return snapshotTree(dir).catch(() => undefined)
+}
+
+/** The tree of the project's folder as it is now. It throws with Git's message when Git fails, as it does outside a repo. */
+async function snapshotTree(dir: string): Promise<string> {
   const scratch = mkdtempSync(join(tmpdir(), "desk-index-"))
   const index = join(scratch, "index")
   const env = { GIT_INDEX_FILE: index }
@@ -61,8 +66,6 @@ export async function snapshot(dir: string): Promise<string | undefined> {
     if (copied) await unhide(dir, env).catch(() => undefined)
     await git(dir, ["add", "-A", "--", "."], { env })
     return (await git(dir, ["write-tree"], { env })).trim()
-  } catch {
-    return undefined
   } finally {
     rmSync(scratch, { recursive: true, force: true })
   }
@@ -120,19 +123,26 @@ const refPrefix = () => `refs/desk/${instanceName()}/checkpoints/`
 /**
  * Takes a checkpoint of the project and returns its commit, or undefined outside a Git repo. The commit
  * holds a snapshot, its parent is HEAD at the time and its date is when it was taken, so it records
- * where history stood. A ref keeps it from `git gc`.
+ * where history stood. A ref keeps it from `git gc`. It throws when Git fails in a repo, after T3 Code:
+ * a failure is not a sign that the project has no repo.
  */
 export async function capture(dir: string): Promise<string | undefined> {
-  const tree = await snapshot(dir)
-  if (!tree) return undefined
-  try {
-    const head = (await git(dir, ["rev-parse", "--verify", "--quiet", "HEAD"]).catch(() => "")).trim()
-    const commit = (await git(dir, ["commit-tree", tree, ...(head ? ["-p", head] : []), "-m", "Desk checkpoint"], { env: CHECKPOINT_AUTHOR })).trim()
-    await git(dir, ["update-ref", `${refPrefix()}${commit}`, commit])
-    return commit
-  } catch {
-    return undefined
-  }
+  const inRepo = await git(dir, ["rev-parse", "--is-inside-work-tree"]).then((out) => out.trim() === "true", () => false)
+  if (!inRepo) return undefined
+  const tree = await snapshotTree(dir)
+  const head = (await git(dir, ["rev-parse", "--verify", "--quiet", "HEAD"]).catch(() => "")).trim()
+  const commit = (await git(dir, ["commit-tree", tree, ...(head ? ["-p", head] : []), "-m", "Desk checkpoint"], { env: CHECKPOINT_AUTHOR })).trim()
+  await git(dir, ["update-ref", `${refPrefix()}${commit}`, commit])
+  return commit
+}
+
+/**
+ * `capture`, or undefined when Git fails or `ms` pass first. After T3 Code, a huge or slow repo starts its first
+ * turn without a baseline rather than hold the prompt. A capture that ends later names no thread, so
+ * `releaseCheckpoints` lets Git prune it.
+ */
+export function captureWithin(dir: string, ms: number): Promise<string | undefined> {
+  return Promise.race([capture(dir).catch(() => undefined), Bun.sleep(ms).then(() => undefined)])
 }
 
 /**

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
-import { readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { chmodSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { branchBase, capture, changesSince, checkpointChanges, headTree, releaseCheckpoints, snapshot } from "./checkpoints"
+import { branchBase, capture, captureWithin, changesSince, checkpointChanges, headTree, releaseCheckpoints, snapshot } from "./checkpoints"
 import { gitRepo, tempFolder } from "./test-support"
 
 test("reports what changed since a snapshot, new and deleted files included", async () => {
@@ -299,4 +299,25 @@ test("keeps a file the turn committed by amending the last commit", async () => 
   write("a.ts", "two\n")
   git("commit", "-q", "--amend", "-am", "init, amended")
   expect(paths(await checkpointChanges(dir, from, (await capture(dir))!))).toEqual(["a.ts"])
+})
+
+test("a capture that takes longer than its bound gives none, and one within it gives its commit", async () => {
+  const repo = gitRepo({ "a.txt": "one\n" })
+  expect(await captureWithin(repo.dir, 0)).toBeUndefined()
+  expect(await captureWithin(repo.dir, 60_000)).toMatch(/^[0-9a-f]{40}$/)
+})
+
+test("a capture outside a repo gives none, and one that Git fails in a repo says why", async () => {
+  expect(await capture(tempFolder("plain"))).toBeUndefined()
+  const repo = gitRepo({ "a.txt": "one\n" })
+  writeFileSync(join(repo.dir, "b.txt"), "new\n")
+  // Git cannot write the new file's object into a store it may not write to.
+  const objects = join(repo.dir, ".git", "objects")
+  chmodSync(objects, 0o555)
+  try {
+    await expect(capture(repo.dir)).rejects.toThrow()
+    expect(await captureWithin(repo.dir, 60_000)).toBeUndefined()
+  } finally {
+    chmodSync(objects, 0o755)
+  }
 })

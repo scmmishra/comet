@@ -5,7 +5,7 @@ import type { Agents } from "./agents/registry"
 import { resultMessage } from "./agents/turn-items"
 import type { Delegations, Handoffs } from "./delegate/delegations"
 import type { KeyedThread } from "./plugins/plugins"
-import { branchBase, capture, changesSince, checkpointChanges, headTree, releaseCheckpoints } from "./checkpoints"
+import { branchBase, capture, captureWithin, changesSince, checkpointChanges, headTree, releaseCheckpoints } from "./checkpoints"
 import { errorMessage } from "./errors"
 import { git } from "./git"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
@@ -20,6 +20,8 @@ type Send = (message: CoreMessage) => void
 const MAX_RECENT = 20
 /** How many closed tabs ⌘⇧T can bring back. */
 const CLOSED_TABS = 10
+/** How long a thread's first prompt waits for the checkpoint its turns are measured from. */
+const BASELINE_WAIT_MS = 5_000
 
 /** Thrown by `send` when a plugin moved the tab to another thread before the message went out. */
 class ThreadMoved extends Error {
@@ -187,7 +189,8 @@ export class Window {
     const tab = this.tab(tabId)
     if (!this.thread(tabId).threadStart) {
       const key = this.thread(tabId).key
-      const threadStart = await capture(tab.project)
+      // The first turn of a thread without one lists no changes, and the turns after it are measured from where it ended.
+      const threadStart = await captureWithin(tab.project, BASELINE_WAIT_MS)
       if (this.thread(tabId).key !== key) throw new ThreadMoved()
       if (threadStart) this.updateThread(tabId, { threadStart })
     }
@@ -403,7 +406,7 @@ export class Window {
     this.closeSession(tabId)
     const rewound = await agent.threads.rewind!(tab.project, sessionId, messageId)
     // The last turn's checkpoints describe work the rewind took back. The next turn starts from the files as they are now.
-    const turnTo = await capture(tab.project)
+    const turnTo = await capture(tab.project).catch(() => undefined)
     const { threadStart } = this.thread(tabId)
     const kept = { ...startedOver(this.thread(tabId)), ...(threadStart ? { threadStart } : {}), ...(turnTo ? { turnTo } : {}) }
     // A rewind to the first message leaves nothing to resume, so the next message starts a new session.
@@ -612,7 +615,11 @@ export class Window {
   private async finishTurn(tabId: string, lastMessage: string, current: () => boolean) {
     const tab = this.state.tabs.find((found) => found.id === tabId)
     if (!tab) return
-    const to = await capture(tab.project)
+    // A Git failure leaves the turn with no list of changes, so the user is told why.
+    const to = await capture(tab.project).catch((error) => {
+      if (current()) this.hooks.broadcast({ type: "error", message: `Desk could not record what the turn in “${tab.title}” changed`, detail: errorMessage(error) })
+      return undefined
+    })
     if (!to || !current()) return
     const from = this.thread(tabId).turnTo ?? this.thread(tabId).threadStart
     this.updateThread(tabId, { turnTo: to, ...(from ? { turnFrom: from } : { threadStart: to }) })
