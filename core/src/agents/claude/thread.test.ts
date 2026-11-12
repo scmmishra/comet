@@ -32,6 +32,16 @@ test("shows a subagent's result without the note Claude Code writes for the mode
   expect(event).toMatchObject({ kind: "item", item: { id: "t1", result: { output: "No blocking issues.", isError: false } } })
 })
 
+test("shows Claude Code's notices and warnings, but not transcript notes or a Stop hook's passive summary", () => {
+  const mapper = new ThreadMapper(DIR)
+  const notice = (uuid: string, level: string, content: string, extra: object = {}) => mapper.map(sdk({ type: "system", subtype: "informational", uuid, level, content, ...extra }))
+  expect(notice("n1", "info", "Saved the transcript")).toEqual([])
+  expect(notice("n2", "notice", "Stop says: tests passed")).toEqual([])
+  expect(notice("n3", "notice", "Stop says: fix the lint first", { prevent_continuation: true })).toEqual([{ kind: "item", item: { type: "notice", id: "n3", text: "Stop says: fix the lint first", warning: true } }])
+  expect(notice("n4", "warning", "The hook timed out")).toEqual([{ kind: "item", item: { type: "notice", id: "n4", text: "The hook timed out", warning: true } }])
+  expect(notice("n5", "suggestion", "Try /compact")).toEqual([{ kind: "item", item: { type: "notice", id: "n5", text: "Try /compact", warning: false } }])
+})
+
 test("hides a subagent's own steps", () => {
   const mapper = new ThreadMapper(DIR)
   expect(mapper.map(sdk({ type: "assistant", uuid: "a1", parent_tool_use_id: "task-1", message: { content: [{ type: "text", text: "inner" }] } }))).toEqual([])

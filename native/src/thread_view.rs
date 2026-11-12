@@ -288,6 +288,10 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
             .px(12.0)
             .py(8.0)
             .child(text(message.clone()).wrap().shrink().min_w(0.0).font(theme::thread_text(k, c.size)).color(k.c.danger.fg).selectable(true)),
+        ThreadItem::Notice { text: words, warning, .. } => {
+            let (mark, color) = if *warning { (&ic::WARNING, k.c.warning.fg) } else { (&ic::INFO, k.c.text_faint) };
+            row().w_full().gap(6.0).items_start().child(icon(mark, crate::icons::SIZE).color(color).mt(2.0)).child(c.small(words.clone()).color(color).wrap().shrink().min_w(0.0).selectable(true))
+        }
         ThreadItem::Changes { id, files } => changes_view(c, id, files),
         ThreadItem::Permission { request_id, kind, detail, reason, .. } => permission_view(c, request_id, kind, detail, reason.as_deref()),
         ThreadItem::Thinking { .. } | ThreadItem::Tool { .. } => step_view(c, item),

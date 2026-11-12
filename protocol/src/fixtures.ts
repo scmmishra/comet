@@ -75,6 +75,8 @@ export const CORE_MESSAGES = [
       { type: "text", id: "x1", text: "Fixed it.", done: true, at: 1_700_000_060_000 },
       { type: "result", id: "r1", durationMs: 60_000, isError: false, stopped: true },
       { type: "error", id: "e1", message: "Rate limited" },
+      { type: "notice", id: "n1", text: "Stop says: fix the lint first", warning: true },
+      { type: "notice", id: "n2", text: "Try /compact", warning: false },
       { type: "changes", id: "ch1", files: [{ path: "src/login.ts", status: "modified", additions: 3, deletions: 1 }] },
       { type: "user", id: "u2", text: "A background task finished", selfStarted: true },
     ],

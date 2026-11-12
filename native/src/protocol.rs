@@ -616,6 +616,8 @@ pub enum ThreadItem {
         stopped: bool,
     },
     Error { id: String, message: String },
+    /// Something the agent says about the turn that is not its reply, such as a hook's note.
+    Notice { id: String, text: String, warning: bool },
     /// The files a turn changed, added once the turn ends.
     Changes { id: String, files: Vec<ChangedFile> },
 }
@@ -632,6 +634,7 @@ impl ThreadItem {
             | ThreadItem::Compaction { id, .. }
             | ThreadItem::Result { id, .. }
             | ThreadItem::Error { id, .. }
+            | ThreadItem::Notice { id, .. }
             | ThreadItem::Changes { id, .. } => id,
         }
     }

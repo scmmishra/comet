@@ -7,8 +7,8 @@ const PRIORITY: StepKind[] = ["command", "edit", "read", "search", "web", "other
 /** A group summary names this many kinds, and counts the rest as other actions. */
 const NAMED_KINDS = 2
 
-/** What a folded turn keeps in view: errors, compactions, and permission requests still waiting for the user. */
-const staysOut = (item: ThreadItem) => item.type === "error" || item.type === "compaction" || item.type === "permission"
+/** What a folded turn keeps in view: errors, warnings, compactions, and permission requests still waiting for the user. */
+const staysOut = (item: ThreadItem) => item.type === "error" || (item.type === "notice" && item.warning) || item.type === "compaction" || item.type === "permission"
 
 /** A message that only asks the agent to compact, such as `/compact` or `/compact keep the plan`. */
 const COMPACT_COMMAND = /^\/compact(\s|$)/

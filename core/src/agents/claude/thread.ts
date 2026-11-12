@@ -61,6 +61,7 @@ export class ThreadMapper {
           const { pre_tokens: preTokens, post_tokens: postTokens } = message.compact_metadata
           return [item({ type: "compaction", id, status: "done", preTokens, ...(postTokens ? { postTokens } : {}) })]
         }
+        if (message.subtype === "informational") return this.mapNotice(message)
         if (message.subtype === "api_retry") {
           return [{ kind: "retry", attempt: message.attempt, maxRetries: message.max_retries, delayMs: message.retry_delay_ms, error: retryReason(message.error, message.error_status) }]
         }
@@ -83,6 +84,17 @@ export class ThreadMapper {
       default:
         return []
     }
+  }
+
+  /**
+   * A notice Claude Code shows the user, such as a hook's note, after T3 Code. Notes meant only for the
+   * transcript stay out, and so does the summary a Stop hook leaves after every turn unless it stopped the turn.
+   */
+  private mapNotice(message: Extract<SDKMessage, { type: "system"; subtype: "informational" }>): ThreadEvent[] {
+    if (message.level === "info") return []
+    const stopHookSummary = message.level === "notice" && message.content.startsWith("Stop says: ") && !message.prevent_continuation
+    if (stopHookSummary) return []
+    return [item({ type: "notice", id: message.uuid, text: message.content, warning: message.level === "warning" || !!message.prevent_continuation })]
   }
 
   /**

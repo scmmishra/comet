@@ -125,6 +125,8 @@ export type ThreadItem =
   /** The end of a turn. `stopped` means the user stopped it. */
   | { readonly type: "result"; readonly id: string; readonly durationMs: number; readonly isError: boolean; readonly stopped?: boolean }
   | { readonly type: "error"; readonly id: string; readonly message: string }
+  /** Something the agent says about the turn that is not its reply, such as a hook's note. A warning stands out. */
+  | { readonly type: "notice"; readonly id: string; readonly text: string; readonly warning: boolean }
   /** The files a turn changed, without their diffs, added once the turn ends. */
   | { readonly type: "changes"; readonly id: string; readonly files: readonly ChangedFile[] }
 
