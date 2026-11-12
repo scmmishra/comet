@@ -572,8 +572,15 @@ pub enum ThreadItem {
         #[serde(default)]
         self_started: bool,
     },
-    /// Assistant text. Text still streaming is not done.
-    Text { id: String, text: String, done: bool, at: Option<f64> },
+    /// Assistant text. Text still streaming is not done. An interrupted reply was cut short by a steered message.
+    Text {
+        id: String,
+        text: String,
+        done: bool,
+        at: Option<f64>,
+        #[serde(default)]
+        interrupted: bool,
+    },
     Thinking { id: String, text: Option<String>, kind: StepKind, label: String },
     Tool {
         id: String,

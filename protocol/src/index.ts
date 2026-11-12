@@ -72,8 +72,11 @@ export type ThreadItem =
    * Its text says which.
    */
   | { readonly type: "user"; readonly id: string; readonly text: string; readonly images?: readonly ImageAttachment[]; readonly at?: number; readonly steered?: boolean; readonly selfStarted?: boolean }
-  /** Assistant text. `at` is when it finished. Text still streaming is not done and has none. */
-  | { readonly type: "text"; readonly id: string; readonly text: string; readonly done: boolean; readonly at?: number }
+  /**
+   * Assistant text. `at` is when it finished. Text still streaming is not done and has none. `interrupted`
+   * marks a reply that a steered message cut short.
+   */
+  | { readonly type: "text"; readonly id: string; readonly text: string; readonly done: boolean; readonly at?: number; readonly interrupted?: boolean }
   /** The agent's thinking. `text` is what it thought, when the agent shares it. */
   | { readonly type: "thinking"; readonly id: string; readonly text?: string; readonly kind: StepKind; readonly label: string }
   /**

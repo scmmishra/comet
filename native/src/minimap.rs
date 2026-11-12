@@ -140,7 +140,7 @@ mod tests {
 
     #[test]
     fn a_mark_per_message_with_the_last_answer_before_the_next() {
-        let reply = |id: &str, text: &str| ThreadItem::Text { id: id.into(), text: text.into(), done: true, at: None };
+        let reply = |id: &str, text: &str| ThreadItem::Text { id: id.into(), text: text.into(), done: true, at: None, interrupted: false };
         let items = [user("u1", "Fix  the\nform", false), reply("x1", "first"), reply("x2", "Done,  fixed."), user("u2", "A task ended", true), user("u3", "  ", false)];
         let found = marks(&items);
         assert_eq!(found.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(), ["u1", "u3"]);

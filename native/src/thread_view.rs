@@ -274,11 +274,13 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
                 .child(message_meta(c, item.id(), words, *at, message_actions(c, item.id(), words, images).into_iter().flatten()))
         }
         // Markdown makes its own selection group. Leaving it joins its texts to the thread's, so a drag crosses messages.
-        ThreadItem::Text { text: words, done, at, .. } => {
+        ThreadItem::Text { text: words, done, at, interrupted, .. } => {
             let copied = c.s.copied.as_ref().map(|(key, _)| key.as_str());
             let reply = crate::reply::interactive(crate::reply::document(words), c.tab, item.id(), copied, k).style(theme::markdown(k, c.size)).streaming(!*done).selectable(true).build(k).selection_group(false);
+            // A reply a steered message cut short says so, so it does not read as the whole answer.
+            let cut = interrupted.then(|| text("Cut short by your message").font(crate::theme::text(12.0)).color(k.c.text_faint));
             // A reply still streaming has nothing final to copy.
-            col().w_full().gap(4.0).hover_group().child(reply).children(done.then(|| message_meta(c, item.id(), words, *at, [])))
+            col().w_full().gap(4.0).hover_group().child(reply).children(cut).children(done.then(|| message_meta(c, item.id(), words, *at, [])))
         }
         ThreadItem::Compaction { status, pre_tokens, post_tokens, error, .. } => compaction_view(c, status, *pre_tokens, *post_tokens, error.as_deref()),
         ThreadItem::Error { message, .. } => el()

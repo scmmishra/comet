@@ -238,7 +238,7 @@ mod tests {
     use super::*;
 
     fn text(id: &str, body: &str, done: bool) -> ThreadItem {
-        ThreadItem::Text { id: id.into(), text: body.into(), done, at: None }
+        ThreadItem::Text { id: id.into(), text: body.into(), done, at: None, interrupted: false }
     }
 
     fn user(id: &str, self_started: bool) -> ThreadItem {

@@ -72,6 +72,7 @@ export const CORE_MESSAGES = [
       { type: "permission", id: "p1", requestId: "r1", tool: "Bash", kind: "command", detail: "rm -rf dist", reason: "It deletes files", allowSession: false },
       { type: "question", id: "q1", requestId: "r2", questions: [{ header: "Scope", question: "Which form?", options: [{ label: "Login" }], multiSelect: false }] },
       { type: "compaction", id: "c1", status: "done", preTokens: 180_000, postTokens: 32_000 },
+      { type: "text", id: "x0", text: "I will rewrite the", done: true, at: 1_700_000_030_000, interrupted: true },
       { type: "text", id: "x1", text: "Fixed it.", done: true, at: 1_700_000_060_000 },
       { type: "result", id: "r1", durationMs: 60_000, isError: false, stopped: true },
       { type: "error", id: "e1", message: "Rate limited" },

@@ -250,7 +250,11 @@ export class ClaudeSession implements AgentSession {
         this.subagents.handle(message)
         this.backgroundTasks.handle(message)
         const steer = message.type === "result" ? this.takeSteer(message) : undefined
-        if (steer === "cut") continue
+        if (steer === "cut") {
+          const reply = message.type === "result" && message.terminal_reason === "aborted_streaming" ? this.mapper.interruptedReply(Date.now()) : undefined
+          if (reply) this.emit({ kind: "item", item: reply })
+          continue
+        }
         for (const event of this.mapper.map(message, Date.now())) {
           // A turn Claude Code starts itself, after a background task, makes the tab busy again.
           if (event.kind === "status" && event.busy) this.running = true

@@ -41,6 +41,8 @@ type ToolItem = Extract<ThreadItem, { type: "tool" }>
  */
 export class ThreadMapper {
   private streaming?: string
+  /** The reply the latest top-level assistant message carried, or the one streaming now, which a steer can cut short. */
+  private lastReply?: { readonly id: string; text: string; readonly at?: number }
   private tools = new Map<string, ToolItem>()
   /** The id of the compaction running now, which its result and its boundary update. */
   private compacting?: string
@@ -71,6 +73,7 @@ export class ThreadMapper {
       case "assistant":
         // A subagent's own steps stay inside its tool call.
         if (message.parent_tool_use_id) return []
+        this.lastReply = undefined
         return this.mapAssistant(message.message.content, message.uuid, at).map(item)
       case "user": {
         if (message.parent_tool_use_id) return []
@@ -80,6 +83,7 @@ export class ThreadMapper {
         return this.mapToolResults(message.message.content).map(item)
       }
       case "result":
+        this.lastReply = undefined
         return [item({ type: "result", id: message.uuid, durationMs: message.duration_ms, isError: message.is_error })]
       default:
         return []
@@ -95,6 +99,18 @@ export class ThreadMapper {
     const stopHookSummary = message.level === "notice" && message.content.startsWith("Stop says: ") && !message.prevent_continuation
     if (stopHookSummary) return []
     return [item({ type: "notice", id: message.uuid, text: message.content, warning: message.level === "warning" || !!message.prevent_continuation })]
+  }
+
+  /**
+   * The latest reply, finished and marked as cut short, after T3 Code. A steer that lands while Claude streams
+   * a reply ends it there, and it would otherwise read as complete, or as still streaming.
+   */
+  interruptedReply(at: number): ThreadItem | undefined {
+    const reply = this.lastReply
+    this.lastReply = undefined
+    this.streaming = undefined
+    if (!reply?.text.trim()) return undefined
+    return { type: "text", id: reply.id, text: reply.text, done: true, interrupted: true, at: reply.at ?? at }
   }
 
   /**
@@ -118,9 +134,11 @@ export class ThreadMapper {
     if (parent) return []
     if (event.type === "content_block_start" && event.content_block.type === "text") {
       this.streaming = uuid
+      this.lastReply = { id: uuid, text: "" }
       return [item({ type: "text", id: uuid, text: "", done: false })]
     }
     if (event.type === "content_block_delta" && event.delta.type === "text_delta" && this.streaming) {
+      if (this.lastReply?.id === this.streaming) this.lastReply.text += event.delta.text
       return [{ kind: "text.delta", id: this.streaming, delta: event.delta.text }]
     }
     return []
@@ -131,6 +149,7 @@ export class ThreadMapper {
       if (block.type === "text") {
         const id = this.streaming ?? `${uuid}:${index}`
         this.streaming = undefined
+        this.lastReply = { id, text: block.text, ...(at !== undefined ? { at } : {}) }
         return [{ type: "text", id, text: block.text, done: true, ...(at !== undefined ? { at } : {}) }]
       }
       if (block.type === "thinking") {

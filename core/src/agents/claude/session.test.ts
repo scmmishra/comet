@@ -120,6 +120,20 @@ test("a steered message that cuts the turn's step keeps the turn going and hides
   expect(s.statuses()).toEqual([true, false])
 })
 
+test("a steered message that cuts a streaming reply marks that reply as cut short", async () => {
+  const s = setup()
+  const running = await started(s)
+  const stream = (event: object) => ({ type: "stream_event", uuid: "a1", session_id: "s1", parent_tool_use_id: null, event })
+  running.push(stream({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }))
+  running.push(stream({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "I will rewrite the" } }))
+  await until(() => s.events.some((event) => event.kind === "text.delta"))
+  s.session.steer("Stop, use the old API")
+
+  running.push(result("cut", { terminal_reason: "aborted_streaming" }))
+  await until(() => s.items().some((item) => item.type === "text" && item.done))
+  expect(s.items().at(-1)).toMatchObject({ type: "text", id: "a1", text: "I will rewrite the", done: true, interrupted: true })
+})
+
 test("a steered message that missed its turn keeps the tab busy for the next turn", async () => {
   const s = setup()
   const running = await started(s)
