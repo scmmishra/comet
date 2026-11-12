@@ -8,7 +8,7 @@ use crate::shell::{CoreState, Desk};
 /// A scene: its name, and what it sets in a fresh window.
 type Scene = (&'static str, fn(&mut Desk));
 
-pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("models-other-agent", models_other_agent), ("models-missing-agent", models_missing_agent), ("models-new-tab", models_new_tab), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-codex", settings_codex), ("settings-antigravity", settings_antigravity), ("settings-signing-in", settings_signing_in), ("models-signing-in", models_signing_in), ("settings-projects", settings_projects), ("settings-mcp", settings_mcp), ("stop-notice", stop_notice), ("branch-notice", branch_notice), ("branch-confirm", branch_confirm), ("file", file)];
+pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("models-other-agent", models_other_agent), ("models-missing-agent", models_missing_agent), ("models-new-tab", models_new_tab), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-codex", settings_codex), ("settings-antigravity", settings_antigravity), ("settings-signing-in", settings_signing_in), ("models-signing-in", models_signing_in), ("settings-projects", settings_projects), ("settings-mcp", settings_mcp), ("stop-notice", stop_notice), ("branch-notice", branch_notice), ("branch-confirm", branch_confirm), ("markdown", markdown), ("file", file)];
 
 /// The core messages in the JSON file `DESK_SCENE_FILE` names, with the thread rows in its `open` list
 /// opened.
@@ -134,6 +134,14 @@ fn review(s: &mut Desk) {
           "patch": "--- a/src/login.ts\n+++ b/src/login.ts\n@@ -1,4 +1,5 @@\n export function retry() {\n-  setError(null)\n   send()\n+  setError(null)\n+  return true\n }\n" }
     ] })).expect("the review decodes"))).expect("a review needs no folder");
     s.toggle_panel();
+}
+
+/// The thread with a README open in the pane, on its preview.
+fn markdown(s: &mut Desk) {
+    thread(s);
+    s.open_file("tab", "README.md", None);
+    let text = "# Web\n\nThe login form and its **retry** flow.\nA second line joins the first.\n\n## Run\n\n- `npm install`\n- `npm test`\n\n```sh\nnpm run dev\n```\n\n> Read [the guide](https://example.com) first.\n\n| Script | Does |\n| --- | --- |\n| dev | Serves the app |\n";
+    s.receive(Event::Message(serde_json::from_value(serde_json::json!({ "type": "file", "project": "/Users/me/code/web", "path": "/Users/me/code/web/README.md", "file": { "path": "/Users/me/code/web/README.md", "text": text, "binary": false, "truncated": false } })).expect("the file decodes"))).expect("a file needs no folder");
 }
 
 /// A new tab in a project with past threads.

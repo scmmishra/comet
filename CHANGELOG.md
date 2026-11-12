@@ -13,6 +13,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 - A Claude reply that a steered message cuts short says so under it.
 - In the command palette, the highlighted row's text no longer moves a pixel as the arrows move the highlight. After Escape leaves a nested list, the arrows and Escape work again.
 - The command palette's highlight follows the pointer. The rows under the palette no longer light up on hover.
+- A Markdown file opens in the view pane as a rendered preview. A switch in its header shows its source. A file opened at a line opens on its source, with the line marked.
 - In Search files, Enter pressed before the search for the new query answers opens that query's top file. It used to open the top file of the query before.
 - ⌘P or ⌘⇧O while the command palette is open switches it to files or threads. They used to close it.
 - Desk runs on a newer Rune. Rows, toasts and cards that the core brings now appear at once, without their entrance animation. An animation still plays when your own input causes the change. Hover groups now light while keyboard focus is inside them, so the actions they reveal show when Tab reaches them.

@@ -2,7 +2,7 @@
 //! tab's changes, and files open in it.
 
 use crate::format;
-use crate::protocol::{ClientMessage, FileChange, FileView, TabInfo};
+use crate::protocol::{ClientMessage, FileChange, FileTabInfo, FileView, TabInfo};
 use crate::shell::Desk;
 use rune::{El, ScrollSpec, Tx, col, el, icon, row, text};
 use crate::diff_view::{DiffMode, DiffState, DiffView, FileStatus, parse};
@@ -23,6 +23,8 @@ const OPEN_FILE_LIMIT: usize = 8;
 const HEADER_HEIGHT: f32 = 46.0;
 /// A line of code in the file view, `--diffs-line-height`.
 const LINE_HEIGHT: f32 = 20.0;
+/// Extensions of the files the panel draws as Markdown, lowercase.
+const MARKDOWN_EXTENSIONS: [&str; 2] = ["md", "markdown"];
 
 fn scope_words(scope: &str) -> (&'static str, &'static str) {
     SCOPES.iter().find(|s| s.0 == scope).map_or((SCOPES[0].1, SCOPES[0].2), |s| (s.1, s.2))
@@ -83,6 +85,8 @@ pub struct Panel {
     files: HashMap<(String, String), ShownFile>,
     /// The file tab last read, so a file reads again each time it comes to the front.
     file_shown: Option<String>,
+    /// Whether a Markdown file tab shows its source, once someone chose, by file tab id.
+    markdown_source: HashMap<String, bool>,
     /// How diffs draw, in every tab.
     split: bool,
     scope_open: bool,
@@ -257,6 +261,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .label(format!("Close {name}"))
             .on_press_tx(move |s: &mut Desk, tx| {
                 s.workspace.close_file_tab(&close_tab, &close_id, &s.core);
+                s.panel.markdown_source.remove(&close_id);
                 s.sync_panel();
                 tx.instant();
             })
@@ -330,7 +335,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let body = match (terminal, shown) {
         _ if plugin_panel.is_some() => col().w_full().grow(1.0).min_h(0.0).px(12.0).pb(12.0).child(crate::plugins::view(s, plugin_panel.expect("checked"), &tab.project, crate::plugins::Frame::Pane, k)),
         (Some(t), _) => crate::terminal_view::terminal(s, &t.id, k),
-        (None, Some(file)) => file_view(s, tab, &file.path, file.line, k),
+        (None, Some(file)) => file_view(s, tab, file, k),
         (None, None) => review_view(s, tab, k, layer),
     };
     let body = col().key(body_key).transition(rune::Transition::none()).w_full().grow(1.0).min_h(0.0).child(body);
@@ -473,9 +478,35 @@ fn centred(k: &Kit, words: &str) -> El {
     col().w_full().grow(1.0).center().px(24.0).child(text(words.to_owned()).font(crate::theme::text(13.0)).color(k.c.text_faint).wrap())
 }
 
+fn is_markdown(path: &str) -> bool {
+    path.rsplit_once('.').is_some_and(|(_, ext)| MARKDOWN_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+}
+
+/// Whether a Markdown file tab shows its source. Until someone chooses, it shows its preview, or its
+/// source when it opened at a line, so the line shows marked.
+fn shows_source(s: &Desk, file: &FileTabInfo) -> bool {
+    s.panel.markdown_source.get(&file.id).copied().unwrap_or(file.line.is_some())
+}
+
 /// A file open in the panel, after OpenCode: its path, a button to open it in the editor, then its lines.
-fn file_view(s: &Desk, tab: &TabInfo, path: &str, line: Option<u32>, k: &Kit) -> El {
+/// A Markdown file has a switch between its preview and its source.
+fn file_view(s: &Desk, tab: &TabInfo, file: &FileTabInfo, k: &Kit) -> El {
+    let (path, line) = (file.path.as_str(), file.line);
     let (project, open_path) = (tab.project.clone(), path.to_owned());
+    let markdown = is_markdown(path);
+    let source = !markdown || shows_source(s, file);
+    let switch = markdown.then(|| {
+        let id = file.id.clone();
+        crate::ui::segmented(
+            k,
+            "Markdown view",
+            &[crate::ui::Segment { icon: None, words: Some("Preview"), name: "Preview" }, crate::ui::Segment { icon: None, words: Some("Source"), name: "Source" }],
+            usize::from(source),
+            move |s: &mut Desk, i| {
+                s.panel.markdown_source.insert(id.clone(), i == 1);
+            },
+        )
+    });
     let head = row()
         .w_full()
         .gap(8.0)
@@ -484,6 +515,7 @@ fn file_view(s: &Desk, tab: &TabInfo, path: &str, line: Option<u32>, k: &Kit) ->
         .pb(8.0)
         .pt(2.0)
         .child(text(path.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate().grow(1.0))
+        .children(switch)
         .child(
             crate::theme::small_button("Open in editor")
                 .variant(ButtonVariant::Ghost)
@@ -493,9 +525,23 @@ fn file_view(s: &Desk, tab: &TabInfo, path: &str, line: Option<u32>, k: &Kit) ->
     let body = match s.panel.files.get(&(tab.project.clone(), path.to_owned())) {
         None => centred(k, "Reading the file…"),
         Some(shown) if shown.file.binary => centred(k, "This is a binary file. Open it in the editor to see it."),
-        Some(shown) => code(tab, path, shown, line, k),
+        Some(shown) => {
+            let truncated = shown.file.truncated.then(|| text("The file is long, so only its first megabyte shows.").font(crate::theme::text(12.0)).color(k.c.text_faint).px(12.0).pb(8.0));
+            let content = if source { code(tab, path, shown, line, k) } else { preview(s, tab, path, shown, k) };
+            col().w_full().grow(1.0).min_h(0.0).children(truncated).child(content)
+        }
     };
     col().w_full().grow(1.0).min_h(0.0).child(head).child(body)
+}
+
+/// A Markdown file as a document, with working links and code blocks, as a reply draws them. It takes
+/// the file's text as written: a single newline joins lines, as Markdown means it to.
+fn preview(s: &Desk, tab: &TabInfo, path: &str, shown: &ShownFile, k: &Kit) -> El {
+    let id = format!("preview-{}-{path}", tab.id);
+    let copied = s.copied.as_ref().map(|(key, _)| key.as_str());
+    let document = rune_kit::Markdown::new(shown.file.text.as_deref().unwrap_or("")).scroll_wide(true);
+    let document = crate::reply::interactive(document, &tab.id, &id, copied, k).style(crate::theme::markdown(k, s.account.text_size())).selectable(true).build(k);
+    col().key(id).w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).child(col().w_full().px(12.0).pb(16.0).child(document))
 }
 
 /// A file's text, one numbered line per row, with `line` marked, in Desk's code colours.
@@ -505,7 +551,6 @@ fn code(tab: &TabInfo, path: &str, shown: &ShownFile, line: Option<u32>, k: &Kit
     // Pierre's gutter: 2ch in, the number at least 2ch wide, 1ch after it, and the code 1ch further in.
     const CH: f32 = 7.2;
     let width = 2.0 * CH + (count.max(1).to_string().len().max(2) as f32) * CH + CH;
-    let truncated = shown.file.truncated.then(|| text("The file is long, so only its first megabyte shows.").font(crate::theme::text(12.0)).color(k.c.text_faint).px(12.0).pb(8.0));
     let key = (tab.project.clone(), path.to_owned());
     let dark = k.dark;
     // The line a file opened at, Desk's `--color-accent-soft`.
@@ -533,7 +578,7 @@ fn code(tab: &TabInfo, path: &str, shown: &ShownFile, line: Option<u32>, k: &Kit
                 .child(text(words).spans(spans).font(mono).color(ink).selectable(true).pl(CH))
         },
     );
-    col().key(format!("file-{}-{path}", tab.id)).w_full().grow(1.0).min_h(0.0).children(truncated).child(col().w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).child(rows))
+    col().key(format!("file-{}-{path}", tab.id)).w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).child(rows)
 }
 
 #[cfg(test)]
