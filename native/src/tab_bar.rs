@@ -5,7 +5,7 @@
 
 use crate::shell::{Desk, project_mark};
 use crate::workspace::Place;
-use rune::{Color, Drag, El, Phase, Tx, el, row, text};
+use rune::{Anim, Color, Drag, El, Phase, Tx, el, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit, Spinner};
 use rune_theme_opencode::icons as ic;
 
@@ -16,14 +16,46 @@ const TAB_RADIUS: f32 = 8.0;
 const GAP: f32 = 4.0;
 /// How far a pressed tab moves before it drags. A press that moves less stays a click.
 const DRAG_THRESHOLD: f32 = 4.0;
+/// The distance from one tab's start to the next.
+const PITCH: f32 = TAB_WIDTH + GAP;
 /// The title fades out over its last fifth when it runs long, as `.desk-fade-end` masks it.
 const TITLE_FADE: f32 = 30.0;
 
 /// The tab being dragged, and the tab the strip last scrolled to.
 #[derive(Default)]
 pub struct TabBar {
-    dragging: Option<String>,
+    drag: Option<TabDrag>,
     shown: Option<String>,
+}
+
+/// A tab dragged along the strip. The tabs keep their order until the drop: the dragged tab
+/// follows the pointer and the tabs it passes step aside, as Rune's TabStrip does.
+#[derive(Clone, Debug, PartialEq)]
+struct TabDrag {
+    id: String,
+    /// The tab's place at the press.
+    from: usize,
+    /// The place it takes if it is dropped now.
+    to: usize,
+    /// How far the pointer moved along the strip, held to the strip's ends.
+    dx: f32,
+}
+
+impl TabDrag {
+    /// How far the tab at `index` sits from its place: the dragged tab with the pointer, and the
+    /// tabs between its place and its target one pitch toward the gap it left.
+    fn shift(&self, index: usize) -> f32 {
+        let (from, to) = (self.from, self.to);
+        if index == from {
+            self.dx
+        } else if from < index && index <= to {
+            -PITCH
+        } else if to <= index && index < from {
+            PITCH
+        } else {
+            0.0
+        }
+    }
 }
 
 /// Keeps the active tab in sight: a tab opened, reopened or chosen past the strip's edge scrolls in.
@@ -41,7 +73,7 @@ pub fn tab_bar(s: &Desk, k: &Kit) -> El {
     let w = &s.workspace;
     // Settings show in place of the active tab, so while they are open no tab is marked active.
     let shown = w.active.as_deref().filter(|_| w.settings_page.is_none());
-    let count = w.tabs.len();
+    let dragging = s.tab_bar.drag.as_ref();
     let tabs = w.tabs.iter().enumerate().map(|(index, tab)| {
         let active = shown == Some(tab.id.as_str());
         let busy = s.threads.get(&tab.id).is_some_and(|t| t.busy);
@@ -71,6 +103,7 @@ pub fn tab_bar(s: &Desk, k: &Kit) -> El {
             .child(title)
             .children(busy.then(|| Spinner::new().size(14.0).color(k.c.text_accent).build(k)));
         let id = tab.id.clone();
+        let lifted = dragging.is_some_and(|d| d.id == tab.id);
         let mut slot = row()
             .key(format!("tab-{}", tab.id))
             .w(TAB_WIDTH)
@@ -81,10 +114,18 @@ pub fn tab_bar(s: &Desk, k: &Kit) -> El {
             .checked(active)
             .label(tab.title.clone())
             .no_window_drag()
-            .opacity(if s.tab_bar.dragging.as_deref() == Some(tab.id.as_str()) { 0.7 } else { 1.0 })
-            .on_drag(move |s: &mut Desk, d: &mut Drag, _: &mut Tx| drag(s, &id, index, count, d))
+            .opacity(if lifted { 0.7 } else { 1.0 })
+            // Tabs step aside on a quick spring while a tab drags. A drop, and tabs that open,
+            // close or move otherwise, reflow.
+            .motion(if dragging.is_some() { rune::tok::motion::SNAP } else { rune::tok::motion::REFLOW })
+            .offset(dragging.map_or(0.0, |d| d.shift(index)), 0.0)
+            .on_drag(move |s: &mut Desk, d: &mut Drag, _: &mut Tx| drag(s, &id, index, d))
             .child(body)
             .child(close);
+        if lifted {
+            // It follows the pointer exactly, over its neighbours.
+            slot = slot.raise().offset_motion(Anim::INSTANT);
+        }
         slot = if active {
             slot.fill(crate::theme::tab(k.dark)).border(1.0, crate::theme::outline(k.dark))
         } else {
@@ -115,33 +156,61 @@ pub fn tab_bar(s: &Desk, k: &Kit) -> El {
         .child(el().grow(1.0).h_full().fill(Color::TRANSPARENT))
 }
 
-/// A press that moves past the threshold drags the tab: it takes the place of the tabs it passes the
-/// middle of. A press that does not move selects the tab.
-fn drag(s: &mut Desk, id: &str, index: usize, count: usize, d: &mut Drag) {
-    let pitch = TAB_WIDTH + GAP;
+/// A press that moves past the threshold drags the tab along the strip. A drop moves it to the place
+/// it was over. A press that does not move selects the tab.
+fn drag(s: &mut Desk, id: &str, index: usize, d: &mut Drag) {
     match d.phase {
-        // The tab's place at the press, as the drag moves it.
-        Phase::Down => d.data = index as f32,
+        Phase::Down => {}
         Phase::Move => {
-            if s.tab_bar.dragging.is_none() && d.dx.abs() < DRAG_THRESHOLD {
+            if s.tab_bar.drag.is_none() && d.dx.abs() < DRAG_THRESHOLD {
                 return;
             }
-            s.tab_bar.dragging = Some(id.to_owned());
-            // The pointer's place in the strip, and the middles of the other tabs, which sit one pitch apart.
-            let pointer = d.data * pitch + d.start_x + d.dx;
-            let to = ((pointer - TAB_WIDTH / 2.0) / pitch).floor() + 1.0;
-            let to = (to.max(0.0) as usize).min(count.saturating_sub(1));
-            if let Some(from) = s.workspace.tabs.iter().position(|t| t.id == id)
-                && from != to
-            {
-                s.workspace.move_tab(from, to, &s.core);
-            }
+            s.tab_bar.drag = Some(follow(index, s.workspace.tabs.len(), id, d.dx));
         }
-        Phase::Up => {
-            let dragged = s.tab_bar.dragging.take().is_some();
-            if !dragged && !d.cancelled() {
-                s.show_tab(id);
+        Phase::Up => match s.tab_bar.drag.take() {
+            Some(drag) if !d.cancelled() => {
+                // A tab opened or closed during the drag leaves `from` stale, so find the tab again.
+                if let Some(from) = s.workspace.tabs.iter().position(|t| t.id == drag.id) {
+                    let to = drag.to.min(s.workspace.tabs.len().saturating_sub(1));
+                    s.workspace.move_tab(from, to, &s.core);
+                }
             }
-        }
+            Some(_) => {}
+            None if !d.cancelled() => s.show_tab(id),
+            None => {}
+        },
+    }
+}
+
+/// The drag of the tab at `from`, among `count` tabs, `dx` from the press. The tab takes the place
+/// of each tab it passes the middle of.
+fn follow(from: usize, count: usize, id: &str, dx: f32) -> TabDrag {
+    let last = count.saturating_sub(1);
+    let dx = dx.clamp(-(from as f32) * PITCH, last.saturating_sub(from) as f32 * PITCH);
+    let to = (from as f32 + (dx / PITCH).round()).clamp(0.0, last as f32) as usize;
+    TabDrag { id: id.to_owned(), from, to, dx }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tabs_between_the_place_and_the_target_step_aside() {
+        let d = follow(1, 5, "t", 1.6 * PITCH);
+        assert_eq!(d.to, 3);
+        let shifts: Vec<f32> = (0..5).map(|i| d.shift(i)).collect();
+        assert_eq!(shifts, [0.0, 1.6 * PITCH, -PITCH, -PITCH, 0.0]);
+        let d = follow(3, 5, "t", -1.4 * PITCH);
+        assert_eq!(d.to, 2, "a tab moves once it passes the middle of the next");
+        assert_eq!(d.shift(2), PITCH);
+    }
+
+    #[test]
+    fn the_dragged_tab_stays_inside_the_strip() {
+        let d = follow(1, 3, "t", -5.0 * PITCH);
+        assert_eq!((d.to, d.dx), (0, -PITCH));
+        let d = follow(1, 3, "t", 5.0 * PITCH);
+        assert_eq!((d.to, d.dx), (2, PITCH));
     }
 }
