@@ -17,6 +17,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 - In Search files, Enter pressed before the search for the new query answers opens that query's top file. It used to open the top file of the query before.
 - ⌘P or ⌘⇧O while the command palette is open switches it to files or threads. They used to close it.
 - Desk runs on a newer Rune. Rows, toasts and cards that the core brings now appear at once, without their entrance animation. An animation still plays when your own input causes the change. Hover groups now light while keyboard focus is inside them, so the actions they reveal show when Tab reaches them.
+- Desk runs on a newer Rune. It lays out text faster. A launch reuses the glyphs the last launch drew, even when that window sat idle. Colour emoji draw their gradients.
 - While a popover is open, the rows under it no longer light up as the pointer passes over it. This covers the header chip's cards, the model picker, the usage popover, a subagent's detail and the project icon picker.
 - The Background card shows a multi-line command on one line, by its first line. The note that the agent picks up again wraps instead of running past the card.
 - A dragged tab follows the pointer, and the tabs it passes slide aside. On release it slides into its place. The new order is saved once, on release.
