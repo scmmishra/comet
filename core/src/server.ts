@@ -51,6 +51,8 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       ui.dropTab(tabId)
     },
     turnEnded: (tabId, threadKey, outcome) => plugins.turnEnded(tabId, threadKey, outcome),
+    // Every client shows the project's branch and changes, so each reads the Space card again.
+    spaceStale: (dir) => void Promise.resolve(read(dir, "space", broadcast)).catch(report),
     threadShown: (tabId, threadKey) => plugins.threadShown(tabId, threadKey),
   })
   const ui = startPlugins({ broadcast, openThread: (tabId, thread) => void window.openKey(tabId, thread).catch(report), store: window, report })

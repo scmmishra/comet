@@ -17,6 +17,7 @@ const saved = () => JSON.parse(readFileSync(join(process.env.DESK_HOME!, "window
 function open(state: object) {
   writeFileSync(join(process.env.DESK_HOME!, "window.json"), JSON.stringify(state))
   const sent: CoreMessage[] = []
+  const stale: string[] = []
   const shown: [string, string | undefined][] = []
   const agents = new Agents(() => {}, { compactIdle: () => false })
   const window = new Window({
@@ -24,10 +25,11 @@ function open(state: object) {
     agents,
     delegations: new Delegations(agents, () => "http://127.0.0.1:0/mcp"),
     tabClosed: () => {},
+    spaceStale: (project) => stale.push(project),
     turnEnded: () => {},
     threadShown: (tabId, threadKey) => shown.push([tabId, threadKey]),
   })
-  return { window, sent, shown }
+  return { window, sent, shown, stale }
 }
 
 test("refuses to move a tab whose thread has started, and moves one that has not", () => {
@@ -161,6 +163,7 @@ function openWithAgents(state: object) {
   const codex = fakeAgent("codex", [], [{ id: "x1", title: "Newer", updatedAt: 2 }])
   writeFileSync(join(process.env.DESK_HOME!, "window.json"), JSON.stringify(state))
   const sent: CoreMessage[] = []
+  const stale: string[] = []
   const ended: [string, string, string][] = []
   const agents = new Agents(() => {}, { compactIdle: () => false }, { claude: claude.make, codex: codex.make })
   const window = new Window({
@@ -168,10 +171,11 @@ function openWithAgents(state: object) {
     agents,
     delegations: new Delegations(agents, () => "http://127.0.0.1:0/mcp"),
     tabClosed: () => {},
+    spaceStale: (project) => stale.push(project),
     turnEnded: (tabId, threadKey, outcome) => ended.push([tabId, threadKey, outcome]),
     threadShown: () => {},
   })
-  return { window, sent, ended, claude, codex }
+  return { window, sent, ended, stale, claude, codex }
 }
 
 test("runs a tab on the agent it names, and its thread stays on the agent that started it", async () => {
@@ -435,4 +439,13 @@ test("keeps the checkpoints of a plugin's thread that no tab shows", async () =>
   const refs = () => repo.git("for-each-ref", "--format=%(refname:lstrip=-1)", "refs/desk/")
   await until(() => !refs().includes(dropped))
   expect(refs()).toBe(kept)
+})
+
+test("a turn's end asks for the project's Space card again, as the turn may have switched branch or changed files", async () => {
+  const project = tempFolder("space")
+  const { window, stale, codex } = openWithAgents({ tabs: [codexTab("a", project)], threads: {}, recent: [] })
+  await window.send("a", "one")
+  expect(stale).toEqual([])
+  codex.sessions[0]!.finish()
+  expect(stale).toEqual([project])
 })

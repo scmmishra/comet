@@ -43,6 +43,8 @@ interface WindowHooks {
   readonly delegations: Pick<Delegations, "open">
   /** A tab closed, so what runs for it can stop. */
   readonly tabClosed: (tabId: string) => void
+  /** A turn ended in a project, so its Space card may name an old branch or old counts. */
+  readonly spaceStale: (project: string) => void
   /** A turn ended in a plugin's thread, named by its full key, even while the thread was away from its tab. */
   readonly turnEnded: (tabId: string, threadKey: string, outcome: TurnOutcome) => void
   /** A tab moved to another thread. `threadKey` is the full key of a plugin's thread, or undefined for the tab's own. */
@@ -546,6 +548,7 @@ export class Window {
     const emit = (event: ThreadEvent) => {
       const ended = turn.take(event)
       if (ended && key) this.hooks.turnEnded(tab.id, key, ended.outcome)
+      if (ended) this.hooks.spaceStale(tab.project)
       if (!current()) {
         // A parked session's turn ended while its thread was away. Nothing shows it, so it closes. Its transcript keeps the turn.
         if (ended) this.closeParked(created)
