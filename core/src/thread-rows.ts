@@ -102,6 +102,9 @@ export class ThreadRows {
       const index = thread.items.findIndex((item) => item.id === event.item.id)
       if (index < 0) thread.items.push(event.item)
       else thread.items[index] = event.item
+    } else if (event.kind === "items.remove") {
+      const ids = new Set(event.ids)
+      thread.items = thread.items.filter((item) => !ids.has(item.id))
     } else if (event.kind === "status") thread.busy = event.busy
     else return undefined
     return this.rows(tabId, thread, false)

@@ -90,6 +90,13 @@ test("sends rows after every history, and after an event only when they change",
   expect(rows.after({ type: "settings", settings: undefined as never })).toBeUndefined()
 })
 
+test("lays the rows out again without the items an agent took back", () => {
+  const rows = new ThreadRows()
+  rows.after({ type: "session.history", tabId: "t", items: [user("u1"), text("refused"), text("answer")] })
+  expect(rows.after({ type: "session.event", tabId: "t", event: { kind: "items.remove", ids: ["refused"] } })).toEqual({ type: "session.rows", tabId: "t", rows: [{ type: "item", id: "u1" }, { type: "item", id: "answer" }] })
+  expect(rows.after({ type: "session.event", tabId: "t", event: { kind: "items.remove", ids: ["unknown"] } })).toBeUndefined()
+})
+
 test("sums a group by its two most important kinds, counting files once and thoughts not at all", () => {
   expect(summaryOf(did("read", "a.ts"), did("read", "b.ts"), did("read", "a.ts"), thought("t1"))).toBe("Read 2 files")
   expect(summaryOf(did("read", "a.ts"), did("command", "ls"), did("command", "pwd"))).toBe("Read a file and ran 2 commands")

@@ -203,6 +203,18 @@ test("says when Claude Code retries a failed API request, and why", () => {
   expect(mapper.map(sdk({ type: "system", subtype: "api_retry", attempt: 1, max_retries: 10, retry_delay_ms: 500, error_status: 418, error: "unknown", uuid: "r2" }))[0]).toMatchObject({ error: "The API answered 418" })
 })
 
+test("ends a retry once the next response starts, though it opens with a tool input that shows nothing yet", () => {
+  const mapper = new ThreadMapper(DIR)
+  const stream = (event: object) => mapper.map(sdk({ type: "stream_event", uuid: crypto.randomUUID(), parent_tool_use_id: null, event }))
+  const messageStart = { type: "message_start", message: {} }
+  mapper.map(sdk({ type: "system", subtype: "api_retry", attempt: 1, max_retries: 10, retry_delay_ms: 500, error_status: 529, error: "overloaded", uuid: "r1" }))
+  expect(stream(messageStart)).toEqual([{ kind: "status", busy: true }])
+  expect(stream({ type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "t1", name: "Write", input: {} } })).toEqual([])
+  expect(stream({ type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"file_path":' } })).toEqual([])
+  // A response with no retry before it says nothing at its start.
+  expect(stream(messageStart)).toEqual([])
+})
+
 test("restores a compaction as a line in place of Claude Code's summary", () => {
   const items = new ThreadMapper(DIR).history([
     { type: "system", uuid: "b1", session_id: "s", parent_tool_use_id: null },
@@ -213,4 +225,34 @@ test("restores a compaction as a line in place of Claude Code's summary", () => 
     { type: "compaction", id: "compaction:b1", status: "done" },
     { type: "user", id: "u2", text: "Carry on" },
   ])
+})
+
+test("takes out a refused reply and its tool call once the reply that replaces it arrives", () => {
+  const mapper = new ThreadMapper(DIR)
+  const stream = (uuid: string, event: object) => mapper.map(sdk({ type: "stream_event", uuid, parent_tool_use_id: null, event }))
+  const assistant = (uuid: string, content: object[], extra: object = {}) => mapper.map(sdk({ type: "assistant", uuid, parent_tool_use_id: null, message: { content }, ...extra }))
+  stream("s1", { type: "content_block_start", content_block: { type: "text" } })
+  assistant("a1", [{ type: "text", text: "Sure, here is" }])
+  assistant("a2", [{ type: "thinking", thinking: "Run it" }])
+  assistant("a3", [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "ls" } }])
+  // Claude Code tombstones the refused attempt's tool result.
+  mapper.map(sdk({ type: "user", uuid: "u1", parent_tool_use_id: null, message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "", is_error: true }] } }))
+
+  stream("s2", { type: "content_block_start", content_block: { type: "text" } })
+  expect(assistant("a4", [{ type: "text", text: "Here is the answer." }], { supersedes: ["a1", "a2", "a3", "u1", "unknown"] })).toEqual([
+    { kind: "items.remove", ids: ["s1", "a2:0", "t1"] },
+    { kind: "item", item: { type: "text", id: "s2", text: "Here is the answer.", done: true } },
+  ])
+  // The end-of-turn notice names the same messages again, which are gone already.
+  const notice = { type: "system", subtype: "model_refusal_fallback", uuid: "f1", content: "Opus 5.5 declined. Sonnet 5.5 answered instead.", retracted_message_uuids: ["a1", "a2", "a3", "u1"] }
+  expect(mapper.map(sdk(notice))).toEqual([{ kind: "item", item: { type: "notice", id: "f1", text: "Opus 5.5 declined. Sonnet 5.5 answered instead.", warning: true } }])
+  // A result for the call that was taken out shows nothing.
+  expect(mapper.map(sdk({ type: "user", uuid: "u2", parent_tool_use_id: null, message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "x" }] } }))).toEqual([])
+})
+
+test("takes out the refused reply a fallback notice names when no reply named it first", () => {
+  const mapper = new ThreadMapper(DIR)
+  mapper.map(sdk({ type: "assistant", uuid: "a1", parent_tool_use_id: null, message: { content: [{ type: "text", text: "Sure" }] } }))
+  const events = mapper.map(sdk({ type: "system", subtype: "model_refusal_fallback", uuid: "f1", content: "Retried on another model.", retracted_message_uuids: ["a1"] }))
+  expect(events[0]).toEqual({ kind: "items.remove", ids: ["a1:0"] })
 })

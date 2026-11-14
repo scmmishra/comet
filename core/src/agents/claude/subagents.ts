@@ -30,6 +30,7 @@ export class Subagents {
       // The subagent's own mapper reads its messages as a thread of their own.
       for (const event of tracked.mapper.map({ ...message, parent_tool_use_id: null } as SDKMessage, now)) {
         if (event.kind === "item") tracked.items.set(event.item.id, event.item)
+        if (event.kind === "items.remove") for (const id of event.ids) tracked.items.delete(id)
       }
       this.update(tracked, { items: [...tracked.items.values()] })
     }

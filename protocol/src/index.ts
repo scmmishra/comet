@@ -205,6 +205,8 @@ export type ThreadEvent =
   | { readonly kind: "item"; readonly item: ThreadItem }
   /** More text for a text item still streaming. */
   | { readonly kind: "text.delta"; readonly id: string; readonly delta: string }
+  /** Items the agent took back, such as a reply it replaced with another. An id the thread does not hold is skipped. */
+  | { readonly kind: "items.remove"; readonly ids: readonly string[] }
   | { readonly kind: "status"; readonly busy: boolean }
   /** The model that runs, by the name Desk shows for it, such as "Opus 5.5". */
   | { readonly kind: "init"; readonly model: string }
@@ -219,7 +221,7 @@ export type ThreadEvent =
    * time, so Force stop can end it. The turn's end clears it.
    */
   | { readonly kind: "stopping"; readonly since: number; readonly unresponsive: boolean }
-  /** A request to the API failed and the agent tries again, as attempt `attempt` of `maxRetries`, after `delayMs`. More output clears it. */
+  /** A request to the API failed and the agent tries again, as attempt `attempt` of `maxRetries`, after `delayMs`. More output or a status clears it. */
   | { readonly kind: "retry"; readonly attempt: number; readonly maxRetries: number; readonly delayMs: number; readonly error: string }
 
 /** A command the agent left running in the background, such as a long review or a dev server. */

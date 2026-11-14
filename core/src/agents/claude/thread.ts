@@ -53,12 +53,16 @@ export class ThreadMapper {
   /** The reply the latest top-level assistant message carried, or the one streaming now, which a steer can cut short. */
   private lastReply?: { readonly id: string; text: string; readonly at?: number }
   private tools = new Map<string, ToolItem>()
+  /** The ids of the items each top-level message made, by the message's uuid, so a message that replaces it can take them out. */
+  private madeBy = new Map<string, string[]>()
   /** The id of the compaction running now, which its result and its boundary update. */
   private compacting?: string
   /** The summary of the last background task that finished while no turn ran, for the turn it starts. */
   private wake?: string
   /** The plugin errors the last init showed, since each init carries them again. */
   private pluginErrors?: string
+  /** Set from a retry notice until the next response starts, which ends it. */
+  private retrying = false
 
   constructor(private readonly dir: string) {}
 
@@ -84,7 +88,12 @@ export class ThreadMapper {
           return [item({ type: "compaction", id, status: "done", preTokens, ...(postTokens ? { postTokens } : {}) })]
         }
         if (message.subtype === "informational") return this.mapNotice(message)
+        // The model declined, and Claude Code asked another model. What the first one said goes, and a line says why.
+        if (message.subtype === "model_refusal_fallback") {
+          return [...this.remove(message.retracted_message_uuids), item({ type: "notice", id: message.uuid, text: message.content, warning: true })]
+        }
         if (message.subtype === "api_retry") {
+          this.retrying = true
           return [{ kind: "retry", attempt: message.attempt, maxRetries: message.max_retries, delayMs: message.retry_delay_ms, error: retryReason(message.error, message.error_status) }]
         }
         return []
@@ -94,17 +103,38 @@ export class ThreadMapper {
         // A subagent's own steps stay inside its tool call.
         if (message.parent_tool_use_id) return []
         this.lastReply = undefined
-        return this.mapAssistant(message.message.content, message.uuid, at).map(item)
+        return [...this.remove(message.supersedes), ...this.made(message.uuid, this.mapAssistant(message.message.content, message.uuid, at)).map(item)]
       case "user": {
         if (message.parent_tool_use_id) return []
-        return this.mapToolResults(message.message.content).map(item)
+        return this.made(message.uuid, this.mapToolResults(message.message.content)).map(item)
       }
       case "result":
         this.lastReply = undefined
+        this.retrying = false
         return [item({ type: "result", id: message.uuid, durationMs: message.duration_ms, isError: message.is_error })]
       default:
         return []
     }
+  }
+
+  /** Notes the items a message made, under its uuid. A tool result notes the call it completes. */
+  private made(uuid: string | undefined, items: ThreadItem[]): ThreadItem[] {
+    if (uuid && items.length) this.madeBy.set(uuid, items.map((found) => found.id))
+    return items
+  }
+
+  /**
+   * Takes out the items of messages a later one replaces. Claude Code replaces a response the model refused
+   * once another model answers, and one whose tool call it could not parse once the model answers again.
+   * A tool call goes with its result, since the call was never made. A message Desk does not know is skipped.
+   */
+  private remove(uuids: readonly string[] | undefined): ThreadEvent[] {
+    const ids = new Set((uuids ?? []).flatMap((uuid) => this.madeBy.get(uuid) ?? []))
+    for (const uuid of uuids ?? []) this.madeBy.delete(uuid)
+    if (!ids.size) return []
+    for (const id of ids) this.tools.delete(id)
+    if (this.lastReply && ids.has(this.lastReply.id)) this.lastReply = undefined
+    return [{ kind: "items.remove", ids: [...ids] }]
   }
 
   /**
@@ -183,6 +213,12 @@ export class ThreadMapper {
 
   private mapStreamEvent(event: SDKPartialAssistantMessage["event"], uuid: string, parent: string | null): ThreadEvent[] {
     if (parent) return []
+    // A retried request that recovers may open with a long tool input or thought, which shows nothing until
+    // it ends. The response's start says the retry is over, so the status clears its notice, after T3 Code.
+    if (event.type === "message_start" && this.retrying) {
+      this.retrying = false
+      return [{ kind: "status", busy: true }]
+    }
     if (event.type === "content_block_start" && event.content_block.type === "text") {
       this.streaming = uuid
       this.lastReply = { id: uuid, text: "" }

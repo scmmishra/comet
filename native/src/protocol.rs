@@ -689,6 +689,9 @@ pub enum ThreadEvent {
     /// More text for a text item still streaming.
     #[serde(rename = "text.delta")]
     TextDelta { id: String, delta: String },
+    /// Items the agent took back, such as a reply it replaced with another.
+    #[serde(rename = "items.remove")]
+    ItemsRemove { ids: Vec<String> },
     #[serde(rename = "status")]
     Status { busy: bool },
     #[serde(rename = "context")]
@@ -704,7 +707,7 @@ pub enum ThreadEvent {
     /// The user asked the turn to stop, at `since`. `unresponsive` once the agent has not stopped in time. The turn's end clears it.
     #[serde(rename = "stopping")]
     Stopping { since: f64, unresponsive: bool },
-    /// A request to the API failed and the agent tries again. More output clears it.
+    /// A request to the API failed and the agent tries again. More output or a status clears it.
     #[serde(rename = "retry")]
     Retry(Retry),
     /// An event the app does not read yet.

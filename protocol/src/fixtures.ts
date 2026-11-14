@@ -95,6 +95,7 @@ export const CORE_MESSAGES = [
   },
   { type: "session.event", tabId: "tab-1", event: { kind: "item", item: { type: "text", id: "x2", text: "", done: false } } },
   { type: "session.event", tabId: "tab-1", event: { kind: "text.delta", id: "x2", delta: "Hel" } },
+  { type: "session.event", tabId: "tab-1", event: { kind: "items.remove", ids: ["x2", "t1"] } },
   { type: "session.event", tabId: "tab-1", event: { kind: "status", busy: true } },
   { type: "session.event", tabId: "tab-1", event: { kind: "init", model: "Opus 5.5" } },
   { type: "session.event", tabId: "tab-1", event: { kind: "background", tasks: [{ id: "b1", label: "npm run dev", startedAt: 1_700_000_000_000 }] } },
