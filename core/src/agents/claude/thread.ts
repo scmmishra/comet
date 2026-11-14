@@ -25,6 +25,13 @@ const TOOLS_USED_NOTE = /^\s*<tools-used-before-summary>[^<]*<\/tools-used-befor
 /** Inputs that say in short what a tool call does, in the order a summary prefers them. */
 const SUMMARY_FIELDS = ["command", "file_path", "pattern", "path", "url", "query", "description", "skill"]
 
+/**
+ * Claude Code's plugin errors name paths and URLs of its own and are not bounded. The notice drops control and
+ * bidi characters and cuts each message to this many characters.
+ */
+const PLUGIN_ERROR_LIMIT = 300
+const UNSAFE_CHARACTERS = /[\p{Cc}\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu
+
 /** Why an API request failed, in a few words, for the retry notice. */
 const RETRY_REASONS: Partial<Record<SDKAPIRetryMessage["error"], string>> = {
   rate_limit: "Rate limited",
@@ -50,6 +57,8 @@ export class ThreadMapper {
   private compacting?: string
   /** The summary of the last background task that finished while no turn ran, for the turn it starts. */
   private wake?: string
+  /** The plugin errors the last init showed, since each init carries them again. */
+  private pluginErrors?: string
 
   constructor(private readonly dir: string) {}
 
@@ -60,7 +69,7 @@ export class ThreadMapper {
   map(message: SDKMessage, at?: number, idle = false): ThreadEvent[] {
     switch (message.type) {
       case "system":
-        if (message.subtype === "init") return [{ kind: "init", model: modelLabel(message.model) }, ...this.selfStarted(message.uuid, at, idle)]
+        if (message.subtype === "init") return [{ kind: "init", model: modelLabel(message.model) }, ...this.selfStarted(message.uuid, at, idle), ...this.mapPluginErrors(message)]
         if (message.subtype === "task_notification") {
           if (idle) this.wake = message.summary
           return []
@@ -122,6 +131,25 @@ export class ThreadMapper {
     const stopHookSummary = message.level === "notice" && message.content.startsWith("Stop says: ") && !message.prevent_continuation
     if (stopHookSummary) return []
     return [item({ type: "notice", id: message.uuid, text: message.content, warning: message.level === "warning" || !!message.prevent_continuation })]
+  }
+
+  /**
+   * The plugins that did not load, as one warning. Claude Code sends init at a session start, after a resume
+   * and for a turn it starts itself, so a list that matches the last one shown adds nothing. An init without
+   * errors lets a later failure show again.
+   * A stored transcript has no init, so a reopened thread shows the warning once, at its first new turn.
+   */
+  private mapPluginErrors(message: Extract<SDKMessage, { type: "system"; subtype: "init" }>): ThreadEvent[] {
+    const errors = message.plugin_errors
+    if (!errors?.length) {
+      this.pluginErrors = undefined
+      return []
+    }
+    const lines = errors.map((error) => `${pluginText(error.plugin)}: ${pluginText(error.message)}`)
+    const text = `${errors.length === 1 ? "A plugin" : "Plugins"} did not load.\n${lines.join("\n")}`
+    if (text === this.pluginErrors) return []
+    this.pluginErrors = text
+    return [item({ type: "notice", id: `plugin-errors:${message.uuid}`, text, warning: true })]
   }
 
   /**
@@ -314,6 +342,11 @@ function taskSummary(content: unknown): string | undefined {
   const text = typeof content === "string" ? content : Array.isArray(content) ? content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n") : ""
   if (!text.trimStart().startsWith("<task-notification>")) return undefined
   return /<summary>([\s\S]*?)<\/summary>/.exec(text)?.[1]?.trim() || "A background task finished."
+}
+
+function pluginText(text: string): string {
+  const plain = text.replace(UNSAFE_CHARACTERS, " ").trim()
+  return plain.length > PLUGIN_ERROR_LIMIT ? `${plain.slice(0, PLUGIN_ERROR_LIMIT)}...` : plain
 }
 
 function retryReason(error: SDKAPIRetryMessage["error"], status: number | null): string {

@@ -17,6 +17,22 @@ test("streams text and finishes it with the full assistant message", () => {
   expect(full).toEqual([{ kind: "item", item: { type: "text", id: "s1", text: "Hello", done: true, at: 5 } }])
 })
 
+test("shows the plugins that failed to load once, and again when the list changes", () => {
+  const mapper = new ThreadMapper(DIR)
+  const init = (uuid: string, pluginErrors?: object[]) => mapper.map(sdk({ type: "system", subtype: "init", uuid, model: "claude-opus-5-5", ...(pluginErrors ? { plugin_errors: pluginErrors } : {}) }))
+  const broken = [{ plugin: "lint@tools", type: "dependency-unsatisfied", message: "needs node 22" }]
+  const notice = (id: string, text: string) => ({ kind: "item", item: { type: "notice", id, text, warning: true } }) as const
+
+  expect(init("i0")).toEqual([{ kind: "init", model: "Opus 5.5" }])
+  expect(init("i1", broken)).toEqual([{ kind: "init", model: "Opus 5.5" }, notice("plugin-errors:i1", "A plugin did not load.\nlint@tools: needs node 22")])
+  expect(init("i2", broken)).toEqual([{ kind: "init", model: "Opus 5.5" }])
+  const both = [...broken, { plugin: "fmt@tools", type: "generic-error", message: "bad\u202e manifest" }]
+  expect(init("i3", both)).toEqual([{ kind: "init", model: "Opus 5.5" }, notice("plugin-errors:i3", "Plugins did not load.\nlint@tools: needs node 22\nfmt@tools: bad  manifest")])
+  // A clean init forgets the list, so a plugin that breaks again shows again.
+  init("i4", [])
+  expect(init("i5", broken)).toHaveLength(2)
+})
+
 test("completes a tool call with its result, under the call's id", () => {
   const mapper = new ThreadMapper(DIR)
   mapper.map(sdk({ type: "assistant", uuid: "a1", parent_tool_use_id: null, message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "ls" } }] } }))
