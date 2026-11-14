@@ -156,7 +156,7 @@ pub struct AgentVersion {
     pub installed: Option<String>,
     pub latest: Option<String>,
     pub update_available: bool,
-    /// Whether Desk can update it, with the agent's own updater.
+    /// Whether Desk can update it.
     pub updatable: bool,
 }
 
@@ -267,6 +267,9 @@ pub struct TextEdit {
 pub struct ToolResult {
     pub output: String,
     pub is_error: bool,
+    /// The user stopped the call while it ran, so it did not fail.
+    #[serde(default)]
+    pub stopped: bool,
 }
 
 /// A file a turn changed, without its diff.
@@ -574,6 +577,9 @@ pub enum ThreadItem {
         /// Sent into a turn that was still running.
         #[serde(default)]
         steered: bool,
+        /// A steered message the agent has not taken in yet.
+        #[serde(default)]
+        waiting: bool,
         /// A turn the agent started itself. Its text says why.
         #[serde(default)]
         self_started: bool,
@@ -683,6 +689,9 @@ pub enum ThreadEvent {
     /// More text for a text item still streaming.
     #[serde(rename = "text.delta")]
     TextDelta { id: String, delta: String },
+    /// Items the agent took back, such as a reply it replaced with another.
+    #[serde(rename = "items.remove")]
+    ItemsRemove { ids: Vec<String> },
     #[serde(rename = "status")]
     Status { busy: bool },
     #[serde(rename = "context")]
@@ -698,7 +707,7 @@ pub enum ThreadEvent {
     /// The user asked the turn to stop, at `since`. `unresponsive` once the agent has not stopped in time. The turn's end clears it.
     #[serde(rename = "stopping")]
     Stopping { since: f64, unresponsive: bool },
-    /// A request to the API failed and the agent tries again. More output clears it.
+    /// A request to the API failed and the agent tries again. More output or a status clears it.
     #[serde(rename = "retry")]
     Retry(Retry),
     /// An event the app does not read yet.
@@ -707,11 +716,12 @@ pub enum ThreadEvent {
 }
 
 /// A failed request to the API that the agent tries again, as attempt `attempt` of `max_retries`, after `delay_ms`.
+/// A retry without `max_retries` has no limit.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Retry {
     pub attempt: u32,
-    pub max_retries: u32,
+    pub max_retries: Option<u32>,
     pub delay_ms: f64,
     /// Why the request failed.
     pub error: String,
@@ -877,7 +887,7 @@ pub enum ClientMessage {
     /// Changes the named settings. The core saves them and sends them back.
     #[serde(rename = "settings.update")]
     SettingsUpdate { change: Value },
-    /// Updates an agent with its own updater. The core answers with `agents` once done.
+    /// Updates an agent to its newest version. The core answers with `agents` once done.
     #[serde(rename = "agent.update")]
     AgentUpdate { agent: String },
     /// Installs an agent on this Mac. The core answers with `agents` as it goes.
@@ -1177,8 +1187,10 @@ mod tests {
             _ => None,
         });
         let items = history.expect("a history fixture");
-        assert!(matches!(&items[0], ThreadItem::User { steered: true, .. }));
+        assert!(matches!(&items[0], ThreadItem::User { steered: true, waiting: false, .. }));
+        assert!(items.iter().any(|i| matches!(i, ThreadItem::User { steered: true, waiting: true, .. })));
         assert!(items.iter().any(|i| matches!(i, ThreadItem::Tool { kind: StepKind::Command, result: Some(_), .. })));
+        assert!(items.iter().any(|i| matches!(i, ThreadItem::Tool { result: Some(r), .. } if r.is_error && r.stopped)));
         let rows = messages.iter().find_map(|m| match m {
             CoreMessage::SessionRows { rows, .. } => Some(rows),
             _ => None,
@@ -1189,6 +1201,14 @@ mod tests {
                 assert!(!matches!(event, ThreadEvent::Other), "an event the app reads: {event:?}");
             }
         }
+        let limits: Vec<_> = messages
+            .iter()
+            .filter_map(|m| match m {
+                CoreMessage::SessionEvent { event: ThreadEvent::Retry(retry), .. } => Some(retry.max_retries),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(limits, [Some(10), None], "a retry may come without a limit");
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, jest, test } from "bun:test"
 import type { PermissionAnswer, RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
 import { until } from "../../test-support"
 import type { SessionOptions } from "../agent"
@@ -23,6 +23,7 @@ function setup(options: Partial<SessionOptions> = {}) {
   codex.answer("turn/steer", { turnId: TURN })
   codex.answer("turn/interrupt", {})
   codex.answer("thread/unsubscribe", { status: "unsubscribed" })
+  codex.answer("config/read", { config: {}, layers: null })
   const server = new AppServer(codex.launch)
   const events: ThreadEvent[] = []
   const sessionIds: string[] = []
@@ -70,7 +71,7 @@ test("runs a whole turn: the thread, the message with its settings, and every it
         { type: "text", text: "Fix the bug", text_elements: [] },
         { type: "image", url: "data:image/png;base64,iVBOR" },
       ],
-      summary: "detailed",
+      summary: "auto",
       approvalPolicy: "on-request",
       approvalsReviewer: "user",
       sandboxPolicy: { type: "workspaceWrite", writableRoots: [], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false },
@@ -137,6 +138,24 @@ test("names the default model and its effort, and takes new settings from the ne
   await until(() => s.codex.sent("turn/start").length === 2)
   expect(s.codex.sent("thread/start")).toHaveLength(1)
   expect(s.codex.sent("turn/start")[1]).toMatchObject({ model: "gpt-6-luna", effort: "high", serviceTier: null, approvalPolicy: "never", sandboxPolicy: { type: "dangerFullAccess" } })
+})
+
+test("shows the model Codex moved a turn to, and the model asked for again on the next turn", async () => {
+  const s = setup()
+  await started(s)
+  s.codex.notify("model/rerouted", { threadId: THREAD, turnId: TURN, fromModel: "gpt-6.1-sol", toModel: "gpt-6-luna", reason: "highRiskCyberActivity" })
+  await until(() => s.events.filter((event) => event.kind === "init").length === 2)
+  expect(s.events.filter((event) => event.kind === "init")).toEqual([
+    { kind: "init", model: "GPT-6.1-Sol" },
+    { kind: "init", model: "GPT-6-Luna" },
+  ])
+  s.codex.notify("turn/completed", { threadId: THREAD, turn: turn("completed") })
+  await until(() => !s.session.busy)
+  s.session.send("Again")
+  await until(() => s.codex.sent("turn/start").length === 2)
+  s.codex.notify("turn/started", { threadId: THREAD, turn: turn("inProgress") })
+  await until(() => s.events.filter((event) => event.kind === "init").length === 3)
+  expect(s.events.findLast((event) => event.kind === "init")).toEqual({ kind: "init", model: "GPT-6.1-Sol" })
 })
 
 test("in Auto mode, lets Codex's reviewer answer approvals in a sandbox that can write the project", async () => {
@@ -394,6 +413,30 @@ test("a turn's end closes the requests it left open", async () => {
   expect(s.last("permission")).toMatchObject({ answered: true })
 })
 
+test("warns once that an MCP server did not start, until it starts", async () => {
+  const s = setup()
+  await started(s)
+  const status = (name: string, status: string, error: string | null = null) => s.codex.notify("mcpServer/startupStatus/updated", { threadId: THREAD, name, status, error, failureReason: null })
+  const failure = "MCP client for `docs` failed to start: MCP startup failed: No such file or directory (os error 2)"
+  status("docs", "starting")
+  status("docs", "failed", failure)
+  status("docs", "starting")
+  status("docs", "failed", failure)
+  status("search", "failed")
+  status("docs", "ready")
+  status("docs", "failed", failure)
+  status("github", "ready")
+  await until(() => s.items().filter((item) => item.type === "notice").length === 3)
+  await Bun.sleep(20)
+  const notices = s.items().filter((item) => item.type === "notice")
+  expect(notices).toEqual([
+    { type: "notice", id: expect.stringMatching(/^mcp-failed:/), text: `MCP server docs did not start.\n${failure}`, warning: true },
+    { type: "notice", id: expect.stringMatching(/^mcp-failed:/), text: "MCP server search did not start.", warning: true },
+    { type: "notice", id: expect.stringMatching(/^mcp-failed:/), text: `MCP server docs did not start.\n${failure}`, warning: true },
+  ])
+  expect(new Set(notices.map((notice) => notice.id)).size).toBe(3)
+})
+
 test("shows a failed turn's error before its result", async () => {
   const s = setup()
   await started(s)
@@ -405,6 +448,90 @@ test("shows a failed turn's error before its result", async () => {
     { type: "error", id: `error:${TURN}`, message: "You've hit your usage limit." },
     { type: "result", id: expect.stringMatching(/^result:/), durationMs: 10, isError: true },
   ])
+})
+
+test("counts on from the last retry when Codex's retry gives no limit", async () => {
+  const s = setup()
+  await started(s)
+  const error = (message: string, willRetry = true) => s.codex.notify("error", { threadId: THREAD, turnId: TURN, willRetry, error: { message } })
+  error("Reconnecting... 3/5")
+  error("Waiting for the network")
+  error("Waiting for the network")
+  error("The stream ended", false)
+  await until(() => s.events.filter((event) => event.kind === "retry").length === 3)
+  await Bun.sleep(20)
+  expect(s.events.filter((event) => event.kind === "retry")).toEqual([
+    { kind: "retry", attempt: 3, maxRetries: 5, delayMs: 0, error: "Reconnecting... 3/5" },
+    { kind: "retry", attempt: 4, delayMs: 0, error: "Waiting for the network" },
+    { kind: "retry", attempt: 5, delayMs: 0, error: "Waiting for the network" },
+  ])
+})
+
+const MINUTE = 60_000
+
+/** Runs `body` on fake timers. Bun.sleep waits on real time, so `flush` lets the fake app-server's messages land instead. */
+async function fakeTime(body: () => Promise<void>) {
+  jest.useFakeTimers()
+  try {
+    await body()
+  } finally {
+    jest.useRealTimers()
+  }
+}
+
+const flush = async () => {
+  for (let i = 0; i < 50; i++) await Promise.resolve()
+}
+
+test("fails a turn that Codex has not resumed 10 minutes after a retry, and asks Codex to stop it", async () => {
+  const s = setup()
+  await started(s)
+  await fakeTime(async () => {
+    s.codex.notify("error", { threadId: THREAD, turnId: TURN, willRetry: true, error: { message: "Reconnecting... waiting for network" } })
+    await flush()
+    jest.advanceTimersByTime(10 * MINUTE - 1)
+    expect(s.session.busy).toBe(true)
+    jest.advanceTimersByTime(1)
+  })
+  expect(s.session.busy).toBe(false)
+  expect(s.last("error")?.message).toBe("Codex did not recover from a failed request in 10 minutes, so the turn was stopped. Codex said: Reconnecting... waiting for network")
+  await until(() => s.codex.sent("turn/interrupt").length > 0)
+  expect(s.codex.sent("turn/interrupt")).toEqual([{ threadId: THREAD, turnId: TURN }])
+})
+
+test("a new retry starts the 10 minutes again, and any other word from Codex ends the wait", async () => {
+  const s = setup()
+  await started(s)
+  const retry = () => s.codex.notify("error", { threadId: THREAD, turnId: TURN, willRetry: true, error: { message: "Reconnecting... 1/5" } })
+  await fakeTime(async () => {
+    retry()
+    await flush()
+    jest.advanceTimersByTime(9 * MINUTE)
+    retry()
+    await flush()
+    jest.advanceTimersByTime(9 * MINUTE)
+    expect(s.session.busy).toBe(true)
+    s.codex.notify("item/agentMessage/delta", { threadId: THREAD, turnId: TURN, itemId: "m1", delta: "Back" })
+    await flush()
+    jest.advanceTimersByTime(60 * MINUTE)
+  })
+  expect(s.session.busy).toBe(true)
+  expect(s.codex.sent("turn/interrupt")).toEqual([])
+})
+
+test("leaves a stalled retry to a stop the user asked for", async () => {
+  const s = setup()
+  await started(s)
+  s.codex.answer("turn/interrupt", () => new Promise(() => {}))
+  await fakeTime(async () => {
+    s.codex.notify("error", { threadId: THREAD, turnId: TURN, willRetry: true, error: { message: "Reconnecting... 1/5" } })
+    await flush()
+    void s.session.interrupt()
+    await flush()
+    jest.advanceTimersByTime(10 * MINUTE)
+  })
+  expect(s.session.busy).toBe(true)
+  expect(s.items().some((found) => found.type === "error")).toBe(false)
 })
 
 test("fails the turn when the app-server dies, and loads the thread into a new one on the next message", async () => {
@@ -428,4 +555,21 @@ test("fails the turn when Codex refuses it", async () => {
   s.session.send("Hi")
   await until(() => !s.session.busy)
   expect(s.last("error")).toMatchObject({ message: "Model not available" })
+})
+
+test("asks for the reasoning summary Codex's config sets for the project, else auto", async () => {
+  const configured = setup()
+  configured.codex.answer("config/read", { config: { model_reasoning_summary: "concise" }, layers: null })
+  configured.session.send("Hi")
+  await until(() => configured.codex.sent("turn/start").length > 0)
+  expect(configured.codex.sent("config/read")).toEqual([{ cwd: DIR, includeLayers: false }])
+  expect(configured.codex.sent("turn/start")[0]).toMatchObject({ summary: "concise" })
+
+  const unread = setup()
+  unread.codex.answer("config/read", () => {
+    throw new Error("Invalid config")
+  })
+  unread.session.send("Hi")
+  await until(() => unread.codex.sent("turn/start").length > 0)
+  expect(unread.codex.sent("turn/start")[0]).toMatchObject({ summary: "auto" })
 })

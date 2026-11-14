@@ -166,6 +166,43 @@ test("a steered message that missed its turn keeps the tab busy for the next tur
   expect(s.statuses()).toEqual([true, false])
 })
 
+test("a steered message waits until Claude Code takes it in", async () => {
+  const s = setup()
+  const running = await started(s)
+  s.session.steer("Also check the tests")
+  const steer = s.items().at(-1)!
+  expect(steer).toMatchObject({ type: "user", steered: true, waiting: true })
+
+  // Claude Code holds a steer behind a running foreground tool. Frames that name other messages leave it waiting.
+  running.push({ type: "assistant", uuid: "a1", session_id: "s1", parent_tool_use_id: null, user_message_uuids: ["other"], message: { content: [] } })
+  running.push({ type: "system", subtype: "init", uuid: "i2", session_id: "s1", model: "claude-opus-5-5", user_message_uuids: [steer.id] })
+  await until(() => s.items().filter((item) => item.id === steer.id).length === 2)
+  const taken = s.items().filter((item) => item.id === steer.id)
+  expect(taken.at(-1)).toEqual({ type: "user", id: steer.id, text: "Also check the tests", at: expect.any(Number), steered: true })
+})
+
+test("a tool call that a stop cuts off shows as stopped, not failed", async () => {
+  const s = setup()
+  const running = await started(s)
+  running.push({ type: "assistant", uuid: "a1", session_id: "s1", parent_tool_use_id: null, message: { content: [{ type: "tool_use", id: "call1", name: "Bash", input: { command: "sleep 20" } }] } })
+  await s.session.interrupt()
+  // What Claude Code 2.1.325 sends for a call a stop cut off: an error, marked as rejected by the user.
+  const content = [{ type: "tool_result", tool_use_id: "call1", is_error: true, content: "The user doesn't want to proceed with this tool use." }]
+  running.push({ type: "user", uuid: "u2", session_id: "s1", parent_tool_use_id: null, message: { role: "user", content }, tool_result_meta: [{ id: "call1", non_execution_kind: "user-rejected" }] })
+  await until(() => s.items().some((item) => item.type === "tool" && !!item.result))
+  expect(s.items().at(-1)).toMatchObject({ type: "tool", id: "call1", label: "Stopped sleep", result: { isError: true, stopped: true } })
+})
+
+test("a tool call that fails without a stop shows as failed", async () => {
+  const s = setup()
+  const running = await started(s)
+  running.push({ type: "assistant", uuid: "a1", session_id: "s1", parent_tool_use_id: null, message: { content: [{ type: "tool_use", id: "call1", name: "Bash", input: { command: "npm test" } }] } })
+  running.push({ type: "user", uuid: "u2", session_id: "s1", parent_tool_use_id: null, message: { role: "user", content: [{ type: "tool_result", tool_use_id: "call1", is_error: true, content: "1 failed" }] } })
+  await until(() => s.items().some((item) => item.type === "tool" && !!item.result))
+  expect(s.items().at(-1)).toMatchObject({ type: "tool", label: "Failed npm", result: { isError: true } })
+  expect(s.items().at(-1)).not.toHaveProperty("result.stopped")
+})
+
 test("a stop marks the turn's result as stopped", async () => {
   const s = setup()
   const running = await started(s)

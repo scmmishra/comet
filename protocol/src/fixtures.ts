@@ -68,6 +68,7 @@ export const CORE_MESSAGES = [
       { type: "user", id: "u1", text: "Fix the login form", images: [{ mediaType: "image/png", data: "iVBORw==" }], at: 1_700_000_000_000, steered: true },
       { type: "thinking", id: "th1", text: "**Reading the form**", kind: "thought", label: "Reading the form" },
       { type: "tool", id: "t1", name: "Bash", summary: "npm test", result: { output: "1 failed", isError: true }, kind: "command", label: "Failed npm" },
+      { type: "tool", id: "t3", name: "Bash", summary: "sleep 20", result: { output: "Stopped", isError: true, stopped: true }, kind: "command", label: "Stopped sleep" },
       { type: "tool", id: "t2", name: "Edit", summary: "src/login.ts", file: "src/login.ts", edits: [{ before: "a", after: "b" }], kind: "edit", label: "Edited src/login.ts" },
       { type: "permission", id: "p1", requestId: "r1", tool: "Bash", kind: "command", detail: "rm -rf dist", reason: "It deletes files", allowSession: false },
       { type: "question", id: "q1", requestId: "r2", questions: [{ header: "Scope", question: "Which form?", options: [{ label: "Login" }], multiSelect: false }] },
@@ -80,6 +81,7 @@ export const CORE_MESSAGES = [
       { type: "notice", id: "n2", text: "Try /compact", warning: false },
       { type: "changes", id: "ch1", files: [{ path: "src/login.ts", status: "modified", additions: 3, deletions: 1 }] },
       { type: "user", id: "u2", text: "A background task finished", selfStarted: true },
+      { type: "user", id: "u3", text: "Also check the tests", at: 1_700_000_070_000, steered: true, waiting: true },
     ],
   },
   {
@@ -93,6 +95,7 @@ export const CORE_MESSAGES = [
   },
   { type: "session.event", tabId: "tab-1", event: { kind: "item", item: { type: "text", id: "x2", text: "", done: false } } },
   { type: "session.event", tabId: "tab-1", event: { kind: "text.delta", id: "x2", delta: "Hel" } },
+  { type: "session.event", tabId: "tab-1", event: { kind: "items.remove", ids: ["x2", "t1"] } },
   { type: "session.event", tabId: "tab-1", event: { kind: "status", busy: true } },
   { type: "session.event", tabId: "tab-1", event: { kind: "init", model: "Opus 5.5" } },
   { type: "session.event", tabId: "tab-1", event: { kind: "background", tasks: [{ id: "b1", label: "npm run dev", startedAt: 1_700_000_000_000 }] } },
@@ -107,6 +110,7 @@ export const CORE_MESSAGES = [
   { type: "session.event", tabId: "tab-1", event: { kind: "context", reading: { percent: 20, tokens: 40_000, maxTokens: 200_000 } } },
   { type: "session.event", tabId: "tab-1", event: { kind: "stopping", since: 1_700_000_100_000, unresponsive: true } },
   { type: "session.event", tabId: "tab-1", event: { kind: "retry", attempt: 2, maxRetries: 10, delayMs: 1_500, error: "Overloaded" } },
+  { type: "session.event", tabId: "tab-1", event: { kind: "retry", attempt: 6, delayMs: 0, error: "Waiting for the network" } },
   { type: "thread.branch", tabId: "tab-1", branch: "login" },
   { type: "thread.branch", tabId: "tab-2" },
   {

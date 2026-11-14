@@ -33,8 +33,8 @@ export function tool(step: Extract<BareStep, { type: "tool" }>, kind: StepKind, 
   return { ...step, kind, label: oneLine(label) }
 }
 
-/** A command's label: the program it runs, and whether it is running, ran or failed. */
-export const commandLabel = (command: string, result: Tool["result"]) => `${!result ? "Running" : result.isError ? "Failed" : "Ran"} ${commandProgram(command)}`
+/** A command's label: the program it runs, and whether it is running, ran, was stopped or failed. */
+export const commandLabel = (command: string, result: Tool["result"]) => `${!result ? "Running" : result.stopped ? "Stopped" : result.isError ? "Failed" : "Ran"} ${commandProgram(command)}`
 
 /**
  * The program a shell command runs, after T3 Code: `cd app && npm test` runs npm, and

@@ -10,7 +10,7 @@ import { userInput } from "./input"
 import { changedPaths, threadItems } from "./items"
 import { modelName, turnModel, type ModelCatalog } from "./models"
 import { runPolicy, threadPolicy } from "./permissions"
-import type { CodexItem, CodexModel, CodexTurn, TokenUsage } from "./protocol"
+import type { CodexConfigRead, CodexItem, CodexModel, CodexTurn, McpStartup, ReasoningSummary, TokenUsage } from "./protocol"
 import { asksApproval, readRequest, type CodexRequest } from "./requests"
 import type { AppServer, ThreadOwner, ThreadParams } from "./server"
 
@@ -18,6 +18,14 @@ import type { AppServer, ThreadOwner, ThreadParams } from "./server"
 const TOOL_TIMEOUT_SEC = 3900
 /** How a retry notice gives its attempt, such as "Reconnecting... 2/5". */
 const RETRY_PROGRESS = /\b(\d+)\s*\/\s*(\d+)\b/
+/** The reasoning summary a turn asks for when Codex's config sets none. */
+const DEFAULT_SUMMARY: ReasoningSummary = "auto"
+/**
+ * How long a turn waits for Codex to say anything after a retry before the turn fails, as in T3 Code. Codex
+ * retries with no limit while it waits for the network, and T3 Code saw it announce a retry and never resume.
+ * A retry that works resumes within about 75 seconds, after T3 Code.
+ */
+const RETRY_STALL_MS = 10 * 60_000
 
 /**
  * A turn, from the message that opens it until it ends. Codex names it in its answer to `turn/start`.
@@ -28,8 +36,12 @@ class Turn {
   id?: string
   /** The model the turn runs on, by id. */
   model?: string
+  /** The turn's last retry of a failed request. */
+  attempt = 0
   readonly started: Promise<string | undefined>
   private resolve!: (id: string | undefined) => void
+  /** Fails the turn once Codex has said nothing for `RETRY_STALL_MS` after a retry. */
+  private stall?: ReturnType<typeof setTimeout>
 
   constructor(readonly message: string) {
     this.started = new Promise((resolve) => (this.resolve = resolve))
@@ -42,6 +54,19 @@ class Turn {
 
   end() {
     this.resolve(undefined)
+    this.progressed()
+  }
+
+  /** Codex retries a request. `stalled` runs if Codex then says nothing in time. A later retry starts the wait again. */
+  retried(stalled: () => void) {
+    clearTimeout(this.stall)
+    this.stall = setTimeout(stalled, RETRY_STALL_MS)
+  }
+
+  /** Codex said something after a retry, so the retry has not stalled. */
+  progressed() {
+    clearTimeout(this.stall)
+    this.stall = undefined
   }
 }
 
@@ -72,6 +97,8 @@ export class CodexSession implements AgentSession, ThreadOwner {
   private requests: Requests<unknown, WaitingRequest>
   /** The paths of each file change Codex reported, by item id, for the request to apply it. */
   private files = new Map<string, readonly string[]>()
+  /** The MCP servers whose failure to start the thread shows, until each starts. */
+  private failedServers = new Set<string>()
 
   constructor(
     private readonly dir: string,
@@ -156,9 +183,13 @@ export class CodexSession implements AgentSession, ThreadOwner {
   /** A notification about the thread, or about the thread of one of Codex's own agents. */
   notify(method: string, params: ThreadParams) {
     if (params.threadId !== this.threadId) return this.notifyChild(method, params)
+    // Anything Codex says about the thread, but another retry, shows it did not stall, after T3 Code.
+    if (method !== "error") this.turn?.progressed()
     switch (method) {
       case "turn/started":
         return this.started((params.turn as CodexTurn).id)
+      case "model/rerouted":
+        return this.rerouted(String(params.toModel))
       case "item/started":
       case "item/completed":
         return this.item(params.item as CodexItem, method === "item/completed")
@@ -170,6 +201,8 @@ export class CodexSession implements AgentSession, ThreadOwner {
         return this.retry(params as ThreadParams & { error: { message: string }; willRetry: boolean })
       case "serverRequest/resolved":
         return this.settled(params.requestId as RequestId)
+      case "mcpServer/startupStatus/updated":
+        return this.serverStatus(params as ThreadParams & McpStartup)
       case "turn/completed":
         return this.complete(params.turn as CodexTurn)
     }
@@ -198,6 +231,7 @@ export class CodexSession implements AgentSession, ThreadOwner {
   }
 
   private async startTurn(turn: Turn, text: string, images: readonly ImageAttachment[]) {
+    const summary = this.reasoningSummary()
     this.models = await this.catalog.get()
     const threadId = await this.load(this.models)
     const chosen = turnModel(this.models, this.settings)
@@ -206,12 +240,22 @@ export class CodexSession implements AgentSession, ThreadOwner {
       threadId,
       clientUserMessageId: turn.message,
       input: userInput(text, images),
-      summary: "detailed",
+      summary: await summary,
       ...runPolicy(this.settings.permissionMode),
       ...chosen,
     })
     turn.id ??= started.id
     if (started.startedAt !== null) this.started(started.id)
+  }
+
+  /**
+   * The reasoning summary the user set in Codex's config, else `auto`, after T3 Code. A turn's summary
+   * replaces the config's, and some providers, such as Amazon Bedrock, refuse `detailed`. A model may
+   * default to `none`, so the turn still names one.
+   */
+  private async reasoningSummary(): Promise<ReasoningSummary> {
+    const read = await this.server.request<CodexConfigRead>("config/read", { cwd: this.dir, includeLayers: false }).catch(() => undefined)
+    return read?.config.model_reasoning_summary ?? DEFAULT_SUMMARY
   }
 
   /** A message steered into a turn that ended first starts the next turn, or joins the one running by then. */
@@ -257,7 +301,18 @@ export class CodexSession implements AgentSession, ThreadOwner {
     const turn = this.turn
     if (!turn) return
     turn.start(turnId)
-    const name = turn.model ? modelName(this.models, turn.model) : undefined
+    if (turn.model) this.announce(turn.model)
+  }
+
+  /** Codex moved the turn to another model than the one asked for, such as for a request it flagged. The tab shows the model that runs it. */
+  private rerouted(model: string) {
+    if (this.turn) this.turn.model = model
+    this.announce(model)
+  }
+
+  /** Tells the tab the model that runs, by name, when that changed. */
+  private announce(model: string) {
+    const name = modelName(this.models, model)
     if (name && name !== this.announced) {
       this.announced = name
       this.emit({ kind: "init", model: name })
@@ -293,10 +348,28 @@ export class CodexSession implements AgentSession, ThreadOwner {
     this.emit({ kind: "context", reading: { percent: Math.min(100, (tokens / maxTokens) * 100), tokens, maxTokens } })
   }
 
-  /** Codex tries a failed request again and says so. An error it does not retry ends the turn, whose result reports it. */
+  /**
+   * Codex tries a failed request again and says so. An error it does not retry ends the turn, whose result
+   * reports it. A retry without "2/5" in its text has no limit, after T3 Code: Codex drops the count once
+   * it waits for the network. Its attempt counts on from the turn's last retry.
+   */
   private retry({ error, willRetry }: { error: { message: string }; willRetry: boolean }) {
-    const progress = willRetry ? RETRY_PROGRESS.exec(error.message) : null
-    if (progress) this.emit({ kind: "retry", attempt: Number(progress[1]), maxRetries: Number(progress[2]), delayMs: 0, error: error.message })
+    const turn = this.turn
+    if (!willRetry || !turn) return
+    const progress = RETRY_PROGRESS.exec(error.message)
+    turn.attempt = progress ? Number(progress[1]) : turn.attempt + 1
+    turn.retried(() => this.stalled(turn, error.message))
+    this.emit({ kind: "retry", attempt: turn.attempt, ...(progress ? { maxRetries: Number(progress[2]) } : {}), delayMs: 0, error: error.message })
+  }
+
+  /**
+   * Codex said nothing for `RETRY_STALL_MS` after a retry. The turn fails with Codex's last error, and Codex
+   * is asked to stop it. A stop the user asked for is left to finish, since Force stop can end it.
+   */
+  private stalled(turn: Turn, error: string) {
+    if (this.turn !== turn || this.stop.pending) return
+    if (turn.id && this.threadId) void this.server.request("turn/interrupt", { threadId: this.threadId, turnId: turn.id }).catch(() => undefined)
+    this.fail(new Error(`Codex did not recover from a failed request in ${RETRY_STALL_MS / 60_000} minutes, so the turn was stopped. Codex said: ${error}`))
   }
 
   /** Codex settled a request itself, such as when its reviewer answered. The request leaves the thread. */
@@ -313,6 +386,18 @@ export class CodexSession implements AgentSession, ThreadOwner {
     if (ended.status === "failed") this.emit({ kind: "item", item: turnError(ended) })
     this.emit({ kind: "item", item: turnResult(ended, turn.message, this.stop.pending) })
     this.endTurn()
+  }
+
+  /**
+   * An MCP server that failed to start shows as a warning, with Codex's reason, after T3 Code. Codex starts
+   * the servers each time it loads the thread, and may try a server again, so a server warns once until it starts.
+   */
+  private serverStatus({ name, status, error }: McpStartup) {
+    if (status === "ready") return void this.failedServers.delete(name)
+    if (status !== "failed" || this.failedServers.has(name)) return
+    this.failedServers.add(name)
+    const text = error?.trim() ? `MCP server ${name} did not start.\n${error.trim()}` : `MCP server ${name} did not start.`
+    this.emit({ kind: "item", item: { type: "notice", id: `mcp-failed:${crypto.randomUUID()}`, text, warning: true } })
   }
 
   private endTurn() {

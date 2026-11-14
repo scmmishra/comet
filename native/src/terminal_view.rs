@@ -1,4 +1,4 @@
-//! A terminal in the view pane: its rows on a fixed grid of cells, the cursor, keys, the input method,
+//! A terminal in the view pane: its rows on Rune's grid of cells, the cursor, keys, the input method,
 //! scrolling, selecting text to copy, and the mouse for programs that track it. The screen comes from
 //! `terminal.rs`, and the shell runs in the core.
 
@@ -7,9 +7,11 @@ use crate::shell::Desk;
 use crate::terminal::{FOREGROUND, Mouse, Row, Screen, Size, Spot, key_bytes, mouse_bytes, paste_bytes};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::vte::ansi::Rgb;
-use rune::{Color, Drag, El, Ime, Key, KeyEvent, Mods, Phase, Span, TextStyle, Tx, col, el, memo, text};
+use rune::{Color, Drag, El, GridRow, Ime, Key, KeyEvent, Mods, Phase, Span, TextStyle, Tx, el, text};
 use rune_kit::Kit;
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 /// Desk's terminal font size.
 const FONT_SIZE: f32 = 12.0;
@@ -38,6 +40,9 @@ pub struct Terminals {
     focused: Option<String>,
     /// What the input method has composed and not yet typed, drawn at the caret.
     preedit: String,
+    /// Each terminal's rows as last given to the grid, by id. The view reads `&Desk`, so it keeps them
+    /// behind a `RefCell`.
+    built: RefCell<HashMap<String, Vec<BuiltRow>>>,
 }
 
 fn font() -> TextStyle {
@@ -188,12 +193,15 @@ impl Desk {
     pub fn terminal_ime(&mut self, event: &Ime) -> bool {
         let Some(id) = self.terminals.focused.clone() else { return false };
         match event {
-            Ime::Preedit(text, _) => self.terminals.preedit = text.clone(),
+            // The clauses go unused: the terminal underlines the whole composition as one.
+            Ime::Preedit(text, ..) => self.terminals.preedit = text.clone(),
             Ime::Commit(text) => {
                 self.terminals.preedit.clear();
                 self.type_into(&id, text.clone());
             }
-            Ime::Enabled => {}
+            // Text typed into the shell is gone from the terminal's hands, so there is nothing to
+            // convert again. The terminal publishes no text, and ignores a reconversion.
+            Ime::Select(_) | Ime::Enabled => {}
             Ime::Disabled => self.terminals.preedit.clear(),
         }
         true
@@ -243,26 +251,32 @@ fn rgb(c: Rgb) -> Color {
     rune::color::hex(&format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)).unwrap_or(Color::WHITE)
 }
 
+/// A cell's text colour: the theme's foreground draws in Desk's own ink.
+fn fg_color(fg: Rgb, ink: Color) -> Color {
+    if fg == FOREGROUND { ink } else { rgb(fg) }
+}
+
 /// A terminal's screen, filling the pane, sized to whole cells.
 pub fn terminal(s: &Desk, id: &str, k: &Kit) -> El {
     let Some(screen) = s.terminals.screens.get(id) else { return el().grow(1.0) };
     let f = font();
     let (cw, ch) = s.terminals.cell.unwrap_or((7.2, f.line_height));
     let ink = k.c.text_base;
-    let tint = crate::theme::accent_soft(k.dark);
-    let selection = screen.selection.iter().map(|&(row, from, to)| el().absolute(PAD + from as f32 * cw, row as f32 * ch).size((to + 1 - from) as f32 * cw, ch).fill(tint));
-    let rows = screen.rows.iter().enumerate().map(|(y, row)| {
-        let version = (screen.versions[y], k.dark);
-        memo(format!("term-{id}-{y}"), version, || row_view(row, f, (cw, ch), ink))
-    });
-    let grid = col().absolute(PAD, 0.0).w(screen.size.cols as f32 * cw).children(rows);
+    let look = Look { ink, tint: crate::theme::accent_soft(k.dark) };
+    let rows = s.terminals.grid_rows(id, screen, look);
+    let mut grid = rune::grid(screen.size.cols as u16, cw, ch, rows).absolute(PAD, 0.0).size(screen.size.cols as f32 * cw, screen.size.rows as f32 * ch);
+    if let Some((x, y)) = screen.cursor {
+        grid = grid.grid_caret(x as u16, y as u16);
+    }
     let cursor = screen.cursor.map(|(x, y)| el().absolute(PAD + x as f32 * cw, y as f32 * ch).size(1.5, ch).fill(ink));
     // While the terminal has the keyboard, the input method works at the caret, and what it composes
-    // shows there, underlined, until it is typed.
+    // shows there, underlined, until it is typed. On macOS the caret also makes Option the Alt key, so
+    // Option+B reaches `key_bytes` as Alt+B (Esc b). Otherwise the input method composes it into "∫" and
+    // commits that, with no key for `terminal_key`.
     let has_keyboard = s.terminals.focused.as_deref() == Some(id);
     let (cx, cy) = screen.caret;
     let caret = has_keyboard.then(|| {
-        let at = el().key("caret").absolute(PAD + cx as f32 * cw, cy as f32 * ch).h(ch).ime_cursor();
+        let at = el().key("caret").absolute(PAD + cx as f32 * cw, cy as f32 * ch).h(ch).ime_cursor().ime_option_as_alt(true);
         let preedit = &s.terminals.preedit;
         if preedit.is_empty() {
             return at.w(1.0);
@@ -298,8 +312,6 @@ pub fn terminal(s: &Desk, id: &str, k: &Kit) -> El {
             true
         })
         .child(grid)
-        // Over the cells' own backgrounds, faint enough to read the text through.
-        .children(selection)
         .children(cursor)
         .children(caret)
 }
@@ -309,20 +321,69 @@ pub fn poll(s: &mut Desk, tx: &Tx) -> bool {
     s.follow_focus(tx.focused())
 }
 
-/// One row: background runs under the text, the text with its colours, and wide characters in their cells.
-fn row_view(row: &Row, font: TextStyle, (cw, ch): (f32, f32), ink: Color) -> El {
-    let mut e = el().h(ch).w_full();
-    for run in &row.runs {
-        if let Some(bg) = run.bg {
-            e = e.child(el().absolute(run.col as f32 * cw, 0.0).size(run.cols as f32 * cw, ch).fill(rgb(bg)));
-        }
+/// The theme colours a row draws in.
+#[derive(Clone, Copy, PartialEq)]
+struct Look {
+    ink: Color,
+    /// The selection, over the cells' own backgrounds, faint enough to read the text through.
+    tint: Color,
+}
+
+/// A row as last given to the grid, with what it was built from. The grid shapes a row again only when
+/// it gets a new `GridRow`, so an unchanged row hands back the same one.
+struct BuiltRow {
+    version: u64,
+    selected: Option<(usize, usize)>,
+    look: Look,
+    row: Rc<GridRow>,
+}
+
+impl Terminals {
+    /// Terminal `id`'s rows for the grid, built again only where a row, its selection or the theme changed.
+    fn grid_rows(&self, id: &str, screen: &Screen, look: Look) -> Vec<Rc<GridRow>> {
+        let mut built = self.built.borrow_mut();
+        let built = built.entry(id.to_owned()).or_default();
+        built.truncate(screen.rows.len());
+        let f = font();
+        screen
+            .rows
+            .iter()
+            .enumerate()
+            .map(|(y, row)| {
+                let (version, selected) = (screen.versions[y], screen.selection.iter().find(|s| s.0 == y).map(|&(_, from, to)| (from, to)));
+                match built.get(y) {
+                    Some(b) if (b.version, b.selected, b.look) == (version, selected, look) => b.row.clone(),
+                    _ => {
+                        let fresh = BuiltRow { version, selected, look, row: Rc::new(grid_row(row, selected, f, look)) };
+                        let out = fresh.row.clone();
+                        if y < built.len() { built[y] = fresh } else { built.push(fresh) }
+                        out
+                    }
+                }
+            })
+            .collect()
     }
-    let spans: Vec<Span> = row
-        .runs
+}
+
+/// One row for the grid: its text coloured by its runs, wide characters in their cells, and its
+/// background runs with the selection over them.
+fn grid_row(row: &Row, selected: Option<(usize, usize)>, font: TextStyle, look: Look) -> GridRow {
+    let mut g = GridRow::new(row.text.clone(), spans(row, look.ink), font).wraps(row.wraps);
+    for (start, end, color) in fills(row, selected, look.tint) {
+        g = g.fill(start, end, color);
+    }
+    for (col, glyph, fg) in &row.wide {
+        g = g.cell(*col as u16, 2, glyph.clone(), font, fg_color(*fg, look.ink));
+    }
+    g
+}
+
+/// A span per run, so every cell takes its run's colour, weight, slant and underline.
+fn spans(row: &Row, ink: Color) -> Vec<Span> {
+    row.runs
         .iter()
-        .filter(|r| r.fg != FOREGROUND || r.bold || r.italic || r.underline)
         .map(|r| {
-            let c = rgb(r.fg);
+            let c = fg_color(r.fg, ink);
             let mut span = Span::new(r.start, r.end).color(c);
             if r.bold {
                 span = span.weight(700.0);
@@ -335,23 +396,19 @@ fn row_view(row: &Row, font: TextStyle, (cw, ch): (f32, f32), ink: Color) -> El 
             }
             span
         })
-        .collect();
-    if !row.text.trim_end().is_empty() {
-        let mut t = text(row.text.clone()).font(font).color(ink).absolute(0.0, 0.0);
-        if !spans.is_empty() {
-            t = t.spans(spans);
-        }
-        e = e.child(t);
-    }
-    for (col, glyph, fg) in &row.wide {
-        e = e.child(el().absolute(*col as f32 * cw, 0.0).size(2.0 * cw, ch).center().child(text(glyph.clone()).font(font).color(rgb(*fg))));
-    }
-    e
+        .collect()
+}
+
+/// The columns to fill under the text: each run's background, then the selection over them.
+fn fills(row: &Row, selected: Option<(usize, usize)>, tint: Color) -> Vec<(u16, u16, Color)> {
+    let backgrounds = row.runs.iter().filter_map(|r| r.bg.map(|bg| (r.col as u16, (r.col + r.cols) as u16, rgb(bg))));
+    backgrounds.chain(selected.map(|(from, to)| (from as u16, to as u16 + 1, tint))).collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::terminal::palette;
 
     /// A Desk with one 20×5 terminal, "t", on 10×20 cells.
     fn desk(output: &[u8]) -> Desk {
@@ -370,6 +427,50 @@ mod tests {
     /// The middle of a cell, in the terminal's own points.
     fn at(col: usize, row: usize) -> (f32, f32) {
         (PAD + col as f32 * 10.0 + 2.0, row as f32 * 20.0 + 10.0)
+    }
+
+    const LOOK: Look = Look { ink: Color::WHITE, tint: Color { r: 0.0, g: 0.0, b: 1.0, a: 0.1 } };
+
+    #[test]
+    fn each_run_colours_its_cells_and_the_foreground_draws_in_ink() {
+        let s = desk(b"hi \x1b[1;4;31mred\x1b[0m \x1b[42m ok \x1b[0m");
+        let row = &s.terminals.screens["t"].rows[0];
+        let spans = spans(row, LOOK.ink);
+        assert_eq!(spans.first().and_then(|sp| sp.color), Some(LOOK.ink), "plain text draws in Desk's ink");
+        let red = spans.iter().find(|sp| &row.text[sp.start as usize..sp.end as usize] == "red").expect("a span for the red word");
+        assert_eq!((red.color, red.weight, red.underline), (Some(rgb(palette(1))), Some(700.0), Some(rgb(palette(1)))));
+        assert_eq!(spans.last().map(|sp| sp.end as usize), Some(row.text.len()), "the spans cover the whole row");
+        assert_eq!(fills(row, Some((0, 1)), LOOK.tint), [(7, 11, rgb(palette(2))), (0, 2, LOOK.tint)], "backgrounds first, the selection over them");
+    }
+
+    #[test]
+    fn a_row_is_built_again_only_when_it_its_selection_or_the_theme_changes() {
+        let mut s = desk(b"one\r\ntwo");
+        let rows = |s: &Desk, look| s.terminals.grid_rows("t", &s.terminals.screens["t"], look);
+        let first = rows(&s, LOOK);
+        assert!(first.iter().zip(rows(&s, LOOK)).all(|(a, b)| Rc::ptr_eq(a, &b)), "an unchanged screen hands back the same rows");
+        s.terminals.screens.get_mut("t").unwrap().feed(b"!");
+        let typed = rows(&s, LOOK);
+        assert!(Rc::ptr_eq(&first[0], &typed[0]) && !Rc::ptr_eq(&first[1], &typed[1]), "only the row typed into is new");
+        s.terminals.screens.get_mut("t").unwrap().select_from(Spot { col: 0, row: 0, right: false }, 2);
+        let selected = rows(&s, LOOK);
+        assert!(!Rc::ptr_eq(&typed[0], &selected[0]) && Rc::ptr_eq(&typed[1], &selected[1]), "only the selected row is new");
+        let light = rows(&s, Look { ink: Color::BLACK, ..LOOK });
+        assert!(!Rc::ptr_eq(&selected[1], &light[1]), "a theme change builds every row again");
+    }
+
+    #[test]
+    fn the_grid_reads_each_row_and_puts_the_caret_on_the_cursor() {
+        fn view(s: &Desk, _: &mut rune::Cx<Desk>) -> El {
+            terminal(s, "t", crate::theme::kit(true))
+        }
+        let mut rt = rune::Runtime::new(desk(b"$ ls\r\n\xe6\x97\xa5x"), view, (400.0, 200.0), rune::Env { system_dark: true, scale: 2.0 });
+        rt.frame(0.0);
+        let tree = rt.accessibility_tree();
+        let lines: Vec<&str> = tree.nodes.iter().filter_map(|(_, n)| (format!("{:?}", n.role()) == "TextRun").then(|| n.value()).flatten()).collect();
+        assert_eq!(lines[..2], ["$ ls\n", "\u{65e5}x\n"], "a line per row, the wide character once");
+        let caret = tree.nodes.iter().find_map(|(_, n)| n.text_selection()).expect("the cursor is the caret");
+        assert_eq!(caret.focus.character_index, 2, "after the wide character and the x");
     }
 
     #[test]
@@ -406,12 +507,14 @@ mod tests {
         assert!(!s.terminal_ime(&Ime::Commit("é".into())), "with no terminal focused, the input method goes elsewhere");
         assert!(s.follow_focus(Some("terminal-t")));
         assert!(!s.follow_focus(Some("terminal-t")), "the same focus is no change");
-        assert!(s.terminal_ime(&Ime::Preedit("ni".into(), None)));
+        assert!(s.terminal_ime(&Ime::Preedit("ni".into(), None, vec![rune::Clause::new(0..2).target()])));
+        assert_eq!(s.terminals.preedit, "ni");
+        assert!(s.terminal_ime(&Ime::Select(0..2)), "a reconversion is the terminal's, and changes nothing");
         assert_eq!(s.terminals.preedit, "ni");
         s.terminal_ime(&Ime::Commit("你".into()));
         assert_eq!(s.terminals.preedit, "");
         assert_eq!(sent(&s), ["你"]);
-        s.terminal_ime(&Ime::Preedit("ha".into(), None));
+        s.terminal_ime(&Ime::Preedit("ha".into(), None, Vec::new()));
         assert!(s.follow_focus(Some("composer-input")));
         assert_eq!((s.terminals.focused.as_deref(), s.terminals.preedit.as_str()), (None, ""), "leaving the terminal ends the composition");
     }

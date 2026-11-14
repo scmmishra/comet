@@ -164,14 +164,16 @@ test("fails the turn with the sign-in problem when the agent needs a sign-in, an
   expect(run.signedOut()).toBe(1)
 })
 
-test("fails the turn when the agent prints a sign-in link instead of answering", async () => {
-  const run = start({}, { authenticate: () => new Promise(() => {}) })
-  run.session.send("Hello")
-  await until(() => run.agent().sent("authenticate").length === 1)
-  run.agent().print(SIGN_IN_LINE)
-  await until(() => !run.session.busy)
-  expect(run.last("error")?.message).toBe(SIGN_IN_TO_SEND)
-  expect(run.signedOut()).toBe(1)
+test("fails the turn when the agent prints a sign-in link instead of answering, on stdout or stderr", async () => {
+  for (const print of ["print", "printError"] as const) {
+    const run = start({}, { authenticate: () => new Promise(() => {}) })
+    run.session.send("Hello")
+    await until(() => run.agent().sent("authenticate").length === 1)
+    run.agent()[print](SIGN_IN_LINE)
+    await until(() => !run.session.busy)
+    expect(run.last("error")?.message).toBe(SIGN_IN_TO_SEND)
+    expect(run.signedOut()).toBe(1)
+  }
 })
 
 test("fails a turn whose process dies with the end of its stderr, and resumes the session on the next message", async () => {

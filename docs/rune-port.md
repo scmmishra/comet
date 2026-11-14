@@ -67,12 +67,12 @@ Done so far:
 - Review: the scope picker, the counts, unified or split diffs, drawn by rune-kit's `DiffView` from the core's patches. It reads again when a turn ends.
 - The file view: a file opened from the thread's changed files, with numbered lines and the line it opened at marked.
 
-- Terminals in the pane (Ctrl+` or the + button). The shell runs in the core, as before. The screen comes from `alacritty_terminal`, a pure Rust engine, behind `terminal.rs`, until Rune has a terminal of its own. Rows draw as text on a grid of cells, with wide characters in their own cells. Keys follow xterm's encoding, ⌘V pastes, bracketed when asked, and ⌘⌫ deletes the line. A drag selects text, a double click a word and a triple click a line, and ⌘C copies it. A program that tracks the mouse hears presses, drags and the wheel in xterm's encodings, and Shift still selects. In a full-screen program that does not track the mouse, the wheel sends arrow keys. The input method works at the cursor, for accents, CJK, emoji and dictation.
+- Terminals in the pane (Ctrl+` or the + button). The shell runs in the core, as before. The screen comes from `alacritty_terminal`, a pure Rust engine, behind `terminal.rs`, until Rune has a terminal of its own. Rune's `grid` draws the screen as one element, with wide characters pinned to their cells. A row is shaped again only when it changes. Keys follow xterm's encoding, ⌘V pastes, bracketed when asked, and ⌘⌫ deletes the line. A drag selects text, a double click a word and a triple click a line, and ⌘C copies it. A program that tracks the mouse hears presses, drags and the wheel in xterm's encodings, and Shift still selects. In a full-screen program that does not track the mouse, the wheel sends arrow keys. The input method works at the cursor, for accents, CJK, emoji and dictation.
 
 Still to do:
 
 - Syntax colours in the file view, and Review's per-file "open" button.
-- In the terminal, the mouse reports only the primary button. Box-drawing characters come from a fallback font, so lines may not join.
+- In the terminal, the mouse reports only the primary button. Box-drawing characters come from a fallback font, so lines may not join. `GridRow::shape` can draw them as vectors, but Rune has no table of their strokes, and Desk would have to write one.
 - Done when daily coding work needs no Electron.
 
 ### Phase 4: The rest
@@ -111,7 +111,7 @@ Left:
 
 ## Rune gaps
 
-- No terminal or cell-grid text. Desk uses `alacritty_terminal` and draws rows as text until Rune adds one. libghostty-vt was set aside: its build needs Zig 0.15.2 and an SDK pin.
+- No terminal engine. Rune's `grid` draws a terminal's screen and reads it to a screen reader, but Rune parses no output. Desk uses `alacritty_terminal` until Rune adds an engine. libghostty-vt was set aside: its build needs Zig 0.15.2 and an SDK pin. The grid pins a wide character to its column's left edge, where it cannot be centred in its two cells.
 - Rune keeps winit's Quit on ⌘Q, so the press-twice quit cannot take that key.
 - Markdown messages are their own selection group, so a drag stops at a message's end. `.selection_group(false)` works around it.
 - `Collapsible` builds its content even when closed.

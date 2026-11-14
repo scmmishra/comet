@@ -1,7 +1,7 @@
 import type { PermissionMode } from "@desk/protocol"
 import type { Process } from "../process"
 import type { ConnectOptions } from "./connection"
-import type { ConfigOption, InitializeResult, PermissionRequest } from "./protocol"
+import type { ConfigOption, PermissionRequest } from "./protocol"
 import type { ToolReader } from "./tools"
 
 /**
@@ -15,8 +15,6 @@ export interface AcpFlavor {
   readonly connect: ConnectOptions
   /** The agent's mode for one of Desk's permission modes. */
   modeId(mode: PermissionMode): string
-  /** The agent's own `_meta` for a new or resumed session, chosen from what it said in `initialize`. */
-  sessionMeta?(agent: InitializeResult): Record<string, unknown> | undefined
   readonly tools: ToolReader
   /** Whether a permission request asks a multiple-choice question instead. */
   isQuestion?(request: PermissionRequest): boolean

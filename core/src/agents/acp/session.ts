@@ -177,8 +177,7 @@ export class AcpSession implements AgentSession {
       this.flavor.connect,
     )
     try {
-      const meta = this.flavor.sessionMeta?.(connection.agent)
-      const params = { cwd: this.dir, mcpServers: toolServers(this.options.tools), ...(meta ? { meta } : {}) }
+      const params = { cwd: this.dir, mcpServers: toolServers(this.options.tools) }
       const opened = !this.sessionId
       const setup = this.sessionId ? await connection.resumeSession(this.sessionId, params) : await connection.newSession(params)
       if (!this.sessionId) {

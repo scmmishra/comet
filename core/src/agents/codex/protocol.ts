@@ -71,6 +71,17 @@ export type CodexItem = { readonly startedAtMs?: number | null; readonly complet
       readonly prompt: string | null
     }
   | { readonly type: "subAgentActivity"; readonly id: string; readonly kind: "started" | "interacted" | "interrupted" | "completed"; readonly agentThreadId: string; readonly agentPath: string }
+  | {
+      readonly type: "imageGeneration"
+      readonly id: string
+      /** Such as "completed" or "failed". The schema does not list the values. */
+      readonly status: string
+      /** The prompt the image was made from, as the model rewrote it. */
+      readonly revisedPrompt: string | null
+      readonly failure: { readonly type: string } | null
+      /** Where Codex saved the image, once it has. */
+      readonly savedPath?: string
+    }
 )
 
 export interface CodexModel {
@@ -137,8 +148,11 @@ export interface CodexConfigLayer {
   readonly disabledReason: string | null
 }
 
+/** How much of its reasoning the model sums up. */
+export type ReasoningSummary = "auto" | "concise" | "detailed" | "none"
+
 export interface CodexConfigRead {
-  readonly config: { readonly mcp_servers?: Readonly<Record<string, CodexMcpConfig>> }
+  readonly config: { readonly mcp_servers?: Readonly<Record<string, CodexMcpConfig>>; readonly model_reasoning_summary?: ReasoningSummary | null }
   readonly layers: readonly CodexConfigLayer[] | null
 }
 
@@ -149,4 +163,11 @@ export interface CodexMcpStatus {
   /** Why Codex could not list its tools, such as a server that failed to start. */
   readonly toolsError: string | null
   readonly authStatus: "unknown" | "unsupported" | "notLoggedIn" | "bearerToken" | "oAuth"
+}
+
+/** How one of a thread's MCP servers is starting, as `mcpServer/startupStatus/updated` says. */
+export interface McpStartup {
+  readonly name: string
+  readonly status: "starting" | "ready" | "failed" | "cancelled"
+  readonly error: string | null
 }

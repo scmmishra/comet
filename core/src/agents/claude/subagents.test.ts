@@ -31,3 +31,13 @@ test("leaves out tasks that are not agents, and messages from tool calls it does
   subagents.handle({ type: "assistant", uuid: "a1", parent_tool_use_id: "unknown", message: { content: [{ type: "text", text: "hi" }] } } as never)
   expect(events).toEqual([])
 })
+
+test("drops a subagent's step once a later message of its own replaces it", () => {
+  const events: ThreadEvent[] = []
+  const subagents = new Subagents(DIR, (event) => events.push(event))
+  const last = () => (events.findLast((event) => event.kind === "subagent") as { subagent: Subagent }).subagent
+  subagents.handle({ type: "system", subtype: "task_started", task_id: "t1", tool_use_id: "call1", task_type: "local_agent", description: "Find tests" } as never, 1)
+  subagents.handle({ type: "assistant", uuid: "a1", parent_tool_use_id: "call1", message: { content: [{ type: "text", text: "Refused" }] } } as never, 2)
+  subagents.handle({ type: "assistant", uuid: "a2", parent_tool_use_id: "call1", supersedes: ["a1"], message: { content: [{ type: "text", text: "Found them" }] } } as never, 3)
+  expect(last().items).toEqual([{ type: "text", id: "a2:0", text: "Found them", done: true, at: 3 }])
+})

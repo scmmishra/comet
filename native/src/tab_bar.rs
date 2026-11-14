@@ -78,6 +78,7 @@ pub fn tab_bar(s: &Desk, k: &Kit) -> El {
         let active = shown == Some(tab.id.as_str());
         let busy = s.threads.get(&tab.id).is_some_and(|t| t.busy);
         let close_id = tab.id.clone();
+        let middle_id = tab.id.clone();
         let close = IconButton::new(&ic::XMARK_SMALL)
             .variant(IconButtonVariant::GhostMuted)
             .control_size(ControlSize::Small)
@@ -120,6 +121,8 @@ pub fn tab_bar(s: &Desk, k: &Kit) -> El {
             .motion(if dragging.is_some() { rune::tok::motion::SNAP } else { rune::tok::motion::REFLOW })
             .offset(dragging.map_or(0.0, |d| d.shift(index)), 0.0)
             .on_drag(move |s: &mut Desk, d: &mut Drag, _: &mut Tx| drag(s, &id, index, d))
+            // A middle click closes the tab, as the close button does.
+            .on_middle_press(move |s: &mut Desk, tx: &mut Tx| s.close_tab(&middle_id, tx))
             .child(body)
             .child(close);
         if lifted {

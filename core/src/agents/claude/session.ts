@@ -1,5 +1,5 @@
 import { query, type CanUseTool, type PermissionResult, type Query, type SDKMessage, type SDKRateLimitInfo, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
-import type { ImageAttachment, PermissionAnswer, RunSettings, ThreadEvent } from "@desk/protocol"
+import type { ImageAttachment, PermissionAnswer, RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
 import { SERVER_NAME } from "../../delegate/tools"
 import type { AgentHost, AgentSession, Emit, SessionOptions, ToolServer } from "../agent"
 import { Requests, type OpenRequest } from "../requests"
@@ -11,7 +11,7 @@ import { BackgroundTasks } from "./background-tasks"
 import { claudeCodePath } from "./executable"
 import { Subagents } from "./subagents"
 import { ASK_USER_QUESTION, permissionItem, permissionResult, questionItem, questionResult } from "./requests"
-import { DESK_TOOL } from "./steps"
+import { DESK_TOOL, toolStep } from "./steps"
 import { ThreadMapper } from "./thread"
 
 /** A queue the SDK reads user messages from. A session stays open between turns while it waits. */
@@ -78,6 +78,8 @@ export class ClaudeSession implements AgentSession {
   private closed = false
   /** Set from a steered message until Claude Code takes it in, or its turn ends without it. */
   private steering = false
+  /** The steered messages Claude Code has not taken in yet, by uuid. It holds one behind a running foreground tool. */
+  private waitingSteers = new Map<string, Extract<ThreadItem, { type: "user" }>>()
   private settings: RunSettings
   /** Where the next query resumes, until a turn has run there. Later queries resume at the end, as usual. */
   private resumeAt?: string
@@ -129,7 +131,9 @@ export class ClaudeSession implements AgentSession {
   steer(text: string, images: readonly ImageAttachment[] = []) {
     if (!this.running) return this.send(text, images)
     const uuid = crypto.randomUUID()
-    this.emit({ kind: "item", item: userItem(uuid, text, images, true) })
+    const item = { ...userItem(uuid, text, images, true), waiting: true }
+    this.waitingSteers.set(uuid, item)
+    this.emit({ kind: "item", item })
     this.steering = true
     this.inbox!.push({ type: "user", message: { role: "user", content: userContent(text, images) }, parent_tool_use_id: null, priority: "now", uuid })
   }
@@ -247,6 +251,7 @@ export class ClaudeSession implements AgentSession {
           this.options.onSessionId(message.session_id)
         }
         if (message.type === "rate_limit_event") this.options.onRateLimit(message.rate_limit_info)
+        this.markSteersTaken(message)
         this.subagents.handle(message)
         this.backgroundTasks.handle(message)
         const steer = message.type === "result" ? this.takeSteer(message) : undefined
@@ -295,6 +300,7 @@ export class ClaudeSession implements AgentSession {
   /** Ends the session after an error, which shows in the thread. The next message starts it again. */
   private fail(error: unknown) {
     this.steering = false
+    this.waitingSteers.clear()
     this.requests.settleAll(() => ({ behavior: "deny", message: "The session failed." }))
     this.emit({ kind: "item", item: errorItem(error) })
     this.endTurn()
@@ -318,6 +324,21 @@ export class ClaudeSession implements AgentSession {
     this.steering = false
     const cut = result.terminal_reason === "aborted_streaming" || result.terminal_reason === "aborted_tools"
     return cut && !this.stop.pending ? "cut" : "missed"
+  }
+
+  /**
+   * Shows each steered message Claude Code has taken in as no longer waiting, after T3 Code. Each frame of a turn
+   * names the messages the turn has read so far, so the first frame that names a steer shows it was taken.
+   */
+  private markSteersTaken(message: SDKMessage) {
+    if (!this.waitingSteers.size) return
+    for (const uuid of echoedUuids(message)) {
+      const item = this.waitingSteers.get(uuid)
+      if (!item) continue
+      this.waitingSteers.delete(uuid)
+      const { waiting: _, ...taken } = item
+      this.emit({ kind: "item", item: taken })
+    }
   }
 
   private async reportContext(running: Query) {
@@ -344,13 +365,27 @@ export class ClaudeSession implements AgentSession {
 
 /**
  * An event of a turn the user is stopping. Its result says it was stopped, so the thread can tell it from
- * one that finished. A compaction that fails because of the stop was stopped, not failed.
+ * one that finished. A compaction or a tool call that fails because of the stop was stopped, not failed.
+ * Claude Code marks a tool call that a stop cut off as rejected by the user, as it marks one the user
+ * declined, so only the stop tells them apart.
  */
 function stoppedEvent(event: ThreadEvent): ThreadEvent {
   if (event.kind !== "item") return event
-  if (event.item.type === "result") return { ...event, item: { ...event.item, stopped: true } }
-  if (event.item.type === "compaction" && event.item.status === "failed") return { ...event, item: { type: "compaction", id: event.item.id, status: "stopped" } }
+  const item = event.item
+  if (item.type === "result") return { ...event, item: { ...item, stopped: true } }
+  if (item.type === "compaction" && item.status === "failed") return { ...event, item: { type: "compaction", id: item.id, status: "stopped" } }
+  if (item.type === "tool" && item.result?.isError) return { ...event, item: toolStep({ ...item, result: { ...item.result, stopped: true } }) }
   return event
+}
+
+/**
+ * The uuids of the user messages a frame says its turn has read. Claude Code stamps them on a turn's init, its
+ * replies and its result. The SDK types them on some frames only.
+ */
+function echoedUuids(message: SDKMessage): readonly string[] {
+  const { user_message_uuids: uuids, user_message_uuid: uuid } = message as { user_message_uuids?: unknown; user_message_uuid?: unknown }
+  if (Array.isArray(uuids)) return uuids.filter((found): found is string => typeof found === "string")
+  return typeof uuid === "string" ? [uuid] : []
 }
 
 /** Desk's tools as an MCP server Claude Code connects to over HTTP. */

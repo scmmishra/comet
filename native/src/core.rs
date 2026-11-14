@@ -130,6 +130,25 @@ impl Core {
         let Some((child, stdin)) = self.process.lock().unwrap().take() else { return };
         end(child, stdin, STOP_GRACE);
     }
+
+    /// Stops this core when the app quits. Rune ends the process fast at a quit, so nothing after
+    /// `App::run` runs. Its `fast_exit` hook runs once, after the window has hidden and every quit
+    /// hook has run, which suits a stop that may wait up to `STOP_GRACE`. The hook is a plain `fn`,
+    /// so it finds the core in `QUITTING`.
+    pub fn stop_at_quit(&self) {
+        if QUITTING.set(self.clone()).is_ok() {
+            rune::fast_exit(stop_quitting);
+        }
+    }
+}
+
+/// The core `stop_at_quit` registered, for Rune's `fast_exit` hook.
+static QUITTING: std::sync::OnceLock<Core> = std::sync::OnceLock::new();
+
+fn stop_quitting() {
+    if let Some(core) = QUITTING.get() {
+        core.stop();
+    }
 }
 
 /// Closes a process's stdin and waits until it exits, for at most `grace`, then kills it. A thread waits

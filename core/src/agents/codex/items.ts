@@ -50,6 +50,13 @@ export function threadItems(dir: string, item: CodexItem, done: boolean, at?: nu
     case "subAgentActivity":
       if (item.kind !== "started") return []
       return [tool({ type: "tool", id: item.id, name: "Agent", summary: agentName(item.agentPath), ...finished(done, false) }, "other", `Started an agent: ${agentName(item.agentPath)}`)]
+    case "imageGeneration": {
+      const prompt = firstLine(item.revisedPrompt ?? "")
+      const failed = item.failure !== null || item.status === "failed"
+      // The output holds where the image went, since a step shows no image.
+      const result = done ? { output: failed ? imageFailure(item.failure) : (item.savedPath ?? ""), isError: failed } : undefined
+      return [tool({ type: "tool", id: item.id, name: "ImageGeneration", summary: prompt, ...(result ? { result } : {}) }, "other", prompt ? `Generated an image: ${prompt}` : "Generated an image")]
+    }
     default:
       return []
   }
@@ -68,6 +75,9 @@ export const changedPaths = (dir: string, changes: readonly { readonly path: str
 
 /** A result with no output, for a call whose output Desk does not show. A call still running has none. */
 const finished = (done: boolean, isError: boolean) => (done ? { result: { output: "", isError } } : {})
+
+/** Why Codex made no image. Codex names one reason, a used-up limit. */
+const imageFailure = (failure: { readonly type: string } | null) => (failure?.type === "usageLimitExceeded" ? "The image generation limit is used up." : "Codex could not generate the image.")
 
 /** The last part of a subagent's path, such as "say_hello" from "/root/say_hello". */
 const agentName = (path: string) => path.split("/").filter(Boolean).at(-1) ?? path

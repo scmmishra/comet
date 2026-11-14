@@ -135,7 +135,7 @@ mod tests {
     use super::*;
 
     fn user(id: &str, text: &str, self_started: bool) -> ThreadItem {
-        ThreadItem::User { id: id.into(), text: text.into(), images: vec![], at: None, steered: false, self_started }
+        ThreadItem::User { id: id.into(), text: text.into(), images: vec![], at: None, steered: false, waiting: false, self_started }
     }
 
     #[test]

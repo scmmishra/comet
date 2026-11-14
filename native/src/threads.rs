@@ -101,6 +101,25 @@ impl Thread {
             }
         }
     }
+
+    /// Takes out the items with these ids, keeping the others in order. An id it does not hold is skipped.
+    fn remove(&mut self, ids: &[String]) {
+        if !ids.iter().any(|id| self.index.contains_key(id)) {
+            return;
+        }
+        let mut kept = 0;
+        for i in 0..self.items.len() {
+            if ids.iter().any(|id| id == self.items[i].id()) {
+                continue;
+            }
+            self.items.swap(kept, i);
+            self.revisions.swap(kept, i);
+            kept += 1;
+        }
+        self.items.truncate(kept);
+        self.revisions.truncate(kept);
+        self.index = self.items.iter().enumerate().map(|(i, item)| (item.id().to_owned(), i)).collect();
+    }
 }
 
 /// Every tab's thread. A revision counter, shared by all, marks each change.
@@ -173,11 +192,12 @@ impl Threads {
                     thread.revisions[i] = revision;
                 }
             }
+            // A status also says the agent got past a retry, such as when its next response starts.
             ThreadEvent::Status { busy } => {
                 thread.busy = busy;
+                thread.retry = None;
                 if !busy {
                     thread.stopping = None;
-                    thread.retry = None;
                 }
             }
             ThreadEvent::Context { reading } => thread.context = Some(reading),
@@ -193,6 +213,7 @@ impl Threads {
                 thread.stopping = Some(Stopping { since, unresponsive, forcing });
             }
             ThreadEvent::Retry(retry) => thread.retry = Some(retry),
+            ThreadEvent::ItemsRemove { ids } => thread.remove(&ids),
             ThreadEvent::Other => {}
         }
     }
@@ -242,7 +263,7 @@ mod tests {
     }
 
     fn user(id: &str, self_started: bool) -> ThreadItem {
-        ThreadItem::User { id: id.into(), text: "hi".into(), images: vec![], at: None, steered: false, self_started }
+        ThreadItem::User { id: id.into(), text: "hi".into(), images: vec![], at: None, steered: false, waiting: false, self_started }
     }
 
     #[test]
@@ -272,6 +293,24 @@ mod tests {
     }
 
     #[test]
+    fn removing_items_keeps_the_rest_in_order_and_findable() {
+        let mut threads = Threads::default();
+        for id in ["a", "b", "c", "d"] {
+            threads.apply("t", ThreadEvent::Item { item: text(id, id, true) });
+        }
+        let d = threads.get("t").unwrap().revision("d");
+        threads.apply("t", ThreadEvent::ItemsRemove { ids: vec!["b".into(), "c".into(), "unknown".into()] });
+        let thread = threads.get("t").unwrap();
+        let ids: Vec<&str> = thread.items.iter().map(|i| i.id()).collect();
+        assert_eq!(ids, ["a", "d"]);
+        assert_eq!(thread.item("d"), Some(&text("d", "d", true)));
+        assert_eq!(thread.revision("d"), d);
+        assert!(thread.item("b").is_none());
+        threads.apply("t", ThreadEvent::Item { item: text("e", "e", true) });
+        assert_eq!(threads.get("t").unwrap().item("e"), Some(&text("e", "e", true)));
+    }
+
+    #[test]
     fn an_item_with_a_known_id_replaces_it_in_place() {
         let mut threads = Threads::default();
         threads.apply("t", ThreadEvent::Item { item: text("a", "", false) });
@@ -283,7 +322,7 @@ mod tests {
     }
 
     fn retry(attempt: u32) -> ThreadEvent {
-        ThreadEvent::Retry(Retry { attempt, max_retries: 10, delay_ms: 1500.0, error: "Overloaded".into() })
+        ThreadEvent::Retry(Retry { attempt, max_retries: Some(10), delay_ms: 1500.0, error: "Overloaded".into() })
     }
 
     #[test]
@@ -317,6 +356,9 @@ mod tests {
         threads.apply("t", ThreadEvent::Item { item: text("b", "x", true) });
         assert!(threads.get("t").unwrap().retry.is_none());
         threads.apply("t", retry(4));
+        threads.apply("t", ThreadEvent::Status { busy: true });
+        assert!(threads.get("t").unwrap().retry.is_none(), "a status in the turn clears it");
+        threads.apply("t", retry(5));
         threads.apply("t", ThreadEvent::Status { busy: false });
         assert!(threads.get("t").unwrap().retry.is_none(), "the turn's end clears it");
     }

@@ -912,7 +912,7 @@ mod tests {
         let mut s = desk();
         assert!(s.composer_appeared(), "a tab's composer takes focus as it shows");
         assert!(!s.composer_appeared(), "and leaves focus alone after");
-        s.threads.apply("t", ThreadEvent::Item { item: crate::protocol::ThreadItem::User { id: "u".into(), text: "hi".into(), images: vec![], at: None, steered: false, self_started: false } });
+        s.threads.apply("t", ThreadEvent::Item { item: crate::protocol::ThreadItem::User { id: "u".into(), text: "hi".into(), images: vec![], at: None, steered: false, waiting: false, self_started: false } });
         assert!(s.composer_appeared(), "the first message moves it to the bottom of the thread");
         s.show_palette(Vec::new());
         s.workspace.active = Some("other".into());

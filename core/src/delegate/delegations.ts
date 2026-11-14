@@ -122,6 +122,7 @@ export class Delegations {
       subagent = { ...subagent, ...change }
       host.emit({ kind: "subagent", subagent })
     }
+    const showItems = () => show({ items: [...items.values()], toolUses: [...items.values()].filter((item) => item.type === "tool").length })
 
     return new Promise<ToolResult>((resolve) => {
       const finish = () => {
@@ -133,6 +134,10 @@ export class Delegations {
       }
       const emit = (event: ThreadEvent) => {
         if (event.kind === "status" && !event.busy) return finish()
+        if (event.kind === "items.remove") {
+          event.ids.forEach((id) => items.delete(id))
+          return showItems()
+        }
         if (event.kind !== "item") return
         // Only the user can answer a request, so it shows in the caller's thread, and its answer comes back here.
         if (event.item.type === "permission" || event.item.type === "question") {
@@ -142,7 +147,7 @@ export class Delegations {
         }
         if (event.item.type === "user") return
         items.set(event.item.id, event.item)
-        show({ items: [...items.values()], toolUses: [...items.values()].filter((item) => item.type === "tool").length })
+        showItems()
       }
       const child: Child = { session: this.agents.get(info.id).open(host.project, emit, { settings, onSessionId: () => {}, ephemeral: true }), requests: new Map() }
       children.add(child)

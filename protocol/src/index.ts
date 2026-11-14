@@ -67,11 +67,20 @@ export interface ImageAttachment {
 export type ThreadItem =
   /**
    * A message that starts a turn. `at` is when it was sent, in milliseconds since the epoch, when that is
-   * known. `steered` marks one sent into a turn that was still running. `selfStarted` marks a turn the
-   * agent started itself: a background task finished, or a subagent or another session sent it a message.
-   * Its text says which.
+   * known. `steered` marks one sent into a turn that was still running. `waiting` marks a steered message
+   * the agent has not taken in yet, such as while a tool runs. `selfStarted` marks a turn the agent started
+   * itself: a background task finished, or a subagent or another session sent it a message. Its text says which.
    */
-  | { readonly type: "user"; readonly id: string; readonly text: string; readonly images?: readonly ImageAttachment[]; readonly at?: number; readonly steered?: boolean; readonly selfStarted?: boolean }
+  | {
+      readonly type: "user"
+      readonly id: string
+      readonly text: string
+      readonly images?: readonly ImageAttachment[]
+      readonly at?: number
+      readonly steered?: boolean
+      readonly waiting?: boolean
+      readonly selfStarted?: boolean
+    }
   /**
    * Assistant text. `at` is when it finished. Text still streaming is not done and has none. `interrupted`
    * marks a reply that a steered message cut short.
@@ -81,7 +90,8 @@ export type ThreadItem =
   | { readonly type: "thinking"; readonly id: string; readonly text?: string; readonly kind: StepKind; readonly label: string }
   /**
    * A tool call. `summary` is what it was given in short, such as its command or path, relative to the
-   * project. A call that edits a file carries the file's path and its edits.
+   * project. A call that edits a file carries the file's path and its edits. A result is `stopped` when
+   * the user stopped the call while it ran.
    */
   | {
       readonly type: "tool"
@@ -90,7 +100,7 @@ export type ThreadItem =
       readonly summary: string
       readonly file?: string
       readonly edits?: readonly TextEdit[]
-      readonly result?: { readonly output: string; readonly isError: boolean }
+      readonly result?: { readonly output: string; readonly isError: boolean; readonly stopped?: boolean }
       readonly kind: StepKind
       readonly label: string
     }
@@ -195,6 +205,8 @@ export type ThreadEvent =
   | { readonly kind: "item"; readonly item: ThreadItem }
   /** More text for a text item still streaming. */
   | { readonly kind: "text.delta"; readonly id: string; readonly delta: string }
+  /** Items the agent took back, such as a reply it replaced with another. An id the thread does not hold is skipped. */
+  | { readonly kind: "items.remove"; readonly ids: readonly string[] }
   | { readonly kind: "status"; readonly busy: boolean }
   /** The model that runs, by the name Desk shows for it, such as "Opus 5.5". */
   | { readonly kind: "init"; readonly model: string }
@@ -209,8 +221,11 @@ export type ThreadEvent =
    * time, so Force stop can end it. The turn's end clears it.
    */
   | { readonly kind: "stopping"; readonly since: number; readonly unresponsive: boolean }
-  /** A request to the API failed and the agent tries again, as attempt `attempt` of `maxRetries`, after `delayMs`. More output clears it. */
-  | { readonly kind: "retry"; readonly attempt: number; readonly maxRetries: number; readonly delayMs: number; readonly error: string }
+  /**
+   * A request to the API failed and the agent tries again, as attempt `attempt` of `maxRetries`, after `delayMs`.
+   * A retry with no `maxRetries` has no limit, such as Codex waiting for the network. More output or a status clears it.
+   */
+  | { readonly kind: "retry"; readonly attempt: number; readonly maxRetries?: number; readonly delayMs: number; readonly error: string }
 
 /** A command the agent left running in the background, such as a long review or a dev server. */
 export interface BackgroundTask {
@@ -370,7 +385,7 @@ export interface AgentVersion {
   /** The newest version on the user's update channel. */
   readonly latest?: string
   readonly updateAvailable: boolean
-  /** Whether Desk can update it, with the agent's own updater. */
+  /** Whether Desk can update it. */
   readonly updatable: boolean
 }
 
@@ -861,7 +876,7 @@ export type ClientMessage =
   | { readonly type: "agents.get" }
   /** Reads every agent's plan usage again. The core answers with `agents`. */
   | { readonly type: "usage.get" }
-  /** Updates an agent with its own updater. The core answers with `agents` once it is done. */
+  /** Updates an agent to its newest version. The core answers with `agents` once it is done. */
   | { readonly type: "agent.update"; readonly agent: AgentId }
   /** Installs an agent that has `install`. The core answers with `agents` as it goes. */
   | { readonly type: "agent.install"; readonly agent: AgentId }

@@ -34,6 +34,7 @@ mod questions;
 mod reply;
 mod rewind;
 mod scenes;
+mod search;
 mod session_menu;
 mod settings;
 mod shell;
@@ -101,6 +102,9 @@ fn main() {
         return;
     }
     rune::prewarm_gpu();
+    // OpenCode sets `text-wrap-style: pretty` on every element: a paragraph never ends on a lone short word.
+    // Rune caches text layouts, so this runs before any text is laid out.
+    rune::text::set_pretty_wrap(true);
     let core = core::Core::default();
     let state = core.clone();
     let mut app = rune::App::new(AppSpec {
@@ -137,7 +141,8 @@ fn main() {
         let handle = app.handle();
         core.send(&protocol::ClientMessage::AgentsGet);
         core.start(move |event| handle.update(move |s: &mut Desk, tx| s.receive_in(event, tx)));
+        core.stop_at_quit();
     }
+    // Rune ends the process when the app quits, so code after this line does not run.
     app.run();
-    core.stop();
 }

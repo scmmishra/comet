@@ -144,12 +144,12 @@ fn palette(s: &mut Desk) {
     s.show_palette(Vec::new());
 }
 
-/// The thread with a terminal open in the pane, showing coloured output.
+/// The thread with a terminal open in the pane, showing coloured output, wide characters and a box.
 fn terminal(s: &mut Desk) {
     thread(s);
     s.new_terminal();
     let id = s.workspace.active_tab().and_then(|t| t.terminals.first()).map(|t| t.id.clone()).expect("a terminal");
-    let output = "\x1b[1;32m➜\x1b[0m  \x1b[36mweb\x1b[0m \x1b[34mgit:(\x1b[31mmain\x1b[34m)\x1b[0m npm test\r\n\r\n \x1b[42;30m PASS \x1b[0m src/login.test.ts\r\n \x1b[41;37m FAIL \x1b[0m src/retry.test.ts\r\n   \x1b[31m● retry keeps the error\x1b[0m\r\n\r\nTests: \x1b[31m1 failed\x1b[0m, \x1b[32m1 passed\x1b[0m, 2 total\r\n\x1b[1;32m➜\x1b[0m  \x1b[36mweb\x1b[0m ";
+    let output = "\x1b[1;32m➜\x1b[0m  \x1b[36mweb\x1b[0m \x1b[34mgit:(\x1b[31mmain\x1b[34m)\x1b[0m npm test\r\n\r\n \x1b[42;30m PASS \x1b[0m src/login.test.ts\r\n \x1b[41;37m FAIL \x1b[0m src/retry.test.ts\r\n   \x1b[31m● retry keeps the error\x1b[0m\r\n\r\nTests: \x1b[31m1 failed\x1b[0m, \x1b[32m1 passed\x1b[0m, 2 total\r\n╭──────────╮\r\n│ 日本語 ok │\r\n╰──────────╯\r\n\x1b[1;32m➜\x1b[0m  \x1b[36mweb\x1b[0m ";
     s.terminal_output(&id, output);
 }
 
@@ -329,7 +329,7 @@ fn branch_confirm(s: &mut Desk) {
     s.restore_branch("tab");
 }
 
-/// A tab with a finished turn, a steered message, and a running turn with a live group.
+/// A tab with a finished turn, a steered message, and a running turn with a live group and a steer that waits.
 fn thread(s: &mut Desk) {
     s.status = CoreState::Ready;
     // Times count back from now, as the working head reads the clock.
@@ -343,6 +343,7 @@ fn thread(s: &mut Desk) {
             { "type": "thinking", "id": "th1", "text": "**Reading the form**", "kind": "thought", "label": "Reading the form" },
             { "type": "tool", "id": "t1", "name": "Read", "summary": "src/login.ts", "result": { "output": "…", "isError": false }, "kind": "read", "label": "Read src/login.ts" },
             { "type": "tool", "id": "t2", "name": "Bash", "summary": "npm test", "result": { "output": "1 failed", "isError": true }, "kind": "command", "label": "Failed npm" },
+            { "type": "tool", "id": "t2b", "name": "Bash", "summary": "npm run e2e", "result": { "output": "Stopped", "isError": true, "stopped": true }, "kind": "command", "label": "Stopped npm" },
             { "type": "tool", "id": "t3", "name": "Edit", "summary": "src/login.ts", "file": "src/login.ts", "edits": [{ "before": "setError(null)\nretry()", "after": "retry()" }], "kind": "edit", "label": "Edited src/login.ts" },
             { "type": "text", "id": "x1", "text": "The retry cleared the error before it ran. I moved the reset **after** the retry, so a failed retry keeps its message.\n\n```ts\nretry()\n```", "done": true, "at": at(65.0) },
             { "type": "result", "id": "r1", "durationMs": 63_000.0, "isError": false },
@@ -350,6 +351,7 @@ fn thread(s: &mut Desk) {
             { "type": "compaction", "id": "c1", "status": "done", "preTokens": 180_000.0, "postTokens": 32_000.0 },
             { "type": "user", "id": "u2", "text": "Now add a test for it. Yes, in phases. The old app stays the shipped one until the last phase. Each phase should end with something that runs, so we can stop between them.", "at": at(25.0), "steered": true },
             { "type": "tool", "id": "t4", "name": "Bash", "summary": "npm test -- login", "kind": "command", "label": "Running npm" },
+            { "type": "user", "id": "u3", "text": "Use the fake timer.", "at": at(5.0), "steered": true, "waiting": true },
             { "type": "permission", "id": "p1", "requestId": "r1", "tool": "Bash", "kind": "command", "detail": "rm -rf dist && npm run build", "reason": "It deletes the build folder", "allowSession": true }
         ] },
         { "type": "session.event", "tabId": "tab", "event": { "kind": "status", "busy": true } },
@@ -370,13 +372,14 @@ fn thread(s: &mut Desk) {
         { "type": "session.event", "tabId": "tab", "event": { "kind": "subagent", "subagent": { "id": "a1", "description": "Find the login tests", "type": "Explore", "status": "running", "background": false, "startedAt": at(12.0), "toolUses": 3, "items": [] } } },
         { "type": "session.rows", "tabId": "tab", "rows": [
             { "type": "item", "id": "u1" },
-            { "type": "fold", "id": "fold:u1", "rows": [{ "type": "group", "id": "group:th1", "steps": ["th1", "t1", "t2", "t3"], "live": false, "summary": "Read a file, ran a command, and changed a file" }], "durationMs": 63_000.0, "stopped": false },
+            { "type": "fold", "id": "fold:u1", "rows": [{ "type": "group", "id": "group:th1", "steps": ["th1", "t1", "t2", "t2b", "t3"], "live": false, "summary": "Read a file, ran a command, and changed a file" }], "durationMs": 63_000.0, "stopped": false },
             { "type": "item", "id": "x1" },
             { "type": "item", "id": "ch1" },
             { "type": "item", "id": "c1" },
             { "type": "item", "id": "u2" },
             { "type": "working", "id": "working:u2", "since": at(25.0) },
             { "type": "group", "id": "group:t4", "steps": ["t4"], "live": true, "summary": "Ran a command" },
+            { "type": "item", "id": "u3" },
             { "type": "item", "id": "p1" }
         ] }
     ]);

@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { configDir } from "./config-dir"
 import { claudeCodePath } from "./executable"
 import { spawn } from "../../environment"
+import { isNewer } from "../versions"
 
 /** Where Anthropic publishes the newest Claude Code version of each update channel, as T3 Code reads it. */
 const RELEASES = "https://downloads.claude.ai/claude-code-releases"
@@ -36,13 +37,6 @@ export async function updateClaudeCode() {
   const child = spawn([path, "update"], { stdout: "ignore", stderr: "pipe" })
   const [error, code] = await Promise.all([new Response(child.stderr).text(), child.exited])
   if (code !== 0) throw new Error(`Claude Code could not update: ${error.trim() || `exit code ${code}`}`)
-}
-
-/** Whether `latest` is a later version than `installed`, comparing each number in turn. */
-export function isNewer(latest: string, installed: string) {
-  const [a, b] = [latest, installed].map((version) => version.split(".").map(Number))
-  for (let index = 0; index < 3; index++) if (a![index] !== b![index]) return a![index]! > b![index]!
-  return false
 }
 
 /** The update channel the user set in Claude Code's settings. Claude Code uses "latest" without one. */
