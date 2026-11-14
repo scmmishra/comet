@@ -23,6 +23,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 - A subagent's result no longer starts with the list of tools Claude Code adds for the model.
 - Claude Code's notices and warnings show in the thread, such as a hook that stopped the turn. The summary a Stop hook leaves after every turn stays hidden.
 - A Claude reply that a steered message cuts short says so under it.
+- A terminal draws its screen as one element, and draws again only the rows that changed. A screen reader reads a terminal row by row and follows its cursor. Wide characters in the light theme draw in the text colour. They used to draw nearly white.
 - In the command palette, the highlighted row's text no longer moves a pixel as the arrows move the highlight. After Escape leaves a nested list, the arrows and Escape work again.
 - The command palette's highlight follows the pointer. The rows under the palette no longer light up on hover.
 - A Markdown file opens in the view pane as a rendered preview. A switch in its header shows its source. A file opened at a line opens on its source, with the line marked.

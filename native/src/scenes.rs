@@ -144,12 +144,12 @@ fn palette(s: &mut Desk) {
     s.show_palette(Vec::new());
 }
 
-/// The thread with a terminal open in the pane, showing coloured output.
+/// The thread with a terminal open in the pane, showing coloured output, wide characters and a box.
 fn terminal(s: &mut Desk) {
     thread(s);
     s.new_terminal();
     let id = s.workspace.active_tab().and_then(|t| t.terminals.first()).map(|t| t.id.clone()).expect("a terminal");
-    let output = "\x1b[1;32m➜\x1b[0m  \x1b[36mweb\x1b[0m \x1b[34mgit:(\x1b[31mmain\x1b[34m)\x1b[0m npm test\r\n\r\n \x1b[42;30m PASS \x1b[0m src/login.test.ts\r\n \x1b[41;37m FAIL \x1b[0m src/retry.test.ts\r\n   \x1b[31m● retry keeps the error\x1b[0m\r\n\r\nTests: \x1b[31m1 failed\x1b[0m, \x1b[32m1 passed\x1b[0m, 2 total\r\n\x1b[1;32m➜\x1b[0m  \x1b[36mweb\x1b[0m ";
+    let output = "\x1b[1;32m➜\x1b[0m  \x1b[36mweb\x1b[0m \x1b[34mgit:(\x1b[31mmain\x1b[34m)\x1b[0m npm test\r\n\r\n \x1b[42;30m PASS \x1b[0m src/login.test.ts\r\n \x1b[41;37m FAIL \x1b[0m src/retry.test.ts\r\n   \x1b[31m● retry keeps the error\x1b[0m\r\n\r\nTests: \x1b[31m1 failed\x1b[0m, \x1b[32m1 passed\x1b[0m, 2 total\r\n╭──────────╮\r\n│ 日本語 ok │\r\n╰──────────╯\r\n\x1b[1;32m➜\x1b[0m  \x1b[36mweb\x1b[0m ";
     s.terminal_output(&id, output);
 }
 

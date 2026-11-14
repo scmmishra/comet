@@ -66,6 +66,8 @@ pub struct Row {
     pub text: String,
     pub runs: Vec<Run>,
     pub wide: Vec<(usize, String, Rgb)>,
+    /// The program's line runs on into the next row: the terminal wrapped it at the screen's edge.
+    pub wraps: bool,
 }
 
 pub struct Screen {
@@ -200,6 +202,7 @@ impl Screen {
                 continue;
             }
             let (row, last) = (&mut rows[y as usize], &mut last[y as usize]);
+            row.wraps |= cell.flags.contains(Flags::WRAPLINE);
             let inverse = cell.flags.contains(Flags::INVERSE);
             let (mut fg, mut bg) = (resolve(colors, cell.fg, true), resolve(colors, cell.bg, false));
             if inverse {
