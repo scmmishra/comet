@@ -108,3 +108,45 @@ export interface TokenUsage {
   readonly last: { readonly totalTokens: number }
   readonly modelContextWindow: number | null
 }
+
+/** A skill as `skills/list` gives it. A plugin's skill names its plugin, such as "pdf@openai-primary-runtime". */
+export interface CodexSkill {
+  readonly name: string
+  readonly description: string
+  readonly scope: "user" | "repo" | "system" | "admin"
+  readonly enabled: boolean
+  readonly pluginId: string | null
+  /** Its SKILL.md. */
+  readonly path: string
+}
+
+/** An MCP server as Codex's config describes it. */
+export interface CodexMcpConfig {
+  readonly command?: string
+  readonly args?: readonly string[]
+  readonly url?: string
+  readonly enabled?: boolean
+}
+
+/** One file of Codex's config, as `config/read` with `includeLayers` gives it, the strongest first. */
+export interface CodexConfigLayer {
+  /** Such as "user", "project" or "system". */
+  readonly name: { readonly type: string }
+  readonly config: { readonly mcp_servers?: Readonly<Record<string, CodexMcpConfig>> } | null
+  /** Why Codex skips the layer, such as a project the user has not trusted. */
+  readonly disabledReason: string | null
+}
+
+export interface CodexConfigRead {
+  readonly config: { readonly mcp_servers?: Readonly<Record<string, CodexMcpConfig>> }
+  readonly layers: readonly CodexConfigLayer[] | null
+}
+
+/** A server as `mcpServerStatus/list` gives it. */
+export interface CodexMcpStatus {
+  readonly name: string
+  readonly tools: Readonly<Record<string, unknown>>
+  /** Why Codex could not list its tools, such as a server that failed to start. */
+  readonly toolsError: string | null
+  readonly authStatus: "unknown" | "unsupported" | "notLoggedIn" | "bearerToken" | "oAuth"
+}

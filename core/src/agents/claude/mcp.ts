@@ -62,5 +62,6 @@ export function mcpServer(status: McpServerStatus): McpServer {
     ...(target ? { target } : {}),
     tools: status.tools?.length ?? 0,
     ...(status.error ? { error: status.error } : {}),
+    toggleable: true,
   }
 }

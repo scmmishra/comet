@@ -358,8 +358,10 @@ export interface ModelOption {
  * - `fork`, `rename`, `delete`: what the session menu does to a thread.
  * - `compact-idle`: the agent compacts a large thread that sat idle.
  * - `sign-in`: Desk can start the agent's sign-in. `install`: Desk can install the agent.
+ * - `mcp`: Desk lists the agent's MCP servers in a project and turns them on or off.
+ * - `slash-commands`: the agent runs a skill or command named after a `/` in a message, so the composer offers them.
  */
-export const AGENT_FEATURES = ["steer", "rewind", "restore-files", "fork", "rename", "delete", "compact-idle", "sign-in", "install"] as const
+export const AGENT_FEATURES = ["steer", "rewind", "restore-files", "fork", "rename", "delete", "compact-idle", "sign-in", "install", "mcp", "slash-commands"] as const
 export type AgentFeature = (typeof AGENT_FEATURES)[number]
 
 /** An agent's version on this Mac, and whether a newer one is out. A version that could not be read is absent. */
@@ -471,11 +473,14 @@ export interface ProjectSettings {
   readonly icon?: string
 }
 
-/** An MCP server Claude Code loads in a project, and how its connection stands. */
+/**
+ * An MCP server an agent loads in a project, and how its connection stands. `not-started` means the agent
+ * starts it only inside a thread, so Desk cannot see it connect.
+ */
 export interface McpServer {
   readonly name: string
-  readonly status: "connected" | "failed" | "needs-auth" | "pending" | "disabled"
-  /** Where it is configured, as Claude Code names it, such as "user" or "project". */
+  readonly status: "connected" | "failed" | "needs-auth" | "pending" | "not-started" | "disabled"
+  /** Where it is configured, as the agent names it, such as "user" or "project". */
   readonly scope?: string
   /** Whether it is configured for this project only, rather than for every project. */
   readonly ownProject: boolean
@@ -485,6 +490,8 @@ export interface McpServer {
   readonly tools: number
   /** Why it failed, when it did. */
   readonly error?: string
+  /** Whether Desk can turn it on or off. Codex lets Desk change only the user's own config, so a project's or a plugin's server stays as it is. */
+  readonly toggleable: boolean
 }
 
 /**
@@ -503,6 +510,8 @@ export interface Skill {
   readonly ownProject: boolean
   /** Where a skill available to every project comes from, such as "User" or "Plugin: figma". */
   readonly group: string
+  /** The file that defines it, such as its SKILL.md, when the agent says or Desk finds it. */
+  readonly path?: string
 }
 
 export interface DeskSettings {
@@ -578,8 +587,7 @@ export interface CommandSource {
 
 /**
  * What Desk reads about a project, by part. The app asks for a part and the core answers with a
- * `project` message. Commands are sent again whenever they change, such as a command's run. MCP
- * servers are sent again while they connect, to the client that asked.
+ * `project` message. Commands are sent again whenever they change, such as a command's run.
  */
 export interface ProjectParts {
   /** Null when the folder is not a Git repo. */
@@ -591,8 +599,6 @@ export interface ProjectParts {
   readonly threads: readonly ThreadSummary[]
   /** Images in the project that look like its logo, as paths relative to it. The core serves each at `/project-icon`. */
   readonly icons: readonly string[]
-  /** Null when Claude Code could not be asked. Reading starts the servers, so it takes a few seconds. */
-  readonly mcp: readonly McpServer[] | null
   /** Each agent's skills and custom commands, by agent. Null when the agent could not be asked. An agent with no slash commands lists none. */
   readonly skills: Readonly<Partial<Record<AgentId, readonly Skill[] | null>>>
   /** What the plugins on in the project let the user start. Reading starts those plugins. */
@@ -847,8 +853,10 @@ export function applyOps(nodes: Record<number, UiNode>, ops: readonly UiOp[]) {
 export type ClientMessage =
   | { readonly type: "settings.update"; readonly change: SettingsChange }
   | { readonly type: "project.get"; readonly project: string; readonly part: ProjectPart }
-  /** Turns an MCP server on or off for the project. Claude Code keeps the choice. */
-  | { readonly type: "mcp.toggle"; readonly project: string; readonly name: string; readonly enabled: boolean }
+  /** Reads an agent's MCP servers in the project, for an agent that has `mcp`. Reading starts the servers, so it takes a few seconds. The core answers with `mcp`, again as they connect. */
+  | { readonly type: "mcp.get"; readonly project: string; readonly agent: AgentId }
+  /** Turns one of an agent's MCP servers on or off. The agent keeps the choice. The core answers with `mcp`. */
+  | { readonly type: "mcp.toggle"; readonly project: string; readonly agent: AgentId; readonly name: string; readonly enabled: boolean }
   /** Reads the agents: whether each is installed and signed in, its models and its plan usage. The core answers with `agents`, again as it learns more. */
   | { readonly type: "agents.get" }
   /** Reads every agent's plan usage again. The core answers with `agents`. */
@@ -950,6 +958,8 @@ export type CoreMessage =
   | { [K in ProjectPart]: { readonly type: "project"; readonly project: string; readonly part: K; readonly value: ProjectParts[K] } }[ProjectPart]
   /** Every agent as Desk knows it now, in Desk's order, sent whole each time one changes. */
   | { readonly type: "agents"; readonly agents: readonly AgentInfo[] }
+  /** An agent's MCP servers in a project, to the client that asked. Null when the agent could not be asked. */
+  | { readonly type: "mcp"; readonly project: string; readonly agent: AgentId; readonly servers: readonly McpServer[] | null }
   | { readonly type: "review"; readonly tabId: string; readonly scope: ReviewScope; readonly files: readonly FileChange[] }
   /** Setups across projects, each with the project it opens in. A setup on in every project shows once, for the active one. */
   | { readonly type: "setups"; readonly setups: readonly ProjectSetup[] }

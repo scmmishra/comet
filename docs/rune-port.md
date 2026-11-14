@@ -86,7 +86,8 @@ Done:
 - The minimap rail.
 - Plugin views: sidebars, panels, cards and setups, drawn from the core's primitives.
 - Meters: the context ring and the usage button.
-- Settings (⌘,): Providers, Appearance, Projects, MCP servers and Skills. Showing a tab closes them, as in the Electron app.
+- Settings (⌘,): Providers, Appearance and Projects. Showing a tab closes them, as in the Electron app.
+- The session header's MCP button lists the tab agent's MCP servers and skills in the project, after OpenCode's session details: a rune-kit `Menu`, with each list in a `PopupList` beside it. It shows for Claude Code and Codex.
 
 
 ### Phase 5: Switch
@@ -121,6 +122,7 @@ Left:
 - A growth stack cannot grow virtual rows open, and holds removed rows 0.15 s before it closes up. Review's files fold at once for this.
 - Text has no unbreakable span, so inline code wraps at its spaces. No-break spaces would keep it whole, but a copied command would then carry them.
 - Rune has no left-start placement, so a subagent's detail centres beside its row.
+- A surface anchored beside its anchor is not fitted to the window, only one above or below it, and a rune-kit `Menu` takes no maximum height. A submenu opens beside its row, so a long one runs off the window. The header's MCP servers and skills open their lists beside the menu in a `PopupList`, which takes a maximum height, not in a submenu.
 - rune-kit's `Dialog` keeps its title and description to one line each, and a long one runs past the panel and pushes the close button out. Desk puts longer text in the dialog's body, where it wraps. A `Checkbox` description keeps to one line too, so Desk keeps it short.
 - A truncated text draws only its first line, but takes the height of all its lines. Text with newlines makes its row tall, so Desk passes one line to `.truncate()`.
 - Rune lights a `.hover()` style on every element under the pointer, including elements under an overlay. Only a modal makes them inert. rune-kit's `scrim` catches presses but not hover, and its `Popover` uses one. Desk makes each of its popovers a modal that closes on an outside press.

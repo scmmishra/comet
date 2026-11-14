@@ -23,9 +23,12 @@ export interface Agent {
   open(dir: string, emit: Emit, options: SessionOptions): AgentSession
   /** The conversations the agent saved. */
   readonly threads: AgentThreads
-  /** The slash commands the agent offers in a folder, grouped. Null when the agent could not be asked. An agent without slash commands has no such method. */
+  /**
+   * The skills and commands the agent offers in a folder, grouped. Null when the agent could not be asked.
+   * An agent that has `slash-commands` runs them from a `/` in a message. An agent that offers none has no such method.
+   */
   commands?(dir: string): Promise<Skill[] | null>
-  /** The MCP servers the agent loads in a folder. An agent whose servers Desk does not show has none. */
+  /** The MCP servers the agent loads in a folder, for an agent that has `mcp`. */
   readonly mcp?: AgentMcp
   /** Updates the agent with its own updater. It runs to its end, since stopping an updater midway can leave the agent broken. */
   update?(): Promise<void>

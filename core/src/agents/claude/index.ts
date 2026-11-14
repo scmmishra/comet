@@ -22,7 +22,7 @@ export function claudeAgent(host: AgentHost): Agent {
   return {
     id: "claude",
     name: "Claude Code",
-    features: ["steer", "rewind", "restore-files", "fork", "rename", "delete", "compact-idle"],
+    features: ["steer", "rewind", "restore-files", "fork", "rename", "delete", "compact-idle", "mcp", "slash-commands"],
     threads: claudeThreads,
     commands: readSkills,
     mcp: claudeMcp,

@@ -4,6 +4,8 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- The session header has a button for the project's MCP servers and skills, beside the context ring. It lists those of the tab's agent, Claude Code or Codex. A server turns on or off from its row. A skill opens its SKILL.md in the view pane. Settings no longer has MCP servers and Skills pages.
+- Desk reads Codex's MCP servers and skills. Desk turns on or off only the servers that ~/.codex/config.toml sets, since Codex lets a client write only that file. A server a project sets shows as starting with a thread, since Codex starts it only there.
 - Desk shows its tabs sooner at launch. The core starts beside the window, not after its first frame.
 - The core starts faster. It loads Babel only to build a plugin, and reuses a plugin's last build while none of its files changed.
 - Git runs faster on a Mac. Desk runs the git binary that `git` points to, not Apple's /usr/bin/git, which looks up Xcode's tools on every run. A thread's first message, Review and the Space card wait less on Git.

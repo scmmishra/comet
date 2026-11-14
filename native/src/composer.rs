@@ -278,7 +278,9 @@ impl Desk {
                 _ => Vec::new(),
             },
             TriggerKind::Command => {
-                let skills = self.projects.get(&info.project).and_then(|p| p.skills_of(&info.agent)).unwrap_or(&[]);
+                // An agent that does not run skills from a `/` offers none here, such as Codex, which takes `$` and a skill input.
+                let slash = self.account.can(&info.agent, "slash-commands");
+                let skills = self.projects.get(&info.project).and_then(|p| p.skills_of(&info.agent)).filter(|_| slash).unwrap_or(&[]);
                 let all: Vec<Suggestion> = DESK_COMMANDS.iter().map(|(n, d)| Suggestion::Desk(n, d)).chain(skills.iter().cloned().map(Suggestion::Skill)).collect();
                 triggers::match_commands(&all, &trigger.query, suggestion_name, suggestion_description).into_iter().cloned().collect()
             }
@@ -1029,6 +1031,24 @@ mod tests {
         assert!(s.list_key("t", &Key::Enter));
         assert_eq!(s.drafts.text("t"), "");
         assert_eq!(s.core.sent().last().unwrap()["type"], "thread.clear");
+    }
+
+    #[test]
+    fn skills_list_only_for_an_agent_that_runs_them_from_a_slash() {
+        let mut s = desk();
+        let messages = serde_json::json!([
+            { "type": "project", "project": "/code/x", "part": "skills", "value": { "claude": [{ "name": "pdf", "description": "Reads PDFs", "ownProject": false, "group": "User" }] } },
+            { "type": "agents", "agents": [{ "id": "claude", "name": "Claude Code", "state": "ready", "features": [], "models": [] }] }
+        ]);
+        for m in serde_json::from_value::<Vec<CoreMessage>>(messages).unwrap() {
+            s.receive(Event::Message(m)).unwrap();
+        }
+        type_focused(&mut s, "/pd");
+        assert!(s.suggestions("t").is_empty(), "without slash-commands, a skill is not offered");
+        let agents = serde_json::json!({ "type": "agents", "agents": [{ "id": "claude", "name": "Claude Code", "state": "ready", "features": ["slash-commands"], "models": [] }] });
+        s.receive(Event::Message(serde_json::from_value(agents).unwrap())).unwrap();
+        let names: Vec<String> = s.suggestions("t").iter().map(|x| suggestion_name(x).to_owned()).collect();
+        assert_eq!(names, ["pdf"]);
     }
 
     #[test]

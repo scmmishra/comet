@@ -208,18 +208,20 @@ pub struct AgentInfo {
     pub sign_in_link: Option<String>,
 }
 
-/// An MCP server Claude Code loads.
+/// An MCP server an agent loads in a project.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct McpServer {
     pub name: String,
-    /// "connected", "failed", "needs-auth", "pending" or "disabled".
+    /// "connected", "failed", "needs-auth", "pending", "not-started" or "disabled".
     pub status: String,
     pub own_project: bool,
     pub target: Option<String>,
     #[serde(default)]
     pub tools: u32,
     pub error: Option<String>,
+    /// Whether Desk can turn it on or off.
+    pub toggleable: bool,
 }
 
 /// A model an agent offers the account.
@@ -489,18 +491,22 @@ pub struct CommandProcess {
     pub command: String,
 }
 
-/// A command Claude Code offers: a skill, or one of its own such as /compact.
+/// A skill or command an agent offers, or one of its own such as /compact.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Skill {
-    /// What follows the slash, such as "pdf".
+    /// Its name, such as "pdf".
     pub name: String,
     pub description: String,
     /// What the command takes after its name, such as "<file>".
     pub argument_hint: Option<String>,
-    /// Whether it is Claude Code's own command, rather than a skill.
+    /// Whether it is the agent's own command, rather than a skill.
     #[serde(default)]
     pub builtin: bool,
+    /// Whether it lives in this project, rather than being available to every project.
+    pub own_project: bool,
+    /// The file that defines it, such as its SKILL.md, when known.
+    pub path: Option<String>,
 }
 
 /// A file a thread or the checkout changed, with its unified diff. Empty for binary files.
@@ -789,6 +795,9 @@ pub enum CoreMessage {
     /// Something read about a project. `value` decodes by `part`, in `projects.rs`.
     #[serde(rename = "project")]
     Project { project: String, part: String, value: Value },
+    /// An agent's MCP servers in a project. None when the agent could not be asked.
+    #[serde(rename = "mcp")]
+    Mcp { project: String, agent: String, servers: Option<Vec<McpServer>> },
     #[serde(rename = "terminal.output")]
     TerminalOutput { id: String, data: String },
     /// The shell ended. Its exit code is not shown.
@@ -880,9 +889,12 @@ pub enum ClientMessage {
     /// Stops an agent's install or sign-in. The core answers with `agents`, as the agent was before.
     #[serde(rename = "agent.cancel")]
     AgentCancel { agent: String },
-    /// Turns an MCP server on or off for the project. Claude Code keeps the choice.
+    /// Reads an agent's MCP servers in the project. The core answers with `mcp`, again as they connect.
+    #[serde(rename = "mcp.get")]
+    McpGet { project: String, agent: String },
+    /// Turns one of an agent's MCP servers on or off. The agent keeps the choice.
     #[serde(rename = "mcp.toggle")]
-    McpToggle { project: String, name: String, enabled: bool },
+    McpToggle { project: String, agent: String, name: String, enabled: bool },
     /// Reopens the tab closed last. The core answers with `tab.reopened`.
     #[serde(rename = "tab.reopen")]
     TabReopen,
@@ -1103,7 +1115,8 @@ mod tests {
             ClientMessage::AgentInstall { agent: "antigravity".into() },
             ClientMessage::AgentSignIn { agent: "antigravity".into() },
             ClientMessage::AgentCancel { agent: "antigravity".into() },
-            ClientMessage::McpToggle { project: "/Users/me/code/web".into(), name: "github".into(), enabled: false },
+            ClientMessage::McpGet { project: "/Users/me/code/web".into(), agent: "codex".into() },
+            ClientMessage::McpToggle { project: "/Users/me/code/web".into(), agent: "codex".into(), name: "github".into(), enabled: false },
             ClientMessage::TabReopen,
             ClientMessage::TabsSave { tabs, active },
             ClientMessage::SessionSend { tab_id: "tab-1".into(), text: "Add a test".into(), images: vec![], follow_up: Some("queue".into()) },

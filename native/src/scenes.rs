@@ -8,7 +8,7 @@ use crate::shell::{CoreState, Desk};
 /// A scene: its name, and what it sets in a fresh window.
 type Scene = (&'static str, fn(&mut Desk));
 
-pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("models-other-agent", models_other_agent), ("models-missing-agent", models_missing_agent), ("models-new-tab", models_new_tab), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-codex", settings_codex), ("settings-antigravity", settings_antigravity), ("settings-signing-in", settings_signing_in), ("models-signing-in", models_signing_in), ("settings-projects", settings_projects), ("settings-mcp", settings_mcp), ("stop-notice", stop_notice), ("branch-notice", branch_notice), ("branch-confirm", branch_confirm), ("markdown", markdown), ("file", file)];
+pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("models-other-agent", models_other_agent), ("models-missing-agent", models_missing_agent), ("models-new-tab", models_new_tab), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-codex", settings_codex), ("settings-antigravity", settings_antigravity), ("settings-signing-in", settings_signing_in), ("models-signing-in", models_signing_in), ("settings-projects", settings_projects), ("extensions", extensions), ("extensions-skills", extensions_skills), ("stop-notice", stop_notice), ("branch-notice", branch_notice), ("branch-confirm", branch_confirm), ("markdown", markdown), ("file", file)];
 
 /// The core messages in the JSON file `DESK_SCENE_FILE` names, with the thread rows in its `open` list
 /// opened.
@@ -58,17 +58,44 @@ fn settings_projects(s: &mut Desk) {
     s.open_settings("projects");
 }
 
-/// Settings on MCP servers, with one server of each kind.
-fn settings_mcp(s: &mut Desk) {
-    settings(s);
-    s.open_settings("mcps");
-    let servers = serde_json::json!({ "type": "project", "project": "/Users/me/code/web", "part": "mcp", "value": [
-        { "name": "postgres", "status": "connected", "scope": "project", "ownProject": true, "target": "npx pg-mcp", "tools": 4 },
-        { "name": "github", "status": "connected", "scope": "user", "ownProject": false, "target": "npx github-mcp", "tools": 12 },
-        { "name": "linear", "status": "needs-auth", "scope": "user", "ownProject": false, "target": "https://mcp.linear.app/sse" },
-        { "name": "sentry", "status": "disabled", "scope": "user", "ownProject": false, "target": "npx sentry-mcp" }
+/// The session header's MCP servers and skills, open on a thread with its servers beside it, one of each kind.
+fn extensions(s: &mut Desk) {
+    extensions_menu(s);
+    s.show_extensions_list(crate::extensions::List::Mcp);
+}
+
+/// The same menu with its skills beside it, more than the list holds.
+fn extensions_skills(s: &mut Desk) {
+    extensions_menu(s);
+    s.show_extensions_list(crate::extensions::List::Skills);
+    let tab = s.workspace.active_tab().expect("the thread scene has a tab").clone();
+    let skills: Vec<serde_json::Value> = (1..=50).map(|i| serde_json::json!({ "name": format!("skill-{i:02}"), "description": "", "ownProject": false, "group": "User", "path": format!("/Users/me/.claude/skills/skill-{i:02}/SKILL.md") })).collect();
+    let message = serde_json::json!({ "type": "project", "project": tab.project, "part": "skills", "value": { "claude": skills } });
+    s.receive(Event::Message(serde_json::from_value(message).expect("the skills decode"))).expect("the scene has a tab");
+}
+
+fn extensions_menu(s: &mut Desk) {
+    thread(s);
+    let agents = serde_json::json!({ "type": "agents", "agents": [{ "id": "claude", "name": "Claude Code", "state": "ready", "features": ["mcp", "slash-commands"], "models": [] }] });
+    s.receive(Event::Message(serde_json::from_value(agents).expect("the agents decode"))).expect("agents need no folder");
+    let tab = s.workspace.active_tab().expect("the thread scene has a tab").clone();
+    s.open_extensions(&tab);
+    let servers = serde_json::json!({ "type": "mcp", "project": tab.project, "agent": tab.agent, "servers": [
+        { "name": "postgres", "status": "connected", "scope": "project", "ownProject": true, "target": "npx pg-mcp", "tools": 4, "toggleable": true },
+        { "name": "github", "status": "connected", "scope": "user", "ownProject": false, "target": "npx github-mcp", "tools": 12, "toggleable": true },
+        { "name": "linear", "status": "needs-auth", "scope": "user", "ownProject": false, "target": "https://mcp.linear.app/sse", "tools": 0, "toggleable": true },
+        { "name": "files", "status": "failed", "scope": "user", "ownProject": false, "target": "npx files-mcp", "tools": 0, "error": "spawn npx ENOENT", "toggleable": true },
+        { "name": "sentry", "status": "disabled", "scope": "user", "ownProject": false, "target": "npx sentry-mcp", "tools": 0, "toggleable": true }
     ] });
-    s.receive(Event::Message(serde_json::from_value(servers).expect("the servers decode"))).expect("servers need no folder");
+    let skills = serde_json::json!({ "type": "project", "project": tab.project, "part": "skills", "value": { "claude": [
+        { "name": "compact", "description": "Compact the context", "builtin": true, "ownProject": false, "group": "Claude Code" },
+        { "name": "deploy", "description": "Deploys the web app to staging, then runs the smoke tests", "ownProject": true, "group": "project", "path": "/Users/me/code/web/.claude/skills/deploy/SKILL.md" },
+        { "name": "pdf", "description": "Reads, fills and merges PDF files", "ownProject": false, "group": "User", "path": "/Users/me/.claude/skills/pdf/SKILL.md" },
+        { "name": "figma:figma-use", "description": "Edits a Figma file through the plugin API", "ownProject": false, "group": "Plugin: figma" }
+    ] } });
+    for message in [servers, skills] {
+        s.receive(Event::Message(serde_json::from_value(message).expect("the scene's message decodes"))).expect("the scene has a tab");
+    }
 }
 
 /// A tab laid out by a plugin's setup: a sidebar listing made-up conversations, and a card.

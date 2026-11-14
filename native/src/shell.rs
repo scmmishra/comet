@@ -72,6 +72,7 @@ pub struct Desk {
     pub cards: crate::cards::Cards,
     pub commands_card: crate::commands_card::CommandsCard,
     pub meters: crate::meters::Meters,
+    pub extensions: crate::extensions::Extensions,
     pub minimap: crate::minimap::Minimap,
     pub plugins: crate::plugins::Plugins,
     pub settings: crate::settings::SettingsUi,
@@ -166,6 +167,7 @@ impl Desk {
                 }
                 self.projects.read(project, &part, value);
             }
+            CoreMessage::Mcp { project, agent, servers } => self.projects.read_mcp(project, agent, servers),
             CoreMessage::FilesFound { project, query, paths } => self.found_files(project, query, paths),
             CoreMessage::Review { tab_id, scope, files } => self.take_review(tab_id, scope, files),
             CoreMessage::TerminalOutput { id, data } => self.terminal_output(&id, &data),
@@ -495,6 +497,7 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, window: 
         .items_center()
         // Without room for the rail, the project's cards fold into a chip.
         .children(width.filter(|w| !crate::cards::Lane::rail(*w)).map(|_| crate::cards::space_chip(s, tab, k, layer)))
+        .children(crate::extensions::button(s, tab, k, layer))
         .children(s.threads.get(&tab.id).and_then(|t| t.context.as_ref()).map(|reading| crate::meters::context_ring(reading, k)));
     // The header keeps its last 48 points for the panel toggle, which sits over the corner. While the pane
     // is open, the pane's own header holds the toggle.

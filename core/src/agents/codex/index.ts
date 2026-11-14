@@ -4,7 +4,9 @@ import { CodexMissing } from "./executable"
 import { ModelCatalog, modelOptions } from "./models"
 import type { CodexAccount } from "./protocol"
 import { AppServer, launchCodex, type Launch } from "./server"
+import { codexMcp } from "./mcp"
 import { CodexSession } from "./session"
+import { readSkills } from "./skills"
 import { codexThreads } from "./threads"
 import { Usage } from "./usage"
 
@@ -14,7 +16,7 @@ const SIGN_IN = "Run `codex login` in a terminal to sign in."
 /**
  * OpenAI's Codex, run through its app-server. Desk runs the `codex` installed on this Mac, so it uses the
  * account and the settings Codex already has in `~/.codex`. One app-server serves every Codex tab, the
- * thread list and Settings. It starts on the first need and ends with Desk. `launch` lets a test play the app-server.
+ * thread list, Settings and the project's MCP servers and skills. It starts on the first need and ends with Desk. `launch` lets a test play the app-server.
  */
 export function codexAgent(host: AgentHost, launch: Launch = launchCodex): Agent {
   const server = new AppServer(launch)
@@ -23,8 +25,10 @@ export function codexAgent(host: AgentHost, launch: Launch = launchCodex): Agent
   return {
     id: "codex",
     name: "Codex",
-    features: ["steer", "rewind", "fork", "rename", "delete"],
+    features: ["steer", "rewind", "fork", "rename", "delete", "mcp"],
     threads: codexThreads(server),
+    commands: (dir) => readSkills(server, dir),
+    mcp: codexMcp(server),
 
     async inspect() {
       let installed: string | undefined

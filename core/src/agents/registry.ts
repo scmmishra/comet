@@ -1,6 +1,6 @@
 import { AGENTS, type AgentId, type AgentInfo, type CoreMessage, type Skill } from "@desk/protocol"
 import { errorMessage } from "../errors"
-import type { Agent, AgentHost, AgentMcp, AgentReading } from "./agent"
+import { requireFeature, type Agent, type AgentHost, type AgentMcp, type AgentReading } from "./agent"
 import { antigravityAgent } from "./antigravity"
 import { claudeAgent } from "./claude"
 import { codexAgent } from "./codex"
@@ -76,17 +76,18 @@ export class Agents {
     for (const agent of this.agents.values()) void this.inspect(agent)
   }
 
-  /** Each agent's slash commands in a folder, by agent. An agent without any lists none. */
+  /** Each agent's skills and commands in a folder, by agent. An agent without any lists none. */
   async commands(dir: string): Promise<Partial<Record<AgentId, Skill[] | null>>> {
     const read = await Promise.all(this.all().map(async (agent) => [agent.id, agent.commands ? await agent.commands(dir) : []] as const))
     return Object.fromEntries(read)
   }
 
-  /** The MCP servers Desk shows: those of the agent that lists them. */
-  mcp(): AgentMcp {
-    const found = this.all().find((agent) => agent.mcp)?.mcp
-    if (!found) throw new Error("No agent Desk runs lists its MCP servers.")
-    return found
+  /** An agent's MCP servers, for an agent that has `mcp`. */
+  mcp(id: AgentId): AgentMcp {
+    const agent = this.get(id)
+    requireFeature(agent, "mcp", "list its MCP servers")
+    if (!agent.mcp) throw new Error(`${agent.name} lists the mcp feature but has no MCP reader.`)
+    return agent.mcp
   }
 
   /** Reads every agent's plan usage again. Usage is extra information, so a failed read keeps the last one. */

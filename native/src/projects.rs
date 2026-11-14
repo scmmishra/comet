@@ -10,7 +10,7 @@ pub struct Project {
     pub threads: Option<Vec<ThreadSummary>>,
     /// None until read or outside a Git repo.
     pub space: Option<Space>,
-    /// Each agent's slash commands in the project, by agent. None until read, and None for an agent that could not be asked.
+    /// Each agent's skills and commands in the project, by agent. None until read, and None for an agent that could not be asked.
     pub skills: Option<HashMap<String, Option<Vec<Skill>>>>,
     /// The project's own commands, which the Commands card runs. None until read.
     pub commands: Option<Vec<CommandInfo>>,
@@ -20,12 +20,12 @@ pub struct Project {
     pub plugins: Option<PluginContributions>,
     /// Images in the project that look like its logo, for the icon picker, as paths inside it. None until read.
     pub icons: Option<Vec<String>>,
-    /// The MCP servers Claude Code loads in the project. Some(None) when it could not be asked.
-    pub mcp: Option<Option<Vec<McpServer>>>,
+    /// Each agent's MCP servers in the project, by agent, once read. None for an agent that could not be asked.
+    pub mcp: HashMap<String, Option<Vec<McpServer>>>,
 }
 
 impl Project {
-    /// An agent's slash commands in the project. None until read, and when the agent could not be asked.
+    /// An agent's skills and commands in the project. None until read, and when the agent could not be asked.
     pub fn skills_of(&self, agent: &str) -> Option<&[Skill]> {
         self.skills.as_ref()?.get(agent)?.as_deref()
     }
@@ -52,9 +52,13 @@ impl Projects {
             "commands" => project.commands = serde_json::from_value(value).ok(),
             "commandSources" => project.command_sources = serde_json::from_value(value).ok(),
             "plugins" => project.plugins = serde_json::from_value(value).ok(),
-            "mcp" => project.mcp = Some(serde_json::from_value(value).ok()),
             _ => {}
         }
+    }
+
+    /// Takes an agent's MCP servers, read again on each ask.
+    pub fn read_mcp(&mut self, dir: String, agent: String, servers: Option<Vec<McpServer>>) {
+        self.by_dir.entry(dir).or_default().mcp.insert(agent, servers);
     }
 }
 

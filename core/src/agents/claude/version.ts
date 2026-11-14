@@ -1,7 +1,7 @@
 import type { AgentVersion } from "@desk/protocol"
 import { readFileSync, realpathSync } from "node:fs"
-import { homedir } from "node:os"
 import { join } from "node:path"
+import { configDir } from "./config-dir"
 import { claudeCodePath } from "./executable"
 import { spawn } from "../../environment"
 
@@ -46,7 +46,7 @@ export function isNewer(latest: string, installed: string) {
 }
 
 /** The update channel the user set in Claude Code's settings. Claude Code uses "latest" without one. */
-export function updateChannel(settingsFile = join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"), "settings.json")): (typeof CHANNELS)[number] {
+export function updateChannel(settingsFile = join(configDir(), "settings.json")): (typeof CHANNELS)[number] {
   try {
     const channel = (JSON.parse(readFileSync(settingsFile, "utf8")) as { autoUpdatesChannel?: unknown }).autoUpdatesChannel
     return CHANNELS.find((known) => known === channel) ?? "latest"

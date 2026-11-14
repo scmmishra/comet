@@ -1,6 +1,7 @@
 import type { SlashCommand } from "@anthropic-ai/claude-agent-sdk"
 import type { Skill } from "@desk/protocol"
 import { probe } from "./probe"
+import { withFiles } from "./skill-files"
 
 /** Claude Code ends a description with where the skill comes from, such as " (user)". */
 const SOURCE_SUFFIX = /\s*\(([^()]+)\)\s*$/
@@ -17,7 +18,7 @@ const BUILT_IN = "Claude Code"
 /** The commands Claude Code offers in a project, grouped: its own, then skills and custom commands. */
 export async function readSkills(dir: string): Promise<Skill[] | null> {
   const commands = await probe(dir, (running) => running.supportedCommands())
-  return commands ? skillsFrom(commands) : null
+  return commands ? withFiles(dir, skillsFrom(commands)) : null
 }
 
 /** Claude Code's commands as Desk lists them, in their groups' order. */

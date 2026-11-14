@@ -14,6 +14,7 @@ mod diff;
 // Its options Review does not use yet, such as annotations and comments, stay with it.
 #[allow(dead_code)]
 mod diff_view;
+mod extensions;
 mod format;
 mod icons;
 mod ids;

@@ -172,10 +172,13 @@ export const CORE_MESSAGES = [
   { type: "error", message: "The support plugin could not start", detail: "desk.onTurnEnd is not a function." },
   { type: "notice", message: "Copied the link." },
   {
-    type: "project",
+    type: "mcp",
     project: "/Users/me/code/web",
-    part: "mcp",
-    value: [{ name: "github", status: "connected", scope: "user", ownProject: false, target: "npx github-mcp", tools: 12 }],
+    agent: "codex",
+    servers: [
+      { name: "github", status: "connected", scope: "user", ownProject: false, target: "npx github-mcp", tools: 12, toggleable: true },
+      { name: "db", status: "not-started", scope: "project", ownProject: true, target: "npx pg-mcp", tools: 0, toggleable: false },
+    ],
   },
   {
     type: "plugin.ops",
@@ -210,7 +213,8 @@ export const CLIENT_MESSAGES = [
   { type: "agent.install", agent: "antigravity" },
   { type: "agent.signIn", agent: "antigravity" },
   { type: "agent.cancel", agent: "antigravity" },
-  { type: "mcp.toggle", project: "/Users/me/code/web", name: "github", enabled: false },
+  { type: "mcp.get", project: "/Users/me/code/web", agent: "codex" },
+  { type: "mcp.toggle", project: "/Users/me/code/web", agent: "codex", name: "github", enabled: false },
   { type: "tab.reopen" },
   { type: "tabs.save", tabs: TABS, active: "tab-2" },
   { type: "session.send", tabId: "tab-1", text: "Add a test", followUp: "queue" },

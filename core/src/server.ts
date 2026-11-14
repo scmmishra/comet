@@ -81,7 +81,6 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     commandSources: (dir, reply) => discoverCommands(dir, new Set(commandsOf(dir).list().map((command) => command.command))).then(reply),
     threads: (dir, reply) => window.recentThreads(dir).then(reply),
     icons: (dir, reply) => findIconFiles(dir).then(reply),
-    mcp: (dir, reply) => agents.mcp().read(dir, reply),
     skills: (dir, reply) => agents.commands(dir).then(reply),
     plugins: (dir, reply) => plugins.contributions(dir).then(reply),
   }
@@ -98,8 +97,10 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         return broadcast({ type: "settings", settings })
       case "project.get":
         return read(message.project, message.part, reply)
+      case "mcp.get":
+        return agents.mcp(message.agent).read(message.project, (servers) => reply({ type: "mcp", project: message.project, agent: message.agent, servers }))
       case "mcp.toggle":
-        return agents.mcp().toggle(message.project, message.name, message.enabled, (servers) => reply(project(message.project, "mcp", servers)))
+        return agents.mcp(message.agent).toggle(message.project, message.name, message.enabled, (servers) => reply({ type: "mcp", project: message.project, agent: message.agent, servers }))
       case "file.open":
         return openInEditor(requireFile(message.project, message.path), message.line)
       case "file.read":

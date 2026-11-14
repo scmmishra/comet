@@ -12,12 +12,10 @@ use rune_theme_opencode::icons as ic;
 use serde_json::json;
 
 /// The pages, in the sidebar's order: id, title and icon.
-pub const PAGES: [(&str, &str, &rune::Icon); 5] = [
+pub const PAGES: [(&str, &str, &rune::Icon); 3] = [
     ("providers", "Providers", &ic::PROVIDERS),
     ("appearance", "Appearance", &ic::APPEARANCE),
     ("projects", "Projects", &ic::FOLDER),
-    ("mcps", "MCP servers", &ic::MCP),
-    ("skills", "Skills", &ic::POST_SKILL),
 ];
 /// The thread text sizes Appearance offers, Desk's `FONT_SIZES`.
 const FONT_SIZES: std::ops::RangeInclusive<u32> = 11..=20;
@@ -44,15 +42,9 @@ impl Desk {
         }
         self.workspace.settings_page = Some(page.to_owned());
         self.settings.open_select = None;
-        match page {
-            // The agents are read again, so one installed or signed in outside Desk shows.
-            "providers" => self.core.send(&ClientMessage::AgentsGet),
-            "mcps" | "skills" => {
-                if let Some(project) = self.workspace.active_tab().map(|t| t.project.clone()) {
-                    self.core.send(&ClientMessage::ProjectGet { project, part: if page == "mcps" { "mcp" } else { "skills" }.into() });
-                }
-            }
-            _ => {}
+        // The agents are read again, so one installed or signed in outside Desk shows.
+        if page == "providers" {
+            self.core.send(&ClientMessage::AgentsGet);
         }
     }
 
@@ -134,8 +126,6 @@ pub fn screen(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
     let content = match page {
         "appearance" => appearance(s, k, layer),
         "projects" => projects(s, k, layer),
-        "mcps" => mcps(s, k),
-        "skills" => skills(s, k),
         _ => providers(s, k, layer),
     };
     // `.settings-panel` keeps 4 points each side for the lists' shadows. Each page is its own element:
@@ -588,64 +578,6 @@ fn icon_picker(s: &Desk, dir: &str, current: Option<&str>, k: &Kit, layer: &mut 
     trigger
 }
 
-fn mcps(s: &Desk, k: &Kit) -> El {
-    let project = s.workspace.active_tab().map(|t| t.project.clone());
-    let servers = project.as_ref().and_then(|p| s.projects.get(p)).and_then(|p| p.mcp.clone());
-    let faint = |words: &str| text(words.to_owned()).font(crate::theme::text(13.0)).color(k.c.text_faint).wrap();
-    let content = match (project, servers) {
-        (None, _) => vec![faint("Open a tab in a project to see its servers.")],
-        (Some(_), None) => vec![faint("Starting the servers to read them…")],
-        (Some(_), Some(None)) => vec![faint("Desk could not ask Claude Code for its MCP servers.")],
-        (Some(project), Some(Some(servers))) => {
-            let row_for = |server: &crate::protocol::McpServer| {
-                let enabled = server.status != "disabled";
-                let (dir, name) = (project.clone(), server.name.clone());
-                let status = match server.status.as_str() {
-                    "connected" => format!("Connected · {}", format::plural(server.tools as usize, "tool")),
-                    "failed" => format!("Failed{}", server.error.as_ref().map(|e| format!(": {e}")).unwrap_or_default()),
-                    "needs-auth" => "Needs sign-in".into(),
-                    "pending" => "Connecting…".into(),
-                    _ => "Off in this project".into(),
-                };
-                let description = [Some(status), server.target.clone()].into_iter().flatten().collect::<Vec<_>>().join(" · ");
-                setting(k, title(k, &server.name), Some(description), Some(Switch::new(enabled).web().label(format!("Use {}", server.name)).hide_label().on_toggle(move |s: &mut Desk| s.core.send(&ClientMessage::McpToggle { project: dir.clone(), name: name.clone(), enabled: !enabled })).build(k)))
-            };
-            let own: Vec<El> = servers.iter().filter(|x| x.own_project).map(row_for).collect();
-            let shared: Vec<El> = servers.iter().filter(|x| !x.own_project).map(row_for).collect();
-            let name = s.account.project_label(&project);
-            vec![
-                section(k, format!("Installed in {name}"), if own.is_empty() { faint("No MCP servers are installed in this project. Add one to its .mcp.json, or with claude mcp add.") } else { list(k, own) }),
-                section(k, "Available in every project".into(), if shared.is_empty() { faint("No MCP servers are available to all projects.") } else { list(k, shared) }),
-            ]
-        }
-    };
-    col()
-        .w_full()
-        .child(header(k, "MCP servers", "The servers Claude Code loads. A project's switches act in that project only."))
-        .child(body(content))
-}
-
-fn skills(s: &Desk, k: &Kit) -> El {
-    // The page lists the commands of the active tab's agent, since those are the ones `/` offers there.
-    let tab = s.workspace.active_tab();
-    let agent = tab.map_or(s.account.default_agent(), |t| t.agent.as_str());
-    let project = tab.and_then(|t| s.projects.get(&t.project));
-    let faint = |words: &str| text(words.to_owned()).font(crate::theme::text(13.0)).color(k.c.text_faint).wrap();
-    let content = match project.and_then(|p| p.skills.as_ref()) {
-        None => vec![faint("Reading skills…")],
-        Some(_) => {
-            let skills = project.and_then(|p| p.skills_of(agent)).unwrap_or(&[]);
-            let rows: Vec<El> = skills
-                .iter()
-                .filter(|x| !x.builtin)
-                .map(|skill| setting(k, text(format!("/{}", skill.name)).font(crate::theme::mono(12.0)).color(k.c.text_base), Some(skill.description.clone()), None))
-                .collect();
-            if rows.is_empty() { vec![faint("No skills are available.")] } else { vec![list(k, rows)] }
-        }
-    };
-    col().w_full().child(header(k, "Skills", &format!("The skills and commands {} offers in this tab's project. Type / in a thread to use one.", s.agent_name(agent)))).child(body(content))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -668,8 +600,8 @@ mod tests {
     #[test]
     fn opening_a_page_reads_what_it_shows_and_showing_a_tab_closes_settings() {
         let mut s = desk();
-        s.open_settings("mcps");
-        assert!(s.core.sent().iter().any(|m| m["type"] == "project.get" && m["part"] == "mcp"));
+        s.open_settings("providers");
+        assert!(s.core.sent().iter().any(|m| m["type"] == "agents.get"));
         s.workspace.show_tab("t", &s.core);
         assert_eq!(s.workspace.settings_page, None);
     }
