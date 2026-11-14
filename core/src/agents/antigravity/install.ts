@@ -8,6 +8,10 @@ import { RELEASE, RELEASE_PLATFORM, type Release } from "./release"
 
 const UNZIP = "/usr/bin/unzip"
 const NOTHING_INSTALLED = "Nothing was installed."
+/** How long the download may go without a byte before it fails. The archive is about 100 MB, so a limit on the whole download would fail a slow link that still works. */
+const DOWNLOAD_IDLE_MS = 60_000
+const UNREACHABLE = `Desk could not download Antigravity from Google. Check the network connection and any proxy settings, then try again. ${NOTHING_INSTALLED}`
+const STALLED = `The Antigravity download stopped: no data came from Google for ${DOWNLOAD_IDLE_MS / 1000} seconds. Check the network connection, then try again. ${NOTHING_INSTALLED}`
 
 /** Saves what `url` serves at `path`. */
 type Download = (url: string, path: string, signal: AbortSignal) => Promise<void>
@@ -60,10 +64,41 @@ export async function installRuntime({ signal = new AbortController().signal, re
   }
 }
 
-async function fetchTo(url: string, path: string, signal: AbortSignal) {
-  const response = await fetch(url, { signal })
-  if (!response.ok) throw new Error(`The Antigravity download failed with HTTP ${response.status}. ${NOTHING_INSTALLED}`)
-  await Bun.write(path, response)
+/**
+ * Saves what `url` serves at `path`. It fails once no byte has come for `DOWNLOAD_IDLE_MS`. A network
+ * failure says so in plain words, not in fetch's, such as "getaddrinfo ENOTFOUND". `fetcher` is a test's.
+ */
+export async function fetchTo(url: string, path: string, signal: AbortSignal, fetcher: (url: string, init: RequestInit) => Promise<Response> = fetch) {
+  const idle = new AbortController()
+  const stopped = AbortSignal.any([signal, idle.signal])
+  // A fetch whose body ignores its signal still ends: every wait races the stop.
+  const ended = new Promise<never>((_, reject) => stopped.addEventListener("abort", () => reject(stopped.reason), { once: true }))
+  ended.catch(() => undefined)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const waitForBytes = () => {
+    clearTimeout(timer)
+    timer = setTimeout(() => idle.abort(), DOWNLOAD_IDLE_MS)
+  }
+  const file = Bun.file(path).writer()
+  let response: Response | undefined
+  try {
+    waitForBytes()
+    response = await Promise.race([fetcher(url, { signal: stopped }), ended])
+    if (!response.ok) throw new Error(`The Antigravity download failed with HTTP ${response.status}. ${NOTHING_INSTALLED}`)
+    const reader = response.body?.getReader()
+    while (reader) {
+      waitForBytes()
+      const { done, value } = await Promise.race([reader.read(), ended])
+      if (done) break
+      file.write(value)
+    }
+  } catch (error) {
+    if (signal.aborted || response?.ok === false) throw error
+    throw new Error(idle.signal.aborted ? STALLED : UNREACHABLE, { cause: error })
+  } finally {
+    clearTimeout(timer)
+    await file.end()
+  }
 }
 
 /** A file's size and SHA-256, read as a stream, since the archive is about 100 MB. */
