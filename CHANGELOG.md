@@ -6,6 +6,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 - When Claude Code retries a failed API request and the retry works, the retry notice goes as soon as the new reply starts. It used to stay while Claude wrote a long tool input, such as a file to write.
 - When Codex retries a request with no limit, such as while it waits for the network, the retry notice counts on from the last attempt. It used to keep showing the last attempt with its old limit, such as 3/5.
+- A Codex turn fails when Codex says nothing for 10 minutes after it retries a request, with Codex's last error. Desk asks Codex to stop the turn. The tab used to stay busy until you pressed Stop and then Force stop.
 - When Claude Code replaces a reply, the replaced reply and its tool calls leave the thread. Claude Code replaces a reply that the model refused once another model answers, and a reply whose tool call it could not read once the model answers again. A line in the thread says when another model answered.
 - A message you steer into a Claude turn says "Waiting to steer" until Claude takes it in. Claude holds it while a tool runs in the foreground, and the message used to read as delivered.
 - A Claude tool call that Stop cuts off shows as stopped, not failed.

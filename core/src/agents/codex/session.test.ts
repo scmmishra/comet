@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, jest, test } from "bun:test"
 import type { PermissionAnswer, RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
 import { until } from "../../test-support"
 import type { SessionOptions } from "../agent"
@@ -465,6 +465,73 @@ test("counts on from the last retry when Codex's retry gives no limit", async ()
     { kind: "retry", attempt: 4, delayMs: 0, error: "Waiting for the network" },
     { kind: "retry", attempt: 5, delayMs: 0, error: "Waiting for the network" },
   ])
+})
+
+const MINUTE = 60_000
+
+/** Runs `body` on fake timers. Bun.sleep waits on real time, so `flush` lets the fake app-server's messages land instead. */
+async function fakeTime(body: () => Promise<void>) {
+  jest.useFakeTimers()
+  try {
+    await body()
+  } finally {
+    jest.useRealTimers()
+  }
+}
+
+const flush = async () => {
+  for (let i = 0; i < 50; i++) await Promise.resolve()
+}
+
+test("fails a turn that Codex has not resumed 10 minutes after a retry, and asks Codex to stop it", async () => {
+  const s = setup()
+  await started(s)
+  await fakeTime(async () => {
+    s.codex.notify("error", { threadId: THREAD, turnId: TURN, willRetry: true, error: { message: "Reconnecting... waiting for network" } })
+    await flush()
+    jest.advanceTimersByTime(10 * MINUTE - 1)
+    expect(s.session.busy).toBe(true)
+    jest.advanceTimersByTime(1)
+  })
+  expect(s.session.busy).toBe(false)
+  expect(s.last("error")?.message).toBe("Codex did not recover from a failed request in 10 minutes, so the turn was stopped. Codex said: Reconnecting... waiting for network")
+  await until(() => s.codex.sent("turn/interrupt").length > 0)
+  expect(s.codex.sent("turn/interrupt")).toEqual([{ threadId: THREAD, turnId: TURN }])
+})
+
+test("a new retry starts the 10 minutes again, and any other word from Codex ends the wait", async () => {
+  const s = setup()
+  await started(s)
+  const retry = () => s.codex.notify("error", { threadId: THREAD, turnId: TURN, willRetry: true, error: { message: "Reconnecting... 1/5" } })
+  await fakeTime(async () => {
+    retry()
+    await flush()
+    jest.advanceTimersByTime(9 * MINUTE)
+    retry()
+    await flush()
+    jest.advanceTimersByTime(9 * MINUTE)
+    expect(s.session.busy).toBe(true)
+    s.codex.notify("item/agentMessage/delta", { threadId: THREAD, turnId: TURN, itemId: "m1", delta: "Back" })
+    await flush()
+    jest.advanceTimersByTime(60 * MINUTE)
+  })
+  expect(s.session.busy).toBe(true)
+  expect(s.codex.sent("turn/interrupt")).toEqual([])
+})
+
+test("leaves a stalled retry to a stop the user asked for", async () => {
+  const s = setup()
+  await started(s)
+  s.codex.answer("turn/interrupt", () => new Promise(() => {}))
+  await fakeTime(async () => {
+    s.codex.notify("error", { threadId: THREAD, turnId: TURN, willRetry: true, error: { message: "Reconnecting... 1/5" } })
+    await flush()
+    void s.session.interrupt()
+    await flush()
+    jest.advanceTimersByTime(10 * MINUTE)
+  })
+  expect(s.session.busy).toBe(true)
+  expect(s.items().some((found) => found.type === "error")).toBe(false)
 })
 
 test("fails the turn when the app-server dies, and loads the thread into a new one on the next message", async () => {

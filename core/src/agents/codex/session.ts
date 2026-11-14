@@ -20,6 +20,12 @@ const TOOL_TIMEOUT_SEC = 3900
 const RETRY_PROGRESS = /\b(\d+)\s*\/\s*(\d+)\b/
 /** The reasoning summary a turn asks for when Codex's config sets none. */
 const DEFAULT_SUMMARY: ReasoningSummary = "auto"
+/**
+ * How long a turn waits for Codex to say anything after a retry before the turn fails, as in T3 Code. Codex
+ * retries with no limit while it waits for the network, and T3 Code saw it announce a retry and never resume.
+ * A retry that works resumes within about 75 seconds, after T3 Code.
+ */
+const RETRY_STALL_MS = 10 * 60_000
 
 /**
  * A turn, from the message that opens it until it ends. Codex names it in its answer to `turn/start`.
@@ -34,6 +40,8 @@ class Turn {
   attempt = 0
   readonly started: Promise<string | undefined>
   private resolve!: (id: string | undefined) => void
+  /** Fails the turn once Codex has said nothing for `RETRY_STALL_MS` after a retry. */
+  private stall?: ReturnType<typeof setTimeout>
 
   constructor(readonly message: string) {
     this.started = new Promise((resolve) => (this.resolve = resolve))
@@ -46,6 +54,19 @@ class Turn {
 
   end() {
     this.resolve(undefined)
+    this.progressed()
+  }
+
+  /** Codex retries a request. `stalled` runs if Codex then says nothing in time. A later retry starts the wait again. */
+  retried(stalled: () => void) {
+    clearTimeout(this.stall)
+    this.stall = setTimeout(stalled, RETRY_STALL_MS)
+  }
+
+  /** Codex said something after a retry, so the retry has not stalled. */
+  progressed() {
+    clearTimeout(this.stall)
+    this.stall = undefined
   }
 }
 
@@ -162,6 +183,8 @@ export class CodexSession implements AgentSession, ThreadOwner {
   /** A notification about the thread, or about the thread of one of Codex's own agents. */
   notify(method: string, params: ThreadParams) {
     if (params.threadId !== this.threadId) return this.notifyChild(method, params)
+    // Anything Codex says about the thread, but another retry, shows it did not stall, after T3 Code.
+    if (method !== "error") this.turn?.progressed()
     switch (method) {
       case "turn/started":
         return this.started((params.turn as CodexTurn).id)
@@ -335,7 +358,18 @@ export class CodexSession implements AgentSession, ThreadOwner {
     if (!willRetry || !turn) return
     const progress = RETRY_PROGRESS.exec(error.message)
     turn.attempt = progress ? Number(progress[1]) : turn.attempt + 1
+    turn.retried(() => this.stalled(turn, error.message))
     this.emit({ kind: "retry", attempt: turn.attempt, ...(progress ? { maxRetries: Number(progress[2]) } : {}), delayMs: 0, error: error.message })
+  }
+
+  /**
+   * Codex said nothing for `RETRY_STALL_MS` after a retry. The turn fails with Codex's last error, and Codex
+   * is asked to stop it. A stop the user asked for is left to finish, since Force stop can end it.
+   */
+  private stalled(turn: Turn, error: string) {
+    if (this.turn !== turn || this.stop.pending) return
+    if (turn.id && this.threadId) void this.server.request("turn/interrupt", { threadId: this.threadId, turnId: turn.id }).catch(() => undefined)
+    this.fail(new Error(`Codex did not recover from a failed request in ${RETRY_STALL_MS / 60_000} minutes, so the turn was stopped. Codex said: ${error}`))
   }
 
   /** Codex settled a request itself, such as when its reviewer answered. The request leaves the thread. */
