@@ -188,12 +188,15 @@ impl Desk {
     pub fn terminal_ime(&mut self, event: &Ime) -> bool {
         let Some(id) = self.terminals.focused.clone() else { return false };
         match event {
-            Ime::Preedit(text, _) => self.terminals.preedit = text.clone(),
+            // The clauses go unused: the terminal underlines the whole composition as one.
+            Ime::Preedit(text, ..) => self.terminals.preedit = text.clone(),
             Ime::Commit(text) => {
                 self.terminals.preedit.clear();
                 self.type_into(&id, text.clone());
             }
-            Ime::Enabled => {}
+            // Text typed into the shell is gone from the terminal's hands, so there is nothing to
+            // convert again. The terminal publishes no text, and ignores a reconversion.
+            Ime::Select(_) | Ime::Enabled => {}
             Ime::Disabled => self.terminals.preedit.clear(),
         }
         true
@@ -406,12 +409,14 @@ mod tests {
         assert!(!s.terminal_ime(&Ime::Commit("é".into())), "with no terminal focused, the input method goes elsewhere");
         assert!(s.follow_focus(Some("terminal-t")));
         assert!(!s.follow_focus(Some("terminal-t")), "the same focus is no change");
-        assert!(s.terminal_ime(&Ime::Preedit("ni".into(), None)));
+        assert!(s.terminal_ime(&Ime::Preedit("ni".into(), None, vec![rune::Clause::new(0..2).target()])));
+        assert_eq!(s.terminals.preedit, "ni");
+        assert!(s.terminal_ime(&Ime::Select(0..2)), "a reconversion is the terminal's, and changes nothing");
         assert_eq!(s.terminals.preedit, "ni");
         s.terminal_ime(&Ime::Commit("你".into()));
         assert_eq!(s.terminals.preedit, "");
         assert_eq!(sent(&s), ["你"]);
-        s.terminal_ime(&Ime::Preedit("ha".into(), None));
+        s.terminal_ime(&Ime::Preedit("ha".into(), None, Vec::new()));
         assert!(s.follow_focus(Some("composer-input")));
         assert_eq!((s.terminals.focused.as_deref(), s.terminals.preedit.as_str()), (None, ""), "leaving the terminal ends the composition");
     }

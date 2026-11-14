@@ -137,7 +137,8 @@ fn main() {
         let handle = app.handle();
         core.send(&protocol::ClientMessage::AgentsGet);
         core.start(move |event| handle.update(move |s: &mut Desk, tx| s.receive_in(event, tx)));
+        core.stop_at_quit();
     }
+    // Rune ends the process when the app quits, so code after this line does not run.
     app.run();
-    core.stop();
 }
