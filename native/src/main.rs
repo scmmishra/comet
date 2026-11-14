@@ -102,6 +102,9 @@ fn main() {
         return;
     }
     rune::prewarm_gpu();
+    // OpenCode sets `text-wrap-style: pretty` on every element: a paragraph never ends on a lone short word.
+    // Rune caches text layouts, so this runs before any text is laid out.
+    rune::text::set_pretty_wrap(true);
     let core = core::Core::default();
     let state = core.clone();
     let mut app = rune::App::new(AppSpec {
