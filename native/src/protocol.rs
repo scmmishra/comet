@@ -156,7 +156,7 @@ pub struct AgentVersion {
     pub installed: Option<String>,
     pub latest: Option<String>,
     pub update_available: bool,
-    /// Whether Desk can update it, with the agent's own updater.
+    /// Whether Desk can update it.
     pub updatable: bool,
 }
 
@@ -887,7 +887,7 @@ pub enum ClientMessage {
     /// Changes the named settings. The core saves them and sends them back.
     #[serde(rename = "settings.update")]
     SettingsUpdate { change: Value },
-    /// Updates an agent with its own updater. The core answers with `agents` once done.
+    /// Updates an agent to its newest version. The core answers with `agents` once done.
     #[serde(rename = "agent.update")]
     AgentUpdate { agent: String },
     /// Installs an agent on this Mac. The core answers with `agents` as it goes.

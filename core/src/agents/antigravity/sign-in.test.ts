@@ -5,12 +5,13 @@ import { signInWithGoogle } from "./sign-in"
 import { BROWSER_COMMAND, signInLink } from "./sign-in-link"
 
 const LINK = "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&response_type=code&state=abc&redirect_uri=http%3A%2F%2F127.0.0.1%3A40123%2F"
-const PRINTED = `Open the following link to authenticate the ACP server: ${LINK}`
+/** The line the browser helper prints on the agent's stderr. */
+const PRINTED = `DESK_ANTIGRAVITY_SIGN_IN ${LINK}`
 const CONNECT = { clientInfo: { name: "fake-client", version: "1.0.0" }, authMethod: "fake-auth" }
 
 test("reads Google's sign-in link back to this Mac, and refuses any other", () => {
   expect(signInLink(PRINTED)).toBe(LINK)
-  expect(signInLink(`DESK_ANTIGRAVITY_SIGN_IN ${LINK}\r`)).toBe(LINK)
+  expect(signInLink(`${PRINTED}\r`)).toBe(LINK)
   const refused = [
     LINK.replace("accounts.google.com", "evil.example"),
     LINK.replace("127.0.0.1%3A40123", "example.com%3A40123"),
@@ -24,12 +25,13 @@ test("reads Google's sign-in link back to this Mac, and refuses any other", () =
   expect(signInLink("Starting the server")).toBeUndefined()
 })
 
-test("the browser helper prints the link it is given as a line Desk reads, and opens nothing", () => {
-  // The agent splits BROWSER at colons, as a PATH, so a colon would cut the command.
+test("the browser helper prints the link it is given on stderr as a line Desk reads, and opens nothing", () => {
+  // BROWSER may list several commands split at colons, so a colon would cut the command.
   expect(BROWSER_COMMAND).not.toContain(":")
-  const printed = Bun.spawnSync(["/bin/sh", "-c", BROWSER_COMMAND.replace("%s", LINK)], { stdout: "pipe" })
+  const printed = Bun.spawnSync(["/bin/sh", "-c", BROWSER_COMMAND.replace("%s", LINK)], { stdout: "pipe", stderr: "pipe" })
   expect(printed.exitCode).toBe(0)
-  expect(signInLink(printed.stdout.toString())).toBe(LINK)
+  expect(printed.stdout.toString()).toBe("")
+  expect(signInLink(printed.stderr.toString())).toBe(LINK)
 })
 
 test("opens the link the agent prints once, and is done when a session opens", async () => {
@@ -39,8 +41,8 @@ test("opens the link the agent prints once, and is done when a session opens", a
   const agent = fakeAcpAgent({
     // The agent answers once the user has signed in, after the link opened.
     authenticate: async () => {
-      agent.print(PRINTED)
-      agent.print(PRINTED)
+      agent.printError(PRINTED)
+      agent.printError(PRINTED)
       await linkOpened.promise
       return {}
     },
@@ -71,7 +73,7 @@ test("stops when the user stops it, and ends the agent's process", async () => {
   const opened: string[] = []
   const waiting = fakeAcpAgent({
     authenticate: () => {
-      waiting.print(PRINTED)
+      waiting.printError(PRINTED)
       return new Promise(() => {})
     },
   })

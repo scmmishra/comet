@@ -1,10 +1,10 @@
-import { JsonRpc, METHOD_NOT_FOUND, RpcError, type Transport } from "../json-rpc"
+import { JsonRpc, METHOD_NOT_FOUND, RpcError } from "../json-rpc"
+import type { Process } from "../process"
 import {
   PROTOCOL_VERSION,
   type ClientInfo,
   type ConfigOption,
   type ContentBlock,
-  type InitializeResult,
   type McpServer,
   type PermissionRequest,
   type PermissionResponse,
@@ -20,7 +20,7 @@ export interface AcpClient {
   readonly permission: (request: PermissionRequest) => Promise<PermissionResponse>
   /** The agent is gone. Every request still waiting has failed with `error`. */
   readonly closed: (error: Error) => void
-  /** A line the agent printed that is not a message. */
+  /** A line the agent printed outside the protocol: on stdout, a line that is not a message, and every line on stderr. */
   readonly stray?: (line: string) => void
 }
 
@@ -31,11 +31,10 @@ export interface ConnectOptions {
   readonly authMethod?: string
 }
 
-/** What a session is opened with. `meta` is the agent's own extension of the request. */
+/** What a session is opened with. */
 interface SessionParams {
   readonly cwd: string
   readonly mcpServers: readonly McpServer[]
-  readonly meta?: Record<string, unknown>
 }
 
 /**
@@ -43,16 +42,13 @@ interface SessionParams {
  * its file system nor its terminals, so the agent uses its own. Requests Desk does not handle are refused.
  */
 export class AcpConnection {
-  private constructor(
-    private readonly rpc: JsonRpc,
-    /** What the agent said about itself in `initialize`. */
-    readonly agent: InitializeResult,
-  ) {}
+  private constructor(private readonly rpc: JsonRpc) {}
 
-  /** Initializes the agent on `transport`, then authenticates. A connection that fails to open is closed. */
-  static async open(transport: Transport, client: AcpClient, options: ConnectOptions): Promise<AcpConnection> {
+  /** Initializes the agent in `process`, then authenticates. A connection that fails to open is closed. */
+  static async open(process: Process, client: AcpClient, options: ConnectOptions): Promise<AcpConnection> {
+    if (client.stray) process.onStderrLine(client.stray)
     const rpc = new JsonRpc(
-      transport,
+      process,
       {
         notification: (method, params) => method === "session/update" && client.update(params as SessionNotification),
         request: (method, params) => {
@@ -64,13 +60,13 @@ export class AcpConnection {
       { versioned: true, ...(client.stray ? { stray: client.stray } : {}) },
     )
     try {
-      const agent = await rpc.request<InitializeResult>("initialize", {
+      await rpc.request("initialize", {
         protocolVersion: PROTOCOL_VERSION,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
         clientInfo: options.clientInfo,
       })
       if (options.authMethod) await rpc.request("authenticate", { methodId: options.authMethod })
-      return new AcpConnection(rpc, agent)
+      return new AcpConnection(rpc)
     } catch (error) {
       rpc.close()
       throw error
@@ -78,12 +74,12 @@ export class AcpConnection {
   }
 
   newSession(params: SessionParams): Promise<SessionSetup> {
-    return this.rpc.request("session/new", sessionRequest(params))
+    return this.rpc.request("session/new", params)
   }
 
   /** Continues a saved session without replaying its history, as `session/load` would. */
   resumeSession(sessionId: string, params: SessionParams): Promise<SessionSetup> {
-    return this.rpc.request("session/resume", { sessionId, ...sessionRequest(params) })
+    return this.rpc.request("session/resume", { sessionId, ...params })
   }
 
   /** Runs a turn. It answers once the turn has ended, also after a cancel. */
@@ -109,8 +105,4 @@ export class AcpConnection {
   close() {
     this.rpc.close()
   }
-}
-
-function sessionRequest({ cwd, mcpServers, meta }: SessionParams) {
-  return { cwd, mcpServers, ...(meta ? { _meta: meta } : {}) }
 }

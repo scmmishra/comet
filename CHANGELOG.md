@@ -4,6 +4,8 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- Desk runs Antigravity as Google's `agy` CLI, in place of Google's ACP server. It installs the newest CLI from Google's release channel. Settings shows its version and offers Update when Google publishes a newer one. An Antigravity that Desk installed before needs one Install in Settings. You stay signed in.
+- Antigravity offers Supervised, Auto-accept edits and Auto, as the CLI has them. It has no Full access.
 - When Claude Code retries a failed API request and the retry works, the retry notice goes as soon as the new reply starts. It used to stay while Claude wrote a long tool input, such as a file to write.
 - When Codex retries a request with no limit, such as while it waits for the network, the retry notice counts on from the last attempt. It used to keep showing the last attempt with its old limit, such as 3/5.
 - A Codex turn fails when Codex says nothing for 10 minutes after it retries a request, with Codex's last error. Desk asks Codex to stop the turn. The tab used to stay busy until you pressed Stop and then Force stop.
@@ -54,7 +56,6 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 - A Codex thread that a closed session left loaded can hand work to another agent again. Desk now lets Codex unload the thread, so the next session loads it with Desk's tools.
 - Review says why it could not read the changes, such as a diff too large to read. It used to show no changes.
 - Each client connected to the core gets its own thread rows, so what one is sent no longer changes what another is sent next.
-- On the agy CLI, the model picker offers only Supervised, the one mode the CLI honours. Accept edits and Bypass used to ask anyway.
 - A task one agent hands another stays with the thread that started it. A plugin thread that runs in the background no longer shows its tasks in the thread the tab moved to, and stopping the visible thread no longer stops them.
 - Send now leaves a queued message in the queue while a turn runs on an agent that cannot take a message mid-turn. It used to start a second turn.
 - A long queued message wraps inside its dashed box. Its text ran past the box's right edge.

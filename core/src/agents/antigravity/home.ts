@@ -1,30 +1,56 @@
-import { existsSync } from "node:fs"
+import { existsSync, readdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { deskHome, instanceHome, writeJsonFile } from "../../data-files"
+import { deskHome, instanceHome } from "../../data-files"
+import { isNewer } from "../versions"
 
 /** The file an install writes last. A folder without it is never run. */
 const INSTALLED_MARKER = ".installed"
+const VERSION = /^\d+\.\d+\.\d+$/
 
-/** Where Desk keeps Antigravity's files: its runtime, its sign-in, its threads and its models. */
+/** The `agy` CLI's program, as Google's archive names it. */
+export const EXECUTABLE = "antigravity"
+
+/** Where Desk keeps Antigravity's files: its installs, its sign-in, its threads and its models. */
 export const antigravityHome = () => join(deskHome(), "agents", "antigravity")
 
-/** The folder a runtime version is installed in. */
+/** The folder a version is installed in. */
 export const runtimeFolder = (version: string) => join(antigravityHome(), version)
 
-/** Marks a version's folder as installed. The marker holds the version, because an earlier Desk reads it from there. */
-export const markInstalled = (version: string) => writeJsonFile(join(runtimeFolder(version), INSTALLED_MARKER), { version })
+/** Marks a version's folder as installed. */
+export const markInstalled = (version: string) => writeFileSync(join(runtimeFolder(version), INSTALLED_MARKER), "")
 
 /** Whether a version's install finished. */
 export const isInstalled = (version: string) => existsSync(join(runtimeFolder(version), INSTALLED_MARKER))
 
+/** Every version whose folder Antigravity's home holds, finished or not. */
+export function versionFolders(): string[] {
+  try {
+    return readdirSync(antigravityHome()).filter((name) => VERSION.test(name))
+  } catch {
+    return []
+  }
+}
+
+/** The versions whose install finished, newest first. */
+export const installedVersions = () =>
+  versionFolders()
+    .filter(isInstalled)
+    .sort((a, b) => (isNewer(a, b) ? -1 : isNewer(b, a) ? 1 : 0))
+
 /**
- * Antigravity's own folder for this Desk, as GEMINI_HOME. It holds the Google sign-in, so the agent never
- * reads the account, settings or MCP servers of an Antigravity the user runs elsewhere.
+ * Antigravity's own folder for this Desk, which the CLI takes as `--gemini-dir`. It holds the Google
+ * sign-in, so the agent never reads the account, settings or MCP servers of an Antigravity the user runs elsewhere.
  */
 export const geminiHome = () => join(antigravityHome(), "home")
 
+/**
+ * The CLI's folder, as `--app-data-dir`, which the CLI joins beneath `geminiHome`. Google's ACP server
+ * kept its sign-in and conversations there, so those of an install Desk made before the CLI carry over.
+ */
+export const APP_DATA = "antigravity-acp"
+
 /** The token the agent writes once the user has signed in. */
-export const tokenPath = () => join(geminiHome(), "antigravity-acp", "acp_token.json")
+export const tokenPath = () => join(geminiHome(), APP_DATA, "acp_token.json")
 
 export const threadsFolder = () => join(antigravityHome(), "threads")
 
@@ -35,7 +61,7 @@ export const modelsPath = () => join(antigravityHome(), "models.json")
 export const signInFolder = () => join(antigravityHome(), "sign-in")
 
 /**
- * Where each process unpacks itself, about 1 GB per launch. It is the running Desk's own, so clearing
- * what a Desk left behind never touches what another Desk runs.
+ * Where Google's ACP server, which an earlier Desk ran, unpacked itself, about 1 GB per start. A crash
+ * left it behind. The CLI does not unpack, so its install removes the folder.
  */
-export const runtimeTemp = () => join(instanceHome(), "agents", "antigravity", "tmp")
+export const serverTemp = () => join(instanceHome(), "agents", "antigravity", "tmp")

@@ -21,13 +21,14 @@ export const FAKE_OPTIONS: ConfigOption[] = [
 /**
  * An ACP agent for tests, as a process that runs no program. It answers the client's requests with
  * `handlers`, else with a default answer, and records every message the client wrote. A prompt waits
- * until the test ends the turn. The test can send updates and requests of its own, print stray lines, and
- * end the process.
+ * until the test ends the turn. The test can send updates and requests of its own, print stray lines on
+ * stdout or stderr, and end the process.
  */
 export function fakeAcpAgent(handlers: Record<string, Handler> = {}) {
   const written: Message[] = []
   let exit: (code: number) => void = () => {}
   let stderr = ""
+  const stderrListeners: ((line: string) => void)[] = []
   let nextId = 1
   const waiting = new Map<number | string, (result: unknown) => void>()
   let endPrompt: ((stopReason: string) => void) | undefined
@@ -69,6 +70,7 @@ export function fakeAcpAgent(handlers: Record<string, Handler> = {}) {
     ...transport,
     close: end,
     stderr: () => stderr,
+    onStderrLine: (listener) => void stderrListeners.push(listener),
     exited: new Promise<number>((resolve) => (exit = resolve)),
   }
 
@@ -89,6 +91,8 @@ export function fakeAcpAgent(handlers: Record<string, Handler> = {}) {
     },
     /** Prints a line that is not a message. */
     print: (line: string) => say(line),
+    /** Prints a line on stderr. */
+    printError: (line: string) => stderrListeners.forEach((listener) => listener(line)),
     /** Ends the running prompt's turn. */
     endTurn: (stopReason = "end_turn") => endPrompt?.(stopReason),
     /** Ends the process, after printing `text` on stderr. */

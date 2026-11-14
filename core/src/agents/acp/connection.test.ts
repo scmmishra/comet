@@ -9,11 +9,10 @@ const CLIENT_INFO = { name: "fake-client", version: "1.0.0" }
 
 test("initializes without offering Desk's files or terminals, then authenticates", async () => {
   const agent = fakeAcpAgent()
-  const connection = await AcpConnection.open(agent.process, client, { clientInfo: CLIENT_INFO, authMethod: "fake-auth" })
+  await AcpConnection.open(agent.process, client, { clientInfo: CLIENT_INFO, authMethod: "fake-auth" })
   expect(agent.written.map((message) => message.method)).toEqual(["initialize", "authenticate"])
   expect(agent.sent("initialize")[0]).toEqual({ protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: CLIENT_INFO })
   expect(agent.sent("authenticate")[0]).toEqual({ methodId: "fake-auth" })
-  expect(connection.agent.agentInfo?.name).toBe("fake-acp")
   expect(agent.written.every((message) => message.jsonrpc === "2.0")).toBe(true)
 })
 

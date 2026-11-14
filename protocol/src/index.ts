@@ -385,7 +385,7 @@ export interface AgentVersion {
   /** The newest version on the user's update channel. */
   readonly latest?: string
   readonly updateAvailable: boolean
-  /** Whether Desk can update it, with the agent's own updater. */
+  /** Whether Desk can update it. */
   readonly updatable: boolean
 }
 
@@ -876,7 +876,7 @@ export type ClientMessage =
   | { readonly type: "agents.get" }
   /** Reads every agent's plan usage again. The core answers with `agents`. */
   | { readonly type: "usage.get" }
-  /** Updates an agent with its own updater. The core answers with `agents` once it is done. */
+  /** Updates an agent to its newest version. The core answers with `agents` once it is done. */
   | { readonly type: "agent.update"; readonly agent: AgentId }
   /** Installs an agent that has `install`. The core answers with `agents` as it goes. */
   | { readonly type: "agent.install"; readonly agent: AgentId }

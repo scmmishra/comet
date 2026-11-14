@@ -32,3 +32,13 @@ test("kills a program that ignores SIGTERM after its grace period", async () => 
   expect(await exitWithin(program.exited, 1000)).toBe("running")
   expect(await exitWithin(program.exited, 3000)).not.toBe("running")
 }, 10_000)
+
+test("hands each stderr line to its listeners, and keeps the end of stderr", async () => {
+  const program = run(["/bin/sh", "-c", "printf 'one\\ntw' >&2; sleep 0.1; printf 'o\\n' >&2"])
+  const heard: string[] = []
+  program.onStderrLine((line) => void heard.push(line))
+  await program.exited
+  await Bun.sleep(20)
+  expect(heard).toEqual(["one", "two"])
+  expect(program.stderr()).toBe("one\ntwo")
+})

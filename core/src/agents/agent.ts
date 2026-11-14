@@ -30,7 +30,7 @@ export interface Agent {
   commands?(dir: string): Promise<Skill[] | null>
   /** The MCP servers the agent loads in a folder, for an agent that has `mcp`. */
   readonly mcp?: AgentMcp
-  /** Updates the agent with its own updater. It runs to its end, since stopping an updater midway can leave the agent broken. */
+  /** Updates the agent to its newest version. It runs to its end, since stopping an updater midway can leave the agent broken. */
   update?(): Promise<void>
   /** Installs the agent on this Mac. It stops, and leaves the install as it was, once `signal` aborts. */
   install?(signal: AbortSignal): Promise<void>

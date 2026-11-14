@@ -21,11 +21,6 @@ export interface ClientInfo {
   readonly version: string
 }
 
-export interface InitializeResult {
-  readonly protocolVersion: number
-  readonly agentInfo?: { readonly name: string; readonly version: string } | null
-}
-
 /** An MCP server the agent connects to for a session. Desk offers its tools over HTTP. */
 export interface McpServer {
   readonly type: "http"

@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, expect, test } from "bun:test"
-import { chmodSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs"
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tempFolder, useTempHome } from "../../test-support"
-import { markInstalled, runtimeFolder } from "./home"
-import { RELEASE } from "./release"
-import { environment, resolveRuntime } from "./runtime"
+import { EXECUTABLE, geminiHome, markInstalled, runtimeFolder } from "./home"
+import { environment, launch, onlyServerInstalled, resolveRuntime } from "./runtime"
+import { BROWSER_COMMAND } from "./sign-in-link"
 
 useTempHome()
 
@@ -19,49 +19,50 @@ afterEach(() => {
   else process.env.DESK_ANTIGRAVITY = saved.DESK_ANTIGRAVITY
 })
 
-/** Executable files in a new folder, by name. The folder is resolved, as the runtime resolves a server's path. */
-function programs(...names: string[]) {
-  const folder = realpathSync(tempFolder("antigravity-bin"))
-  for (const name of names) {
-    writeFileSync(join(folder, name), "#!/bin/sh\n")
-    chmodSync(join(folder, name), 0o755)
-  }
-  return folder
+/** A program in a new folder, by name, that runs `script`. */
+function program(name: string, script = "") {
+  const path = join(tempFolder("antigravity-bin"), name)
+  writeFileSync(path, `#!/bin/sh\n${script}\n`)
+  chmodSync(path, 0o755)
+  return path
 }
 
-test("finds the server on the PATH only with its harness beside its real path", () => {
+/** Installs a version as Desk would, finished or not. */
+function install(version: string, finished = true) {
+  mkdirSync(runtimeFolder(version), { recursive: true })
+  writeFileSync(join(runtimeFolder(version), EXECUTABLE), "")
+  if (finished) markInstalled(version)
+}
+
+test("runs the newest finished install of the CLI, never the ACP server an earlier Desk installed", () => {
+  install("1.4.5")
   expect(resolveRuntime()).toBeUndefined()
-  const lonely = programs(RELEASE.executable.name)
-  const paired = programs(RELEASE.executable.name, RELEASE.harness.name)
-  const linked = programs()
-  symlinkSync(join(paired, RELEASE.executable.name), join(linked, RELEASE.executable.name))
-  process.env.PATH = [lonely, linked].join(":")
-  expect(resolveRuntime()).toEqual({ kind: "server", command: [join(paired, RELEASE.executable.name)], harness: join(paired, RELEASE.harness.name) })
+  expect(onlyServerInstalled()).toBe(true)
+  install("1.5.7")
+  install("1.5.10")
+  install("1.6.0", false)
+  expect(resolveRuntime()).toEqual({ command: join(runtimeFolder("1.5.10"), EXECUTABLE), version: "1.5.10" })
+  expect(onlyServerInstalled()).toBe(false)
 })
 
-test("prefers the runtime Desk installed to the PATH, and only once its install finished", () => {
-  const onPath = programs(RELEASE.executable.name, RELEASE.harness.name)
-  process.env.PATH = onPath
-  const folder = runtimeFolder(RELEASE.version)
-  mkdirSync(folder, { recursive: true })
-  expect(resolveRuntime()?.command).toEqual([join(onPath, RELEASE.executable.name)])
-  markInstalled(RELEASE.version)
-  expect(resolveRuntime()).toEqual({ kind: "server", command: [join(folder, RELEASE.executable.name)], harness: join(folder, RELEASE.harness.name), version: RELEASE.version })
-})
-
-test("runs DESK_ANTIGRAVITY first: the agy CLI as `agy acp`, by name or path", () => {
-  const cli = programs("agy")
-  process.env.PATH = cli
+test("runs DESK_ANTIGRAVITY first, by name on the PATH or by path, with no version Desk knows", () => {
+  install("1.5.9")
+  const agy = program("agy")
+  process.env.PATH = join(agy, "..")
   process.env.DESK_ANTIGRAVITY = "agy"
-  expect(resolveRuntime()).toEqual({ kind: "cli", command: [join(cli, "agy"), "acp"] })
-  process.env.DESK_ANTIGRAVITY = join(programs(RELEASE.executable.name), RELEASE.executable.name)
+  expect(resolveRuntime()).toEqual({ command: agy })
+  process.env.DESK_ANTIGRAVITY = join(agy, "..", "missing")
   expect(resolveRuntime()).toBeUndefined()
 })
 
-test("starts without the user's Google credentials, and gives the harness only to the server", () => {
-  const server = environment({ kind: "server", command: ["server"], harness: "/rt/localharness_external" }, "/tmp/run-1")
-  // A variable set to undefined is removed from what the runtime inherits.
-  for (const name of ["GEMINI_API_KEY", "GOOGLE_APPLICATION_CREDENTIALS"]) expect(name in server && server[name] === undefined).toBe(true)
-  expect(server.ANTIGRAVITY_HARNESS_PATH).toBe("/rt/localharness_external")
-  expect("ANTIGRAVITY_HARNESS_PATH" in environment({ kind: "cli", command: ["agy", "acp"] }, "/tmp/run-2")).toBe(false)
+test("starts the CLI's ACP server in Desk's own Gemini folder, without the user's Google credentials", async () => {
+  const args = join(tempFolder("antigravity-args"), "args")
+  const agy = program("agy", `printf '%s\\n' "$@" > '${args}'`)
+  const started = launch({ command: agy }, tempFolder("antigravity-project"))
+  await started.exited
+  expect(readFileSync(args, "utf8").trim().split("\n")).toEqual(["acp", "--gemini-dir", geminiHome(), "--app-data-dir", "antigravity-acp"])
+  const env = environment()
+  // A variable set to undefined is removed from what the CLI inherits.
+  for (const name of ["GEMINI_API_KEY", "GOOGLE_APPLICATION_CREDENTIALS"]) expect(name in env && env[name] === undefined).toBe(true)
+  expect(env.BROWSER).toBe(BROWSER_COMMAND)
 })

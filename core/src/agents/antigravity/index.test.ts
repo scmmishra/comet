@@ -1,34 +1,49 @@
 import { afterAll, expect, test } from "bun:test"
+import type { AgentVersion } from "@desk/protocol"
 import { mkdirSync, writeFileSync } from "node:fs"
-import { dirname } from "node:path"
-import { useTempHome } from "../../test-support"
+import { dirname, join } from "node:path"
+import { until, useTempHome } from "../../test-support"
 import type { AgentReading } from "../agent"
 import { FAKE_OPTIONS } from "../acp/test-agent"
-import { markInstalled, modelsPath, tokenPath } from "./home"
+import { EXECUTABLE, markInstalled, modelsPath, runtimeFolder, tokenPath } from "./home"
 import { antigravityAgent } from "."
-import { modesFor } from "./modes"
 import { ModelCache } from "./models"
-import { RELEASE } from "./release"
 
 useTempHome()
-const savedPath = process.env.PATH
-process.env.PATH = ""
-afterAll(() => (process.env.PATH = savedPath))
+const saved = process.env.DESK_ANTIGRAVITY
+delete process.env.DESK_ANTIGRAVITY
+afterAll(() => {
+  if (saved !== undefined) process.env.DESK_ANTIGRAVITY = saved
+})
 
-test("reads where Antigravity stands from its files alone: missing, signed out, then ready with the cached models", async () => {
+function install(version: string) {
+  mkdirSync(runtimeFolder(version), { recursive: true })
+  writeFileSync(join(runtimeFolder(version), EXECUTABLE), "")
+  markInstalled(version)
+}
+
+test("reads where Antigravity stands from its files, then offers the update Google names", async () => {
   const readings: AgentReading[] = []
-  const agent = antigravityAgent({ publish: (reading) => void readings.push(reading), compactIdle: () => false })
+  const checked: AgentVersion = { installed: "1.5.8", latest: "1.5.9", updateAvailable: true, updatable: true }
+  const agent = antigravityAgent({ publish: (reading) => void readings.push(reading), compactIdle: () => false }, { checkForUpdate: async () => checked })
   await agent.inspect()
   expect(readings.at(-1)).toEqual({ state: "missing", problem: "Install it to use the models of your Google account." })
 
-  markInstalled(RELEASE.version)
+  // The ACP server an earlier Desk installed no longer runs, and its sign-in carries over to the CLI.
+  install("1.4.5")
   await agent.inspect()
-  const version = { installed: RELEASE.version, updateAvailable: false, updatable: false }
-  expect(readings.at(-1)).toEqual({ state: "signed-out", problem: "Sign in with your Google account to use its models.", version })
+  expect(readings.at(-1)).toEqual({ state: "missing", problem: "Desk now runs Google's Antigravity CLI, not the server it installed before. Install the CLI to go on. You stay signed in." })
+
+  install("1.5.8")
+  await agent.inspect()
+  const version = { installed: "1.5.8", updateAvailable: false, updatable: true }
+  expect(readings).toContainEqual({ state: "signed-out", problem: "Sign in with your Google account to use its models.", version })
+  await until(() => readings.at(-1)?.version === checked)
+  expect(readings.at(-1)).toEqual({ version: checked })
 
   mkdirSync(dirname(tokenPath()), { recursive: true })
   writeFileSync(tokenPath(), "{}")
-  const models = new ModelCache(modelsPath, () => modesFor("server")).learn(FAKE_OPTIONS, true)
+  const models = new ModelCache(modelsPath).learn(FAKE_OPTIONS, true)
   await agent.inspect()
-  expect(readings.at(-1)).toEqual({ state: "ready", problem: undefined, version, models })
+  expect(readings).toContainEqual({ state: "ready", problem: undefined, version, models })
 })

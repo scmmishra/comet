@@ -12,6 +12,8 @@ const KILL_AFTER_MS = 2000
 /** A program run as a peer: its stdin and stdout carry the messages, and `stderr` holds the end of what it printed there. */
 export interface Process extends Transport {
   stderr(): string
+  /** Calls `listener` with each line the program prints on stderr from now on, without its newline. */
+  onStderrLine(listener: (line: string) => void): void
   /** Resolves with the exit code once the program has ended. */
   readonly exited: Promise<number>
 }
@@ -24,9 +26,12 @@ export function run(command: string[], options: { readonly cwd?: string; readonl
   const child = spawn(command, { stdin: "pipe", stdout: "pipe", stderr: "pipe", ...(options.cwd ? { cwd: options.cwd } : {}), env: options.env as Record<string, string> })
   let tail = ""
   let closing = false
+  const listeners: ((line: string) => void)[] = []
   void (async () => {
-    const decoder = new TextDecoder()
-    for await (const chunk of child.stderr) tail = (tail + decoder.decode(chunk, { stream: true })).slice(-STDERR_TAIL)
+    for await (const line of lines(child.stderr)) {
+      tail = `${tail}${line}\n`.slice(-STDERR_TAIL)
+      for (const listener of listeners) listener(line)
+    }
   })()
   return {
     lines: lines(child.stdout),
@@ -47,6 +52,7 @@ export function run(command: string[], options: { readonly cwd?: string; readonl
       void child.exited.then(() => clearTimeout(timer))
     },
     stderr: () => tail.trim(),
+    onStderrLine: (listener) => void listeners.push(listener),
     exited: child.exited,
   }
 }
