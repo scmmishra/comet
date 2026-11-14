@@ -261,11 +261,13 @@ pub fn terminal(s: &Desk, id: &str, k: &Kit) -> El {
     let grid = col().absolute(PAD, 0.0).w(screen.size.cols as f32 * cw).children(rows);
     let cursor = screen.cursor.map(|(x, y)| el().absolute(PAD + x as f32 * cw, y as f32 * ch).size(1.5, ch).fill(ink));
     // While the terminal has the keyboard, the input method works at the caret, and what it composes
-    // shows there, underlined, until it is typed.
+    // shows there, underlined, until it is typed. On macOS the caret also makes Option the Alt key, so
+    // Option+B reaches `key_bytes` as Alt+B (Esc b). Otherwise the input method composes it into "∫" and
+    // commits that, with no key for `terminal_key`.
     let has_keyboard = s.terminals.focused.as_deref() == Some(id);
     let (cx, cy) = screen.caret;
     let caret = has_keyboard.then(|| {
-        let at = el().key("caret").absolute(PAD + cx as f32 * cw, cy as f32 * ch).h(ch).ime_cursor();
+        let at = el().key("caret").absolute(PAD + cx as f32 * cw, cy as f32 * ch).h(ch).ime_cursor().ime_option_as_alt(true);
         let preedit = &s.terminals.preedit;
         if preedit.is_empty() {
             return at.w(1.0);

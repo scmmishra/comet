@@ -7,6 +7,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 - A paragraph no longer ends on one short word. Desk wraps text as OpenCode does, so the last line takes a word from the line above.
 - Search in the command palette and in the `/` command list ignores accents and full-width letters. "cafe" finds "Café", and "ｃａｆｅ" finds "cafe".
 - A middle click on a tab closes it, as its close button does.
+- In a terminal, Option works as the Alt key on a Mac. Option+B sends Esc B to the shell. It used to type "∫". Option no longer types characters such as "∫" or "@" in a terminal.
 - The session header has a button for the project's MCP servers and skills, beside the context ring. It lists those of the tab's agent, Claude Code or Codex. A server turns on or off from its row. A skill opens its SKILL.md in the view pane. Settings no longer has MCP servers and Skills pages.
 - Desk reads Codex's MCP servers and skills. Desk turns on or off only the servers that ~/.codex/config.toml sets, since Codex lets a client write only that file. A server a project sets shows as starting with a thread, since Codex starts it only there.
 - Desk shows its tabs sooner at launch. The core starts beside the window, not after its first frame.
