@@ -7,8 +7,8 @@ bun="${DESK_BUN:-$(command -v bun)}"
 stage="$repo/dist/stage"
 cd "$repo"
 
-# The core reads Solid, the plugin package, Babel and the Agent SDK's Claude binary from disk while it
-# runs, so it ships as source with its packages instead of as one compiled file.
+# The core reads Solid, the plugin package and Babel from disk while it runs,
+# so it ships as source with its packages instead of as one compiled file.
 rm -rf "$stage"
 mkdir -p "$stage/core"
 for package in protocol plugin core; do
