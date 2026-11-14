@@ -4,6 +4,8 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- A message you steer into a Claude turn says "Waiting to steer" until Claude takes it in. Claude holds it while a tool runs in the foreground, and the message used to read as delivered.
+- A Claude tool call that Stop cuts off shows as stopped, not failed.
 - A paragraph no longer ends on one short word. Desk wraps text as OpenCode does, so the last line takes a word from the line above.
 - Search in the command palette and in the `/` command list ignores accents and full-width letters. "cafe" finds "Café", and "ｃａｆｅ" finds "cafe".
 - A middle click on a tab closes it, as its close button does.

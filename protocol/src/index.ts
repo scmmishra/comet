@@ -67,11 +67,20 @@ export interface ImageAttachment {
 export type ThreadItem =
   /**
    * A message that starts a turn. `at` is when it was sent, in milliseconds since the epoch, when that is
-   * known. `steered` marks one sent into a turn that was still running. `selfStarted` marks a turn the
-   * agent started itself: a background task finished, or a subagent or another session sent it a message.
-   * Its text says which.
+   * known. `steered` marks one sent into a turn that was still running. `waiting` marks a steered message
+   * the agent has not taken in yet, such as while a tool runs. `selfStarted` marks a turn the agent started
+   * itself: a background task finished, or a subagent or another session sent it a message. Its text says which.
    */
-  | { readonly type: "user"; readonly id: string; readonly text: string; readonly images?: readonly ImageAttachment[]; readonly at?: number; readonly steered?: boolean; readonly selfStarted?: boolean }
+  | {
+      readonly type: "user"
+      readonly id: string
+      readonly text: string
+      readonly images?: readonly ImageAttachment[]
+      readonly at?: number
+      readonly steered?: boolean
+      readonly waiting?: boolean
+      readonly selfStarted?: boolean
+    }
   /**
    * Assistant text. `at` is when it finished. Text still streaming is not done and has none. `interrupted`
    * marks a reply that a steered message cut short.
@@ -81,7 +90,8 @@ export type ThreadItem =
   | { readonly type: "thinking"; readonly id: string; readonly text?: string; readonly kind: StepKind; readonly label: string }
   /**
    * A tool call. `summary` is what it was given in short, such as its command or path, relative to the
-   * project. A call that edits a file carries the file's path and its edits.
+   * project. A call that edits a file carries the file's path and its edits. A result is `stopped` when
+   * the user stopped the call while it ran.
    */
   | {
       readonly type: "tool"
@@ -90,7 +100,7 @@ export type ThreadItem =
       readonly summary: string
       readonly file?: string
       readonly edits?: readonly TextEdit[]
-      readonly result?: { readonly output: string; readonly isError: boolean }
+      readonly result?: { readonly output: string; readonly isError: boolean; readonly stopped?: boolean }
       readonly kind: StepKind
       readonly label: string
     }

@@ -50,6 +50,10 @@ const MESSAGE_IMAGE: [f32; 2] = [240.0, 192.0];
 const BOX_RADIUS: f32 = 10.0;
 /// A message's bubble, `rounded-3xl`.
 const BUBBLE_RADIUS: f32 = 12.0;
+/// The mark above a message sent into a running turn, once the agent took it in.
+const STEERED: &str = "Steered";
+/// The mark above a steered message the agent has not taken in yet, such as while a tool runs.
+const STEER_WAITING: &str = "Waiting to steer";
 
 const ICON_BY_KIND: [(StepKind, &Icon); 7] = [
     (StepKind::Thought, &ic::OUTLINE_BRAIN),
@@ -247,9 +251,11 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
             .items_center()
             .child(icon(&ic::OUTLINE_CONSOLE, STEP_ICON).color(k.c.text_faint))
             .child(c.small(words.clone()).color(k.c.text_faint).truncate()),
-        ThreadItem::User { text: words, steered, images, at, .. } => {
+        ThreadItem::User { text: words, steered, waiting, images, at, .. } => {
+            // A steered message the agent has not taken in yet says so, so it does not read as delivered.
+            let mark = if *waiting { STEER_WAITING } else { STEERED };
             let steered = steered.then(|| {
-                row().gap(4.0).items_center().child(icon(&ic::ARROW_UP_RIGHT, crate::icons::SIZE).color(k.c.text_faint)).child(text("Steered").font(crate::theme::text(12.0)).color(k.c.text_faint))
+                row().gap(4.0).items_center().child(icon(&ic::ARROW_UP_RIGHT, crate::icons::SIZE).color(k.c.text_faint)).child(text(mark).font(crate::theme::text(12.0)).color(k.c.text_faint))
             });
             // The text shrinks and wraps inside the bubble's cap, as `w-fit max-w-[80%]` lays it out.
             let bubble = el().max_w(c.bubble_max).min_w(0.0).fill(k.c.layer_02).radius(BUBBLE_RADIUS).px(BUBBLE_PAD_X).py(9.0).child(
@@ -477,7 +483,8 @@ fn step_view(c: &Ctx, item: &ThreadItem) -> El {
     let k = c.k;
     let id = item.id();
     let (kind, label) = step_name(item);
-    let failed = matches!(item, ThreadItem::Tool { result: Some(r), .. } if r.is_error);
+    // A call the user stopped did not fail, so it keeps the plain ink.
+    let failed = matches!(item, ThreadItem::Tool { result: Some(r), .. } if r.is_error && !r.stopped);
     let has_detail = match item {
         ThreadItem::Thinking { text, .. } => text.is_some(),
         ThreadItem::Tool { edits, result, kind, .. } => *kind == StepKind::Command || edits.as_ref().is_some_and(|e| !e.is_empty()) || result.is_some(),

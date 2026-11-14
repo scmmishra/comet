@@ -242,7 +242,7 @@ mod tests {
     }
 
     fn user(id: &str, self_started: bool) -> ThreadItem {
-        ThreadItem::User { id: id.into(), text: "hi".into(), images: vec![], at: None, steered: false, self_started }
+        ThreadItem::User { id: id.into(), text: "hi".into(), images: vec![], at: None, steered: false, waiting: false, self_started }
     }
 
     #[test]

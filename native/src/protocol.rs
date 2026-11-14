@@ -267,6 +267,9 @@ pub struct TextEdit {
 pub struct ToolResult {
     pub output: String,
     pub is_error: bool,
+    /// The user stopped the call while it ran, so it did not fail.
+    #[serde(default)]
+    pub stopped: bool,
 }
 
 /// A file a turn changed, without its diff.
@@ -574,6 +577,9 @@ pub enum ThreadItem {
         /// Sent into a turn that was still running.
         #[serde(default)]
         steered: bool,
+        /// A steered message the agent has not taken in yet.
+        #[serde(default)]
+        waiting: bool,
         /// A turn the agent started itself. Its text says why.
         #[serde(default)]
         self_started: bool,
@@ -1177,8 +1183,10 @@ mod tests {
             _ => None,
         });
         let items = history.expect("a history fixture");
-        assert!(matches!(&items[0], ThreadItem::User { steered: true, .. }));
+        assert!(matches!(&items[0], ThreadItem::User { steered: true, waiting: false, .. }));
+        assert!(items.iter().any(|i| matches!(i, ThreadItem::User { steered: true, waiting: true, .. })));
         assert!(items.iter().any(|i| matches!(i, ThreadItem::Tool { kind: StepKind::Command, result: Some(_), .. })));
+        assert!(items.iter().any(|i| matches!(i, ThreadItem::Tool { result: Some(r), .. } if r.is_error && r.stopped)));
         let rows = messages.iter().find_map(|m| match m {
             CoreMessage::SessionRows { rows, .. } => Some(rows),
             _ => None,
