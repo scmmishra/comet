@@ -322,7 +322,7 @@ mod tests {
     }
 
     fn retry(attempt: u32) -> ThreadEvent {
-        ThreadEvent::Retry(Retry { attempt, max_retries: 10, delay_ms: 1500.0, error: "Overloaded".into() })
+        ThreadEvent::Retry(Retry { attempt, max_retries: Some(10), delay_ms: 1500.0, error: "Overloaded".into() })
     }
 
     #[test]

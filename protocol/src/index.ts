@@ -221,8 +221,11 @@ export type ThreadEvent =
    * time, so Force stop can end it. The turn's end clears it.
    */
   | { readonly kind: "stopping"; readonly since: number; readonly unresponsive: boolean }
-  /** A request to the API failed and the agent tries again, as attempt `attempt` of `maxRetries`, after `delayMs`. More output or a status clears it. */
-  | { readonly kind: "retry"; readonly attempt: number; readonly maxRetries: number; readonly delayMs: number; readonly error: string }
+  /**
+   * A request to the API failed and the agent tries again, as attempt `attempt` of `maxRetries`, after `delayMs`.
+   * A retry with no `maxRetries` has no limit, such as Codex waiting for the network. More output or a status clears it.
+   */
+  | { readonly kind: "retry"; readonly attempt: number; readonly maxRetries?: number; readonly delayMs: number; readonly error: string }
 
 /** A command the agent left running in the background, such as a long review or a dev server. */
 export interface BackgroundTask {

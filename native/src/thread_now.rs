@@ -51,13 +51,16 @@ fn stop_line(s: &Desk, tab: &str, stop: &Stopping, k: &Kit) -> El {
     line("stop-notice", mark, ink, title, description.map(str::to_owned), k).child(elapsed).children(force)
 }
 
-/// "Retrying (2/10)", with why and when, as a quiet line rather than an error.
+/// "Retrying (2/10)", or "Retrying (6)" with no limit, with why and when, as a quiet line rather than an error.
 fn retry_line(retry: &Retry, k: &Kit) -> El {
     line("retry-note", &ic::REFRESH, k.c.text_faint, &retry_title(retry), Some(retry_detail(retry)), k)
 }
 
 fn retry_title(retry: &Retry) -> String {
-    format!("Retrying ({}/{})", retry.attempt, retry.max_retries)
+    match retry.max_retries {
+        Some(max) => format!("Retrying ({}/{max})", retry.attempt),
+        None => format!("Retrying ({})", retry.attempt),
+    }
 }
 
 /// Why the request failed, and when the agent tries again, after T3 Code's `providerErrorPresentation`.
@@ -93,12 +96,13 @@ mod tests {
     use super::*;
 
     fn retry(delay_ms: f64) -> Retry {
-        Retry { attempt: 2, max_retries: 10, delay_ms, error: "Overloaded ".into() }
+        Retry { attempt: 2, max_retries: Some(10), delay_ms, error: "Overloaded ".into() }
     }
 
     #[test]
     fn a_retry_says_its_attempt_why_and_when() {
         assert_eq!(retry_title(&retry(0.0)), "Retrying (2/10)");
+        assert_eq!(retry_title(&Retry { max_retries: None, ..retry(0.0) }), "Retrying (2)");
         assert_eq!(retry_detail(&retry(0.0)), "Overloaded");
         assert_eq!(retry_detail(&retry(1500.0)), "Overloaded Retrying in 1.5s.");
         assert_eq!(retry_detail(&retry(2000.0)), "Overloaded Retrying in 2s.");

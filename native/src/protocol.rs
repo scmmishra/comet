@@ -716,11 +716,12 @@ pub enum ThreadEvent {
 }
 
 /// A failed request to the API that the agent tries again, as attempt `attempt` of `max_retries`, after `delay_ms`.
+/// A retry without `max_retries` has no limit.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Retry {
     pub attempt: u32,
-    pub max_retries: u32,
+    pub max_retries: Option<u32>,
     pub delay_ms: f64,
     /// Why the request failed.
     pub error: String,
@@ -1200,6 +1201,14 @@ mod tests {
                 assert!(!matches!(event, ThreadEvent::Other), "an event the app reads: {event:?}");
             }
         }
+        let limits: Vec<_> = messages
+            .iter()
+            .filter_map(|m| match m {
+                CoreMessage::SessionEvent { event: ThreadEvent::Retry(retry), .. } => Some(retry.max_retries),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(limits, [Some(10), None], "a retry may come without a limit");
     }
 
     #[test]

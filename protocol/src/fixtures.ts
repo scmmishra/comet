@@ -110,6 +110,7 @@ export const CORE_MESSAGES = [
   { type: "session.event", tabId: "tab-1", event: { kind: "context", reading: { percent: 20, tokens: 40_000, maxTokens: 200_000 } } },
   { type: "session.event", tabId: "tab-1", event: { kind: "stopping", since: 1_700_000_100_000, unresponsive: true } },
   { type: "session.event", tabId: "tab-1", event: { kind: "retry", attempt: 2, maxRetries: 10, delayMs: 1_500, error: "Overloaded" } },
+  { type: "session.event", tabId: "tab-1", event: { kind: "retry", attempt: 6, delayMs: 0, error: "Waiting for the network" } },
   { type: "thread.branch", tabId: "tab-1", branch: "login" },
   { type: "thread.branch", tabId: "tab-2" },
   {

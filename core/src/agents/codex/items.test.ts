@@ -30,6 +30,16 @@ test("shows a web search by its query, and a compaction while it runs and once d
   expect(threadItems(DIR, { type: "contextCompaction", id: "c1" }, true)).toEqual([{ type: "compaction", id: "c1", status: "done" }])
 })
 
+test("shows an image Codex generates by its prompt, with where Codex saved it or why it failed", () => {
+  const image = { type: "imageGeneration", id: "ig_1", status: "generating", revisedPrompt: "A red fox in snow\nWatercolor", failure: null } as const
+  expect(threadItems(DIR, image, false)).toEqual([{ type: "tool", id: "ig_1", name: "ImageGeneration", summary: "A red fox in snow", kind: "other", label: "Generated an image: A red fox in snow" }])
+  expect(threadItems(DIR, { ...image, status: "completed", savedPath: "/Users/ada/.codex/generated_images/ig_1.png" }, true)[0]).toMatchObject({
+    result: { output: "/Users/ada/.codex/generated_images/ig_1.png", isError: false },
+  })
+  expect(threadItems(DIR, { ...image, status: "failed", failure: { type: "usageLimitExceeded" } }, true)[0]).toMatchObject({ result: { output: "The image generation limit is used up.", isError: true } })
+  expect(threadItems(DIR, { ...image, revisedPrompt: null }, false)[0]).toMatchObject({ summary: "", label: "Generated an image" })
+})
+
 test("shows an agent Codex starts, and leaves out its other agent calls and the user's messages", () => {
   expect(threadItems(DIR, { type: "subAgentActivity", id: "s1", kind: "started", agentThreadId: "t", agentPath: "/root/say_hello" }, true)[0]).toMatchObject({ label: "Started an agent: say_hello" })
   expect(threadItems(DIR, { type: "subAgentActivity", id: "s2", kind: "completed", agentThreadId: "t", agentPath: "/root/say_hello" }, true)).toEqual([])
