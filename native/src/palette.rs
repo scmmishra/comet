@@ -336,13 +336,12 @@ impl Desk {
         if matches!(self.palette.pages.last(), Some(Page::Files(_))) {
             return entries;
         }
-        let query = self.palette.query.text.to_lowercase();
-        let words: Vec<&str> = query.split_whitespace().collect();
+        let query = &self.palette.query.text;
         entries
             .into_iter()
             .filter(|e| {
-                let haystack = format!("{} {} {}", e.title, e.detail.as_deref().unwrap_or(""), e.section).to_lowercase();
-                words.iter().all(|w| haystack.contains(w))
+                let haystack = format!("{} {} {}", e.title, e.detail.as_deref().unwrap_or(""), e.section);
+                query.split_whitespace().all(|w| crate::search::contains(&haystack, w))
             })
             .collect()
     }
@@ -621,6 +620,17 @@ mod tests {
         assert_eq!(titles(&s), ["Speed up the build"]);
         s.palette.query = TextEdit::new("api");
         assert!(titles(&s).contains(&"api".to_owned()), "a search from the root finds projects too");
+    }
+
+    #[test]
+    fn a_search_ignores_accents_and_full_width_letters() {
+        let mut s = desk();
+        s.show_palette(Vec::new());
+        s.plugins.setups = vec![crate::protocol::ProjectSetup { project: "/code/web".into(), id: "cafe".into(), title: "Café menu".into() }];
+        s.palette.query = TextEdit::new("cafe");
+        assert!(titles(&s).contains(&"Café menu".to_owned()), "a plain query finds an accented title");
+        s.palette.query = TextEdit::new("ｂｕｉｌｄ speed");
+        assert_eq!(titles(&s), ["Speed up the build"], "a full-width word matches its plain form");
     }
 
     #[test]

@@ -39,19 +39,18 @@ pub fn complete(text: &str, start: usize, caret: usize, inserted: &str) -> (Stri
 /// that hold it, then descriptions that hold it, each in the list's own order. A command whose name an
 /// earlier one already took is left out, so Desk's own /model and /clear win over Claude Code's.
 pub fn match_commands<'a, T>(commands: &'a [T], query: &str, name: impl Fn(&T) -> &str, description: impl Fn(&T) -> &str) -> Vec<&'a T> {
-    let wanted = query.to_lowercase();
     let mut seen = std::collections::HashSet::new();
     let mut found: Vec<(u8, usize, &T)> = commands
         .iter()
         .enumerate()
         .filter(|(_, c)| seen.insert(name(c).to_owned()))
         .filter_map(|(i, c)| {
-            let n = name(c).to_lowercase();
-            let rank = if n.starts_with(&wanted) {
+            let n = name(c);
+            let rank = if crate::search::starts_with(n, query) {
                 0
-            } else if n.contains(&wanted) {
+            } else if crate::search::contains(n, query) {
                 1
-            } else if description(c).to_lowercase().contains(&wanted) {
+            } else if crate::search::contains(description(c), query) {
                 2
             } else {
                 return None;
@@ -87,5 +86,14 @@ mod tests {
         let commands = [("model", "Switch the model"), ("clear", "Start fresh"), ("pdf", "Read a model card"), ("remodel", "x"), ("model", "Claude Code's own")];
         let found: Vec<&str> = match_commands(&commands, "mod", |c| c.0, |c| c.1).into_iter().map(|c| c.0).collect();
         assert_eq!(found, ["model", "remodel", "pdf"]);
+    }
+
+    #[test]
+    fn ignores_accents_and_full_width_letters() {
+        let commands = [("résumé", "Pick up where it stopped"), ("clear", "Start fresh")];
+        let names = |query: &str| -> Vec<&str> { match_commands(&commands, query, |c| c.0, |c| c.1).into_iter().map(|c| c.0).collect() };
+        assert_eq!(names("resume"), ["résumé"], "a plain query finds an accented name");
+        assert_eq!(names("ｃｌｅ"), ["clear"], "a full-width query finds a plain name");
+        assert_eq!(names(""), ["résumé", "clear"], "an empty query lists every command");
     }
 }

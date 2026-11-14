@@ -34,6 +34,7 @@ mod questions;
 mod reply;
 mod rewind;
 mod scenes;
+mod search;
 mod session_menu;
 mod settings;
 mod shell;
