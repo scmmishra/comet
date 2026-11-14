@@ -623,6 +623,18 @@ mod tests {
     }
 
     #[test]
+    fn a_middle_click_closes_a_tab() {
+        let mut rt = runtime(vec![tab("a", "First"), tab("b", "Second")], "b");
+        let (x, y) = rt.find("tab-a").expect("the first tab");
+        rt.button_down(x, y, rune::PointerButton::Middle);
+        rt.button_up(x, y, rune::PointerButton::Middle);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.state.workspace.tabs.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), ["b"]);
+        assert_eq!(rt.state.workspace.active.as_deref(), Some("b"), "closing another tab keeps the active one");
+        assert!(rt.state.core.sent().iter().any(|m| m["type"] == "tabs.save"), "the close is saved");
+    }
+
+    #[test]
     fn an_empty_window_with_no_project_asks_for_a_folder() {
         let mut rt = runtime(vec![], "none");
         rt.frame(1.0 / 60.0);
