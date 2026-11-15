@@ -6,9 +6,9 @@ publish = false
 
 [dependencies]
 # Rune is pre-release. Apps pin a rev of its `dev` branch, which is never rewritten.
-rune = { git = "https://github.com/anomalyco/rune", rev = "e1263a8afb3ae4e79882b25e72904bb43a97573a", features = ["native-file-dialog", "svg"] }
-rune-kit = { git = "https://github.com/anomalyco/rune", rev = "e1263a8afb3ae4e79882b25e72904bb43a97573a", features = ["markdown"] }
-rune-theme-opencode = { git = "https://github.com/anomalyco/rune", rev = "e1263a8afb3ae4e79882b25e72904bb43a97573a" }
+rune = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e", features = ["native-file-dialog", "svg"] }
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e", features = ["markdown"] }
+rune-theme-opencode = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
 alacritty_terminal = "0.26"
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }
@@ -16,14 +16,15 @@ serde_json = "1"
 tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
 
 # Rune builds against its own copies of these crates, and a dependency's `[patch]` does not reach
-# Desk. Without them Desk builds against the stock crates and loses Rune's input method and text
-# shaping fixes. The list follows the `[patch.crates-io]` table in Rune's root `Cargo.toml`, at the
-# same rev as above.
+# Desk. Without them Desk builds against the stock crates and loses Rune's input method, text
+# shaping and VoiceOver heading fixes. The list follows the `[patch.crates-io]` table in Rune's root
+# `Cargo.toml`, at the same rev as above.
 [patch.crates-io]
-winit = { git = "https://github.com/anomalyco/rune", rev = "e1263a8afb3ae4e79882b25e72904bb43a97573a" }
-parley_engine = { git = "https://github.com/anomalyco/rune", rev = "e1263a8afb3ae4e79882b25e72904bb43a97573a" }
-wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "e1263a8afb3ae4e79882b25e72904bb43a97573a" }
-accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "e1263a8afb3ae4e79882b25e72904bb43a97573a" }
+winit = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
+parley_engine = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
+wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
+accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
+accesskit_macos = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
 
 # Rune's own profiles. Full debug info for Rune made one test build take tens of GB of memory.
 [profile.dev]
