@@ -5,6 +5,14 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 ## Unreleased
 
 - Desk has a second colour theme, Verdigris by Karan Sharma, in its light flavour Limestone and its dark flavour Slate. Settings › Appearance shows each theme as a card with its two flavours. Pressing a flavour uses that theme in that mode. Mode tiles for System, Light and Dark replace the Theme menu.
+- `/rename` in a Claude thread renames its tab.
+- A message sent just as a Claude turn ends shows as the next turn's first message, below that turn's result.
+- A background subagent no longer shows as running after Claude Code exits or its tab's session closes.
+- When Desk cannot show an MCP server's question to Claude, Claude tells the server it was cancelled, not declined.
+- When Codex or Antigravity fails to start or ends early, the error shows how it ended and the last lines it printed. A Codex that never answers at start no longer blocks every Codex tab: Desk stops it after 30 seconds and starts a new one.
+- A Codex web search that never completes shows as not finished when its turn ends, not as running.
+- An Antigravity turn that the agent refuses, or that stops at its token or request limit, now says why.
+- Desk runs on a newer Rune. VoiceOver finds the headings in a Markdown file and says their level. A long paste into the composer no longer holds up the window, and each undo step is smaller. Desk gives back memory while it sits idle.
 - Desk runs Antigravity as Google's `agy` CLI, in place of Google's ACP server. It installs the newest CLI from Google's release channel. Settings shows its version and offers Update when Google publishes a newer one. An Antigravity that Desk installed before needs one Install in Settings. You stay signed in.
 - Antigravity offers Supervised, Auto-accept edits and Auto, as the CLI has them. It has no Full access.
 - When Claude Code retries a failed API request and the retry works, the retry notice goes as soon as the new reply starts. It used to stay while Claude wrote a long tool input, such as a file to write.

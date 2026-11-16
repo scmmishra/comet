@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, jest, test } from "bun:test"
 import { until } from "../../test-support"
 import { fakeAppServer } from "./test-app-server"
 import { AppServer } from "./server"
@@ -50,4 +50,42 @@ test("tells each owner once the app-server ends, and starts a new one on the nex
   expect(lost).toEqual(["The agent's process ended."])
   await server.version()
   expect(codex.launches).toBe(2)
+})
+
+test("closes an app-server that never answers initialize after 30 seconds, and starts a new one on the next request", async () => {
+  const codex = fakeAppServer()
+  codex.answer("initialize", () => new Promise(() => {}))
+  const server = new AppServer(codex.launch)
+  jest.useFakeTimers()
+  let failure: Error | undefined
+  try {
+    // Both callers share the one pending connection.
+    const waiting = [server.version(), server.request("account/read")].map((call) => call.catch((error: Error) => (failure = error)))
+    await Promise.resolve()
+    jest.advanceTimersByTime(30_000 - 1)
+    expect(failure).toBeUndefined()
+    jest.advanceTimersByTime(1)
+    await Promise.all(waiting)
+  } finally {
+    jest.useRealTimers()
+  }
+  expect(failure?.message).toBe("Codex did not answer its first message in 30 seconds, so Desk stopped it. The next request starts it again.")
+  expect(codex.launches).toBe(1)
+  codex.answer("initialize", { userAgent: "desk/0.167.0 (Mac OS 26.6.2; arm64)" })
+  expect(await server.version()).toBe("0.167.0")
+  expect(codex.launches).toBe(2)
+})
+
+test("an app-server that answers initialize in time is not closed", async () => {
+  const codex = fakeAppServer()
+  const server = new AppServer(codex.launch)
+  jest.useFakeTimers()
+  try {
+    await server.version()
+    jest.advanceTimersByTime(60_000)
+  } finally {
+    jest.useRealTimers()
+  }
+  expect(await server.version()).toBe("0.167.0")
+  expect(codex.launches).toBe(1)
 })

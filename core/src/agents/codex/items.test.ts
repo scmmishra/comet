@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { threadItems } from "./items"
+import { mayStayOpen, threadItems, unfinishedItems } from "./items"
 
 const DIR = "/p"
 
@@ -52,4 +52,21 @@ test("marks a declined command as failed, and cuts long output", () => {
   const [found] = threadItems(DIR, command, true)
   expect(found).toMatchObject({ label: "Failed rm", result: { isError: true } })
   expect(found?.type === "tool" && found.result?.output.length).toBe(4002)
+})
+
+test("shows an open web search as one that did not finish, with its turn's end deciding whether it is an error", () => {
+  const search = { type: "webSearch", id: "w1", query: "bun 1.4 release" } as const
+  const unfinished = (result: { output: string; isError: boolean; stopped?: boolean }) => ({ type: "tool" as const, id: "w1", name: "WebSearch", summary: "bun 1.4 release", result, kind: "web" as const, label: "Did not finish searching the web for bun 1.4 release" })
+  expect(unfinishedItems(DIR, search, "completed")).toEqual([unfinished({ output: "The search did not finish.", isError: false })])
+  expect(unfinishedItems(DIR, search, "failed")).toEqual([unfinished({ output: "The search did not finish.", isError: true })])
+  expect(unfinishedItems(DIR, search, "interrupted")).toEqual([unfinished({ output: "The search did not finish.", isError: true, stopped: true })])
+})
+
+test("shows an open compaction as stopped, or failed when the turn failed", () => {
+  const compaction = { type: "contextCompaction", id: "c1" } as const
+  expect(unfinishedItems(DIR, compaction, "completed")).toEqual([{ type: "compaction", id: "c1", status: "stopped" }])
+  expect(unfinishedItems(DIR, compaction, "interrupted")).toEqual([{ type: "compaction", id: "c1", status: "stopped" }])
+  expect(unfinishedItems(DIR, compaction, "failed")).toEqual([{ type: "compaction", id: "c1", status: "failed" }])
+  expect(mayStayOpen(compaction)).toBe(true)
+  expect(mayStayOpen({ type: "agentMessage", id: "a1", text: "" })).toBe(false)
 })

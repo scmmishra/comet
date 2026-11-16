@@ -129,6 +129,30 @@ test("cancels a turn and waits for its prompt to answer, then ends it as stopped
   expect(run.last("result")).toMatchObject({ isError: false, stopped: true })
 })
 
+test.each([
+  ["refusal", "The agent refused this request. Its next turn won't include this message or its reply."],
+  ["max_tokens", "The agent stopped because its reply reached the output token limit."],
+  ["max_turn_requests", "The agent stopped because it reached its request limit for this turn."],
+])("tells the user why a turn that stopped on %s did not finish", async (stopReason, sentence) => {
+  const run = start()
+  run.session.send("Hello")
+  await until(() => run.agent().sent("session/prompt").length === 1)
+  run.agent().endTurn(stopReason)
+  await until(() => !run.session.busy)
+  expect(run.items().filter((item) => item.type === "error")).toMatchObject([{ message: sentence }])
+  expect(run.last("result")).toMatchObject({ isError: true })
+})
+
+test.each(["end_turn", "cancelled"])("shows no reason for a turn that stopped on %s", async (stopReason) => {
+  const run = start()
+  run.session.send("Hello")
+  await until(() => run.agent().sent("session/prompt").length === 1)
+  run.agent().endTurn(stopReason)
+  await until(() => !run.session.busy)
+  expect(run.items().filter((item) => item.type === "error")).toEqual([])
+  expect(run.last("result")).toMatchObject({ isError: false })
+})
+
 test("asks for permission, answers with the chosen option, and cancels open requests on close", async () => {
   const run = start()
   run.session.send("Run tests")
@@ -176,13 +200,13 @@ test("fails the turn when the agent prints a sign-in link instead of answering, 
   }
 })
 
-test("fails a turn whose process dies with the end of its stderr, and resumes the session on the next message", async () => {
+test("fails a turn whose process dies with its exit code and the end of its stderr, and resumes the session on the next message", async () => {
   const run = start()
   run.session.send("Hello")
   await until(() => run.agent().sent("session/prompt").length === 1)
-  run.agent().die("Traceback: out of memory")
+  run.agent().die("Traceback: out of memory", 3)
   await until(() => !run.session.busy)
-  expect(run.last("error")?.message).toBe("The agent's process ended.\n\nTraceback: out of memory")
+  expect(run.last("error")?.message).toBe("The fake agent exited with code 3.\n\nTraceback: out of memory")
 
   run.agents.push(fakeAcpAgent())
   run.session.send("Again")

@@ -3,7 +3,7 @@ import { deskToolLabel, deskToolSummary, SERVER_NAME } from "../../delegate/tool
 import { firstLine } from "../../text"
 import { commandLabel, cutOutput, relativeTo, thought, tool } from "../steps"
 import { fileEdits } from "./diff"
-import type { CodexItem, FileUpdate } from "./protocol"
+import type { CodexItem, CodexTurn, FileUpdate } from "./protocol"
 import { shellScript } from "./shell"
 
 /** A tool call's arguments beyond this many characters are cut in its summary. */
@@ -60,6 +60,22 @@ export function threadItems(dir: string, item: CodexItem, done: boolean, at?: nu
     default:
       return []
   }
+}
+
+/** Whether Codex may start the item and never complete it, so the thread shows it running after its turn ended. */
+export const mayStayOpen = (item: CodexItem) => item.type === "webSearch" || item.type === "contextCompaction"
+
+/**
+ * An item the turn left open, as it shows once the turn ended. A search that did not finish has no result
+ * to show, so its step says so. It is an error when the turn failed or the user stopped it, after T3 Code.
+ */
+export function unfinishedItems(dir: string, item: CodexItem, turn: CodexTurn["status"]): ThreadItem[] {
+  if (item.type === "contextCompaction") return [{ type: "compaction", id: item.id, status: turn === "failed" ? "failed" : "stopped" }]
+  return threadItems(dir, item, true).map((found) =>
+    found.type === "tool"
+      ? tool({ ...found, result: { output: "The search did not finish.", isError: turn !== "completed", ...(turn === "interrupted" ? { stopped: true } : {}) } }, "web", `Did not finish searching the web for ${found.summary}`)
+      : found,
+  )
 }
 
 /** One file of a patch, with its path relative to the project. */

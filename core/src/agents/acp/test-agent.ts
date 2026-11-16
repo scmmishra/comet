@@ -1,5 +1,5 @@
 import { memoryTransport } from "../../test-support"
-import type { Process } from "../process"
+import { explainEnd, type Process, type Spawned } from "../process"
 import type { ConfigOption, SessionUpdate } from "./protocol"
 
 type Message = { readonly jsonrpc?: string; readonly id?: number | string; readonly method?: string; readonly params?: any; readonly result?: any; readonly error?: any }
@@ -28,6 +28,7 @@ export function fakeAcpAgent(handlers: Record<string, Handler> = {}) {
   const written: Message[] = []
   let exit: (code: number) => void = () => {}
   let stderr = ""
+  let exitCode = 1
   const stderrListeners: ((line: string) => void)[] = []
   let nextId = 1
   const waiting = new Map<number | string, (result: unknown) => void>()
@@ -42,7 +43,7 @@ export function fakeAcpAgent(handlers: Record<string, Handler> = {}) {
   })
   const end = () => {
     hangUp()
-    exit(1)
+    exit(exitCode)
   }
   const defaults: Record<string, Handler> = {
     initialize: () => ({ protocolVersion: 1, agentCapabilities: { sessionCapabilities: { resume: {} } }, agentInfo: { name: "fake-acp", version: "1.0.0" } }),
@@ -66,13 +67,17 @@ export function fakeAcpAgent(handlers: Record<string, Handler> = {}) {
       )
   }
 
-  const process: Process = {
+  const program: Spawned = {
     ...transport,
     close: end,
     stderr: () => stderr,
     onStderrLine: (listener) => void stderrListeners.push(listener),
     exited: new Promise<number>((resolve) => (exit = resolve)),
+    drained: Promise.resolve(),
+    signal: () => null,
   }
+  // As a flavor's launch gives its process, so a test sees the errors a real agent's end gives.
+  const process: Process = explainEnd(program, "The fake agent")
 
   return {
     process,
@@ -95,9 +100,10 @@ export function fakeAcpAgent(handlers: Record<string, Handler> = {}) {
     printError: (line: string) => stderrListeners.forEach((listener) => listener(line)),
     /** Ends the running prompt's turn. */
     endTurn: (stopReason = "end_turn") => endPrompt?.(stopReason),
-    /** Ends the process, after printing `text` on stderr. */
-    die(text = "") {
+    /** Ends the process with `code`, after printing `text` on stderr. */
+    die(text = "", code = 1) {
       stderr = text
+      exitCode = code
       end()
     },
   }

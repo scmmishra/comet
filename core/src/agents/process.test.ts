@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import { lines, run } from "./process"
+import { explainEnd, lines, run } from "./process"
+import { JsonRpc } from "./json-rpc"
 
 test("splits a byte stream into lines across chunks, and keeps a last line with no newline", async () => {
   const encode = (text: string) => new TextEncoder().encode(text)
@@ -41,4 +42,37 @@ test("hands each stderr line to its listeners, and keeps the end of stderr", asy
   await Bun.sleep(20)
   expect(heard).toEqual(["one", "two"])
   expect(program.stderr()).toBe("one\ntwo")
+})
+
+/** Asks a program over JSON-RPC, as Desk does, and gives how the request failed. */
+async function failureOf(command: string[]) {
+  const rpc = new JsonRpc(explainEnd(run(command), "Codex"), { notification: () => {}, request: () => {}, closed: () => {} }, { versioned: false })
+  return rpc.request("initialize").then(
+    () => undefined,
+    (error: Error) => error.message,
+  )
+}
+
+test("a program that prints to stderr and exits says so in the error of a request it never answered", async () => {
+  expect(await failureOf(["/bin/sh", "-c", "echo 'fake codex: config.toml is broken at line 7' >&2; exit 3"])).toBe("Codex exited with code 3.\n\nfake codex: config.toml is broken at line 7")
+})
+
+test("the error names a request made after the program had exited, not EPIPE", async () => {
+  const program = run(["/bin/sh", "-c", "echo 'gone' >&2; exit 3"])
+  await program.exited
+  const rpc = new JsonRpc(explainEnd(program, "Codex"), { notification: () => {}, request: () => {}, closed: () => {} }, { versioned: false })
+  await Bun.sleep(50)
+  const error = await rpc.request("initialize").catch((error: Error) => error.message)
+  expect(error).toBe("Codex exited with code 3.\n\ngone")
+})
+
+test("the error names the signal that ended the program, and keeps only the last lines of stderr", async () => {
+  const noise = Array.from({ length: 12 }, (_, i) => `line ${i + 1}`).join("\\n")
+  expect(await failureOf(["/bin/sh", "-c", `printf '${noise}\\n' >&2; kill -9 $$`])).toBe("Codex was ended by SIGKILL.\n\nline 8\nline 9\nline 10\nline 11\nline 12")
+  const long = await failureOf(["/bin/sh", "-c", "head -c 3000 /dev/zero | tr '\\0' x >&2; exit 1"])
+  expect(long).toMatch(/^Codex exited with code 1\.\n\n…x{500}$/)
+})
+
+test("a program that exits with nothing on stderr gives only how it exited", async () => {
+  expect(await failureOf(["/bin/sh", "-c", "exit 0"])).toBe("Codex exited with code 0.")
 })
