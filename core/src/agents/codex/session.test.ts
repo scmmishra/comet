@@ -231,6 +231,47 @@ test("forces a stop that Codex did not answer", async () => {
   expect(s.session.busy).toBe(false)
 })
 
+test.each([
+  ["completed", { isError: false }],
+  ["failed", { isError: true }],
+  ["interrupted", { isError: true, stopped: true }],
+] as const)("a web search a %s turn left open gets a result before the turn's result, and a finished one keeps its own", async (status, flags) => {
+  const s = setup()
+  await started(s)
+  s.codex.notify(...item("item/started", { type: "webSearch", id: "w1", query: "bun release" }))
+  s.codex.notify(...item("item/started", { type: "webSearch", id: "w2", query: "rune kit" }))
+  s.codex.notify(...item("item/started", { type: "contextCompaction", id: "c1" }))
+  s.codex.notify(...item("item/completed", { type: "webSearch", id: "w2", query: "rune kit" }))
+  await until(() => s.items().some((found) => found.id === "w2" && found.type === "tool" && found.result))
+  expect(s.items().filter((found) => found.id === "w1")).toHaveLength(1)
+  s.codex.notify("turn/completed", { threadId: THREAD, turn: turn(status, { error: status === "failed" ? { message: "No." } : null }) })
+  await until(() => !s.session.busy)
+  const settled = s.items().filter((found) => found.id === "w1" && found.type === "tool" && found.result)
+  expect(settled).toEqual([expect.objectContaining({ result: { output: "The search did not finish.", ...flags }, label: "Did not finish searching the web for bun release" })])
+  expect(s.items().filter((found) => found.id === "w2" && found.type === "tool" && found.result)).toEqual([expect.objectContaining({ result: { output: "", isError: false } })])
+  expect(s.last("compaction")).toEqual({ type: "compaction", id: "c1", status: status === "failed" ? "failed" : "stopped" })
+  expect(s.items().findIndex((found) => found.id === "w1" && found.type === "tool" && found.result)).toBeLessThan(s.items().findIndex((found) => found.type === "result"))
+})
+
+test("an open web search settles when the app-server dies or a stop is forced, and not again on the next turn", async () => {
+  const s = setup()
+  await started(s)
+  s.codex.notify(...item("item/started", { type: "webSearch", id: "w1", query: "one" }))
+  await until(() => s.items().some((found) => found.id === "w1"))
+  s.codex.hangUp()
+  await until(() => !s.session.busy)
+  expect(s.items().filter((found) => found.id === "w1" && found.type === "tool" && found.result)).toHaveLength(1)
+  s.session.send("Again")
+  await until(() => s.codex.sent("turn/start").length === 2)
+  s.codex.notify("turn/started", { threadId: THREAD, turn: turn("inProgress") })
+  s.codex.notify(...item("item/started", { type: "webSearch", id: "w2", query: "two" }))
+  await until(() => s.items().some((found) => found.id === "w2"))
+  void s.session.interrupt()
+  expect(s.session.forceStop()).toBe(true)
+  expect(s.items().filter((found) => found.id === "w1" && found.type === "tool" && found.result)).toHaveLength(1)
+  expect(s.items().filter((found) => found.id === "w2" && found.type === "tool" && found.result)).toEqual([expect.objectContaining({ result: { output: "The search did not finish.", isError: true, stopped: true } })])
+})
+
 const ANSWERS: [PermissionAnswer, string][] = [
   ["allow", "accept"],
   ["allow-session", "acceptForSession"],

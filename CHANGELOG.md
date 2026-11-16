@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- A Codex web search that never completes shows as not finished when its turn ends, not as running.
 - An Antigravity turn that the agent refuses, or that stops at its token or request limit, now says why.
 - Desk runs on a newer Rune. VoiceOver finds the headings in a Markdown file and says their level. A long paste into the composer no longer holds up the window, and each undo step is smaller. Desk gives back memory while it sits idle.
 - Desk runs Antigravity as Google's `agy` CLI, in place of Google's ACP server. It installs the newest CLI from Google's release channel. Settings shows its version and offers Update when Google publishes a newer one. An Antigravity that Desk installed before needs one Install in Settings. You stay signed in.
