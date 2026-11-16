@@ -46,17 +46,20 @@ pub static ANTIGRAVITY: Icon = Icon {
     ),
 };
 
-/// The panel toggle: a window with its right side marked, filled while the panel is open.
-pub static PANEL: Icon = Icon {
-    name: "panel",
-    view: 16.0,
-    body: r#"<rect x="2" y="2.5" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/><path d="M10 2.5v11" fill="none" stroke="currentColor" stroke-width="1.25"/>"#,
-};
-pub static PANEL_OPEN: Icon = Icon {
-    name: "panel-open",
-    view: 16.0,
-    body: r#"<rect x="2" y="2.5" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/><path d="M10 2.5v11" fill="none" stroke="currentColor" stroke-width="1.25"/><rect x="10" y="2.5" width="4" height="11" fill="currentColor"/>"#,
-};
+macro_rules! panel_body {
+    ($fill:literal) => {
+        concat!(
+            r#"<rect x="9.5" y="2.5" width="4" height="11" fill="currentColor" fill-opacity=""#, $fill, r#""/>"#,
+            r#"<path d="M2.5 2.5H13.5V13.5H2.5ZM9.5 2.5V13.5" fill="none" stroke="currentColor" stroke-miterlimit="10" stroke-linecap="square"/>"#,
+        )
+    };
+}
+
+/// The panel toggle: the catalog's `LAYOUT_RIGHT_PARTIAL` while closed and `LAYOUT_RIGHT_FULL` while open,
+/// redrawn on this 16-unit grid. The catalog draws them on a 20-unit grid, so at the kit's 16 points their
+/// lines fall between pixels and blur. Here every line lands on whole pixels, like the header's other icons.
+pub static PANEL: Icon = Icon { name: "panel", view: 16.0, body: panel_body!("0.16") };
+pub static PANEL_OPEN: Icon = Icon { name: "panel-open", view: 16.0, body: panel_body!("1") };
 
 /// A file's icon from the OpenCode catalog, with one swap: a README is a Markdown file,
 /// so it takes the Markdown mark, not the catalog's info badge.

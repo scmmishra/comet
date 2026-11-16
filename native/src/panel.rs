@@ -210,7 +210,7 @@ impl Desk {
     }
 }
 
-/// The toggle in the top corner, which opens and closes the pane. Its glyph fills its right side while open.
+/// The toggle in the top corner, which opens and closes the pane. Its glyph's right side is tinted while closed and filled while open.
 pub fn toggle(open: bool, k: &Kit) -> El {
     IconButton::new(if open { &crate::icons::PANEL_OPEN } else { &crate::icons::PANEL })
         .variant(IconButtonVariant::GhostMuted)

@@ -17,9 +17,10 @@ use rune_kit::shell::WindowTitlebar;
 pub const TITLEBAR_HEIGHT: f32 = 44.0;
 /// The ground shown around the main panel, on its sides and below it.
 const PANEL_INSET: f32 = 8.0;
-/// The panel toggle's place in the session's corner: 10 and 9 points from the outside of the card, less
-/// the card's border.
-const TOGGLE_INSET: (f32, f32) = (8.0, 9.0);
+/// The panel toggle's place in the session header's corner, from its top and its right. It is where the
+/// pane's header puts the toggle, so the toggle stays put when the pane opens and lines up with the
+/// header's other buttons.
+const TOGGLE_INSET: (f32, f32) = (9.0, 10.0);
 /// How fast Rune's animations run: 1.2 plays every entry, exit and fade in five sixths of its time.
 /// Scrolling and growing lists keep their own pace.
 const ANIMATION_SPEED: f32 = 1.2;
