@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import type { RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
 import { tempFolder, until } from "../../test-support"
 import type { SessionOptions } from "../agent"
+import { unfinishedResult } from "../steps"
 import { FAKE_OPTIONS, fakeAcpAgent } from "./test-agent"
 import type { AcpFlavor } from "./flavor"
 import type { ConfigOption } from "./protocol"
@@ -213,4 +214,35 @@ test("fails a turn whose process dies with its exit code and the end of its stde
   await until(() => run.agent().sent("session/prompt").length === 1)
   expect(run.agent().sent("session/new")).toEqual([])
   expect(run.agent().sent("session/resume")[0]).toMatchObject({ sessionId: "s1", cwd: "/repo" })
+})
+
+test("ends every open tool call as unfinished when the process dies mid-turn", async () => {
+  const run = start()
+  run.session.send("Hello")
+  await until(() => run.agent().sent("session/prompt").length === 1)
+  run.agent().update({ sessionUpdate: "tool_call", toolCallId: "t1", title: "Run", kind: "execute", status: "in_progress", rawInput: { command: "npm test" } })
+  run.agent().update({ sessionUpdate: "tool_call", toolCallId: "t2", title: "Read", kind: "read", status: "pending" })
+  run.agent().update({ sessionUpdate: "tool_call", toolCallId: "t3", title: "Search", kind: "search", status: "completed" })
+  await until(() => run.items().filter((item) => item.type === "tool").length === 3)
+  run.agent().die("crashed", 1)
+  await until(() => !run.session.busy)
+  const tool = (id: string) => run.items().findLast((item) => item.type === "tool" && item.id === id)
+  expect(tool("t1")).toMatchObject({ result: unfinishedResult("failed"), label: "Failed npm" })
+  expect(tool("t2")).toMatchObject({ result: unfinishedResult("failed") })
+  expect(tool("t3")).toMatchObject({ result: { output: "", isError: false } })
+})
+
+test("ends only the tool calls the agent never started when its prompt fails with an error", async () => {
+  const run = start()
+  run.session.send("Hello")
+  await until(() => run.agent().sent("session/prompt").length === 1)
+  run.agent().update({ sessionUpdate: "tool_call", toolCallId: "t1", title: "Run", kind: "execute", status: "in_progress", rawInput: { command: "npm test" } })
+  run.agent().update({ sessionUpdate: "tool_call", toolCallId: "t2", title: "Read", kind: "read" })
+  await until(() => run.items().filter((item) => item.type === "tool").length === 2)
+  run.agent().failTurn("Internal error")
+  await until(() => !run.session.busy)
+  const tool = (id: string) => run.items().findLast((item) => item.type === "tool" && item.id === id)
+  expect(tool("t1")).not.toHaveProperty("result")
+  expect(tool("t2")).toMatchObject({ result: unfinishedResult("failed") })
+  expect(run.last("error")?.message).toBe("Internal error")
 })

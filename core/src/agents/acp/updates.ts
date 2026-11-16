@@ -1,5 +1,5 @@
 import type { ThreadEvent, ThreadItem } from "@desk/protocol"
-import { thought } from "../steps"
+import { thought, unfinishedResult } from "../steps"
 import type { SessionUpdate, ToolCall } from "./protocol"
 import { toolItem, type ToolReader } from "./tools"
 
@@ -39,6 +39,21 @@ export class UpdateMapper {
   finish(at: number): ThreadEvent[] {
     this.thinking = undefined
     return this.endText(at)
+  }
+
+  /**
+   * Ends each tool call still open as one that did not finish, in the error look, after T3 Code. With
+   * `pendingOnly`, it ends only the calls the agent never started, since an agent that is still alive may
+   * finish the rest.
+   */
+  endTools(pendingOnly: boolean): ThreadEvent[] {
+    const open = [...this.tools.values()].filter((call) => (pendingOnly ? (call.status ?? "pending") === "pending" : call.status !== "completed" && call.status !== "failed"))
+    return open.map((known) => {
+      const call: ToolCall = { ...known, status: "failed" }
+      this.tools.set(call.toolCallId, call)
+      const found = toolItem(this.dir, call, this.reader)
+      return item({ ...found, result: unfinishedResult("failed") })
+    })
   }
 
   private endText(at: number): ThreadEvent[] {

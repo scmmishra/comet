@@ -260,13 +260,18 @@ export class AcpSession implements AgentSession {
     this.endTurn(turn, { isError: unfinished !== undefined, stopped: stopReason === "cancelled" || this.stop.pending })
   }
 
-  /** Ends the turn after an error, which shows in the thread. A sign-in the agent needs signs the account out. */
+  /**
+   * Ends the turn after an error, which shows in the thread. A sign-in the agent needs signs the account out.
+   * Tool calls left open end as unfinished. An agent that answered with an error is still alive, so only the
+   * calls it never started end. Any other error means its process is gone, or Desk closed it.
+   */
   private fail(turn: NonNullable<AcpSession["turn"]>, error: unknown) {
     if (this.turn !== turn) return
     const signIn = this.signInNeeded || (error instanceof RpcError && error.code === AUTH_REQUIRED)
     this.signInNeeded = false
     const shown = signIn ? this.flavor.signedOut() : error
     if (signIn) this.process?.close()
+    for (const event of this.mapper.endTools(error instanceof RpcError && !signIn)) this.emit(event)
     this.emit({ kind: "item", item: errorItem(shown) })
     this.endTurn(turn)
   }

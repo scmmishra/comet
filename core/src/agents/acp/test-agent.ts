@@ -33,6 +33,7 @@ export function fakeAcpAgent(handlers: Record<string, Handler> = {}) {
   let nextId = 1
   const waiting = new Map<number | string, (result: unknown) => void>()
   let endPrompt: ((stopReason: string) => void) | undefined
+  let failPrompt: ((error: { code: number; message: string }) => void) | undefined
   let options = FAKE_OPTIONS
 
   const { transport, say, hangUp } = memoryTransport((line) => {
@@ -55,7 +56,11 @@ export function fakeAcpAgent(handlers: Record<string, Handler> = {}) {
       options = options.map((option) => (option.id === configId ? { ...option, currentValue: value } : option))
       return { configOptions: options }
     },
-    "session/prompt": () => new Promise((resolve) => (endPrompt = (stopReason) => resolve({ stopReason }))),
+    "session/prompt": () =>
+      new Promise((resolve, reject) => {
+        endPrompt = (stopReason) => resolve({ stopReason })
+        failPrompt = reject
+      }),
   }
   const answer = (message: Message) => {
     const handler = handlers[message.method!] ?? defaults[message.method!]
@@ -100,6 +105,8 @@ export function fakeAcpAgent(handlers: Record<string, Handler> = {}) {
     printError: (line: string) => stderrListeners.forEach((listener) => listener(line)),
     /** Ends the running prompt's turn. */
     endTurn: (stopReason = "end_turn") => endPrompt?.(stopReason),
+    /** Answers the running prompt with an RPC error, as an agent that is still alive does. */
+    failTurn: (message = "Prompt failed", code = -32603) => failPrompt?.({ code, message }),
     /** Ends the process with `code`, after printing `text` on stderr. */
     die(text = "", code = 1) {
       stderr = text
