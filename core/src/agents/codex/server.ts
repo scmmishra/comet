@@ -1,6 +1,6 @@
 import { version as coreVersion } from "../../../package.json"
 import { JsonRpc, METHOD_NOT_FOUND, RpcError, type RequestId, type Transport } from "../json-rpc"
-import { run } from "../process"
+import { explainEnd, run } from "../process"
 import { codexPath, CodexMissing } from "./executable"
 
 /** Starts an app-server and gives its stdio. A test passes its own. */
@@ -9,11 +9,17 @@ export type Launch = () => Transport
 /** How Desk names itself to Codex. The core does not know Desk's version, so it gives its own. */
 const CLIENT_INFO = { name: "desk", title: "Desk", version: coreVersion }
 
-/** Runs `codex app-server`, which speaks one JSON message per line over stdio. It throws `CodexMissing` when Desk finds no Codex. */
+/** How long Codex has to answer `initialize`, as in T3 Code. It answers in under a second, and a slow first start has room. */
+const INITIALIZE_TIMEOUT_MS = 30_000
+
+/**
+ * Runs `codex app-server`, which speaks one JSON message per line over stdio. It throws `CodexMissing` when
+ * Desk finds no Codex. If the process ends, the error says how and what it printed on stderr.
+ */
 export const launchCodex: Launch = () => {
   const path = codexPath()
   if (!path) throw new CodexMissing()
-  return run([path, "app-server"])
+  return explainEnd(run([path, "app-server"]), "Codex")
 }
 
 /** What a request or a notification about one thread carries. Codex's older approvals name the thread `conversationId`. */
@@ -95,9 +101,29 @@ export class AppServer {
       { versioned: false },
     )
     this.rpc = rpc
-    const { userAgent } = await rpc.request<{ userAgent: string }>("initialize", { clientInfo: CLIENT_INFO, capabilities: { experimentalApi: true } })
+    const { userAgent } = await this.greet(rpc)
     rpc.notify("initialized")
     return { rpc, version: installedVersion(userAgent) }
+  }
+
+  /**
+   * Greets the app-server. One that never answers would hold every request behind it, so it is closed after
+   * `INITIALIZE_TIMEOUT_MS`. Closing it clears the connection, so the next request starts a new process.
+   */
+  private async greet(rpc: JsonRpc) {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const silent = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        // Rejected first: closing fails the pending request, and its message would win the race.
+        reject(new Error(`Codex did not answer its first message in ${INITIALIZE_TIMEOUT_MS / 1000} seconds, so Desk stopped it. The next request starts it again.`))
+        rpc.close()
+      }, INITIALIZE_TIMEOUT_MS)
+    })
+    try {
+      return await Promise.race([rpc.request<{ userAgent: string }>("initialize", { clientInfo: CLIENT_INFO, capabilities: { experimentalApi: true } }), silent])
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   private route(method: string, params: ThreadParams) {

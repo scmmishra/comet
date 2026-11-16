@@ -7,7 +7,7 @@ import { Stop } from "../stopping"
 import { errorItem, forcedStop, userItem } from "../turn-items"
 import { turnError, turnResult } from "./history"
 import { userInput } from "./input"
-import { changedPaths, threadItems } from "./items"
+import { changedPaths, mayStayOpen, threadItems, unfinishedItems } from "./items"
 import { modelName, turnModel, type ModelCatalog } from "./models"
 import { runPolicy, threadPolicy } from "./permissions"
 import type { CodexConfigRead, CodexItem, CodexModel, CodexTurn, McpStartup, ReasoningSummary, TokenUsage } from "./protocol"
@@ -38,6 +38,8 @@ class Turn {
   model?: string
   /** The turn's last retry of a failed request. */
   attempt = 0
+  /** The items the turn started and has not completed, which may stay open for good, by id. */
+  readonly open = new Map<string, CodexItem>()
   readonly started: Promise<string | undefined>
   private resolve!: (id: string | undefined) => void
   /** Fails the turn once Codex has said nothing for `RETRY_STALL_MS` after a retry. */
@@ -148,6 +150,7 @@ export class CodexSession implements AgentSession, ThreadOwner {
 
   forceStop(): boolean {
     if (!this.stop.pending) return false
+    this.settleOpen("interrupted")
     this.emit({ kind: "item", item: forcedStop() })
     this.endTurn()
     return true
@@ -322,6 +325,10 @@ export class CodexSession implements AgentSession, ThreadOwner {
   private item(item: CodexItem, done: boolean) {
     this.claimAgents(item)
     if (item.type === "fileChange") this.files.set(item.id, changedPaths(this.dir, item.changes))
+    if (mayStayOpen(item)) {
+      if (done) this.turn?.open.delete(item.id)
+      else this.turn?.open.set(item.id, item)
+    }
     for (const found of threadItems(this.dir, item, done, done ? Date.now() : undefined)) this.emit({ kind: "item", item: found })
   }
 
@@ -383,6 +390,7 @@ export class CodexSession implements AgentSession, ThreadOwner {
     const turn = this.turn
     if (!turn || (turn.id !== undefined && turn.id !== ended.id)) return
     this.dismissRequests()
+    this.settleOpen(ended.status)
     if (ended.status === "failed") this.emit({ kind: "item", item: turnError(ended) })
     this.emit({ kind: "item", item: turnResult(ended, turn.message, this.stop.pending) })
     this.endTurn()
@@ -409,8 +417,15 @@ export class CodexSession implements AgentSession, ThreadOwner {
 
   private fail(error: unknown) {
     this.dismissRequests()
+    this.settleOpen("failed")
     this.emit({ kind: "item", item: errorItem(error) })
     this.endTurn()
+  }
+
+  /** Shows each item the turn left open as unfinished, so none shows as running once the turn is over. */
+  private settleOpen(status: CodexTurn["status"]) {
+    for (const open of this.turn?.open.values() ?? []) for (const item of unfinishedItems(this.dir, open, status)) this.emit({ kind: "item", item })
+    this.turn?.open.clear()
   }
 
   private dismissRequests() {

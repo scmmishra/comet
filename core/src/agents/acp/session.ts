@@ -1,6 +1,5 @@
 import { DEFAULT_MODEL, type ImageAttachment, type PermissionAnswer, type RunSettings } from "@desk/protocol"
 import { SERVER_NAME } from "../../delegate/tools"
-import { errorMessage } from "../../errors"
 import type { AgentSession, Emit, SessionOptions, ToolServer } from "../agent"
 import { RpcError } from "../json-rpc"
 import type { Process } from "../process"
@@ -16,8 +15,12 @@ import { AUTH_REQUIRED, type ConfigOption, type McpServer, type PermissionReques
 import type { AcpThreadStore, ThreadRecord } from "./thread-record"
 import { UpdateMapper } from "./updates"
 
-/** Stop reasons that mean the turn did not finish its work. */
-const ERROR_STOPS: ReadonlySet<StopReason> = new Set(["max_tokens", "max_turn_requests", "refusal"])
+/** Stop reasons that mean the turn did not finish its work, with the sentence that tells the user why. */
+const UNFINISHED_STOPS: Partial<Record<StopReason, string>> = {
+  refusal: "The agent refused this request. Its next turn won't include this message or its reply.",
+  max_tokens: "The agent stopped because its reply reached the output token limit.",
+  max_turn_requests: "The agent stopped because it reached its request limit for this turn.",
+}
 
 /** A running agent process with its session open. */
 interface Live {
@@ -47,7 +50,7 @@ export class AcpSession implements AgentSession {
   /** The session's settings as the agent last reported them. */
   private configOptions: readonly ConfigOption[] = []
   private sessionId?: string
-  /** The process of the latest start, whose stderr says why it ended. */
+  /** The process of the latest start. */
   private process?: Process
   private starting?: Promise<Live>
   private live?: Live
@@ -252,7 +255,9 @@ export class AcpSession implements AgentSession {
 
   private finish(turn: NonNullable<AcpSession["turn"]>, stopReason: StopReason) {
     if (this.turn !== turn) return
-    this.endTurn(turn, { isError: ERROR_STOPS.has(stopReason), stopped: stopReason === "cancelled" || this.stop.pending })
+    const unfinished = UNFINISHED_STOPS[stopReason]
+    if (unfinished) this.emit({ kind: "item", item: errorItem(unfinished) })
+    this.endTurn(turn, { isError: unfinished !== undefined, stopped: stopReason === "cancelled" || this.stop.pending })
   }
 
   /** Ends the turn after an error, which shows in the thread. A sign-in the agent needs signs the account out. */
@@ -260,17 +265,10 @@ export class AcpSession implements AgentSession {
     if (this.turn !== turn) return
     const signIn = this.signInNeeded || (error instanceof RpcError && error.code === AUTH_REQUIRED)
     this.signInNeeded = false
-    const message = signIn ? this.flavor.signedOut() : this.explain(error)
+    const shown = signIn ? this.flavor.signedOut() : error
     if (signIn) this.process?.close()
-    this.emit({ kind: "item", item: errorItem(message) })
+    this.emit({ kind: "item", item: errorItem(shown) })
     this.endTurn(turn)
-  }
-
-  /** An error in a sentence. One from a process that ended carries the end of what it printed, which says why. */
-  private explain(error: unknown) {
-    const message = errorMessage(error)
-    const stderr = error instanceof RpcError ? "" : (this.process?.stderr() ?? "")
-    return stderr ? `${message}\n\n${stderr}` : message
   }
 
   /** Finishes the text being written, adds the result when there is one, and saves the thread. */

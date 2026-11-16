@@ -10,7 +10,10 @@ import type { ToolReader } from "./tools"
  * their command, and what a sign-in looks like. The optional hooks cover what only some agents do.
  */
 export interface AcpFlavor {
-  /** Starts the agent's process in a folder. It throws a sentence the user reads when the agent cannot start. */
+  /**
+   * Starts the agent's process in a folder. It throws a sentence the user reads when the agent cannot start.
+   * The process should come from `explainEnd`, so that when it ends, the error says how and what it printed.
+   */
   launch(dir: string): Process
   readonly connect: ConnectOptions
   /** The agent's mode for one of Desk's permission modes. */

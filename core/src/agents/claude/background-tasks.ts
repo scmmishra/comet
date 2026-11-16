@@ -22,6 +22,13 @@ export class BackgroundTasks {
       .map((task) => ({ id: task.task_id, label: firstLine(task.description), startedAt: seen.get(task.task_id) ?? now }))
     this.emit({ kind: "background", tasks: this.tasks })
   }
+
+  /** Empties the list once Claude Code's process is gone, since its commands end with it. */
+  clear() {
+    if (!this.tasks.length) return
+    this.tasks = []
+    this.emit({ kind: "background", tasks: this.tasks })
+  }
 }
 
 function firstLine(text: string) {

@@ -83,6 +83,8 @@ export class ClaudeSession implements AgentSession {
   private settings: RunSettings
   /** Where the next query resumes, until a turn has run there. Later queries resume at the end, as usual. */
   private resumeAt?: string
+  /** The title a `/rename` gave the session, until the command's result applies it. */
+  private renamedTo?: string
 
   constructor(
     private readonly dir: string,
@@ -166,6 +168,7 @@ export class ClaudeSession implements AgentSession {
     this.closed = true
     this.stop.clear()
     this.requests.settleAll(() => ({ behavior: "deny", message: "The session was closed." }))
+    this.endWork()
     this.inbox?.close()
     this.query?.close()
   }
@@ -238,6 +241,8 @@ export class ClaudeSession implements AgentSession {
         supportedDialogKinds: ["resume_return"],
         onUserDialog: async (request) =>
           request.dialogKind === "resume_return" ? { behavior: "completed", result: this.options.compactIdle() ? "compact" : "continue" } : { behavior: "cancelled" },
+        // Desk cannot show an MCP elicitation, so the user made no choice. MCP keeps "decline" for an explicit no.
+        onElicitation: async () => ({ action: "cancel" }),
       },
     })
     void this.pump(this.query)
@@ -252,6 +257,7 @@ export class ClaudeSession implements AgentSession {
         }
         if (message.type === "rate_limit_event") this.options.onRateLimit(message.rate_limit_info)
         this.markSteersTaken(message)
+        this.followRename(message)
         this.subagents.handle(message)
         this.backgroundTasks.handle(message)
         const steer = message.type === "result" ? this.takeSteer(message) : undefined
@@ -270,6 +276,7 @@ export class ClaudeSession implements AgentSession {
         if (message.type === "result") {
           if (steer === "missed") {
             this.stop.clear()
+            this.moveMissedSteers()
             continue
           }
           this.endTurn()
@@ -309,6 +316,7 @@ export class ClaudeSession implements AgentSession {
 
   /** Lets the query go, so the next message starts Claude Code again. */
   private release() {
+    this.endWork()
     this.inbox?.close()
     this.query = undefined
     this.started = false
@@ -339,6 +347,39 @@ export class ClaudeSession implements AgentSession {
       const { waiting: _, ...taken } = item
       this.emit({ kind: "item", item: taken })
     }
+  }
+
+  /**
+   * Moves each steered message the turn ended without to after the turn's result, after T3 Code. Claude
+   * Code starts the next turn with it, so it shows as that turn's first message, and not as a steer.
+   */
+  private moveMissedSteers() {
+    if (!this.waitingSteers.size) return
+    const missed = [...this.waitingSteers.values()]
+    this.waitingSteers.clear()
+    this.emit({ kind: "items.remove", ids: missed.map((item) => item.id) })
+    for (const { waiting: _, steered: __, ...item } of missed) this.emit({ kind: "item", item })
+  }
+
+  /**
+   * Reports the session's new title after a `/rename`, after T3 Code. Claude Code reports the new title, then the command's
+   * result. It has already saved the title with the thread. The SDK does not type the title frame.
+   */
+  private followRename(message: SDKMessage) {
+    const frame = message as { type: string; subtype?: string; title?: unknown; local_command?: unknown }
+    if (frame.type === "system" && frame.subtype === "session_title_changed" && typeof frame.title === "string") {
+      this.renamedTo = frame.title.trim() || undefined
+    }
+    if (frame.type === "result" && frame.local_command === "rename" && this.renamedTo) {
+      this.options.onRenamed?.(this.renamedTo)
+      this.renamedTo = undefined
+    }
+  }
+
+  /** Claude Code's process is gone or going, and the subagents and commands it ran in the background end with it. */
+  private endWork() {
+    this.subagents.stopRunning()
+    this.backgroundTasks.clear()
   }
 
   private async reportContext(running: Query) {

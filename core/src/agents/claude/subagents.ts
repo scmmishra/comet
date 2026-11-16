@@ -78,6 +78,18 @@ export class Subagents {
     }
   }
 
+  /**
+   * Ends the subagents still running as stopped, after T3 Code, once Claude Code's process is gone. They
+   * end with it and never report it. The next process starts subagents of its own.
+   */
+  stopRunning(now = Date.now()) {
+    for (const tracked of this.byTask.values()) {
+      if (tracked.subagent.status === "running") this.update(tracked, { status: "stopped", endedAt: now })
+    }
+    this.byTask.clear()
+    this.taskByTool.clear()
+  }
+
   private update(tracked: Tracked, change: Partial<Subagent>) {
     tracked.subagent = { ...tracked.subagent, ...change }
     this.emit({ kind: "subagent", subagent: tracked.subagent })

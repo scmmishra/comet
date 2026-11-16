@@ -1,7 +1,7 @@
 import { accessSync, constants, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { which } from "../../environment"
-import { run, type Process } from "../process"
+import { explainEnd, run, type Process } from "../process"
 import { isNewer } from "../versions"
 import { APP_DATA, EXECUTABLE, geminiHome, installedVersions, runtimeFolder } from "./home"
 import { MIN_VERSION } from "./release"
@@ -55,10 +55,10 @@ function executable(path: string) {
   }
 }
 
-/** Starts the CLI's ACP server in a folder, signed in through Desk's own Gemini folder. */
+/** Starts the CLI's ACP server in a folder, signed in through Desk's own Gemini folder. If it ends, the error says how and what it printed on stderr. */
 export function launch(runtime: Runtime, dir: string): Process {
   mkdirSync(geminiHome(), { recursive: true, mode: 0o700 })
-  return run([runtime.command, "acp", "--gemini-dir", geminiHome(), "--app-data-dir", APP_DATA], { cwd: dir, env: environment() })
+  return explainEnd(run([runtime.command, "acp", "--gemini-dir", geminiHome(), "--app-data-dir", APP_DATA], { cwd: dir, env: environment() }), "Antigravity")
 }
 
 /** The variables the CLI starts with, on top of the core's. A variable set to undefined is removed. */

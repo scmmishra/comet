@@ -591,6 +591,8 @@ export class Window {
         const parked = id ? this.state.keyed[id] : undefined
         if (id && parked) this.persist({ keyed: { ...this.state.keyed, [id]: { ...parked, sessionId, agent: agent.id } } })
       },
+      // The app names the tab and saves it, as after a rename from Desk. A parked thread's tab shows another thread.
+      onRenamed: (title) => current() && this.hooks.broadcast({ type: "tab.title", tabId: tab.id, title }),
     })
     const created: Live = { session, handoffs }
     this.sessions.set(tab.id, created)
