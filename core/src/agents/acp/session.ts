@@ -1,6 +1,5 @@
 import { DEFAULT_MODEL, type ImageAttachment, type PermissionAnswer, type RunSettings } from "@desk/protocol"
 import { SERVER_NAME } from "../../delegate/tools"
-import { errorMessage } from "../../errors"
 import type { AgentSession, Emit, SessionOptions, ToolServer } from "../agent"
 import { RpcError } from "../json-rpc"
 import type { Process } from "../process"
@@ -51,7 +50,7 @@ export class AcpSession implements AgentSession {
   /** The session's settings as the agent last reported them. */
   private configOptions: readonly ConfigOption[] = []
   private sessionId?: string
-  /** The process of the latest start, whose stderr says why it ended. */
+  /** The process of the latest start. */
   private process?: Process
   private starting?: Promise<Live>
   private live?: Live
@@ -266,17 +265,10 @@ export class AcpSession implements AgentSession {
     if (this.turn !== turn) return
     const signIn = this.signInNeeded || (error instanceof RpcError && error.code === AUTH_REQUIRED)
     this.signInNeeded = false
-    const message = signIn ? this.flavor.signedOut() : this.explain(error)
+    const shown = signIn ? this.flavor.signedOut() : error
     if (signIn) this.process?.close()
-    this.emit({ kind: "item", item: errorItem(message) })
+    this.emit({ kind: "item", item: errorItem(shown) })
     this.endTurn(turn)
-  }
-
-  /** An error in a sentence. One from a process that ended carries the end of what it printed, which says why. */
-  private explain(error: unknown) {
-    const message = errorMessage(error)
-    const stderr = error instanceof RpcError ? "" : (this.process?.stderr() ?? "")
-    return stderr ? `${message}\n\n${stderr}` : message
   }
 
   /** Finishes the text being written, adds the result when there is one, and saves the thread. */

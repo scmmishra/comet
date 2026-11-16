@@ -200,13 +200,13 @@ test("fails the turn when the agent prints a sign-in link instead of answering, 
   }
 })
 
-test("fails a turn whose process dies with the end of its stderr, and resumes the session on the next message", async () => {
+test("fails a turn whose process dies with its exit code and the end of its stderr, and resumes the session on the next message", async () => {
   const run = start()
   run.session.send("Hello")
   await until(() => run.agent().sent("session/prompt").length === 1)
-  run.agent().die("Traceback: out of memory")
+  run.agent().die("Traceback: out of memory", 3)
   await until(() => !run.session.busy)
-  expect(run.last("error")?.message).toBe("The agent's process ended.\n\nTraceback: out of memory")
+  expect(run.last("error")?.message).toBe("The fake agent exited with code 3.\n\nTraceback: out of memory")
 
   run.agents.push(fakeAcpAgent())
   run.session.send("Again")

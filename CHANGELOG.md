@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- When Codex or Antigravity fails to start or ends early, the error shows how it ended and the last lines it printed. A Codex that never answers at start no longer blocks every Codex tab: Desk stops it after 30 seconds and starts a new one.
 - A Codex web search that never completes shows as not finished when its turn ends, not as running.
 - An Antigravity turn that the agent refuses, or that stops at its token or request limit, now says why.
 - Desk runs on a newer Rune. VoiceOver finds the headings in a Markdown file and says their level. A long paste into the composer no longer holds up the window, and each undo step is smaller. Desk gives back memory while it sits idle.
