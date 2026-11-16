@@ -7,6 +7,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 - Desk runs on a newer Rune. A screen reader can read a composer draft of any length. A long thread lays out faster. Translucent colours and text edges look the same however a frame is drawn.
 - Desk has a second colour theme, Verdigris by Karan Sharma, in its light flavour Limestone and its dark flavour Slate. Settings › Appearance shows each theme as a card with its two flavours. Pressing a flavour uses that theme in that mode. Mode tiles for System, Light and Dark replace the Theme menu.
 - `/rename` in a Claude thread renames its tab.
+- The line that opens a turn an agent started itself stays level with its icon when its text ends in a line break.
 - A message sent just as a Claude turn ends shows as the next turn's first message, below that turn's result.
 - A background subagent no longer shows as running after Claude Code exits or its tab's session closes.
 - When Desk cannot show an MCP server's question to Claude, Claude tells the server it was cancelled, not declined.

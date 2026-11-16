@@ -250,7 +250,7 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
             .gap(8.0)
             .items_center()
             .child(icon(&ic::OUTLINE_CONSOLE, STEP_ICON).color(k.c.text_faint))
-            .child(c.small(words.clone()).color(k.c.text_faint).truncate()),
+            .child(c.small(crate::format::one_line(words)).color(k.c.text_faint).truncate()),
         ThreadItem::User { text: words, steered, waiting, images, at, .. } => {
             // A steered message the agent has not taken in yet says so, so it does not read as delivered.
             let mark = if *waiting { STEER_WAITING } else { STEERED };
