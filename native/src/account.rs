@@ -1,6 +1,6 @@
 //! What the core says about Desk's settings and the agents it runs.
 
-use crate::protocol::{AgentDefaults, AgentInfo, DeskSettings, ModelOption, PlanUsage, ProjectSettings, ThemeChoice};
+use crate::protocol::{AgentDefaults, AgentInfo, ColorTheme, DeskSettings, ModelOption, PlanUsage, ProjectSettings, ThemeChoice};
 
 /// The thread's text size before the settings arrive, as `DEFAULT_SETTINGS` has it.
 const DEFAULT_TEXT_SIZE: f32 = 14.0;
@@ -51,6 +51,11 @@ impl Account {
     /// The chosen theme. Until the core sends the settings, Desk follows macOS, so a light Mac does not open dark.
     pub fn theme(&self) -> ThemeChoice {
         self.settings.as_ref().map_or(ThemeChoice::Auto, |s| s.appearance.theme)
+    }
+
+    /// The chosen colour theme, Desk's own until the core sends the settings.
+    pub fn color_theme(&self) -> ColorTheme {
+        self.settings.as_ref().map_or(ColorTheme::Desk, |s| s.appearance.color_theme)
     }
 
     /// The thread's text size, Desk's `--desk-text-size`.

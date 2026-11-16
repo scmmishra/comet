@@ -443,11 +443,16 @@ export interface ThreadSummary {
 export const THEMES = ["dark", "light", "auto"] as const
 export type ThemeChoice = (typeof THEMES)[number]
 
+/** The colours Desk draws in. Each has a light and a dark flavour, and the theme above picks between them. */
+export const COLOR_THEMES = ["desk", "verdigris"] as const
+export type ColorTheme = (typeof COLOR_THEMES)[number]
+
 /** Thread text sizes Desk allows, in px. Outside them, text either crowds or no longer fits a line. */
 export const FONT_SIZES = { min: 11, max: 20 } as const
 
 export interface AppearanceSettings {
   readonly theme: ThemeChoice
+  readonly colorTheme: ColorTheme
   /** Thread text, in px. Code and the composer follow it. */
   readonly fontSize: number
   /** A CSS font family list for the interface. Empty means Desk's own. */
@@ -540,7 +545,7 @@ export interface DeskSettings {
 
 /** Desk's settings before anyone changes them. The app uses them until the core sends the saved ones. */
 export const DEFAULT_SETTINGS: DeskSettings = {
-  appearance: { theme: "dark", fontSize: 14, uiFont: "", codeFont: "" },
+  appearance: { theme: "dark", colorTheme: "desk", fontSize: 14, uiFont: "", codeFont: "" },
   threads: { agent: DEFAULT_AGENT, followUp: "steer", compactIdle: false },
   agents: {
     claude: { model: DEFAULT_MODEL, permissionMode: "auto" },

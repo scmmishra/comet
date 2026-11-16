@@ -41,6 +41,7 @@ mod shell;
 mod start_screen;
 mod tab_bar;
 mod theme;
+mod theme_picker;
 mod thread_now;
 mod thread_view;
 mod terminal;

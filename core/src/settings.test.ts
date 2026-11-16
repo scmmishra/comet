@@ -10,11 +10,11 @@ const settingsPath = () => join(process.env.DESK_HOME!, "settings.json")
 
 test("starts from the defaults and keeps a change across a reload", () => {
   expect(loadSettings()).toEqual(DEFAULT_SETTINGS)
-  const changed = updateSettings(DEFAULT_SETTINGS, { appearance: { theme: "light", fontSize: 15 }, threads: { agent: "codex" }, agent: { id: "codex", defaults: { model: "gpt-6-astra", effort: "ultra" } } })
+  const changed = updateSettings(DEFAULT_SETTINGS, { appearance: { theme: "light", colorTheme: "verdigris", fontSize: 15 }, threads: { agent: "codex" }, agent: { id: "codex", defaults: { model: "gpt-6-astra", effort: "ultra" } } })
   saveSettings(changed)
   expect(loadSettings()).toEqual({
     ...DEFAULT_SETTINGS,
-    appearance: { ...DEFAULT_SETTINGS.appearance, theme: "light", fontSize: 15 },
+    appearance: { ...DEFAULT_SETTINGS.appearance, theme: "light", colorTheme: "verdigris", fontSize: 15 },
     threads: { ...DEFAULT_SETTINGS.threads, agent: "codex" },
     agents: { ...DEFAULT_SETTINGS.agents, codex: { model: "gpt-6-astra", effort: "ultra", permissionMode: "auto" } },
   })
@@ -30,6 +30,7 @@ test("null clears an optional field and cannot clear a required one", () => {
 
 test("refuses values Desk cannot use", () => {
   expect(() => updateSettings(DEFAULT_SETTINGS, { appearance: { theme: "blue" as never } })).toThrow()
+  expect(() => updateSettings(DEFAULT_SETTINGS, { appearance: { colorTheme: "solarized" as never } })).toThrow()
   expect(() => updateSettings(DEFAULT_SETTINGS, { appearance: { fontSize: 40 } })).toThrow()
   expect(() => updateSettings(DEFAULT_SETTINGS, { agent: { id: "claude", defaults: { effort: " " } } })).toThrow()
   expect(() => updateSettings(DEFAULT_SETTINGS, { agent: { id: "claude", defaults: { permissionMode: "plan" as never } } })).toThrow()

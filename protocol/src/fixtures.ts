@@ -26,7 +26,7 @@ const TABS: TabInfo[] = [
 ]
 
 export const CORE_MESSAGES = [
-  { type: "settings", settings: { ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_SETTINGS.appearance, theme: "light" }, projects: { "/Users/me/code/web": { name: "Web", color: "blue" } } } },
+  { type: "settings", settings: { ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_SETTINGS.appearance, theme: "light", colorTheme: "verdigris" }, projects: { "/Users/me/code/web": { name: "Web", color: "blue" } } } },
   { type: "tabs", tabs: TABS, active: "tab-2" },
   { type: "tabs", tabs: [] },
   { type: "recent", projects: ["/Users/me/code/api", "/Users/me/code/web"] },
