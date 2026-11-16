@@ -5,7 +5,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 ## Unreleased
 
 - Desk works in Git worktrees. The branch menu on a new tab's start screen picks where the thread starts: the main checkout, a worktree that exists, or a new worktree. A new worktree goes in `~/.desk/worktrees/<repo>/`, on a `desk/` branch named from the first message, which goes out once the worktree is made.
-- A Claude or Codex thread moves into a worktree when you ask the agent to work in one. Claude moves with its own worktree tools. Codex asks Desk through Desk's new `move_to_worktree` tool. The tab moves when the turn ends, and Review, terminals, search and the Space card follow it. A thread cannot rewind to before its move. Antigravity threads stay in the folder they started in.
+- A Claude or Codex thread moves into a worktree when you ask the agent to work in one. The agent asks Desk through Desk's new `move_to_worktree` tool. Claude's own EnterWorktree tool moves it too. A worktree the agent makes for another use, such as a baseline, leaves the thread where it is. The tab moves when the turn ends, and Review, terminals, search and the Space card follow it. A thread cannot rewind to before its move. Antigravity threads stay in the folder they started in.
 - A tab in a worktree shows its repo's name and mark. Its Space card names the worktree and where it came from, and can remove it. Removing deletes the folder and closes the tab. The branch stays.
 - A repo shows once among the recent projects, by its main checkout. Its recent threads include the threads of all its worktrees, and each opens in the worktree it runs in.
 - A subagent's timer keeps counting after the turn that started it ends.

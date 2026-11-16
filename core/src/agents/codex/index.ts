@@ -26,8 +26,8 @@ export function codexAgent(host: AgentHost, launch: Launch = launchCodex): Agent
     id: "codex",
     name: "Codex",
     features: ["steer", "rewind", "fork", "rename", "delete", "mcp"],
-    // Codex has no tool to change its folder, and resumes a thread in whatever folder it is given.
-    worktreeMoves: "desk",
+    // Codex resumes a thread in whatever folder it is given.
+    movesThreads: true,
     threads: codexThreads(server),
     commands: (dir) => readSkills(server, dir),
     mcp: codexMcp(server),

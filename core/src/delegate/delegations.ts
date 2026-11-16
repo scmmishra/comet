@@ -13,8 +13,8 @@ export interface DelegationHost {
   /** Adds an event to the session's thread. */
   emit(event: ThreadEvent): void
   /**
-   * Moves the session's thread into another checkout of its repo once its turn ends, for an agent that moves
-   * through Desk. Returns the folder it moves to. A session without it is not offered `move_to_worktree`.
+   * Moves the session's thread into another checkout of its repo once its turn ends, for an agent whose
+   * threads can move. Returns the folder it moves to. A session without it is not offered `move_to_worktree`.
    */
   moveTo?(dir: string): string
 }

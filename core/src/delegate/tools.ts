@@ -40,9 +40,9 @@ export const DELEGATE: Tool = {
   },
 }
 
-/** What a session whose agent moves into worktrees through Desk is told, after `INSTRUCTIONS`. */
+/** What a session whose thread can move into a worktree is told, after `INSTRUCTIONS`. */
 export const MOVE_INSTRUCTIONS =
-  "When the user asks you to work in a git worktree, make it with `git worktree add` if it does not exist, then call `move_to_worktree` with its path. Desk then shows the worktree's changes and runs your next turns in it."
+  "When the user asks you to work in a git worktree, make it with `git worktree add` if it does not exist, then call `move_to_worktree` with its path. Desk then runs your next turns in it and shows its changes. A worktree you make for another use, such as a baseline to compare against, needs no move."
 
 export const MOVE_TO_WORKTREE: Tool = {
   name: "move_to_worktree",

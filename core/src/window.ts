@@ -667,7 +667,8 @@ export class Window {
       settings: () => this.state.tabs.find((open) => open.id === tab.id) ?? tab,
       // A task's events show only while its session's thread does.
       emit: (event) => current() && this.hooks.broadcast({ type: "session.event", tabId: tab.id, event }),
-      ...(agent.worktreeMoves === "desk" && !key ? { moveTo: (dir: string) => this.askMove(tab.id, dir) } : {}),
+      // A plugin's thread stays in the folder its key belongs to.
+      ...(agent.movesThreads && !key ? { moveTo: (dir: string) => this.askMove(tab.id, dir) } : {}),
     })
     const saveSession = (change: Partial<TabThread>) => {
       if (current()) return this.updateThread(tab.id, change)
@@ -687,8 +688,7 @@ export class Window {
       onSessionLost: () => saveSession({ sessionId: undefined, rewind: undefined }),
       // The app names the tab and saves it, as after a rename from Desk. A parked thread's tab shows another thread.
       onRenamed: (title) => current() && this.hooks.broadcast({ type: "tab.title", tabId: tab.id, title }),
-      // A plugin's thread stays in the folder its key belongs to.
-      ...(agent.worktreeMoves === "own" && !key ? { onMoved: (dir: string) => void (current() && this.askMove(tab.id, dir)) } : {}),
+      ...(agent.movesThreads && !key ? { onMoved: (dir: string) => void (current() && this.askMove(tab.id, dir)) } : {}),
     })
     const created: Live = { session, handoffs }
     this.sessions.set(tab.id, created)

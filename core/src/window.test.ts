@@ -469,12 +469,12 @@ test("a turn's end asks for the project's Space card again, as the turn may have
   expect(stale).toEqual([project])
 })
 
-/** A window with one agent that moves its threads into worktrees as `moves` says, and a repo with a worktree on `side`. */
-function openInRepo(moves: "own" | "desk", threads: { id: string; title: string; updatedAt: number }[] = []) {
+/** A window with one agent, whose threads can move into worktrees unless `moves` is false, and a repo with a worktree on `side`. */
+function openInRepo(threads: { id: string; title: string; updatedAt: number }[] = [], moves = true) {
   const repo = gitRepo({ "a.txt": "one\n" })
   const worktree = join(tempFolder("worktree"), "side")
   repo.git("worktree", "add", "-q", "-b", "side", worktree)
-  const id = moves === "own" ? "claude" : "codex"
+  const id = "claude"
   const agent = fakeAgent(id, [], threads, moves)
   const tabIn = (dir: string): TabInfo => ({ ...tab("a", dir), agent: id })
   writeFileSync(join(process.env.DESK_HOME!, "window.json"), JSON.stringify({ tabs: [tabIn(repo.dir)], threads: {}, recent: [] }))
@@ -487,7 +487,7 @@ function openInRepo(moves: "own" | "desk", threads: { id: string; title: string;
 }
 
 test("moves a thread into the worktree its agent entered once its turn ends, and resumes it there", async () => {
-  const { repo, worktree, agent, window, moved, tabIn } = openInRepo("own")
+  const { repo, worktree, agent, window, moved, tabIn } = openInRepo()
   await window.send("a", "Work in a worktree")
   agent.sessions[0]!.options.onMoved!(worktree)
   expect(moved()).toBeUndefined()
@@ -506,8 +506,8 @@ test("moves a thread into the worktree its agent entered once its turn ends, and
   expect(agent.sessions[1]!.options.resume).toBe("claude-session")
 })
 
-test("offers Desk's move tool to an agent that moves through Desk, and moves its thread after the turn", async () => {
-  const { worktree, agent, window, delegations, moved } = openInRepo("desk")
+test("offers Desk's move tool to an agent whose threads can move, and moves its thread after the turn", async () => {
+  const { worktree, agent, window, delegations, moved } = openInRepo()
   await window.send("a", "Work in a worktree")
   const tools = delegations.toolsFor(agent.sessions[0]!.options.tools!.authorization)!
   expect(tools.tools.map((tool) => tool.name)).toContain("move_to_worktree")
@@ -519,14 +519,14 @@ test("offers Desk's move tool to an agent that moves through Desk, and moves its
   expect(moved()!.project).toBe(worktree)
 })
 
-test("gives Desk's move tool only to an agent that moves through Desk", async () => {
-  const { agent, window, delegations } = openInRepo("own")
+test("gives Desk's move tool only to an agent whose threads can move", async () => {
+  const { agent, window, delegations } = openInRepo([], false)
   await window.send("a", "Hi")
   expect(delegations.toolsFor(agent.sessions[0]!.options.tools!.authorization)!.tools.map((tool) => tool.name)).not.toContain("move_to_worktree")
 })
 
 test("lists a repo's threads from every checkout, each in the folder it runs in now", async () => {
-  const { repo, worktree, agent, window, moved, tabIn } = openInRepo("own", [{ id: "claude-session", title: "Here", updatedAt: 1 }])
+  const { repo, worktree, agent, window, moved, tabIn } = openInRepo([{ id: "claude-session", title: "Here", updatedAt: 1 }])
   const [before] = await window.recentThreads(worktree)
   expect(samePath(before!.project, repo.dir)).toBe(true)
   await window.send("a", "Work in a worktree")
@@ -544,7 +544,7 @@ test("refuses a rewind to the message whose turn moved the thread, or to one bef
 })
 
 test("removes the worktree a tab works in, once no other tab works there", async () => {
-  const { repo, window, tabIn } = openInRepo("own")
+  const { repo, window, tabIn } = openInRepo()
   const made = join(tempFolder("made"), "made")
   repo.git("worktree", "add", "-q", "-b", "made", made)
   window.save([tabIn(made), { ...tabIn(made), id: "b" }], "a")
