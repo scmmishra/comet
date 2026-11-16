@@ -92,10 +92,41 @@ impl ThemeChoice {
     }
 }
 
+/// The colours Desk draws in, Desk's `ColorTheme`. Each has a light and a dark flavour.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ColorTheme {
+    #[default]
+    Desk,
+    Verdigris,
+}
+
+impl ColorTheme {
+    /// The colour themes, in the order Appearance lists them.
+    pub const ALL: [ColorTheme; 2] = [ColorTheme::Desk, ColorTheme::Verdigris];
+
+    /// The colour theme as the settings file names it.
+    pub fn id(self) -> &'static str {
+        match self {
+            ColorTheme::Desk => "desk",
+            ColorTheme::Verdigris => "verdigris",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ColorTheme::Desk => "Desk",
+            ColorTheme::Verdigris => "Verdigris",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppearanceSettings {
     pub theme: ThemeChoice,
+    #[serde(default)]
+    pub color_theme: ColorTheme,
     /// The thread's text, in points.
     pub font_size: f32,
     /// The font for everything but code, and the font for code, by family name. Empty for Geist.
@@ -1086,6 +1117,7 @@ mod tests {
         let messages = core_messages();
         let CoreMessage::Settings { settings } = &messages[0] else { panic!("settings first") };
         assert_eq!(settings.appearance.theme, ThemeChoice::Light);
+        assert_eq!(settings.appearance.color_theme, ColorTheme::Verdigris);
         assert_eq!(settings.threads.agent, "claude");
         assert_eq!(settings.agents["claude"].permission_mode, "auto");
         let CoreMessage::Tabs { tabs, active } = &messages[1] else { panic!("tabs second") };
@@ -1112,6 +1144,12 @@ mod tests {
             .filter(|name| !rune_theme_opencode::icons::ALL.iter().any(|icon| icon.name == name))
             .collect();
         assert!(missing.is_empty(), "the catalog lacks {missing:?}");
+    }
+
+    #[test]
+    fn the_app_draws_every_colour_theme_the_core_allows() {
+        let ids: Vec<String> = printed("index", "COLOR_THEMES").into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect();
+        assert_eq!(ids, ColorTheme::ALL.map(|t| t.id().to_owned()));
     }
 
     #[test]

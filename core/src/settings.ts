@@ -1,4 +1,4 @@
-import { AGENTS, DEFAULT_SETTINGS, FOLLOW_UPS, FONT_SIZES, PERMISSION_MODES, PROJECT_COLORS, THEMES, type AgentDefaults, type AgentId, type AppearanceSettings, type DeskSettings, type ProjectSettings, type SettingsChange, type ThreadSettings } from "@desk/protocol"
+import { AGENTS, COLOR_THEMES, DEFAULT_SETTINGS, FOLLOW_UPS, FONT_SIZES, PERMISSION_MODES, PROJECT_COLORS, THEMES, type AgentDefaults, type AgentId, type AppearanceSettings, type DeskSettings, type ProjectSettings, type SettingsChange, type ThreadSettings } from "@desk/protocol"
 import { readFileSync } from "node:fs"
 import { isAbsolute, join, relative } from "node:path"
 import { deskHome, writeJsonFile } from "./data-files"
@@ -19,6 +19,7 @@ const trimmed = (value: string) => value.trim() || undefined
 // Each table has a rule for every field, so a new field cannot be dropped for want of one.
 const APPEARANCE: Record<keyof AppearanceSettings, Rule> = {
   theme: { valid: (value) => THEMES.includes(value as never), message: `The theme is one of ${THEMES.join(", ")}.` },
+  colorTheme: { valid: (value) => COLOR_THEMES.includes(value as never), message: `The colour theme is one of ${COLOR_THEMES.join(", ")}.` },
   fontSize: {
     valid: (value) => Number.isInteger(value) && (value as number) >= FONT_SIZES.min && (value as number) <= FONT_SIZES.max,
     message: `The font size is a whole number from ${FONT_SIZES.min} to ${FONT_SIZES.max}.`,

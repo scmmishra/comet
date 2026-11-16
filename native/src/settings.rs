@@ -4,7 +4,7 @@
 use crate::agents::{mark, state_label, status_line};
 use crate::format;
 use crate::models::{effort_label, permission, permission_for, permission_modes};
-use crate::protocol::{AgentDefaults, AgentInfo, AgentState, AgentVersion, ClientMessage, ProjectSettings, ThemeChoice};
+use crate::protocol::{AgentDefaults, AgentInfo, AgentState, AgentVersion, ClientMessage, ColorTheme, ProjectSettings, ThemeChoice};
 use crate::shell::Desk;
 use rune::{El, Key, KeyEvent, ScrollSpec, TextEdit, col, el, icon, row, text};
 use rune_kit::{Badge, BadgeVariant, ButtonVariant, Kit, Select, Switch, TextInput};
@@ -62,6 +62,15 @@ impl Desk {
 
     pub fn set_theme(&self, theme: &str) {
         self.update_settings(json!({ "appearance": { "theme": theme } }));
+    }
+
+    pub fn set_color_theme(&self, theme: ColorTheme) {
+        self.update_settings(json!({ "appearance": { "colorTheme": theme.id() } }));
+    }
+
+    /// Uses `theme` in `mode`, as one change, so the window does not draw the step between.
+    pub fn set_look(&self, theme: ColorTheme, mode: ThemeChoice) {
+        self.update_settings(json!({ "appearance": { "colorTheme": theme.id(), "theme": mode.id() } }));
     }
 
     fn update_settings(&self, change: serde_json::Value) {
@@ -163,6 +172,11 @@ fn body(children: Vec<El>) -> El {
 
 fn section(k: &Kit, title: String, child: El) -> El {
     section_with(text(title).font(crate::theme::medium(13.0)).color(k.c.text_base), child)
+}
+
+/// A section's title with a line under it that says what it sets.
+fn heading(k: &Kit, title: &str, description: &str) -> El {
+    col().gap(4.0).child(text(title.to_owned()).font(crate::theme::medium(13.0)).color(k.c.text_base)).child(text(description.to_owned()).font(crate::theme::text(13.0).lh(20.0)).color(k.c.text_muted).wrap())
 }
 
 /// A section under a heading of the caller's making, such as a project's mark, name and folder.
@@ -420,16 +434,8 @@ fn usage_windows(usage: &crate::protocol::PlanUsage, k: &Kit) -> El {
 
 fn appearance(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
     let Some(settings) = &s.account.settings else { return col() };
-    let themes: Vec<(String, String)> = ThemeChoice::ALL.iter().map(|t| (t.id().to_owned(), t.label().to_owned())).collect();
-    let theme = settings.appearance.theme.id();
     let sizes: Vec<(String, String)> = FONT_SIZES.map(|n| (n.to_string(), format!("{n}px"))).collect();
     let rows = vec![
-        setting(
-            k,
-            title(k, "Theme"),
-            Some("System follows macOS's light or dark setting.".into()),
-            Some(select(s, k, layer, "theme", &themes, theme, |s: &mut Desk, value: &str| s.set_theme(value))),
-        ),
         setting(
             k,
             title(k, "Font size"),
@@ -453,7 +459,9 @@ fn appearance(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
             Some(field(s, k, "codeFont".into(), settings.appearance.code_font.clone(), "Geist Mono", "Code font", |s, typed| s.update_settings(json!({ "appearance": { "codeFont": typed } })))),
         ),
     ];
-    col().w_full().child(header(k, "Appearance", "How Desk looks. Changes apply at once.")).child(body(vec![list(k, rows)]))
+    let mode = section_with(heading(k, "Mode", "System follows macOS's light or dark setting."), crate::theme_picker::modes(s, k));
+    let themes = section_with(heading(k, "Theme", "Each theme has a light and a dark flavour. Pick a flavour to switch to its mode too."), crate::theme_picker::themes(s, k));
+    col().w_full().child(header(k, "Appearance", "How Desk looks. Changes apply at once.")).child(body(vec![mode, themes, list(k, rows)]))
 }
 
 fn projects(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
@@ -617,6 +625,17 @@ mod tests {
         settings.appearance.ui_font = "Inter".into();
         assert_eq!(s.account.project_label("/code/web"), "Web");
         assert_eq!(s.account.font_families().0, "Inter, Geist");
+    }
+
+    #[test]
+    fn the_colour_theme_starts_as_desk_and_a_flavour_sets_its_theme_and_mode_in_one_change() {
+        let s = desk();
+        assert_eq!(s.account.color_theme(), ColorTheme::Desk);
+        s.set_look(ColorTheme::Verdigris, ThemeChoice::Light);
+        let sent = s.core.sent();
+        let changes: Vec<_> = sent.iter().filter(|m| m["type"] == "settings.update").collect();
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0]["change"], json!({ "appearance": { "colorTheme": "verdigris", "theme": "light" } }));
     }
 
     #[test]

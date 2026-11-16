@@ -392,6 +392,7 @@ pub fn modifiers(s: &mut Desk, mods: rune::Mods, _: &mut Tx) {
 
 pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
     cx.time_scale(ANIMATION_SPEED);
+    theme::use_color_theme(s.account.color_theme());
     let k = theme::kit(s.dark(cx));
     let mut layer = Vec::new();
     let w = &s.workspace;

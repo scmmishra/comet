@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- Desk has a second colour theme, Verdigris by Karan Sharma, in its light flavour Limestone and its dark flavour Slate. Settings › Appearance shows each theme as a card with its two flavours. Pressing a flavour uses that theme in that mode. Mode tiles for System, Light and Dark replace the Theme menu.
 - Desk runs Antigravity as Google's `agy` CLI, in place of Google's ACP server. It installs the newest CLI from Google's release channel. Settings shows its version and offers Update when Google publishes a newer one. An Antigravity that Desk installed before needs one Install in Settings. You stay signed in.
 - Antigravity offers Supervised, Auto-accept edits and Auto, as the CLI has them. It has no Full access.
 - When Claude Code retries a failed API request and the retry works, the retry notice goes as soon as the new reply starts. It used to stay while Claude wrote a long tool input, such as a file to write.
