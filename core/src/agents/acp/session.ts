@@ -16,8 +16,12 @@ import { AUTH_REQUIRED, type ConfigOption, type McpServer, type PermissionReques
 import type { AcpThreadStore, ThreadRecord } from "./thread-record"
 import { UpdateMapper } from "./updates"
 
-/** Stop reasons that mean the turn did not finish its work. */
-const ERROR_STOPS: ReadonlySet<StopReason> = new Set(["max_tokens", "max_turn_requests", "refusal"])
+/** Stop reasons that mean the turn did not finish its work, with the sentence that tells the user why. */
+const UNFINISHED_STOPS: Partial<Record<StopReason, string>> = {
+  refusal: "The agent refused this request. Its next turn won't include this message or its reply.",
+  max_tokens: "The agent stopped because its reply reached the output token limit.",
+  max_turn_requests: "The agent stopped because it reached its request limit for this turn.",
+}
 
 /** A running agent process with its session open. */
 interface Live {
@@ -252,7 +256,9 @@ export class AcpSession implements AgentSession {
 
   private finish(turn: NonNullable<AcpSession["turn"]>, stopReason: StopReason) {
     if (this.turn !== turn) return
-    this.endTurn(turn, { isError: ERROR_STOPS.has(stopReason), stopped: stopReason === "cancelled" || this.stop.pending })
+    const unfinished = UNFINISHED_STOPS[stopReason]
+    if (unfinished) this.emit({ kind: "item", item: errorItem(unfinished) })
+    this.endTurn(turn, { isError: unfinished !== undefined, stopped: stopReason === "cancelled" || this.stop.pending })
   }
 
   /** Ends the turn after an error, which shows in the thread. A sign-in the agent needs signs the account out. */
