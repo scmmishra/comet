@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- A subagent's timer keeps counting after the turn that started it ends.
 - Codex in full access accepts MCP prompts, such as browser access, instead of declining them. A prompt that sends you to a web page is cancelled in every mode. A Codex request too large for the provider shows a plain message instead of the provider's HTML page.
 - Antigravity tool calls no longer show as running after the agent stops or its turn fails.
 - Tool calls no longer stay running after Claude Code exits during a turn. A Claude subagent's report shows without Claude Code's hand-back frame. A Claude tab whose conversation is gone says so, and starts a new one on the next message.

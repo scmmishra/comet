@@ -233,10 +233,16 @@ impl Desk {
         self.core.send(&ClientMessage::PermissionAnswer { tab_id: tab.to_owned(), request_id: request_id.to_owned(), answer: answer.to_owned() });
     }
 
-    /// Whether the active tab's turn, its stop or a background command runs, so the times they show count seconds.
-    fn working(&self) -> bool {
+    /// Whether the active tab's turn, its stop, a background command or a subagent runs, so the times they show
+    /// count seconds. A subagent can run on after the turn that started it has ended.
+    fn ticking(&self) -> bool {
         let thread = self.workspace.active.as_deref().and_then(|tab| self.threads.get(tab));
-        thread.is_some_and(|t| !t.background.is_empty() || t.stopping.is_some() || t.rows.iter().any(|r| matches!(r, ThreadRow::Working { .. })))
+        thread.is_some_and(|t| {
+            !t.background.is_empty()
+                || t.stopping.is_some()
+                || t.subagents.iter().any(|x| x.status == "running")
+                || t.rows.iter().any(|r| matches!(r, ThreadRow::Working { .. }))
+        })
     }
 
     fn dark(&self, cx: &Cx<Desk>) -> bool {
@@ -330,7 +336,7 @@ pub mod commands {
     }
 }
 
-/// Ticks the clock each second while a turn runs. A still window does no work.
+/// Ticks the clock each second while something with a timer runs. A still window does no work.
 pub fn poll(s: &mut Desk, _: f64, tx: &mut Tx) -> bool {
     s.sync_palette();
     s.sync_plugin_inputs();
@@ -341,7 +347,7 @@ pub fn poll(s: &mut Desk, _: f64, tx: &mut Tx) -> bool {
         let next = s.refresh_usage();
         tx.wake_after(next);
     }
-    if !s.working() {
+    if !s.ticking() {
         return composed;
     }
     let now = format::now_ms();
@@ -634,6 +640,20 @@ mod tests {
         assert_eq!(rt.state.workspace.tabs.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), ["b"]);
         assert_eq!(rt.state.workspace.active.as_deref(), Some("b"), "closing another tab keeps the active one");
         assert!(rt.state.core.sent().iter().any(|m| m["type"] == "tabs.save"), "the close is saved");
+    }
+
+    #[test]
+    fn a_subagent_running_after_its_turn_keeps_the_clock_ticking() {
+        let mut rt = runtime(vec![tab("a", "First")], "a");
+        let subagent = |status: &str| serde_json::json!({ "type": "session.event", "tabId": "a", "event": { "kind": "subagent", "subagent": { "id": "s1", "description": "Find the login tests", "type": "Explore", "status": status, "background": true, "startedAt": 0.0, "toolUses": 0, "items": [] } } });
+        for message in [subagent("running"), serde_json::json!({ "type": "session.event", "tabId": "a", "event": { "kind": "status", "busy": false } })] {
+            let message = serde_json::from_value::<CoreMessage>(message).unwrap();
+            rt.update(move |s, tx| s.receive_in(Event::Message(message), tx));
+        }
+        assert!(rt.state.ticking(), "a running subagent counts seconds with no turn running");
+        let message = serde_json::from_value::<CoreMessage>(subagent("completed")).unwrap();
+        rt.update(move |s, tx| s.receive_in(Event::Message(message), tx));
+        assert!(!rt.state.ticking(), "a finished subagent stops the clock");
     }
 
     #[test]
