@@ -578,19 +578,22 @@ export class Window {
       // A task's events show only while its session's thread does.
       emit: (event) => current() && this.hooks.broadcast({ type: "session.event", tabId: tab.id, event }),
     })
+    const saveSession = (change: Partial<TabThread>) => {
+      if (current()) return this.updateThread(tab.id, change)
+      // A parked thread keeps its session under its key, so coming back resumes it.
+      const id = key && keyedId(tab.project, key)
+      const parked = id ? this.state.keyed[id] : undefined
+      if (id && parked) this.persist({ keyed: { ...this.state.keyed, [id]: { ...parked, ...change } } })
+    }
     const session = agent.open(tab.project, emit, {
       resume: this.thread(tab.id).sessionId,
       ...(rewind ? { resumeAt: rewind.at, onResumedAt: () => current() && this.updateThread(tab.id, { rewind: undefined }) } : {}),
       settings: tab,
       tools: handoffs.tools,
-      onSessionId: (sessionId) => {
-        // The thread belongs to the agent that started it from here on.
-        if (current()) return this.updateThread(tab.id, { sessionId, agent: agent.id })
-        // A parked thread keeps its session under its key, so coming back resumes it.
-        const id = key && keyedId(tab.project, key)
-        const parked = id ? this.state.keyed[id] : undefined
-        if (id && parked) this.persist({ keyed: { ...this.state.keyed, [id]: { ...parked, sessionId, agent: agent.id } } })
-      },
+      // The thread belongs to the agent that started it from here on.
+      onSessionId: (sessionId) => saveSession({ sessionId, agent: agent.id }),
+      // A lost session is dropped with the rewind that waited on it, so neither comes back after a restart. The thread keeps its agent.
+      onSessionLost: () => saveSession({ sessionId: undefined, rewind: undefined }),
       // The app names the tab and saves it, as after a rename from Desk. A parked thread's tab shows another thread.
       onRenamed: (title) => current() && this.hooks.broadcast({ type: "tab.title", tabId: tab.id, title }),
     })

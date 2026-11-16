@@ -1,6 +1,6 @@
 import type { SDKAPIRetryMessage, SDKAssistantMessage, SDKMessage, SDKMessageOrigin, SDKPartialAssistantMessage, SessionMessage } from "@anthropic-ai/claude-agent-sdk"
 import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, type ThreadItem } from "@desk/protocol"
-import { cutOutput, relativeTo, thought } from "../steps"
+import { cutOutput, relativeTo, thought, unfinishedResult } from "../steps"
 import { deskToolSummary } from "../../delegate/tools"
 import { resultId } from "../turn-items"
 import { modelLabel } from "./models"
@@ -21,6 +21,14 @@ const SELF_STARTED = "Claude Code started a turn on its own."
  * started the subagent, so the result shows without it, after T3 Code.
  */
 const TOOLS_USED_NOTE = /^\s*<tools-used-before-summary>[^<]*<\/tools-used-before-summary>\s*/
+/**
+ * The frame Claude Code puts around a subagent's report for the model that started it, after T3 Code. A line
+ * opens it, each line of the report is indented by two spaces, and a usage block and the subagent's id follow.
+ */
+const HAND_BACK_FRAME = /^\[Subagent hand-back\] The text below is the final report of a subagent [^\n]* The report follows:\n/
+const USAGE_TRAILER = /(?:^|\n)<usage>[^<]*<\/usage>\s*$/
+const AGENT_ID_TRAILER = /(?:^|\n)agentId: ([\w-]+) \(use SendMessage with to: '\1'[^\n]*\)\s*$/
+const REPORT_INDENT = /^ {2}/gm
 
 /** Inputs that say in short what a tool call does, in the order a summary prefers them. */
 const SUMMARY_FIELDS = ["command", "file_path", "pattern", "path", "url", "query", "description", "skill"]
@@ -45,13 +53,14 @@ type ToolItem = Extract<ThreadItem, { type: "tool" }>
 
 /**
  * Turns Agent SDK messages into thread events for one project's thread. It keeps the text block being
- * streamed, so the full message that follows finishes it instead of adding a copy, and each tool call,
- * so its result can complete it.
+ * streamed, so the full message that follows finishes it instead of adding a copy, and each tool call
+ * until its result completes it.
  */
 export class ThreadMapper {
   private streaming?: string
   /** The reply the latest top-level assistant message carried, or the one streaming now, which a steer can cut short. */
   private lastReply?: { readonly id: string; text: string; readonly at?: number }
+  /** The tool calls that have no result yet, by id. */
   private tools = new Map<string, ToolItem>()
   /** The ids of the items each top-level message made, by the message's uuid, so a message that replaces it can take them out. */
   private madeBy = new Map<string, string[]>()
@@ -251,13 +260,22 @@ export class ThreadMapper {
     })
   }
 
-  /** Each result completes the tool call it answers. */
+  /** Each result completes the tool call it answers, which is then no longer open. */
   private mapToolResults(content: unknown): ThreadItem[] {
     if (!Array.isArray(content)) return []
     return content.flatMap((block): ThreadItem[] => {
       const tool = block.type === "tool_result" ? this.tools.get(String(block.tool_use_id)) : undefined
-      return tool ? [toolStep({ ...tool, result: { output: cutOutput(toolOutputText(block.content)), isError: Boolean(block.is_error) } })] : []
+      if (!tool) return []
+      this.tools.delete(tool.id)
+      return [toolStep({ ...tool, result: { output: cutOutput(toolOutputText(block.content)), isError: Boolean(block.is_error) } })]
     })
+  }
+
+  /** Ends each tool call that has no result yet, for a turn that ended without them. */
+  settleOpen(end: "failed" | "stopped"): ThreadItem[] {
+    const settled = [...this.tools.values()].map((tool) => toolStep({ ...tool, result: unfinishedResult(end) }))
+    this.tools.clear()
+    return settled
   }
 
   /**
@@ -350,9 +368,16 @@ function toolEdits(name: string, input: Record<string, unknown>): TextEdit[] | u
 }
 
 function toolOutputText(content: unknown): string {
-  if (typeof content === "string") return content.replace(TOOLS_USED_NOTE, "")
-  if (Array.isArray(content)) return content.map((part) => (part.type === "text" ? part.text : `[${part.type}]`)).join("\n").replace(TOOLS_USED_NOTE, "")
+  if (typeof content === "string") return subagentReport(content)
+  if (Array.isArray(content)) return subagentReport(content.map((part) => (part.type === "text" ? part.text : `[${part.type}]`)).join("\n"))
   return ""
+}
+
+/** A subagent's report without the notes Claude Code adds for the model that started it. Other output stays as it is. */
+function subagentReport(output: string): string {
+  const text = output.replace(TOOLS_USED_NOTE, "")
+  if (!HAND_BACK_FRAME.test(text)) return text
+  return text.replace(HAND_BACK_FRAME, "").replace(USAGE_TRAILER, "").replace(AGENT_ID_TRAILER, "").replace(REPORT_INDENT, "")
 }
 
 /** The images the user sent, as base64. Claude Code stores pasted images in the transcript this way. */

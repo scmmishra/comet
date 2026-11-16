@@ -69,7 +69,7 @@ class FakeQuery implements AsyncIterable<SDKMessage> {
   }
 }
 
-function setup() {
+function setup(resume?: string) {
   const events: ThreadEvent[] = []
   const queries: FakeQuery[] = []
   const run = ({ options }: { options?: Options }) => {
@@ -78,16 +78,25 @@ function setup() {
     return running as unknown as Query
   }
   const renames: string[] = []
+  const sessionIds: (string | undefined)[] = []
   const session = new ClaudeSession(
     DIR,
     (event) => void events.push(event),
-    { settings: SETTINGS, onSessionId: () => {}, onRenamed: (title) => void renames.push(title), onRateLimit: () => {}, compactIdle: () => false },
+    {
+      settings: SETTINGS,
+      ...(resume ? { resume } : {}),
+      onSessionId: (id) => void sessionIds.push(id),
+      onSessionLost: () => void sessionIds.push(undefined),
+      onRenamed: (title) => void renames.push(title),
+      onRateLimit: () => {},
+      compactIdle: () => false,
+    },
     run as never,
   )
   const items = () => events.flatMap((event) => (event.kind === "item" ? [event.item] : []))
   const results = () => items().filter((item): item is Extract<ThreadItem, { type: "result" }> => item.type === "result")
   const statuses = () => events.flatMap((event) => (event.kind === "status" ? [event.busy] : []))
-  return { session, events, queries, items, results, statuses, renames }
+  return { session, events, queries, items, results, statuses, renames, sessionIds }
 }
 
 /** Sends a message and waits for the session to start its query. */
@@ -372,4 +381,73 @@ test("a failure shows an error and ends the turn, and the next message starts ag
   s.session.send("Again")
   await until(() => s.queries.length === 2)
   expect(s.statuses()).toEqual([true, false, true])
+})
+
+const toolUse = (id: string, command: string) => ({ type: "assistant", uuid: `a-${id}`, session_id: "s1", parent_tool_use_id: null, message: { content: [{ type: "tool_use", id, name: "Bash", input: { command } }] } })
+const tools = (s: ReturnType<typeof setup>) => s.items().filter((item): item is Extract<ThreadItem, { type: "tool" }> => item.type === "tool")
+
+test("a turn that a dead stream or a failure ends shows its open tool calls as unfinished", async () => {
+  const s = setup()
+  const first = await started(s)
+  first.push(toolUse("call1", "npm test"))
+  await until(() => tools(s).length === 1)
+  first.end()
+  await until(() => s.statuses().length === 2)
+  expect(tools(s).at(-1)).toMatchObject({ id: "call1", label: "Failed npm", result: { output: "The tool call did not finish.", isError: true } })
+  expect(s.items().at(-1)).toMatchObject({ type: "error", message: "Claude Code exited before it finished the turn." })
+
+  s.session.send("Again")
+  await until(() => s.queries.length === 2)
+  const second = s.queries[1]!
+  second.push(toolUse("call2", "npm run build"))
+  await until(() => tools(s).length === 3)
+  second.fail(new Error("Claude Code process exited with code 1"))
+  await until(() => s.statuses().length === 4)
+  expect(tools(s).at(-1)).toMatchObject({ id: "call2", label: "Failed npm", result: { isError: true } })
+  // The first turn's call was settled already, so it is not ended twice.
+  expect(tools(s).filter((tool) => tool.id === "call1")).toHaveLength(2)
+})
+
+test("a turn the user stopped shows its open tool calls as stopped when Claude Code dies", async () => {
+  const s = setup()
+  const running = await started(s)
+  running.push(toolUse("call1", "sleep 20"))
+  await until(() => tools(s).length === 1)
+  await s.session.interrupt()
+  running.fail(new Error("Claude Code process exited with code 1"))
+  await until(() => s.statuses().length === 2)
+  expect(tools(s).at(-1)).toMatchObject({ id: "call1", label: "Stopped sleep", result: { isError: true, stopped: true } })
+})
+
+test("a conversation Claude Code cannot find to resume is dropped, and the next message starts a new one", async () => {
+  const s = setup("gone")
+  const running = await started(s)
+  expect(running.options.resume).toBe("gone")
+  // What Claude Code sends when the session behind --resume is gone, after T3 Code: an error result, then it exits.
+  running.push(result("r1", { subtype: "error_during_execution", is_error: true, session_id: "gone", errors: ["No conversation found with session ID: gone"] }))
+  running.fail(new Error("Claude Code process exited with code 1"))
+  await until(() => s.queries.length === 1 && !s.session.busy && s.items().some((item) => item.type === "error"))
+  await Bun.sleep(10)
+  const errors = s.items().filter((item) => item.type === "error")
+  expect(errors).toEqual([expect.objectContaining({ message: "Claude Code could not find the earlier conversation. Your next message starts a new conversation in this tab." })])
+  expect(s.sessionIds).toEqual([undefined])
+
+  s.session.send("Again")
+  await until(() => s.queries.length === 2)
+  expect(s.queries[1]!.options.resume).toBeUndefined()
+  s.queries[1]!.push({ type: "system", subtype: "init", uuid: "i1", session_id: "fresh", model: "claude-opus-5-5" })
+  await until(() => s.sessionIds.length === 2)
+  expect(s.sessionIds).toEqual([undefined, "fresh"])
+})
+
+test("a conversation Claude Code names as missing only in its exit error is dropped too", async () => {
+  const s = setup("gone")
+  const running = await started(s)
+  running.fail(new Error("Claude Code process exited with code 1: No conversation found with session ID: gone"))
+  await until(() => !s.session.busy)
+  expect(s.items().at(-1)).toMatchObject({ type: "error", message: expect.stringContaining("could not find the earlier conversation") })
+  expect(s.sessionIds).toEqual([undefined])
+  s.session.send("Again")
+  await until(() => s.queries.length === 2)
+  expect(s.queries[1]!.options.resume).toBeUndefined()
 })

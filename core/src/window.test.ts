@@ -178,6 +178,15 @@ function openWithAgents(state: object) {
   return { window, sent, ended, stale, claude, codex }
 }
 
+test("a session the agent lost is dropped with its rewind, so a restart does not resume it", async () => {
+  const project = tempFolder("lost")
+  const { window, sent, claude } = openWithAgents({ tabs: [tab("a", project)], threads: { a: { sessionId: "gone", agent: "claude", rewind: { at: "m1", from: "m2" } } }, recent: [] })
+  await window.send("a", "hello")
+  claude.sessions[0]!.options.onSessionLost!()
+  expect(saved().threads.a).toEqual({ agent: "claude" })
+  expect(sent).toContainEqual({ type: "thread.session", tabId: "a" })
+})
+
 test("runs a tab on the agent it names, and its thread stays on the agent that started it", async () => {
   const project = tempFolder("agents")
   const { window, sent, claude, codex } = openWithAgents({ tabs: [{ ...tab("a", project), agent: "codex" }], threads: {}, recent: [] })

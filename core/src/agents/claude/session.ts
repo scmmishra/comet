@@ -4,6 +4,7 @@ import { SERVER_NAME } from "../../delegate/tools"
 import type { AgentHost, AgentSession, Emit, SessionOptions, ToolServer } from "../agent"
 import { Requests, type OpenRequest } from "../requests"
 import { Stop } from "../stopping"
+import { errorMessage } from "../../errors"
 import { errorItem, forcedStop, userItem } from "../turn-items"
 import { readContext } from "./context"
 import { sdkEffort, sdkModel } from "./models"
@@ -52,6 +53,13 @@ export interface ClaudeSessionOptions extends SessionOptions, Pick<AgentHost, "c
 
 type RequestSuggestions = Parameters<CanUseTool>[2]["suggestions"]
 
+/**
+ * How Claude Code answers a resume whose conversation is gone, in a result's errors or in its exit error,
+ * after T3 Code. The session cannot come back, so the next message starts a new one.
+ */
+const CONVERSATION_NOT_FOUND = "No conversation found with session ID:"
+const CONVERSATION_LOST = "Claude Code could not find the earlier conversation. Your next message starts a new conversation in this tab."
+
 /** A request waiting for the user, with what Claude asked. */
 interface ClaudeRequest extends OpenRequest<PermissionResult> {
   readonly tool: string
@@ -85,6 +93,8 @@ export class ClaudeSession implements AgentSession {
   private resumeAt?: string
   /** The title a `/rename` gave the session, until the command's result applies it. */
   private renamedTo?: string
+  /** Set once Claude Code said the conversation to resume is gone, so the failure that follows adds no second error. */
+  private lost = false
 
   constructor(
     private readonly dir: string,
@@ -153,6 +163,7 @@ export class ClaudeSession implements AgentSession {
   /** After a forced stop, the window closes the session, which ends Claude Code. The next message starts a new one on the same thread. */
   forceStop(): boolean {
     if (!this.stop.pending) return false
+    this.settleOpen("stopped")
     this.emit({ kind: "item", item: forcedStop() })
     this.endTurn()
     return true
@@ -206,6 +217,7 @@ export class ClaudeSession implements AgentSession {
    */
   private async start() {
     this.started = true
+    this.lost = false
     const inbox = (this.inbox = new Inbox())
     let executable: string
     try {
@@ -251,11 +263,13 @@ export class ClaudeSession implements AgentSession {
   private async pump(running: Query) {
     try {
       for await (const message of running) {
-        if (message.session_id && message.session_id !== this.sessionId) {
+        // A session Claude Code could not find stays dropped, whatever id the rest of its frames carry.
+        if (message.session_id && message.session_id !== this.sessionId && !this.lost) {
           this.sessionId = message.session_id
           this.options.onSessionId(message.session_id)
         }
         if (message.type === "rate_limit_event") this.options.onRateLimit(message.rate_limit_info)
+        if (message.type === "result" && message.subtype !== "success" && message.errors.some((error) => error.startsWith(CONVERSATION_NOT_FOUND))) this.forget()
         this.markSteersTaken(message)
         this.followRename(message)
         this.subagents.handle(message)
@@ -304,14 +318,37 @@ export class ClaudeSession implements AgentSession {
     this.release()
   }
 
-  /** Ends the session after an error, which shows in the thread. The next message starts it again. */
+  /**
+   * Ends the session after an error, which shows in the thread. The next message starts it again. A failure
+   * after Claude Code said the conversation is gone adds no error of its own, since the thread already says why.
+   */
   private fail(error: unknown) {
     this.steering = false
     this.waitingSteers.clear()
     this.requests.settleAll(() => ({ behavior: "deny", message: "The session failed." }))
-    this.emit({ kind: "item", item: errorItem(error) })
+    this.settleOpen(this.stop.pending ? "stopped" : "failed")
+    if (!this.lost && errorMessage(error).includes(CONVERSATION_NOT_FOUND)) this.forget()
+    else if (!this.lost) this.emit({ kind: "item", item: errorItem(error) })
     this.endTurn()
     this.release()
+  }
+
+  /** Shows each tool call the turn left without a result as unfinished, so none shows as running once the turn is over. */
+  private settleOpen(end: "failed" | "stopped") {
+    for (const item of this.mapper.settleOpen(end)) this.emit({ kind: "item", item })
+  }
+
+  /**
+   * Drops a session Claude Code could not find to resume, after T3 Code. Resuming it again would fail every
+   * message, so the next message starts a new Claude session in this tab, and the tab forgets the old one.
+   */
+  private forget() {
+    if (this.lost) return
+    this.lost = true
+    this.sessionId = undefined
+    this.resumeAt = undefined
+    this.options.onSessionLost?.()
+    this.emit({ kind: "item", item: errorItem(new Error(CONVERSATION_LOST)) })
   }
 
   /** Lets the query go, so the next message starts Claude Code again. */

@@ -86,6 +86,8 @@ export interface SessionOptions {
   readonly settings: RunSettings
   /** Called when the agent names the session, so it can be resumed later. */
   readonly onSessionId: (id: string) => void
+  /** Called when the agent lost the session, such as one it could not find to resume. The next message starts a new one, so the id is dropped. */
+  readonly onSessionLost?: () => void
   /** Called when the agent renames the session itself, such as from a `/rename` in a message. The agent has already saved the title. */
   readonly onRenamed?: (title: string) => void
   readonly tools?: ToolServer

@@ -33,6 +33,16 @@ export function tool(step: Extract<BareStep, { type: "tool" }>, kind: StepKind, 
   return { ...step, kind, label: oneLine(label) }
 }
 
+/**
+ * The result of a tool call its turn ended without, after T3 Code. The call shows as stopped when the user
+ * stopped the turn, and as failed when the turn failed, so none stays running.
+ */
+export const unfinishedResult = (end: "failed" | "stopped"): NonNullable<Tool["result"]> => ({
+  output: "The tool call did not finish.",
+  isError: true,
+  ...(end === "stopped" ? { stopped: true } : {}),
+})
+
 /** A command's label: the program it runs, and whether it is running, ran, was stopped or failed. */
 export const commandLabel = (command: string, result: Tool["result"]) => `${!result ? "Running" : result.stopped ? "Stopped" : result.isError ? "Failed" : "Ran"} ${commandProgram(command)}`
 
