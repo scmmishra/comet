@@ -15,6 +15,7 @@ import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { loadSettings, saveSettings, updateSettings } from "./settings"
 import { readSpace } from "./space"
 import { Window } from "./window"
+import { createWorktree, listWorktrees } from "./worktrees"
 
 type Send = (message: CoreMessage) => void
 
@@ -80,6 +81,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     commands: (dir, reply) => reply(commandsOf(dir).list()),
     commandSources: (dir, reply) => discoverCommands(dir, new Set(commandsOf(dir).list().map((command) => command.command))).then(reply),
     threads: (dir, reply) => window.recentThreads(dir).then(reply),
+    worktrees: (dir, reply) => listWorktrees(dir).then(reply),
     icons: (dir, reply) => findIconFiles(dir).then(reply),
     skills: (dir, reply) => agents.commands(dir).then(reply),
     plugins: (dir, reply) => plugins.contributions(dir).then(reply),
@@ -161,6 +163,11 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       case "branch.restore":
         // Every client shows the project's branch, so each reads the Space card again.
         return read(await window.restoreBranch(message.tabId), "space", broadcast)
+      case "worktree.create":
+        return reply({ type: "worktree.created", tabId: message.tabId, project: await createWorktree(message.project, message.name) })
+      case "worktree.remove":
+        await window.removeWorktree(message.tabId)
+        return reply({ type: "worktree.removed", tabId: message.tabId })
       case "tasks.stop":
         return window.stopTasks(message.tabId, message.ids)
       case "permission.answer":

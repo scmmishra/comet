@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { join } from "node:path"
+import { basename, join } from "node:path"
 import { readSpace } from "./space"
 import { gitRepo, tempFolder } from "./test-support"
 
@@ -39,4 +39,14 @@ test("counts a binary file without lines", async () => {
 
 test("is null outside a repo", async () => {
   expect(await readSpace(tempFolder("plain"))).toBeNull()
+})
+
+test("names the main checkout's matching folder for a folder in a worktree", async () => {
+  const repo = gitRepo({ "app/a.ts": "one\n" })
+  const worktree = join(tempFolder("worktree"), "side")
+  repo.git("worktree", "add", "-q", "-b", "side", worktree)
+  expect((await readSpace(join(repo.dir, "app")))?.worktree).toBeUndefined()
+  const space = await readSpace(join(worktree, "app"))
+  expect(space?.branch).toBe("side")
+  expect(space?.worktree?.main.endsWith(join(basename(repo.dir), "app"))).toBe(true)
 })

@@ -2,7 +2,7 @@ import { DEFAULT_MODEL, PERMISSION_MODES, type AgentId, type AgentInfo, type Mod
 import type { AgentSession, ToolServer } from "../agents/agent"
 import type { Agents } from "../agents/registry"
 import type { ToolResult, ToolSet } from "./mcp"
-import { DELEGATE, INSTRUCTIONS, LIST_AGENTS, taskWords } from "./tools"
+import { DELEGATE, INSTRUCTIONS, LIST_AGENTS, MOVE_INSTRUCTIONS, MOVE_TO_WORKTREE, taskWords } from "./tools"
 
 /** What Desk reads about the session whose agent hands work off. */
 export interface DelegationHost {
@@ -12,6 +12,11 @@ export interface DelegationHost {
   settings(): RunSettings
   /** Adds an event to the session's thread. */
   emit(event: ThreadEvent): void
+  /**
+   * Moves the session's thread into another checkout of its repo once its turn ends, for an agent that moves
+   * through Desk. Returns the folder it moves to. A session without it is not offered `move_to_worktree`.
+   */
+  moveTo?(dir: string): string
 }
 
 /** What one session's agent may hand off: Desk's tools for it, and the tasks that run for it. */
@@ -67,7 +72,7 @@ export class Delegations {
       return !!child
     }
     return {
-      tools: { url: this.endpoint(), authorization: `Bearer ${token}`, instructions: INSTRUCTIONS },
+      tools: { url: this.endpoint(), authorization: `Bearer ${token}`, instructions: host.moveTo ? `${INSTRUCTIONS}\n${MOVE_INSTRUCTIONS}` : INSTRUCTIONS },
       answerPermission: (requestId, reply) => answer(requestId, (session) => session.answerPermission(requestId, reply)),
       answerQuestion: (requestId, answers) => answer(requestId, (session) => session.answerQuestion(requestId, answers)),
       pending: () => [...caller.children].flatMap((child) => [...child.requests.values()]),
@@ -86,11 +91,13 @@ export class Delegations {
   toolsFor(authorization: string): ToolSet | undefined {
     const caller = this.callers.get(authorization.replace(/^Bearer /, ""))
     if (!caller) return undefined
+    const { moveTo } = caller.host
     return {
-      tools: [LIST_AGENTS, DELEGATE],
+      tools: [LIST_AGENTS, DELEGATE, ...(moveTo ? [MOVE_TO_WORKTREE] : [])],
       call: async (name, input, signal) => {
         if (name === LIST_AGENTS.name) return { text: JSON.stringify({ agents: this.agents.all().flatMap((agent) => listed(this.agents.info(agent.id))) }, null, 2) }
         if (name === DELEGATE.name) return this.delegate(caller, input, signal)
+        if (name === MOVE_TO_WORKTREE.name && moveTo) return { text: `Desk moves this thread to ${moveTo(String(input.path ?? ""))} when this turn ends.` }
         throw new Error(`Desk has no tool called ${name}.`)
       },
     }

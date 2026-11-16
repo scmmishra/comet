@@ -410,6 +410,18 @@ pub struct ThreadSummary {
     pub updated_at: f64,
     /// The tab that has the thread open, if one does.
     pub tab_id: Option<String>,
+    /// The folder the thread runs in: the project's own, or the matching one in another checkout of its repo.
+    pub project: String,
+}
+
+/// A checkout of a project's repo. `path` is the folder in it that matches the project.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct Worktree {
+    pub path: String,
+    /// The branch checked out. None on a detached HEAD.
+    pub branch: Option<String>,
+    /// Whether this is the repo's main checkout.
+    pub main: bool,
 }
 
 /// Commits ahead of and behind the upstream branch.
@@ -454,10 +466,19 @@ pub struct PullRequest {
 pub struct Space {
     pub root: String,
     pub branch: String,
+    /// Set when the project is in a worktree.
+    pub worktree: Option<SpaceWorktree>,
     pub upstream: Option<Upstream>,
     #[serde(default)]
     pub changes: Changes,
     pub pr: Option<PullRequest>,
+}
+
+/// Where a worktree's repo keeps its main checkout.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct SpaceWorktree {
+    /// The folder in the main checkout that matches the project.
+    pub main: String,
 }
 
 /// A subagent the agent started in a turn, sent whole each time it changes. It runs beside the thread.
@@ -812,6 +833,15 @@ pub enum CoreMessage {
         #[serde(default)]
         branch: Option<String>,
     },
+    /// A worktree made for a tab. `project` is the folder in it that the tab moves to.
+    #[serde(rename = "worktree.created", rename_all = "camelCase")]
+    WorktreeCreated { tab_id: String, project: String },
+    /// The worktree a tab worked in is gone, so the tab closes.
+    #[serde(rename = "worktree.removed", rename_all = "camelCase")]
+    WorktreeRemoved { tab_id: String },
+    /// A tab's thread moved into another checkout of its repo. The tab moves to `project`.
+    #[serde(rename = "tab.moved", rename_all = "camelCase")]
+    TabMoved { tab_id: String, project: String },
     #[serde(rename = "session.event")]
     SessionEvent {
         #[serde(rename = "tabId")]
@@ -952,6 +982,12 @@ pub enum ClientMessage {
     /// Asks for one part of what the core reads about a project. The core answers with `project`.
     #[serde(rename = "project.get")]
     ProjectGet { project: String, part: String },
+    /// Makes a worktree from what `project` has checked out, on a branch named from `name`. The core answers with `worktree.created`.
+    #[serde(rename = "worktree.create", rename_all = "camelCase")]
+    WorktreeCreate { tab_id: String, project: String, name: String },
+    /// Removes the worktree a tab works in, with what is uncommitted in it. The core answers with `worktree.removed`.
+    #[serde(rename = "worktree.remove", rename_all = "camelCase")]
+    WorktreeRemove { tab_id: String },
     /// Replaces the commands in `replacing` with `processes`. One process saves as a plain command called
     /// `name`, several as a group called `name`.
     #[serde(rename = "commands.save")]
@@ -1172,6 +1208,8 @@ mod tests {
             ClientMessage::SessionInterrupt { tab_id: "tab-1".into() },
             ClientMessage::SessionForceStop { tab_id: "tab-1".into() },
             ClientMessage::BranchRestore { tab_id: "tab-1".into() },
+            ClientMessage::WorktreeCreate { tab_id: "tab-2".into(), project: "/Users/me/code/web".into(), name: "Add tests for the login form".into() },
+            ClientMessage::WorktreeRemove { tab_id: "tab-2".into() },
             ClientMessage::PermissionAnswer { tab_id: "tab-1".into(), request_id: "r1".into(), answer: "allow-session".into() },
             ClientMessage::QuestionAnswer { tab_id: "tab-1".into(), request_id: "r2".into(), answers: Some([("Which form?".to_owned(), "Login".to_owned())].into()) },
             ClientMessage::QuestionAnswer { tab_id: "tab-1".into(), request_id: "r2".into(), answers: None },

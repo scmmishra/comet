@@ -23,6 +23,8 @@ export function claudeAgent(host: AgentHost): Agent {
     id: "claude",
     name: "Claude Code",
     features: ["steer", "rewind", "restore-files", "fork", "rename", "delete", "compact-idle", "mcp", "slash-commands"],
+    // Claude Code enters and leaves worktrees with its own tools, and resumes a thread in the worktree it was in.
+    worktreeMoves: "own",
     threads: claudeThreads,
     commands: readSkills,
     mcp: claudeMcp,

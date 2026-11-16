@@ -40,6 +40,11 @@ export interface TabThread {
    * thread hides them until that turn has run.
    */
   readonly rewind?: { readonly at: string; readonly from: string }
+  /**
+   * The message whose turn moved the thread into the checkout its tab works in now. The turns up to it ran in
+   * another folder, so the thread cannot rewind to it or before it.
+   */
+  readonly movedAt?: string
 }
 
 /** The window: its tabs in their order across projects, each tab's thread, and the folders tabs have opened. */
@@ -59,6 +64,11 @@ export interface WindowState {
   readonly layouts: Readonly<Record<string, PluginLayout>>
   /** Tabs closed lately, newest last, with what reopening one needs. */
   readonly closed: readonly ClosedTab[]
+  /**
+   * Threads that moved into another checkout of their repo, by agent and thread id: the folder each runs in
+   * now. An agent lists a thread under the folder it started in, so this says where to resume it.
+   */
+  readonly moved: Readonly<Record<string, string>>
 }
 
 /** A closed tab: the tab, where it stood in the bar, and its thread and layout as they were. */
@@ -86,7 +96,7 @@ export function loadWindowState(): WindowState {
   try {
     saved = JSON.parse(readFileSync(windowStatePath(), "utf8")) as Partial<WindowState>
   } catch {
-    return { tabs: [], threads: {}, recent: [], keyed: {}, layouts: {}, closed: [] }
+    return { tabs: [], threads: {}, recent: [], keyed: {}, layouts: {}, closed: [], moved: {} }
   }
   return {
     tabs: Array.isArray(saved.tabs) ? saved.tabs.filter(isTab).map(withAgent) : [],
@@ -96,6 +106,7 @@ export function loadWindowState(): WindowState {
     keyed: typeof saved.keyed === "object" && saved.keyed ? saved.keyed : keyedFromSessions(saved as { keys?: unknown }),
     layouts: typeof saved.layouts === "object" && saved.layouts ? saved.layouts : {},
     closed: Array.isArray(saved.closed) ? saved.closed.filter((closed) => isTab(closed?.tab) && Number.isInteger(closed.index)).map((closed) => ({ ...closed, tab: withAgent(closed.tab) })) : [],
+    moved: typeof saved.moved === "object" && saved.moved ? saved.moved : {},
   }
 }
 

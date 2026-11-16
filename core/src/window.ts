@@ -13,6 +13,7 @@ import { currentBranch } from "./space"
 import { Terminals } from "./terminals"
 import { TurnWatch } from "./turn"
 import { checkpointsOf, keyedId, keyedProject, loadWindowState, saveWindowState, type ClosedTab, type TabThread, type WindowState } from "./window-state"
+import { checkoutRoot, listWorktrees, mainCheckout, matchingFolder, removeWorktree, samePath } from "./worktrees"
 
 type Send = (message: CoreMessage) => void
 
@@ -70,6 +71,10 @@ export class Window {
   private terminals: Terminals
   /** Each tab's last turn being ended. Review waits for it, so it reads the checkpoint the turn ends on. */
   private readonly turnEnds = new Map<string, Promise<void>>()
+  /** Where each tab's thread moves when its running turn ends, as its agent asked: another checkout of its repo. */
+  private readonly moves = new Map<string, string>()
+  /** Tabs whose thread moved, by the folder the app was told to move them to, until the app saves them there. */
+  private readonly arriving = new Map<string, string>()
 
   constructor(private readonly hooks: WindowHooks) {
     this.terminals = new Terminals({
@@ -142,9 +147,12 @@ export class Window {
     // Only a folder a tab opens now is checked, so a folder deleted under an older tab does not block every save.
     const opened = tabs.filter((tab) => before.get(tab.id)?.project !== tab.project).map((tab) => tab.project)
     for (const dir of opened) requireProjectFolder(dir)
-    // A thread's transcript, baseline and Review belong to its folder, so only a tab with no thread can move.
-    const moved = tabs.find((tab) => before.has(tab.id) && before.get(tab.id)!.project !== tab.project && this.thread(tab.id).sessionId)
+    // A thread's transcript, baseline and Review belong to its folder, so only a tab with no thread can move, or one the core moved.
+    const moving = (tab: TabInfo) => before.has(tab.id) && before.get(tab.id)!.project !== tab.project
+    const moved = tabs.find((tab) => moving(tab) && this.thread(tab.id).sessionId && this.arriving.get(tab.id) !== tab.project)
     if (moved) throw new Error("A tab can change its project only before its thread starts.")
+    const arrived = new Set(tabs.filter((tab) => moving(tab) && this.arriving.get(tab.id) === tab.project).map((tab) => tab.id))
+    for (const id of arrived) this.arriving.delete(id)
     const kept = <T>(byTab: Readonly<Record<string, T>>) => Object.fromEntries(tabs.flatMap((tab) => (byTab[tab.id] ? [[tab.id, byTab[tab.id]!]] : [])))
     // A closed tab is kept a while, with its thread and layout, so ⌘⇧T can bring it back.
     const closing = this.state.tabs.flatMap((tab, index): ClosedTab[] =>
@@ -157,8 +165,11 @@ export class Window {
     this.persist({ tabs, active, threads: kept(this.state.threads), layouts: kept(this.state.layouts), closed, keyed })
     for (const tab of tabs) {
       const old = before.get(tab.id)
-      if (old && (old.project !== tab.project || old.agent !== tab.agent)) this.closeSession(tab.id)
-      else if (old && !sameRunSettings(old, tab))
+      if (old && (old.project !== tab.project || old.agent !== tab.agent)) {
+        this.closeSession(tab.id)
+        // A moved thread's next queued message waited for the move, and runs in the new folder.
+        if (arrived.has(tab.id)) this.sendNextQueued(tab.id)
+      } else if (old && !sameRunSettings(old, tab))
         this.sessions
           .get(tab.id)
           ?.session.configure(tab)
@@ -168,9 +179,11 @@ export class Window {
       if (tabs.some((tab) => tab.id === id)) continue
       this.closeSession(id)
       this.turnEnds.delete(id)
+      this.arriving.delete(id)
       this.hooks.tabClosed(id)
     }
-    if (opened.length) this.remember(opened)
+    // A repo shows once among the recent folders, by its main checkout, whichever worktree a tab opened.
+    if (opened.length) this.remember(opened.map(mainCheckout))
     this.terminals.retain(new Set(tabs.flatMap((tab) => tab.terminals.map((terminal) => terminal.id))))
   }
 
@@ -354,10 +367,12 @@ export class Window {
     else close(live)
   }
 
+  /** Closes a tab's session. A move it asked for goes with it, since the move waits for its turn to end. */
   private closeSession(tabId: string) {
     const live = this.sessions.get(tabId)
     if (live) close(live)
     this.sessions.delete(tabId)
+    this.moves.delete(tabId)
   }
 
   /** Starts a fresh session in a tab, as /clear asks. The tab keeps its plugin key and its queue, and its thread starts empty. */
@@ -401,6 +416,7 @@ export class Window {
     requireFeature(agent, "rewind", "rewind a thread")
     if (restoreFiles) requireFeature(agent, "restore-files", "restore the files a thread changed")
     if (this.sessions.get(tabId)?.session.busy) throw new Error(`Stop ${agent.name} before you rewind the thread.`)
+    await this.requireAfterMove(tab, sessionId, messageId)
     // The files go back first, while the transcript still holds the messages that changed them.
     if (restoreFiles) await this.live(tab).session.restoreFiles!(messageId)
     this.closeSession(tabId)
@@ -413,6 +429,65 @@ export class Window {
     const rewind = !rewound.empty && rewound.resumeAt ? { at: rewound.resumeAt, from: messageId } : undefined
     this.setThread(tabId, rewound.empty ? kept : { ...this.thread(tabId), ...kept, turnFrom: undefined, rewind })
     this.hooks.broadcast({ type: "session.history", tabId, items: rewound.empty ? [] : await this.history(tab, sessionId) })
+  }
+
+  /** Refuses a rewind to the message whose turn moved the thread into its folder, or to one before it. Those turns ran in another folder. */
+  private async requireAfterMove(tab: TabInfo, sessionId: string, messageId: string) {
+    const { movedAt } = this.thread(tab.id)
+    if (!movedAt) return
+    const ids = (await this.agent(tab).threads.history(tab.project, sessionId)).map((item) => item.id)
+    const [to, moved] = [ids.indexOf(messageId), ids.indexOf(movedAt)]
+    if (moved >= 0 && to <= moved) throw new Error("The thread moved into this worktree after that message, so it can rewind only to a message sent here.")
+  }
+
+  /**
+   * Notes that a tab's thread moves into another checkout of its repo, `dir`, once its turn ends. A move
+   * back to the tab's own folder cancels one. Returns the folder in that checkout that matches the tab's.
+   */
+  private askMove(tabId: string, dir: string): string {
+    const { project } = this.tab(tabId)
+    const to = isProjectFolder(dir) ? matchingFolder(project, dir) : undefined
+    if (!to) throw new Error(`${dir} is not a checkout of this project's repo.`)
+    if (samePath(to, project)) this.moves.delete(tabId)
+    else this.moves.set(tabId, to)
+    return to
+  }
+
+  /**
+   * Moves a tab's thread into the folder its agent asked for, after its turn. Review starts again from the
+   * files there, and the thread records the branch there. The app moves the tab and saves, and the
+   * session closes then, so the next turn resumes the thread in the new folder.
+   */
+  private async moveThread(tabId: string, message: string | undefined): Promise<boolean> {
+    const to = this.moves.get(tabId)
+    this.moves.delete(tabId)
+    const { sessionId } = this.thread(tabId)
+    if (!to || !sessionId) return false
+    if (!isProjectFolder(to)) {
+      this.hooks.broadcast({ type: "error", message: "Desk could not move the thread into the worktree", detail: `${to} is gone.` })
+      return false
+    }
+    const agent = this.agent(this.tab(tabId))
+    const [threadStart, branch] = await Promise.all([capture(to).catch(() => undefined), currentBranch(to).catch(() => undefined)])
+    this.persist({ moved: { ...this.state.moved, [threadRef(agent.id, sessionId)]: to } })
+    const { turnFrom: _from, turnTo: _to, threadStart: _start, branch: _branch, ...kept } = this.thread(tabId)
+    this.setThread(tabId, { ...kept, ...(threadStart ? { threadStart, turnTo: threadStart } : {}), ...(branch ? { branch } : {}), ...(message ? { movedAt: message } : {}) })
+    this.arriving.set(tabId, to)
+    this.hooks.broadcast({ type: "tab.moved", tabId, project: to })
+    return true
+  }
+
+  /**
+   * Removes the worktree a tab works in, once no other tab works there. The tab's session closes first, so
+   * its agent stops writing there. The app closes the tab after.
+   */
+  async removeWorktree(tabId: string) {
+    const { project } = this.tab(tabId)
+    const root = checkoutRoot(project)
+    if (!root || mainCheckout(project) === project) throw new Error("This tab works in the repo's main checkout, not in a worktree.")
+    if (this.state.tabs.some((tab) => tab.id !== tabId && checkoutRoot(tab.project) === root)) throw new Error("Close the other tabs in this worktree first.")
+    this.closeSession(tabId)
+    await removeWorktree(project)
   }
 
   /**
@@ -465,18 +540,30 @@ export class Window {
     return read(changesSince(project, scope === "git" ? headTree : branchBase))
   }
 
-  /** A project's recent threads across every agent, newest first, each with the tab that has it open. */
+  /**
+   * The recent threads of a project and of the matching folders in its repo's other checkouts, across every
+   * agent, newest first. Each names the folder it runs in and the tab that has it open.
+   */
   async recentThreads(project: string): Promise<ThreadSummary[]> {
-    const open = new Map(this.state.tabs.flatMap((tab) => (tab.project === project && this.thread(tab.id).sessionId ? [[threadRef(this.agent(tab).id, this.thread(tab.id).sessionId!), tab.id] as const] : [])))
-    const lists = await Promise.all(
-      this.hooks.agents.all().map(async (agent) =>
-        (await agent.threads.list(project).catch(() => [])).map((thread): ThreadSummary => {
-          const tabId = open.get(threadRef(agent.id, thread.id))
-          return { ...thread, agent: agent.id, ...(tabId ? { tabId } : {}) }
-        }),
-      ),
-    )
-    return lists.flat().sort((a, b) => b.updatedAt - a.updatedAt)
+    const folders = (await listWorktrees(project)).map((worktree) => worktree.path)
+    if (!folders.length) folders.push(project)
+    const ours = (dir: string | undefined) => (dir ? folders.find((folder) => samePath(folder, dir)) : undefined)
+    const open = new Map(this.state.tabs.flatMap((tab) => (ours(tab.project) && this.thread(tab.id).sessionId ? [[threadRef(this.agent(tab).id, this.thread(tab.id).sessionId!), tab.id] as const] : [])))
+    const found = new Map<string, ThreadSummary>()
+    for (const agent of this.hooks.agents.all()) {
+      const lists = await Promise.all(folders.map(async (folder) => ({ folder, threads: await agent.threads.list(folder).catch(() => []) })))
+      for (const { folder, threads } of lists) {
+        for (const { dir, ...thread } of threads) {
+          const ref = threadRef(agent.id, thread.id)
+          if (found.has(ref)) continue
+          // A thread runs where it last moved, else where its agent says it started, else where it was listed.
+          const moved = this.state.moved[ref]
+          const tabId = open.get(ref)
+          found.set(ref, { ...thread, agent: agent.id, project: (moved && isProjectFolder(moved) ? moved : undefined) ?? ours(dir) ?? folder, ...(tabId ? { tabId } : {}) })
+        }
+      }
+    }
+    return [...found.values()].sort((a, b) => b.updatedAt - a.updatedAt)
   }
 
   /** Starts a terminal in the project of the tab that lists it, or reattaches to it. */
@@ -528,7 +615,7 @@ export class Window {
     return tab
   }
 
-  /** Folders tabs have opened, most recent first. A folder that no longer exists is left out. */
+  /** Folders tabs have opened, most recent first, a worktree's by its main checkout. A folder that no longer exists is left out. */
   private recent() {
     return this.state.recent.filter(isProjectFolder)
   }
@@ -563,11 +650,14 @@ export class Window {
         this.turnEnds.set(tab.id, summary)
       }
       if (!ended) return
+      const message = turn.message
       // The next queued turn starts from the checkpoint this one ends on, so it waits for it.
-      void summary.then(() => {
+      void summary.then(async () => {
         if (!current()) return
+        const moved = this.moves.has(tab.id) && (await this.moveThread(tab.id, message))
         if (ended.held && this.thread(tab.id).queue?.length) this.setQueue(tab.id, this.thread(tab.id).queue!, true)
-        else this.sendNextQueued(tab.id)
+        // A thread that moved sends its next message once the app has moved its tab.
+        else if (!moved) this.sendNextQueued(tab.id)
       })
     }
     const rewind = this.thread(tab.id).rewind
@@ -577,6 +667,7 @@ export class Window {
       settings: () => this.state.tabs.find((open) => open.id === tab.id) ?? tab,
       // A task's events show only while its session's thread does.
       emit: (event) => current() && this.hooks.broadcast({ type: "session.event", tabId: tab.id, event }),
+      ...(agent.worktreeMoves === "desk" && !key ? { moveTo: (dir: string) => this.askMove(tab.id, dir) } : {}),
     })
     const saveSession = (change: Partial<TabThread>) => {
       if (current()) return this.updateThread(tab.id, change)
@@ -596,6 +687,8 @@ export class Window {
       onSessionLost: () => saveSession({ sessionId: undefined, rewind: undefined }),
       // The app names the tab and saves it, as after a rename from Desk. A parked thread's tab shows another thread.
       onRenamed: (title) => current() && this.hooks.broadcast({ type: "tab.title", tabId: tab.id, title }),
+      // A plugin's thread stays in the folder its key belongs to.
+      ...(agent.worktreeMoves === "own" && !key ? { onMoved: (dir: string) => void (current() && this.askMove(tab.id, dir)) } : {}),
     })
     const created: Live = { session, handoffs }
     this.sessions.set(tab.id, created)

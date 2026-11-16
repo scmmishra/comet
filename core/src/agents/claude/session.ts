@@ -59,6 +59,8 @@ type RequestSuggestions = Parameters<CanUseTool>[2]["suggestions"]
  */
 const CONVERSATION_NOT_FOUND = "No conversation found with session ID:"
 const CONVERSATION_LOST = "Claude Code could not find the earlier conversation. Your next message starts a new conversation in this tab."
+/** Claude Code's tools that move a session into a worktree and back out. */
+const WORKTREE_TOOLS = new Set(["EnterWorktree", "ExitWorktree"])
 
 /** A request waiting for the user, with what Claude asked. */
 interface ClaudeRequest extends OpenRequest<PermissionResult> {
@@ -93,6 +95,8 @@ export class ClaudeSession implements AgentSession {
   private resumeAt?: string
   /** The title a `/rename` gave the session, until the command's result applies it. */
   private renamedTo?: string
+  /** EnterWorktree and ExitWorktree calls waiting for their results. */
+  private readonly worktreeCalls = new Set<string>()
   /** Set once Claude Code said the conversation to resume is gone, so the failure that follows adds no second error. */
   private lost = false
 
@@ -272,6 +276,7 @@ export class ClaudeSession implements AgentSession {
         if (message.type === "result" && message.subtype !== "success" && message.errors.some((error) => error.startsWith(CONVERSATION_NOT_FOUND))) this.forget()
         this.markSteersTaken(message)
         this.followRename(message)
+        this.followWorktree(message)
         this.subagents.handle(message)
         this.backgroundTasks.handle(message)
         const steer = message.type === "result" ? this.takeSteer(message) : undefined
@@ -396,6 +401,22 @@ export class ClaudeSession implements AgentSession {
     this.waitingSteers.clear()
     this.emit({ kind: "items.remove", ids: missed.map((item) => item.id) })
     for (const { waiting: _, steered: __, ...item } of missed) this.emit({ kind: "item", item })
+  }
+
+  /**
+   * Reports the folder the session moved to after Claude Code's EnterWorktree or ExitWorktree. Each tool's
+   * result names the worktree, and ExitWorktree's also names the folder the session went back to.
+   */
+  private followWorktree(message: SDKMessage) {
+    if ((message.type !== "assistant" && message.type !== "user") || message.parent_tool_use_id || typeof message.message.content === "string") return
+    for (const block of message.message.content) {
+      // A subagent's result names a worktree too, so only these two tools' calls count.
+      if (block.type === "tool_use" && WORKTREE_TOOLS.has(block.name)) this.worktreeCalls.add(block.id)
+      if (block.type !== "tool_result" || !this.worktreeCalls.delete(block.tool_use_id) || block.is_error) continue
+      const result = (message as { tool_use_result?: { worktreePath?: unknown; originalCwd?: unknown } }).tool_use_result
+      const dir = typeof result?.originalCwd === "string" ? result.originalCwd : result?.worktreePath
+      if (typeof dir === "string") this.options.onMoved?.(dir)
+    }
   }
 
   /**

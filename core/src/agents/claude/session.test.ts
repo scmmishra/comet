@@ -78,6 +78,7 @@ function setup(resume?: string) {
     return running as unknown as Query
   }
   const renames: string[] = []
+  const moves: string[] = []
   const sessionIds: (string | undefined)[] = []
   const session = new ClaudeSession(
     DIR,
@@ -88,6 +89,7 @@ function setup(resume?: string) {
       onSessionId: (id) => void sessionIds.push(id),
       onSessionLost: () => void sessionIds.push(undefined),
       onRenamed: (title) => void renames.push(title),
+      onMoved: (dir) => void moves.push(dir),
       onRateLimit: () => {},
       compactIdle: () => false,
     },
@@ -96,7 +98,7 @@ function setup(resume?: string) {
   const items = () => events.flatMap((event) => (event.kind === "item" ? [event.item] : []))
   const results = () => items().filter((item): item is Extract<ThreadItem, { type: "result" }> => item.type === "result")
   const statuses = () => events.flatMap((event) => (event.kind === "status" ? [event.busy] : []))
-  return { session, events, queries, items, results, statuses, renames, sessionIds }
+  return { session, events, queries, items, results, statuses, renames, moves, sessionIds }
 }
 
 /** Sends a message and waits for the session to start its query. */
@@ -219,6 +221,22 @@ test("a /rename names the tab once its result arrives", async () => {
   running.push(result("r2"))
   await until(() => s.statuses().length === 4)
   expect(s.renames).toEqual(["Probe title"])
+})
+
+test("reports the folder Claude Code's worktree tools moved the session to, and no subagent's worktree", async () => {
+  const s = setup()
+  const running = await started(s)
+  const call = (id: string, name: string) => ({ type: "assistant", uuid: `a-${id}`, session_id: "s1", parent_tool_use_id: null, message: { content: [{ type: "tool_use", id, name, input: {} }] } })
+  const done = (id: string, toolUseResult: object) => ({ type: "user", uuid: `u-${id}`, session_id: "s1", parent_tool_use_id: null, message: { content: [{ type: "tool_result", tool_use_id: id, content: "done" }] }, tool_use_result: toolUseResult })
+  running.push(call("t1", "Agent"))
+  running.push(done("t1", { status: "completed", prompt: "Look", worktreePath: "/work/sub" }))
+  running.push(call("t2", "EnterWorktree"))
+  running.push(done("t2", { worktreePath: "/work/side", worktreeBranch: "side", message: "Entered" }))
+  running.push(call("t3", "ExitWorktree"))
+  running.push(done("t3", { action: "keep", originalCwd: "/work/app", worktreePath: "/work/side", message: "Left" }))
+  running.push(result("r1"))
+  await until(() => s.statuses().length === 2)
+  expect(s.moves).toEqual(["/work/side", "/work/app"])
 })
 
 test("an MCP elicitation Desk cannot show is cancelled, not declined", async () => {

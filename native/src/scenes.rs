@@ -8,7 +8,7 @@ use crate::shell::{CoreState, Desk};
 /// A scene: its name, and what it sets in a fresh window.
 type Scene = (&'static str, fn(&mut Desk));
 
-pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("models-other-agent", models_other_agent), ("models-missing-agent", models_missing_agent), ("models-new-tab", models_new_tab), ("start", start), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-codex", settings_codex), ("settings-antigravity", settings_antigravity), ("settings-signing-in", settings_signing_in), ("models-signing-in", models_signing_in), ("settings-projects", settings_projects), ("settings-appearance", settings_appearance), ("settings-verdigris", settings_verdigris), ("extensions", extensions), ("extensions-skills", extensions_skills), ("stop-notice", stop_notice), ("branch-notice", branch_notice), ("branch-confirm", branch_confirm), ("markdown", markdown), ("file", file)];
+pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("models-other-agent", models_other_agent), ("models-missing-agent", models_missing_agent), ("models-new-tab", models_new_tab), ("start", start), ("worktree", worktree), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-codex", settings_codex), ("settings-antigravity", settings_antigravity), ("settings-signing-in", settings_signing_in), ("models-signing-in", models_signing_in), ("settings-projects", settings_projects), ("settings-appearance", settings_appearance), ("settings-verdigris", settings_verdigris), ("extensions", extensions), ("extensions-skills", extensions_skills), ("stop-notice", stop_notice), ("branch-notice", branch_notice), ("branch-confirm", branch_confirm), ("markdown", markdown), ("file", file)];
 
 /// The core messages in the JSON file `DESK_SCENE_FILE` names, with the thread rows in its `open` list
 /// opened.
@@ -195,9 +195,31 @@ fn start(s: &mut Desk) {
         { "type": "tabs", "active": "tab", "tabs": [{ "id": "tab", "title": "New session", "project": "/Users/me/code/web", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] },
         { "type": "project", "project": "/Users/me/code/web", "part": "space", "value": { "name": "web", "root": "/Users/me/code/web", "branch": "main", "changes": {} } },
         { "type": "project", "project": "/Users/me/code/web", "part": "threads", "value": [
-            { "id": "s1", "agent": "claude", "title": "Fix the login form", "updatedAt": now - 5.0 * 60_000.0 },
-            { "id": "s2", "agent": "codex", "title": "Add a dark theme to the settings page", "branch": "theme", "updatedAt": now - 3.0 * 3_600_000.0 },
-            { "id": "s3", "agent": "claude", "title": "Speed up the build", "updatedAt": now - 2.0 * 86_400_000.0 }
+            { "id": "s1", "agent": "claude", "title": "Fix the login form", "updatedAt": now - 5.0 * 60_000.0, "project": "/Users/me/code/web" },
+            { "id": "s2", "agent": "codex", "title": "Add a dark theme to the settings page", "branch": "desk/dark-theme", "updatedAt": now - 3.0 * 3_600_000.0, "project": "/Users/me/.desk/worktrees/web/dark-theme" },
+            { "id": "s3", "agent": "claude", "title": "Speed up the build", "updatedAt": now - 2.0 * 86_400_000.0, "project": "/Users/me/code/web" }
+        ] },
+        { "type": "project", "project": "/Users/me/code/web", "part": "worktrees", "value": [
+            { "path": "/Users/me/code/web", "branch": "main", "main": true },
+            { "path": "/Users/me/.desk/worktrees/web/dark-theme", "branch": "desk/dark-theme", "main": false }
+        ] }
+    ]);
+    for message in serde_json::from_value::<Vec<CoreMessage>>(messages).expect("the scene's messages decode") {
+        s.receive(Event::Message(message)).expect("the scene has a tab");
+    }
+}
+
+/// A new tab in a worktree of a project, whose Space card names the worktree.
+fn worktree(s: &mut Desk) {
+    s.status = CoreState::Ready;
+    let dir = "/Users/me/.desk/worktrees/web/dark-theme";
+    let messages = serde_json::json!([
+        { "type": "recent", "projects": ["/Users/me/code/web"] },
+        { "type": "tabs", "active": "tab", "tabs": [{ "id": "tab", "title": "New session", "project": dir, "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] },
+        { "type": "project", "project": dir, "part": "space", "value": { "name": "dark-theme", "root": dir, "branch": "desk/dark-theme", "worktree": { "main": "/Users/me/code/web" }, "changes": { "files": 2, "additions": 12, "deletions": 3 } } },
+        { "type": "project", "project": dir, "part": "worktrees", "value": [
+            { "path": "/Users/me/code/web", "branch": "main", "main": true },
+            { "path": dir, "branch": "desk/dark-theme", "main": false }
         ] }
     ]);
     for message in serde_json::from_value::<Vec<CoreMessage>>(messages).expect("the scene's messages decode") {

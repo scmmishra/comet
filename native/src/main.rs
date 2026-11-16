@@ -51,6 +51,7 @@ mod toasts;
 mod triggers;
 mod ui;
 mod workspace;
+mod worktrees;
 
 use rune::{AppSpec, MenuItem, Titlebar, Tx};
 use shell::{Desk, commands};

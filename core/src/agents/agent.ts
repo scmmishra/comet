@@ -13,6 +13,13 @@ export interface Agent {
   /** What the agent can do beyond a conversation. The core refuses what is not listed, and the app does not offer it. */
   readonly features: readonly AgentFeature[]
   /**
+   * How a running thread moves into another checkout of its repo, such as a worktree. With `own`, the agent
+   * moves itself with a tool of its own, and its session reports it through `onMoved`. With `desk`, the
+   * agent asks Desk through its `move_to_worktree` tool. Either way the thread resumes in the new folder
+   * from its next turn. An agent with neither keeps each thread in the folder it started in.
+   */
+  readonly worktreeMoves?: "own" | "desk"
+  /**
    * Reads whether the agent is installed and signed in, its version and its models, and reports each
    * through the host as it learns it. What it throws shows as the agent's problem.
    */
@@ -90,6 +97,8 @@ export interface SessionOptions {
   readonly onSessionLost?: () => void
   /** Called when the agent renames the session itself, such as from a `/rename` in a message. The agent has already saved the title. */
   readonly onRenamed?: (title: string) => void
+  /** Called when an agent whose `worktreeMoves` is `own` moved its session into another folder, such as a worktree it entered. */
+  readonly onMoved?: (dir: string) => void
   readonly tools?: ToolServer
   /** Whether the session leaves no saved thread, such as work one agent hands another. Its transcript is not listed or resumed. */
   readonly ephemeral?: boolean
@@ -135,10 +144,13 @@ export type Rewound =
 /** How many threads an agent lists for a project. Enough for thread search to reach back months. */
 export const THREAD_LIMIT = 200
 
+/** A thread as an agent lists it. `dir` is the folder it started in, when the agent records one. */
+export type ListedThread = Omit<ThreadSummary, "agent" | "tabId" | "project"> & { readonly dir?: string }
+
 /** The conversations an agent saved, by the id its sessions report. Each optional method needs the feature of its name. */
 export interface AgentThreads {
   /** A project's newest threads. A failed read gives none, because the list is a convenience. */
-  list(dir: string): Promise<Omit<ThreadSummary, "agent" | "tabId">[]>
+  list(dir: string): Promise<ListedThread[]>
   /** A thread read back from the agent's transcript. */
   history(dir: string, threadId: string): Promise<ThreadItem[]>
   /** How full a thread's context is, when it can be read without running a turn. */

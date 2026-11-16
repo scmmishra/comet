@@ -309,7 +309,7 @@ impl Desk {
                 }));
                 root.extend(self.workspace.tabs.iter().map(|t| {
                     let mut entry = Entry::new("Tabs", t.title.clone(), Action::Tab(t.id.clone()));
-                    entry.detail = Some(self.account.project_label(&t.project));
+                    entry.detail = Some(shell::project_label(self, &t.project));
                     entry.project = Some(t.project.clone());
                     entry
                 }));
@@ -597,7 +597,7 @@ mod tests {
         let messages = serde_json::json!([
             { "type": "recent", "projects": ["/code/web", "/code/api"] },
             { "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "Fix login", "project": "/code/web", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] },
-            { "type": "project", "project": "/code/web", "part": "threads", "value": [{ "id": "s1", "agent": "claude", "title": "Speed up the build", "updatedAt": 0.0 }] }
+            { "type": "project", "project": "/code/web", "part": "threads", "value": [{ "id": "s1", "agent": "claude", "title": "Speed up the build", "updatedAt": 0.0, "project": "/code/web" }] }
         ]);
         for m in serde_json::from_value::<Vec<CoreMessage>>(messages).unwrap() {
             s.receive(Event::Message(m)).unwrap();

@@ -8,4 +8,6 @@ test("sums a handed task by its agent and its title, else the task's first line"
   expect(deskToolSummary("search", {})).toBeUndefined()
   expect(deskToolLabel("delegate", "codex: Review login", false)).toBe("Handing a task to codex: Review login")
   expect(deskToolLabel("list_agents", "", true)).toBe("Listed the agents")
+  expect(deskToolSummary("move_to_worktree", { path: "/Users/me/.desk/worktrees/web/login" })).toBe("login")
+  expect(deskToolLabel("move_to_worktree", "login", false)).toBe("Moving to login")
 })

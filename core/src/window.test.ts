@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test"
 import type { CoreMessage, TabInfo } from "@desk/protocol"
-import { readFileSync, writeFileSync } from "node:fs"
+import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { fakeAgent, gitRepo, tempFolder, until, useTempHome } from "./test-support"
 import { Agents } from "./agents/registry"
 import { Delegations } from "./delegate/delegations"
 import { Window } from "./window"
 import { capture } from "./checkpoints"
+import { samePath } from "./worktrees"
 
 useTempHome()
 
@@ -227,8 +228,8 @@ test("lists a project's threads across agents, newest first, each with its agent
   const project = tempFolder("agents")
   const { window } = openWithAgents({ tabs: [{ ...tab("a", project), agent: "codex" }], threads: { a: { sessionId: "x1", agent: "codex" } }, recent: [] })
   expect(await window.recentThreads(project)).toEqual([
-    { id: "x1", title: "Newer", updatedAt: 2, agent: "codex", tabId: "a" },
-    { id: "c1", title: "Older", updatedAt: 1, agent: "claude" },
+    { id: "x1", title: "Newer", updatedAt: 2, agent: "codex", tabId: "a", project },
+    { id: "c1", title: "Older", updatedAt: 1, agent: "claude", project },
   ])
 })
 
@@ -466,4 +467,93 @@ test("a turn's end asks for the project's Space card again, as the turn may have
   expect(stale).toEqual([])
   codex.sessions[0]!.finish()
   expect(stale).toEqual([project])
+})
+
+/** A window with one agent that moves its threads into worktrees as `moves` says, and a repo with a worktree on `side`. */
+function openInRepo(moves: "own" | "desk", threads: { id: string; title: string; updatedAt: number }[] = []) {
+  const repo = gitRepo({ "a.txt": "one\n" })
+  const worktree = join(tempFolder("worktree"), "side")
+  repo.git("worktree", "add", "-q", "-b", "side", worktree)
+  const id = moves === "own" ? "claude" : "codex"
+  const agent = fakeAgent(id, [], threads, moves)
+  const tabIn = (dir: string): TabInfo => ({ ...tab("a", dir), agent: id })
+  writeFileSync(join(process.env.DESK_HOME!, "window.json"), JSON.stringify({ tabs: [tabIn(repo.dir)], threads: {}, recent: [] }))
+  const sent: CoreMessage[] = []
+  const agents = new Agents(() => {}, { compactIdle: () => false }, { [id]: agent.make })
+  const delegations = new Delegations(agents, () => "http://127.0.0.1:0/mcp")
+  const window = new Window({ broadcast: (message) => sent.push(message), agents, delegations, tabClosed: () => {}, spaceStale: () => {}, turnEnded: () => {}, threadShown: () => {} })
+  const moved = () => sent.find((message): message is Extract<CoreMessage, { type: "tab.moved" }> => message.type === "tab.moved")
+  return { repo, worktree, agent, window, sent, delegations, moved, tabIn }
+}
+
+test("moves a thread into the worktree its agent entered once its turn ends, and resumes it there", async () => {
+  const { repo, worktree, agent, window, moved, tabIn } = openInRepo("own")
+  await window.send("a", "Work in a worktree")
+  agent.sessions[0]!.options.onMoved!(worktree)
+  expect(moved()).toBeUndefined()
+  agent.sessions[0]!.finish()
+  await until(() => !!moved())
+  expect(moved()!.project).toBe(worktree)
+  // The app has not moved the tab yet, so an older save still names the old folder.
+  window.save([tabIn(repo.dir)], "a")
+  expect(() => window.save([tabIn(join(repo.dir, ".."))], "a")).toThrow("only before its thread starts")
+  window.save([tabIn(worktree)], "a")
+  expect(agent.calls).toContain("close")
+  expect(saved().threads.a).toMatchObject({ sessionId: "claude-session", branch: "side", movedAt: "u1" })
+  expect(saved().moved).toEqual({ "claude\nclaude-session": worktree })
+  await window.send("a", "Go on")
+  expect(agent.sessions[1]!.dir).toBe(worktree)
+  expect(agent.sessions[1]!.options.resume).toBe("claude-session")
+})
+
+test("offers Desk's move tool to an agent that moves through Desk, and moves its thread after the turn", async () => {
+  const { worktree, agent, window, delegations, moved } = openInRepo("desk")
+  await window.send("a", "Work in a worktree")
+  const tools = delegations.toolsFor(agent.sessions[0]!.options.tools!.authorization)!
+  expect(tools.tools.map((tool) => tool.name)).toContain("move_to_worktree")
+  expect(agent.sessions[0]!.options.tools!.instructions).toContain("move_to_worktree")
+  expect(tools.call("move_to_worktree", { path: tempFolder("elsewhere") }, new AbortController().signal)).rejects.toThrow("not a checkout")
+  expect((await tools.call("move_to_worktree", { path: worktree }, new AbortController().signal)).text).toContain(worktree)
+  agent.sessions[0]!.finish()
+  await until(() => !!moved())
+  expect(moved()!.project).toBe(worktree)
+})
+
+test("gives Desk's move tool only to an agent that moves through Desk", async () => {
+  const { agent, window, delegations } = openInRepo("own")
+  await window.send("a", "Hi")
+  expect(delegations.toolsFor(agent.sessions[0]!.options.tools!.authorization)!.tools.map((tool) => tool.name)).not.toContain("move_to_worktree")
+})
+
+test("lists a repo's threads from every checkout, each in the folder it runs in now", async () => {
+  const { repo, worktree, agent, window, moved, tabIn } = openInRepo("own", [{ id: "claude-session", title: "Here", updatedAt: 1 }])
+  const [before] = await window.recentThreads(worktree)
+  expect(samePath(before!.project, repo.dir)).toBe(true)
+  await window.send("a", "Work in a worktree")
+  agent.sessions[0]!.options.onMoved!(worktree)
+  agent.sessions[0]!.finish()
+  await until(() => !!moved())
+  window.save([tabIn(worktree)], "a")
+  expect(await window.recentThreads(repo.dir)).toMatchObject([{ id: "claude-session", project: worktree, tabId: "a" }])
+})
+
+test("refuses a rewind to the message whose turn moved the thread, or to one before it", async () => {
+  const project = tempFolder("moved")
+  const { window } = openWithAgents({ tabs: [tab("a", project)], threads: { a: { sessionId: "s", agent: "claude", movedAt: "s-u1" } }, recent: [] })
+  expect(window.rewindThread("a", "s-u1", false)).rejects.toThrow("moved into this worktree")
+})
+
+test("removes the worktree a tab works in, once no other tab works there", async () => {
+  const { repo, window, tabIn } = openInRepo("own")
+  const made = join(tempFolder("made"), "made")
+  repo.git("worktree", "add", "-q", "-b", "made", made)
+  window.save([tabIn(made), { ...tabIn(made), id: "b" }], "a")
+  // The repo shows once among the recent folders, by its main checkout.
+  expect(samePath(saved().recent[0], repo.dir)).toBe(true)
+  expect(window.removeWorktree("a")).rejects.toThrow("other tabs")
+  window.save([tabIn(made)], "a")
+  await window.removeWorktree("a")
+  expect(existsSync(made)).toBe(false)
+  window.save([tabIn(repo.dir)], "a")
+  expect(window.removeWorktree("a")).rejects.toThrow("main checkout")
 })

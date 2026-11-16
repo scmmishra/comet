@@ -1,5 +1,5 @@
 //! A new tab: the wordmark, the composer, the project and
-//! branch it works in, and threads to pick up again.
+//! checkout it works in, and threads to pick up again.
 
 use crate::composer;
 use crate::format;
@@ -52,15 +52,8 @@ pub fn start_screen(s: &Desk, tab: &TabInfo, lane: Option<Lane>, window: Option<
         .color(k.c.text_base.alpha(WORDMARK_ALPHA))
         .a11y_hidden()
         .mb(-18.0 - 0.26 * size);
-    let project = s.projects.get(&tab.project);
-    let branch = project.and_then(|p| p.space.as_ref()).map(|space| {
-        row()
-            .gap(4.0)
-            .items_center()
-            .child(text("/").font(crate::theme::text(13.0)).color(k.c.text_faint))
-            .child(row().gap(6.0).items_center().px(6.0).child(icon(&ic::BRANCH, 15.0).color(k.c.text_muted)).child(text(space.branch.clone()).font(crate::theme::text(13.0)).color(k.c.text_muted)))
-    });
-    let place = row().gap(4.0).items_center().px(2.0).child(project_switcher(s, tab, k, layer)).children(branch);
+    let checkout = crate::worktrees::checkout_menu(s, tab, k, layer).map(|menu| row().gap(4.0).items_center().child(text("/").font(crate::theme::text(13.0)).color(k.c.text_faint)).child(menu));
+    let place = row().gap(4.0).items_center().px(2.0).child(project_switcher(s, tab, k, layer)).children(checkout);
     let content = col()
         .w_full()
         .gap(18.0)
@@ -73,7 +66,8 @@ pub fn start_screen(s: &Desk, tab: &TabInfo, lane: Option<Lane>, window: Option<
 
 /// Moves this tab to another project. Its thread has not started, so nothing is lost.
 fn project_switcher(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
-    let name = s.account.project_label(&tab.project);
+    let name = shell::project_label(s, &tab.project);
+    let home = s.projects.home(&tab.project).to_owned();
     let trigger = row()
         .key("project-switcher")
         .h(32.0)
@@ -91,7 +85,7 @@ fn project_switcher(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
     for project in &s.workspace.recent {
         let (id, dir) = (tab.id.clone(), project.clone());
         // Each project with its mark.
-        menu = menu.item(MenuItem::new(s.account.project_label(project)).lead(shell::project_mark(s, project, k)).checked(*project == tab.project).on_select(move |s: &mut Desk| {
+        menu = menu.item(MenuItem::new(s.account.project_label(project)).lead(shell::project_mark(s, project, k)).checked(*project == home).on_select(move |s: &mut Desk| {
             let dir = dir.clone();
             s.workspace.change_tab(&id, |t| t.project = dir, &s.core);
             s.start.project_menu = false;
@@ -114,7 +108,7 @@ fn project_switcher(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
         .build(k, layer)
 }
 
-/// Threads in this tab's project that no tab has open. Picking one continues it in this tab.
+/// Threads in this tab's repo that no tab has open. Picking one continues it in the checkout it runs in.
 fn recent_threads(s: &Desk, tab: &TabInfo, k: &Kit) -> Option<El> {
     let project = s.projects.get(&tab.project)?;
     let closed: Vec<&ThreadSummary> = project.threads.as_ref()?.iter().filter(|t| t.tab_id.is_none()).take(RECENT_THREADS).collect();
@@ -128,7 +122,11 @@ fn recent_threads(s: &Desk, tab: &TabInfo, k: &Kit) -> Option<El> {
         let other = thread.branch.as_deref().filter(|b| Some(*b) != current).map(|b| {
             row().gap(4.0).items_center().child(icon(&ic::BRANCH, crate::icons::SIZE).color(k.c.text_faint)).child(text(b.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint))
         });
-        let (summary, dir) = (thread.clone(), tab.project.clone());
+        // A thread from another checkout of the repo names its folder.
+        let elsewhere = (thread.project != s.projects.home(&tab.project)).then(|| {
+            row().gap(4.0).items_center().child(icon(&ic::OUTLINE_WORKTREE, crate::icons::SIZE).color(k.c.text_faint)).child(text(format::project_name(&thread.project).to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint))
+        });
+        let (summary, dir) = (thread.clone(), thread.project.clone());
         row()
             .key(format!("thread-{}", thread.id))
             .h(36.0)
@@ -144,6 +142,7 @@ fn recent_threads(s: &Desk, tab: &TabInfo, k: &Kit) -> Option<El> {
             // The agent the thread ran on, which the tab that continues it runs.
             .child(crate::agents::mark(&thread.agent, 14.0, k))
             .child(text(thread.title.clone()).font(crate::theme::text(13.0)).color(k.c.text_muted).group_color(k.c.text_base).truncate().grow(1.0))
+            .children(elsewhere)
             .children(other)
             // `w-12 text-right`: times end on one edge, whatever their length.
             .child(row().w(48.0).justify_end().child(text(format::ago(thread.updated_at, now)).font(crate::theme::text(12.0)).color(k.c.text_faint)))

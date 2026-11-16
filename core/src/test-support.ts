@@ -79,8 +79,9 @@ type FakeCalls = string[]
  * An agent that runs no program, for tests of what the core does around agents. Its sessions record what
  * they are asked, start a session called `<id>-session` on the first message, and stay busy until
  * `finish` ends the turn or a stop does. `threads` lists what the agent has saved, and its optional parts are those `features` names.
+ * `worktreeMoves` says how its threads move into worktrees, if they do.
  */
-export function fakeAgent(id: AgentId, features: readonly AgentFeature[] = [], threads: readonly { readonly id: string; readonly title: string; readonly updatedAt: number }[] = []) {
+export function fakeAgent(id: AgentId, features: readonly AgentFeature[] = [], threads: readonly { readonly id: string; readonly title: string; readonly updatedAt: number }[] = [], worktreeMoves?: Agent["worktreeMoves"]) {
   const calls: FakeCalls = []
   /** Each session opened, in order: what it was opened with, a way to add to its thread, and a way to end its turn. */
   const sessions: { readonly dir: string; readonly options: SessionOptions; emit(event: ThreadEvent): void; finish(): void }[] = []
@@ -89,6 +90,7 @@ export function fakeAgent(id: AgentId, features: readonly AgentFeature[] = [], t
     id,
     name: `Fake ${id}`,
     features,
+    ...(worktreeMoves ? { worktreeMoves } : {}),
     inspect: async () => host.publish({ state: "ready", models: [{ value: "default", label: "Default", description: "", efforts: [], fast: false, permissionModes: ["default"] }] }),
     refreshUsage: async () => host.publish({ usage: { windows: [{ id: "week", label: "This week", percent: 10 }] } }),
     open(dir, emit, options): AgentSession {

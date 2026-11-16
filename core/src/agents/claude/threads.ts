@@ -7,6 +7,7 @@ import { Transcript } from "./transcript"
 
 /** The conversations Claude Code saved, which it keeps as one transcript per session under the project. */
 export const claudeThreads: AgentThreads = {
+  /** Claude Code lists the threads of every worktree of the folder's repo, each with the folder it started in. */
   async list(dir) {
     // Listing reads only each transcript's head and tail.
     const sessions = await listSessions({ dir, limit: THREAD_LIMIT }).catch(() => [])
@@ -14,6 +15,7 @@ export const claudeThreads: AgentThreads = {
       id: session.sessionId,
       title: session.summary,
       ...(session.gitBranch ? { branch: session.gitBranch } : {}),
+      ...(session.cwd ? { dir: session.cwd } : {}),
       updatedAt: session.lastModified,
     }))
   },

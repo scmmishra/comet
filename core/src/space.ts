@@ -3,6 +3,7 @@ import type { Space } from "@desk/protocol"
 import { uncommittedCounts } from "./checkpoints"
 import { git } from "./git"
 import { spawn } from "./environment"
+import { mainCheckout } from "./worktrees"
 
 /** A part that fails gives undefined, so each part of the card fails on its own. */
 const part = <T>(read: Promise<T>): Promise<T | undefined> => read.catch(() => undefined)
@@ -22,10 +23,12 @@ export async function readSpace(dir: string): Promise<Space | null> {
     gitOutput(root, ["rev-list", "--left-right", "--count", "@{upstream}...HEAD"]),
     part(readPullRequest(root)),
   ])
+  const main = mainCheckout(dir)
   return {
     name: basename(root),
     root,
     branch: branch || (sha ? `detached at ${sha}` : "no commits yet"),
+    ...(main !== dir ? { worktree: { main } } : {}),
     ...(counts ? { upstream: parseCounts(counts) } : {}),
     changes: changes ?? { files: 0, additions: 0, deletions: 0 },
     ...(pr ? { pr } : {}),

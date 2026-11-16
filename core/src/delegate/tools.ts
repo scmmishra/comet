@@ -1,3 +1,4 @@
+import { basename } from "node:path"
 import { firstLine } from "../text"
 import type { Tool } from "./mcp"
 
@@ -39,6 +40,22 @@ export const DELEGATE: Tool = {
   },
 }
 
+/** What a session whose agent moves into worktrees through Desk is told, after `INSTRUCTIONS`. */
+export const MOVE_INSTRUCTIONS =
+  "When the user asks you to work in a git worktree, make it with `git worktree add` if it does not exist, then call `move_to_worktree` with its path. Desk then shows the worktree's changes and runs your next turns in it."
+
+export const MOVE_TO_WORKTREE: Tool = {
+  name: "move_to_worktree",
+  description:
+    "Moves this thread into another checkout of this repo, such as a git worktree. Desk moves it when this turn ends, and the next turn runs there. Until then, run commands in the worktree by its path. Give the main checkout's path to move back.",
+  inputSchema: {
+    type: "object",
+    properties: { path: { type: "string", description: "The absolute path of the worktree." } },
+    required: ["path"],
+    additionalProperties: false,
+  },
+}
+
 /** A task in a few words: the start of its first line. */
 export const taskWords = (text: string) => firstLine(text).slice(0, 80)
 
@@ -48,13 +65,15 @@ export const taskWords = (text: string) => firstLine(text).slice(0, 80)
  */
 export function deskToolSummary(tool: string, input: unknown): string | undefined {
   if (tool === LIST_AGENTS.name) return ""
-  if (tool !== DELEGATE.name) return undefined
   const given = typeof input === "object" && input !== null ? (input as Record<string, unknown>) : {}
+  if (tool === MOVE_TO_WORKTREE.name) return basename(String(given.path ?? ""))
+  if (tool !== DELEGATE.name) return undefined
   return `${String(given.agent ?? "another agent")}: ${taskWords(typeof given.title === "string" && given.title.trim() ? given.title : String(given.task ?? ""))}`
 }
 
 /** A call of one of Desk's tools in a few words, from its summary, whichever agent made it. */
 export function deskToolLabel(tool: string, summary: string, done: boolean): string {
   if (tool === LIST_AGENTS.name) return done ? "Listed the agents" : "Listing the agents"
+  if (tool === MOVE_TO_WORKTREE.name) return `${done ? "Moved to" : "Moving to"} ${summary}`
   return `${done ? "Handed a task to" : "Handing a task to"} ${summary}`
 }

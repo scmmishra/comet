@@ -83,6 +83,7 @@ pub struct Desk {
     pub session_menu: crate::session_menu::SessionMenu,
     pub rewind: crate::rewind::Rewind,
     pub branch_notices: crate::branch_notice::BranchNotices,
+    pub worktrees: crate::worktrees::Worktrees,
 }
 
 impl Desk {
@@ -139,6 +140,9 @@ impl Desk {
             }
             CoreMessage::ThreadForked { tab_id, agent, thread_id, title } => self.open_fork(&tab_id, &agent, thread_id, &title),
             CoreMessage::ThreadBranch { tab_id, branch } => self.threads.get_mut(&tab_id).branch = branch,
+            CoreMessage::WorktreeCreated { tab_id, project } => self.worktree_created(&tab_id, project),
+            CoreMessage::WorktreeRemoved { tab_id } => result = w.close_tab(&tab_id, account, core),
+            CoreMessage::TabMoved { tab_id, project } => self.move_tab(&tab_id, project),
             CoreMessage::SessionHistory { tab_id, items, context } => {
                 for item in &items {
                     self.remember_images(item);
@@ -182,6 +186,7 @@ impl Desk {
             CoreMessage::Setups { setups } => self.plugins.setups = setups,
             CoreMessage::Error { message, detail } => {
                 self.branch_notices.failed();
+                self.worktree_failed();
                 self.toasts.error(message, detail);
             }
             CoreMessage::Notice { message } => self.toasts.show(message, false),
@@ -487,7 +492,7 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
 fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, window: Option<[f32; 2]>, layer: &mut Vec<El>) -> El {
     let width = size.map(|size| size[0]);
     let k = theme::kit(dark);
-    let name = s.account.project_label(&tab.project);
+    let name = project_label(s, &tab.project);
     let place = row()
         .min_w(0.0)
         .shrink()
@@ -500,6 +505,7 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, window: 
         .children(crate::session_menu::button(s, tab, k, layer));
     crate::rewind::dialog(s, &tab.id, k, layer);
     crate::branch_notice::dialog(s, &tab.id, k, layer);
+    crate::worktrees::remove_dialog(s, tab, k, layer);
     let end = row()
         .gap(4.0)
         .items_center()
@@ -559,7 +565,14 @@ fn thread_composer(s: &Desk, tab: &TabInfo, lane: Option<crate::cards::Lane>, k:
 
 /// A project's mark: the icon Settings chose, on its own, else
 /// the initial on a tile in the project's colour.
+/// A project's name as the user set it. A folder in a worktree takes its repo's.
+pub fn project_label(s: &Desk, project: &str) -> String {
+    s.account.project_label(s.projects.home(project))
+}
+
+/// A project's mark. A folder in a worktree takes its repo's.
 pub fn project_mark(s: &Desk, project: &str, k: &rune_kit::Kit) -> El {
+    let project = s.projects.home(project);
     let icon = s.account.project_icon(project).and_then(|path| s.images.file(&std::path::Path::new(project).join(path)));
     match icon {
         // An icon is often a transparent logo, so it shows whole, without the tile.

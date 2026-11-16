@@ -152,6 +152,14 @@ impl Drafts {
         self.by_tab.get(tab).map_or("", |e| e.text.as_str())
     }
 
+    /// Puts a message that could not go out back into its tab's composer.
+    pub fn restore(&mut self, tab: &str, text: String, images: Vec<crate::protocol::ImageAttachment>) {
+        *self.edit(tab) = TextEdit::new(text);
+        if !images.is_empty() {
+            self.images.insert(tab.to_owned(), images);
+        }
+    }
+
     /// Whether the tab's message has text or images to send.
     pub fn has_content(&self, tab: &str) -> bool {
         !self.text(tab).trim().is_empty() || self.images.get(tab).is_some_and(|images| !images.is_empty())
@@ -219,6 +227,12 @@ impl Desk {
         }
         if !text.is_empty() && self.workspace.active_tab().is_some_and(crate::workspace::is_untitled) {
             self.workspace.name_tab(&tab, &text, &self.core);
+        }
+        // A tab that starts in a new worktree sends its first message once the core has made it.
+        if self.makes_worktree(&tab) {
+            self.create_worktree(&tab, text, images);
+            self.drafts.edit(&tab).clear();
+            return;
         }
         let follow_up = self.busy(&tab).then(|| self.follow_up(alternate).for_text(&text).name().to_owned());
         // A message sent while the agent works joins its turn or waits, so its subagents stay.
@@ -889,6 +903,16 @@ mod tests {
 
     fn type_text(s: &mut Desk, words: &str) {
         s.drafts.edit("t").text = words.into();
+    }
+
+    #[test]
+    fn a_tab_that_starts_in_a_new_worktree_asks_for_it_and_holds_its_message() {
+        let mut s = desk();
+        s.pick_checkout("t", None);
+        type_text(&mut s, "Add tests");
+        s.submit(false);
+        assert_eq!(s.core.sent().iter().map(|m| m["type"].as_str().unwrap().to_owned()).filter(|t| t != "tabs.save").collect::<Vec<_>>(), ["worktree.create"]);
+        assert!(!s.drafts.has_content("t"));
     }
 
     #[test]

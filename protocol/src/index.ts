@@ -269,6 +269,8 @@ export interface Space {
   readonly name: string
   readonly root: string
   readonly branch: string
+  /** Set when the project is in a worktree: the matching folder in the repo's main checkout. */
+  readonly worktree?: { readonly main: string }
   /** Commits ahead of and behind the upstream branch, when there is one. */
   readonly upstream?: { readonly ahead: number; readonly behind: number }
   /** Uncommitted changes in the project's folder against HEAD, as Review's uncommitted scope counts them: new files and their lines included. */
@@ -437,6 +439,17 @@ export interface ThreadSummary {
   readonly updatedAt: number
   /** The tab that has the thread open, if one does. */
   readonly tabId?: string
+  /** The folder the thread runs in: the project's own, or the matching one in another checkout of its repo. */
+  readonly project: string
+}
+
+/** A checkout of a project's repo. `path` is the folder in it that matches the project. */
+export interface Worktree {
+  readonly path: string
+  /** The branch checked out. Absent on a detached HEAD. */
+  readonly branch?: string
+  /** Whether this is the repo's main checkout. */
+  readonly main: boolean
 }
 
 /** How the window draws itself. Auto follows the system. */
@@ -615,8 +628,10 @@ export interface ProjectParts {
   readonly commands: readonly CommandInfo[]
   /** Commands the project's files define, for the import menu. */
   readonly commandSources: readonly CommandSource[]
-  /** The project's recent threads, open in a tab or not. */
+  /** The recent threads of the project and of its repo's other checkouts, open in a tab or not. */
   readonly threads: readonly ThreadSummary[]
+  /** The checkouts of the project's repo, the main one first. None outside a Git repo. */
+  readonly worktrees: readonly Worktree[]
   /** Images in the project that look like its logo, as paths relative to it. The core serves each at `/project-icon`. */
   readonly icons: readonly string[]
   /** Each agent's skills and custom commands, by agent. Null when the agent could not be asked. An agent with no slash commands lists none. */
@@ -931,6 +946,13 @@ export type ClientMessage =
   | { readonly type: "session.forceStop"; readonly tabId: string }
   /** Switches the tab's project back to the branch its thread last ran on. */
   | { readonly type: "branch.restore"; readonly tabId: string }
+  /**
+   * Makes a worktree from what `project` has checked out, on a new branch named from `name`, for a tab
+   * whose thread has not started. The core answers with `worktree.created`.
+   */
+  | { readonly type: "worktree.create"; readonly tabId: string; readonly project: string; readonly name: string }
+  /** Removes the worktree a tab works in, with what is uncommitted in it. Its branch stays. The core answers with `worktree.removed`. */
+  | { readonly type: "worktree.remove"; readonly tabId: string }
   /** Stops commands the agent left running in the background in a tab. */
   | { readonly type: "tasks.stop"; readonly tabId: string; readonly ids: readonly string[] }
   /** Lists the setups of every project with plugins on, the active `project`'s first. The core answers with `setups`. */
@@ -973,7 +995,7 @@ export type CoreMessage =
    * session.history message.
    */
   | { readonly type: "tabs"; readonly tabs: readonly TabInfo[]; readonly active?: string }
-  /** Folders tabs have opened, most recent first. Sent on connect, before the tabs, and when a tab opens a folder. */
+  /** Folders tabs have opened, most recent first, a worktree's by its repo's main checkout. Sent on connect, before the tabs, and when a tab opens a folder. */
   | { readonly type: "recent"; readonly projects: readonly string[] }
   | { [K in ProjectPart]: { readonly type: "project"; readonly project: string; readonly part: K; readonly value: ProjectParts[K] } }[ProjectPart]
   /** Every agent as Desk knows it now, in Desk's order, sent whole each time one changes. */
@@ -991,6 +1013,15 @@ export type CoreMessage =
   | { readonly type: "file"; readonly project: string; readonly path: string; readonly file: FileView }
   /** The branch a tab's thread last ran on. Absent outside a Git repo or on a detached HEAD. */
   | { readonly type: "thread.branch"; readonly tabId: string; readonly branch?: string }
+  /** A worktree made for a tab, as `worktree.create` asked. `project` is the folder in it that the tab moves to. */
+  | { readonly type: "worktree.created"; readonly tabId: string; readonly project: string }
+  /** The worktree a tab worked in is gone, so the tab closes. */
+  | { readonly type: "worktree.removed"; readonly tabId: string }
+  /**
+   * A tab's thread moved into another checkout of its repo, such as a worktree its agent made. The app moves
+   * the tab to `project` and saves, and the thread runs there from its next turn.
+   */
+  | { readonly type: "tab.moved"; readonly tabId: string; readonly project: string }
   /** The answer to `files.search`, with the query it answers: paths relative to the project, best match first. */
   | { readonly type: "files.found"; readonly project: string; readonly query: string; readonly paths: readonly string[] }
   | { readonly type: "terminal.output"; readonly id: string; readonly data: string }

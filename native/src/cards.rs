@@ -172,10 +172,12 @@ fn space_card(space: &Space, tab: &str, k: &Kit) -> El {
         (!parts.is_empty()).then(|| faint(parts.join(" ")))
     });
     let changes = changes(space, k);
+    // A worktree names itself and where it came from, in place of the folder.
+    let place = crate::worktrees::space_line(space, tab, k).unwrap_or_else(|| line(k, &ic::FOLDER, format::short_path(&space.root), None));
     let tab = tab.to_owned();
     // The card counts uncommitted work, so it opens Review on the same changes.
     let changes_line = line(k, &ic::REVIEW, "Changes".into(), Some(changes)).hover(k.c.bg_base).role("button").on_press(move |s: &mut Desk| s.open_review(&tab, "git"));
-    let local = col().w_full().padding(6.0).child(line(k, &ic::FOLDER, format::short_path(&space.root), None)).child(line(k, &ic::BRANCH, space.branch.clone(), upstream)).child(changes_line);
+    let local = col().w_full().padding(6.0).child(place).child(line(k, &ic::BRANCH, space.branch.clone(), upstream)).child(changes_line);
     let pr = space.pr.as_ref().map(|pr| {
         let (state, accent) = match (pr.state.as_str(), pr.draft) {
             ("MERGED", _) => ("Merged", false),

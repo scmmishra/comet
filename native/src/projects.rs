@@ -1,13 +1,15 @@
 //! What the core reads about each project.
 
-use crate::protocol::{CommandInfo, CommandSource, McpServer, PluginContributions, Skill, Space, ThreadSummary};
+use crate::protocol::{CommandInfo, CommandSource, McpServer, PluginContributions, Skill, Space, ThreadSummary, Worktree};
 use serde_json::Value;
 use std::collections::HashMap;
 
 #[derive(Default)]
 pub struct Project {
-    /// The project's recent threads, open in a tab or not. None until read.
+    /// The recent threads of the project and of its repo's other checkouts, open in a tab or not. None until read.
     pub threads: Option<Vec<ThreadSummary>>,
+    /// The checkouts of the project's repo, the main one first. None until read, and empty outside a Git repo.
+    pub worktrees: Option<Vec<Worktree>>,
     /// None until read or outside a Git repo.
     pub space: Option<Space>,
     /// Each agent's skills and commands in the project, by agent. None until read, and None for an agent that could not be asked.
@@ -41,11 +43,18 @@ impl Projects {
         self.by_dir.get(dir)
     }
 
+    /// The folder that names a project to the user: for a folder in a worktree, the matching folder in its
+    /// repo's main checkout, once its Space is read. A worktree's tab shows its repo's name and mark.
+    pub fn home<'a>(&'a self, dir: &'a str) -> &'a str {
+        self.get(dir).and_then(|p| p.space.as_ref()).and_then(|s| s.worktree.as_ref()).map_or(dir, |w| w.main.as_str())
+    }
+
     /// Takes one part the core read. Parts the app does not show yet are left out.
     pub fn read(&mut self, dir: String, part: &str, value: Value) {
         let project = self.by_dir.entry(dir).or_default();
         match part {
             "threads" => project.threads = serde_json::from_value(value).ok(),
+            "worktrees" => project.worktrees = serde_json::from_value(value).ok(),
             "space" => project.space = serde_json::from_value(value).ok(),
             "skills" => project.skills = serde_json::from_value(value).ok(),
             "icons" => project.icons = serde_json::from_value(value).ok(),
@@ -62,8 +71,8 @@ impl Projects {
     }
 }
 
-/// The parts a tab shows about its project: the start screen's threads, and the cards' Space and commands.
-pub const START_PARTS: [&str; 3] = ["threads", "space", "commands"];
+/// The parts a tab shows about its project: the start screen's threads and checkouts, and the cards' Space and commands.
+pub const START_PARTS: [&str; 4] = ["threads", "worktrees", "space", "commands"];
 
 #[cfg(test)]
 mod tests {
@@ -72,12 +81,20 @@ mod tests {
     #[test]
     fn reads_threads_and_space_and_a_folder_outside_git() {
         let mut projects = Projects::default();
-        projects.read("/a".into(), "threads", serde_json::json!([{ "id": "s", "agent": "claude", "title": "T", "updatedAt": 5.0 }]));
+        projects.read("/a".into(), "threads", serde_json::json!([{ "id": "s", "agent": "claude", "title": "T", "updatedAt": 5.0, "project": "/a" }]));
         projects.read("/a".into(), "space", serde_json::json!({ "name": "a", "root": "/a", "branch": "main", "changes": {} }));
         projects.read("/b".into(), "space", Value::Null);
         assert_eq!(projects.get("/a").unwrap().threads.as_ref().unwrap()[0].title, "T");
         assert_eq!(projects.get("/a").unwrap().space.as_ref().unwrap().branch, "main");
         assert!(projects.get("/b").unwrap().space.is_none());
+    }
+
+    #[test]
+    fn names_a_worktree_by_its_main_checkout() {
+        let mut projects = Projects::default();
+        projects.read("/w".into(), "space", serde_json::json!({ "name": "w", "root": "/w", "branch": "desk/w", "worktree": { "main": "/a" }, "changes": {} }));
+        assert_eq!(projects.home("/w"), "/a");
+        assert_eq!(projects.home("/a"), "/a");
     }
 
     #[test]
