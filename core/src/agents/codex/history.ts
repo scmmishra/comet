@@ -34,7 +34,18 @@ export function turnResult(turn: CodexTurn, message: string, stopping: boolean):
   return { type: "result", id: resultId(message), durationMs, isError: turn.status === "failed", ...(stopped ? { stopped } : {}) }
 }
 
-export const turnError = (turn: CodexTurn): ThreadItem => ({ type: "error", id: `error:${turn.id}`, message: turn.error?.message ?? "Codex could not finish the turn." })
+/** A provider's status or reason for a request too large to take, after T3 Code. A gateway such as nginx answers it with an HTML page. */
+const REQUEST_TOO_LARGE_STATUS = /^\s*(?:(?:API Error|Error|HTTP|status)(?:\s*:)?\s*)?413\b/iu
+const REQUEST_TOO_LARGE_REASON = /\b(?:Request Entity|Payload|Content) Too Large\b/u
+/** What a request too large reads as. Sending the same thread again fails the same way. */
+export const REQUEST_TOO_LARGE = "The request was too large for the provider. Start a new thread, or remove large attachments."
+
+/** Why the turn failed. A request too large reads as one sentence, in place of the provider's page. */
+export function turnError(turn: CodexTurn): ThreadItem {
+  const message = turn.error?.message ?? "Codex could not finish the turn."
+  const tooLarge = REQUEST_TOO_LARGE_STATUS.test(message) || REQUEST_TOO_LARGE_REASON.test(message)
+  return { type: "error", id: `error:${turn.id}`, message: tooLarge ? REQUEST_TOO_LARGE : message }
+}
 
 /** A user message. The turn it opened gives its time. A message steered into the turn has its own time, when Codex recorded it. */
 function restoredUserItem(message: UserMessage, opened: CodexTurn | undefined): ThreadItem {

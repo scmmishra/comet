@@ -43,9 +43,15 @@ type Params = Record<string, unknown> & { readonly itemId?: string; readonly rea
 /**
  * The request Codex asks with `method`: one for the user, one Desk answers itself, or undefined for one
  * Desk does not handle. `rpcId` is the id Codex gave the request. `files` gives the paths of a file
- * change Codex has already reported, by its item id.
+ * change Codex has already reported, by its item id. `acceptMcp` accepts every MCP prompt without asking.
  */
-export function readRequest(method: string, params: Params, rpcId: RequestId, files: (itemId: string) => readonly string[] | undefined): CodexRequest | AnsweredRequest | undefined {
+export function readRequest(
+  method: string,
+  params: Params,
+  rpcId: RequestId,
+  files: (itemId: string) => readonly string[] | undefined,
+  acceptMcp: boolean,
+): CodexRequest | AnsweredRequest | undefined {
   switch (method) {
     case "item/commandExecution/requestApproval": {
       const command = typeof params.command === "string" ? shellScript(params.command) : ""
@@ -68,7 +74,7 @@ export function readRequest(method: string, params: Params, rpcId: RequestId, fi
       return asking(permission(String(params.callId), "Edit", "file-change", paths.join(", ") || "Change files", params.reason), review)
     }
     case ELICITATION:
-      return elicitationRequest(params as Params & Elicitation, rpcId)
+      return elicitationRequest(params as Params & Elicitation, rpcId, acceptMcp)
     default:
       return undefined
   }
@@ -132,27 +138,32 @@ interface Elicitation {
   readonly serverName: string
   readonly mode: string
   readonly message?: string
-  readonly requestedSchema?: { readonly properties?: Readonly<Record<string, { readonly default?: unknown }>> }
+  readonly requestedSchema?: { readonly properties?: Readonly<Record<string, { readonly default?: unknown }>>; readonly required?: readonly string[] }
 }
 
 /**
  * An MCP server's question. Codex asks before it calls an MCP tool. Desk approves a call of its own tools
  * itself: the user chose the thread's permission mode, and work handed to another agent runs no broader
- * than it. An MCP server's question has no item of its own, so the request's own id names it.
+ * than it. With `acceptMcp`, it approves every question. A question that sends the user to a page is
+ * cancelled, since Desk opens none. An MCP server's question has no item of its own, so the request's own id names it.
  */
-function elicitationRequest(asked: Elicitation, rpcId: RequestId): CodexRequest | AnsweredRequest | undefined {
-  if (asked.serverName === SERVER_NAME) return { answer: elicitationReply(asked, "allow") }
-  if (asked.mode === "url") return undefined
+function elicitationRequest(asked: Elicitation, rpcId: RequestId, acceptMcp: boolean): CodexRequest | AnsweredRequest {
+  if (asked.mode === "url") return { answer: elicitationReply(asked, "cancel") }
+  if (acceptMcp || asked.serverName === SERVER_NAME) return { answer: elicitationReply(asked, "allow") }
   const message = asked.message?.trim() || `Allow ${asked.serverName} to run a tool`
   return asking(permission(`elicitation:${rpcId}`, asked.serverName, "permission", message.slice(0, MAX_DETAIL), undefined), (answer) => elicitationReply(asked, answer))
 }
 
 /**
  * Codex's reply for an answer. Accepting fills each field of the form with its default, which is how a
- * plain approval answers, and allowing for the session asks Codex to keep the approval.
+ * plain approval answers, and allowing for the session asks Codex to keep the approval. A form with a
+ * required field that has no default is cancelled, after T3 Code: Desk cannot fill it, and a decline
+ * reads as the user's refusal, which Codex may keep.
  */
 function elicitationReply(asked: Elicitation, answer: PermissionAnswer) {
   if (answer === "decline" || answer === "cancel") return { action: answer, content: null, _meta: null }
   const defaults = Object.entries(asked.requestedSchema?.properties ?? {}).flatMap(([field, { default: value }]) => (value === undefined || value === null ? [] : [[field, value] as const]))
+  const filled = new Set(defaults.map(([field]) => field))
+  if (asked.requestedSchema?.required?.some((field) => !filled.has(field))) return elicitationReply(asked, "cancel")
   return { action: "accept", content: Object.fromEntries(defaults), _meta: answer === "allow-session" ? { persist: "session" } : null }
 }

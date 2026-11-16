@@ -2,6 +2,7 @@ import { expect, jest, test } from "bun:test"
 import type { PermissionAnswer, RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
 import { until } from "../../test-support"
 import type { SessionOptions } from "../agent"
+import { REQUEST_TOO_LARGE } from "./history"
 import { fakeAppServer, MODELS } from "./test-app-server"
 import { ModelCatalog } from "./models"
 import { AppServer } from "./server"
@@ -11,6 +12,8 @@ const DIR = "/Users/ada/project"
 const THREAD = "01a0d604-1f8d-7522-8fe1-371c6626896e"
 const TURN = "01a0d604-2095-7fb0-a7e6-3f63d1949bbe"
 const SETTINGS: RunSettings = { agent: "codex", model: "default", permissionMode: "default" }
+
+const FULL_ACCESS_APPROVAL = { granular: { mcp_elicitations: true, request_permissions: false, rules: false, sandbox_approval: false, skill_approval: false } }
 
 const turn = (status: string, extra: object = {}) => ({ id: TURN, items: [], itemsView: "notLoaded", status, error: null, startedAt: 1790296989, completedAt: null, durationMs: null, ...extra })
 
@@ -137,7 +140,7 @@ test("names the default model and its effort, and takes new settings from the ne
   s.session.send("Again")
   await until(() => s.codex.sent("turn/start").length === 2)
   expect(s.codex.sent("thread/start")).toHaveLength(1)
-  expect(s.codex.sent("turn/start")[1]).toMatchObject({ model: "gpt-6-luna", effort: "high", serviceTier: null, approvalPolicy: "never", sandboxPolicy: { type: "dangerFullAccess" } })
+  expect(s.codex.sent("turn/start")[1]).toMatchObject({ model: "gpt-6-luna", effort: "high", serviceTier: null, approvalPolicy: FULL_ACCESS_APPROVAL, sandboxPolicy: { type: "dangerFullAccess" } })
 })
 
 test("shows the model Codex moved a turn to, and the model asked for again on the next turn", async () => {
@@ -251,6 +254,16 @@ test.each([
   expect(s.items().filter((found) => found.id === "w2" && found.type === "tool" && found.result)).toEqual([expect.objectContaining({ result: { output: "", isError: false } })])
   expect(s.last("compaction")).toEqual({ type: "compaction", id: "c1", status: status === "failed" ? "failed" : "stopped" })
   expect(s.items().findIndex((found) => found.id === "w1" && found.type === "tool" && found.result)).toBeLessThan(s.items().findIndex((found) => found.type === "result"))
+})
+
+test("a turn that failed on a request too large reads as one sentence, not the provider's HTML page", async () => {
+  const s = setup()
+  await started(s)
+  const message =
+    "unexpected status 413 Payload Too Large: <html><head><title>413 Request Entity Too Large</title></head><body><center><h1>413 Request Entity Too Large</h1></center><hr><center>nginx</center></body></html>, url: http://127.0.0.1:18413/v1/responses"
+  s.codex.notify("turn/completed", { threadId: THREAD, turn: turn("failed", { error: { message } }) })
+  await until(() => !s.session.busy)
+  expect(s.last("error")?.message).toBe(REQUEST_TOO_LARGE)
 })
 
 test("an open web search settles when the app-server dies or a stop is forced, and not again on the next turn", async () => {
@@ -395,10 +408,41 @@ test("approves a call of Desk's own tools itself, and asks the user about anothe
   expect(s.codex.reply(2)).toEqual({ id: 2, result: { action: "decline", content: null, _meta: null } })
 })
 
+test("in full access, asks Codex for MCP prompts and accepts each without a card, and still runs commands without asking", async () => {
+  const s = setup({ settings: { ...SETTINGS, permissionMode: "bypassPermissions" } })
+  await started(s)
+  expect(s.codex.sent("thread/start")[0]).toMatchObject({ approvalPolicy: FULL_ACCESS_APPROVAL, sandbox: "danger-full-access" })
+  expect(s.codex.sent("turn/start")[0]).toMatchObject({ approvalPolicy: FULL_ACCESS_APPROVAL, approvalsReviewer: "user", sandboxPolicy: { type: "dangerFullAccess" } })
+  const toolCall = { codex_approval_kind: "mcp_tool_call", persist: ["session", "always"], tool_name: "ask_access" }
+  s.codex.ask(0, "mcpServer/elicitation/request", { threadId: THREAD, turnId: TURN, serverName: "probe", mode: "form", _meta: toolCall, message: "Allow the probe MCP server to run tool \"ask_access\"?", requestedSchema: { type: "object", properties: {} } })
+  await until(() => s.codex.reply(0) !== undefined)
+  expect(s.codex.reply(0)).toEqual({ id: 0, result: { action: "accept", content: {}, _meta: null } })
+  const form = { type: "object", properties: { allow: { type: "boolean", default: true } }, required: ["allow"] }
+  s.codex.ask(1, "mcpServer/elicitation/request", { threadId: THREAD, turnId: TURN, serverName: "probe", mode: "form", _meta: null, message: "Allow access?", requestedSchema: form })
+  await until(() => s.codex.reply(1) !== undefined)
+  expect(s.codex.reply(1)).toEqual({ id: 1, result: { action: "accept", content: { allow: true }, _meta: null } })
+  expect(s.last("permission")).toBeUndefined()
+})
+
+test("cancels an MCP prompt Desk cannot answer: one that opens a page, and a form with a required field it cannot fill", async () => {
+  for (const permissionMode of ["default", "bypassPermissions"] as const) {
+    const s = setup({ settings: { ...SETTINGS, permissionMode } })
+    await started(s)
+    s.codex.ask(0, "mcpServer/elicitation/request", { threadId: THREAD, turnId: TURN, serverName: "github", mode: "url", _meta: null, message: "Sign in", url: "https://example.com", elicitationId: "e1" })
+    await until(() => s.codex.reply(0) !== undefined)
+    expect(s.codex.reply(0)).toEqual({ id: 0, result: { action: "cancel", content: null, _meta: null } })
+  }
+  const s = setup({ settings: { ...SETTINGS, permissionMode: "bypassPermissions" } })
+  await started(s)
+  s.codex.ask(0, "mcpServer/elicitation/request", { threadId: THREAD, turnId: TURN, serverName: "probe", mode: "form", _meta: null, message: "Your name?", requestedSchema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] } })
+  await until(() => s.codex.reply(0) !== undefined)
+  expect(s.codex.reply(0)).toEqual({ id: 0, result: { action: "cancel", content: null, _meta: null } })
+})
+
 test("refuses a request Desk does not handle", async () => {
   const s = setup()
   await started(s)
-  s.codex.ask(0, "mcpServer/elicitation/request", { threadId: THREAD, serverName: "github", mode: "url", url: "https://example.com", elicitationId: "e1" })
+  s.codex.ask(0, "item/tool/call", { threadId: THREAD, turnId: TURN, callId: "c1", tool: "lookup", arguments: {} })
   await until(() => s.codex.reply(0) !== undefined)
   expect(s.codex.reply(0)).toEqual({ id: 0, error: { code: -32601, message: "Desk does not handle that request." } })
 })
