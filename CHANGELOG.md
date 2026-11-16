@@ -4,6 +4,10 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- `/rename` in a Claude thread renames its tab.
+- A message sent just as a Claude turn ends shows as the next turn's first message, below that turn's result.
+- A background subagent no longer shows as running after Claude Code exits or its tab's session closes.
+- When Desk cannot show an MCP server's question to Claude, Claude tells the server it was cancelled, not declined.
 - When Codex or Antigravity fails to start or ends early, the error shows how it ended and the last lines it printed. A Codex that never answers at start no longer blocks every Codex tab: Desk stops it after 30 seconds and starts a new one.
 - A Codex web search that never completes shows as not finished when its turn ends, not as running.
 - An Antigravity turn that the agent refuses, or that stops at its token or request limit, now says why.

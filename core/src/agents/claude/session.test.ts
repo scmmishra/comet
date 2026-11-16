@@ -77,11 +77,17 @@ function setup() {
     queries.push(running)
     return running as unknown as Query
   }
-  const session = new ClaudeSession(DIR, (event) => void events.push(event), { settings: SETTINGS, onSessionId: () => {}, onRateLimit: () => {}, compactIdle: () => false }, run as never)
+  const renames: string[] = []
+  const session = new ClaudeSession(
+    DIR,
+    (event) => void events.push(event),
+    { settings: SETTINGS, onSessionId: () => {}, onRenamed: (title) => void renames.push(title), onRateLimit: () => {}, compactIdle: () => false },
+    run as never,
+  )
   const items = () => events.flatMap((event) => (event.kind === "item" ? [event.item] : []))
   const results = () => items().filter((item): item is Extract<ThreadItem, { type: "result" }> => item.type === "result")
   const statuses = () => events.flatMap((event) => (event.kind === "status" ? [event.busy] : []))
-  return { session, events, queries, items, results, statuses }
+  return { session, events, queries, items, results, statuses, renames }
 }
 
 /** Sends a message and waits for the session to start its query. */
@@ -164,6 +170,87 @@ test("a steered message that missed its turn keeps the tab busy for the next tur
   running.push(result("r2"))
   await until(() => s.statuses().length === 2)
   expect(s.statuses()).toEqual([true, false])
+})
+
+test("a steered message that missed its turn moves after that turn's result, as the next turn's first message", async () => {
+  const s = setup()
+  const running = await started(s)
+  s.session.steer("Now reply with just: second")
+  const steer = s.items().at(-1)!
+  expect(steer).toMatchObject({ steered: true, waiting: true })
+
+  // What Claude Code sent when a steer came 10 ms before the turn's result: the result, then a new turn that takes the steer.
+  running.push(result("r1", { stop_reason: "end_turn", user_message_uuids: [s.items()[0]!.id] }))
+  await until(() => s.results().length === 1)
+  expect(s.events.slice(-3)).toEqual([
+    { kind: "item", item: expect.objectContaining({ type: "result", id: "r1" }) },
+    { kind: "items.remove", ids: [steer.id] },
+    { kind: "item", item: { type: "user", id: steer.id, text: "Now reply with just: second", at: steer.type === "user" ? steer.at : 0 } },
+  ])
+
+  running.push({ type: "system", subtype: "init", uuid: "i2", session_id: "s1", model: "claude-haiku-5-5", user_message_uuids: [steer.id] })
+  running.push(result("r2", { stop_reason: "end_turn", user_message_uuids: [steer.id] }))
+  await until(() => s.statuses().length === 2)
+  expect(s.items().filter((item) => item.id === steer.id)).toHaveLength(2)
+  expect(s.statuses()).toEqual([true, false])
+})
+
+test("a /rename names the tab once its result arrives", async () => {
+  const s = setup()
+  const running = await started(s)
+  // The frames Claude Code sent for "/rename Probe title".
+  running.push({ type: "system", subtype: "session_title_changed", title: "Probe title", uuid: "t1", session_id: "s1" })
+  expect(s.renames).toEqual([])
+  running.push(result("r1", { result: "Session renamed to: Probe title", local_command: "rename", num_turns: 0 }))
+  await until(() => s.statuses().length === 2)
+  expect(s.renames).toEqual(["Probe title"])
+
+  // A later turn's result does not name it again.
+  s.session.send("Hi")
+  running.push(result("r2"))
+  await until(() => s.statuses().length === 4)
+  expect(s.renames).toEqual(["Probe title"])
+})
+
+test("an MCP elicitation Desk cannot show is cancelled, not declined", async () => {
+  const s = setup()
+  const running = await started(s)
+  const elicit = running.options.onElicitation!
+  expect(await elicit({ serverName: "linear", message: "Pick a team", mode: "form" } as never, { signal: new AbortController().signal, requestId: "e1" })).toEqual({ action: "cancel" })
+})
+
+/** Starts a background subagent and a background command in a turn that has ended. */
+async function backgroundWork(s: ReturnType<typeof setup>, running: FakeQuery) {
+  running.push({ type: "system", subtype: "task_started", uuid: "ts1", session_id: "s1", task_id: "t1", tool_use_id: "call1", task_type: "local_agent", description: "Find tests", is_backgrounded: true })
+  running.push({ type: "system", subtype: "background_tasks_changed", uuid: "bt1", session_id: "s1", tasks: [{ task_id: "b1", task_type: "local_bash", description: "npm run dev" }] })
+  running.push(result("r1"))
+  await until(() => s.statuses().length === 2)
+}
+
+const lastSubagent = (s: ReturnType<typeof setup>) => s.events.findLast((event) => event.kind === "subagent")
+const lastBackground = (s: ReturnType<typeof setup>) => s.events.findLast((event) => event.kind === "background")
+
+test("a stream that ends stops the subagents still running and empties the background commands", async () => {
+  const s = setup()
+  const running = await started(s)
+  await backgroundWork(s, running)
+  expect(lastSubagent(s)).toMatchObject({ subagent: { id: "t1", status: "running" } })
+
+  running.end()
+  await until(() => lastBackground(s)?.kind === "background" && !lastBackground(s)!.tasks.length)
+  expect(lastSubagent(s)).toMatchObject({ subagent: { id: "t1", status: "stopped", endedAt: expect.any(Number) } })
+})
+
+test("a failure and a close stop the subagents still running and empty the background commands", async () => {
+  for (const end of ["fail", "close"] as const) {
+    const s = setup()
+    const running = await started(s)
+    await backgroundWork(s, running)
+    if (end === "fail") running.fail(new Error("Claude Code exited"))
+    else s.session.close()
+    await until(() => lastSubagent(s)?.kind === "subagent" && lastSubagent(s)!.subagent.status === "stopped")
+    expect(lastBackground(s)).toEqual({ kind: "background", tasks: [] })
+  }
 })
 
 test("a steered message waits until Claude Code takes it in", async () => {

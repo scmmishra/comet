@@ -261,6 +261,15 @@ test("renames a thread through its agent, and tells the app the tab's new title"
   expect(claude.calls).toEqual(["rename c1 Login fix"])
 })
 
+test("a session the agent renamed itself names its tab, without a rename back to the agent", async () => {
+  const project = tempFolder("agents")
+  const { window, sent, claude } = openWithAgents({ tabs: [tab("a", project)], threads: { a: { sessionId: "c1", agent: "claude" } }, recent: [] })
+  await window.send("a", "/rename Probe title")
+  claude.sessions.at(-1)!.options.onRenamed!("Probe title")
+  expect(sent).toContainEqual({ type: "tab.title", tabId: "a", title: "Probe title" })
+  expect(claude.calls).toEqual(["send /rename Probe title"])
+})
+
 test("forks a thread under the tab's name, from a message when given, and answers with the copy", async () => {
   const project = tempFolder("agents")
   const { window, claude } = openWithAgents({ tabs: [{ ...tab("a", project), title: "Fix the login form" }], threads: { a: { sessionId: "c1", agent: "claude" } }, recent: [] })
