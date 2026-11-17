@@ -4,6 +4,7 @@ All notable changes to Desk are listed here. Changes go under `## Unreleased` un
 
 ## Unreleased
 
+- Desk runs on a newer Rune. Text in a row that grows moves in whole pixels, so it no longer shimmers while the row animates. A screen reader announces each control once.
 - A file link in a reply opens the file even when the agent shortened its path or gave only its name, if exactly one file in the project matches. A file tab whose file does not exist says so. It used to stay on "Reading the file…" while a toast showed an error.
 - Desk works in Git worktrees. The branch menu on a new tab's start screen picks where the thread starts: the main checkout, a worktree that exists, or a new worktree. A new worktree goes in `~/.desk/worktrees/<repo>/`, on a `desk/` branch named from the first message, which goes out once the worktree is made.
 - A Claude or Codex thread moves into a worktree when you ask the agent to work in one. The agent asks Desk through Desk's new `move_to_worktree` tool. Claude's own EnterWorktree tool moves it too. A worktree the agent makes for another use, such as a baseline, leaves the thread where it is. The tab moves when the turn ends, and Review, terminals, search and the Space card follow it. A thread cannot rewind to before its move. Antigravity threads stay in the folder they started in.
