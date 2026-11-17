@@ -728,6 +728,8 @@ export interface FileView {
   readonly path: string
   readonly text?: string
   readonly binary?: boolean
+  /** Set when no file is at the path, such as when it was deleted or a reply named it wrongly. */
+  readonly missing?: boolean
   /** Set when the text stops before the end of the file. */
   readonly truncated?: boolean
 }
@@ -930,6 +932,11 @@ export type ClientMessage =
   | { readonly type: "window.focus"; readonly focused: boolean }
   /** Opens a file from the thread in the editor. A relative path is in the project. The core refuses anything that is not a file. */
   | { readonly type: "file.open"; readonly project: string; readonly path: string; readonly line?: number }
+  /**
+   * Finds the file a reply names, which may be a shortened path or a name alone. `path` is as the reply
+   * wrote it. The core answers with `file.found`.
+   */
+  | { readonly type: "file.find"; readonly project: string; readonly path: string }
   /** Reads a file to show in the panel. `path` is relative to the project, absolute, or from ~/. The core answers with `file`. */
   | { readonly type: "file.read"; readonly project: string; readonly path: string }
   /** Sends a message. While the agent works, `followUp` says whether it steers the turn or waits in the queue. */
@@ -1011,6 +1018,8 @@ export type CoreMessage =
   | { readonly type: "queue"; readonly tabId: string; readonly messages: readonly QueuedMessage[]; readonly held: boolean }
   /** A file read for the panel, for the `path` that was asked for. */
   | { readonly type: "file"; readonly project: string; readonly path: string; readonly file: FileView }
+  /** The absolute path of the file a reply named, for the `path` that `file.find` asked for. It is the path as written when no file matches. */
+  | { readonly type: "file.found"; readonly project: string; readonly path: string; readonly file: string }
   /** The branch a tab's thread last ran on. Absent outside a Git repo or on a detached HEAD. */
   | { readonly type: "thread.branch"; readonly tabId: string; readonly branch?: string }
   /** A worktree made for a tab, as `worktree.create` asked. `project` is the folder in it that the tab moves to. */

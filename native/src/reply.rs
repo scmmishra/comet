@@ -158,7 +158,7 @@ pub fn document(text: &str) -> Markdown {
     Markdown::new(prepare(text)).scroll_wide(true)
 }
 
-/// `document` with its links and code blocks working: a file link opens the file in the tab's view pane,
+/// `document` with its links and code blocks working: a file link opens the file it names in the tab's view pane,
 /// another link opens in the browser, and each code block has a header with its language and a Copy
 /// button. `id` names the reply, so a code block's copy is told apart from others'.
 pub fn interactive(markdown: Markdown, tab: &str, id: &str, copied: Option<&str>, k: &Kit) -> Markdown {
@@ -178,7 +178,7 @@ pub fn interactive(markdown: Markdown, tab: &str, id: &str, copied: Option<&str>
         .on_link_tx(move |s: &mut Desk, url: &str, tx: &mut Tx| match url.strip_prefix(FILE_SCHEME) {
             Some(target) => {
                 let (path, line) = split_position(target);
-                s.open_file(&tab, path, line);
+                s.open_named_file(&tab, path, line);
             }
             None => {
                 if let Err(e) = tx.open_url(url) {

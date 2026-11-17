@@ -181,6 +181,8 @@ export const CORE_MESSAGES = [
     files: [{ path: "src/login.ts", status: "modified", additions: 1, deletions: 1, patch: "--- a/src/login.ts\n+++ b/src/login.ts\n@@ -1 +1 @@\n-a\n+b\n" }],
   },
   { type: "file", project: "/Users/me/code/web", path: "src/login.ts", file: { path: "/Users/me/code/web/src/login.ts", text: "export {}\n" } },
+  { type: "file", project: "/Users/me/code/web", path: "src/gone.ts", file: { path: "/Users/me/code/web/src/gone.ts", missing: true } },
+  { type: "file.found", project: "/Users/me/code/web", path: "login.ts", file: "/Users/me/code/web/src/login.ts" },
   { type: "terminal.output", id: "term-1", data: "\u001b[32mok\u001b[0m\r\n" },
   { type: "terminal.exit", id: "term-1", code: 0 },
   {
@@ -291,6 +293,7 @@ export const CLIENT_MESSAGES = [
   { type: "terminal.input", id: "term-1", data: "ls\r" },
   { type: "terminal.resize", id: "term-1", cols: 100, rows: 30 },
   { type: "review.get", tabId: "tab-1", scope: "git" },
+  { type: "file.find", project: "/Users/me/code/web", path: "login.ts" },
   { type: "file.read", project: "/Users/me/code/web", path: "src/login.ts" },
   { type: "file.open", project: "/Users/me/code/web", path: "src/login.ts", line: 12 },
   { type: "window.focus", focused: false },

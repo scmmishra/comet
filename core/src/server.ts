@@ -6,7 +6,7 @@ import { Delegations } from "./delegate/delegations"
 import { serveMcp } from "./delegate/mcp"
 import { Clients } from "./clients"
 import { errorMessage } from "./errors"
-import { openableFile, openInEditor, readForView } from "./files"
+import { findNamedFile, openableFile, openInEditor, readForView } from "./files"
 import { checkImages } from "./images"
 import { startPlugins } from "./plugins"
 import { searchFiles } from "./project-files"
@@ -105,8 +105,10 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         return agents.mcp(message.agent).toggle(message.project, message.name, message.enabled, (servers) => reply({ type: "mcp", project: message.project, agent: message.agent, servers }))
       case "file.open":
         return openInEditor(requireFile(message.project, message.path), message.line)
+      case "file.find":
+        return reply({ type: "file.found", project: message.project, path: message.path, file: await findNamedFile(message.project, message.path) })
       case "file.read":
-        return reply({ type: "file", project: message.project, path: message.path, file: readForView(requireFile(message.project, message.path)) })
+        return reply({ type: "file", project: message.project, path: message.path, file: readForView(message.project, message.path) })
       case "commands.save":
         return commandsOf(message.project).save(message.name, message.processes, message.replacing)
       case "commands.remove":

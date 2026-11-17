@@ -583,6 +583,9 @@ pub struct FileView {
     pub binary: bool,
     #[serde(default)]
     pub truncated: bool,
+    /// No file is at the path.
+    #[serde(default)]
+    pub missing: bool,
 }
 
 /// An image sent with a message, as base64.
@@ -885,6 +888,9 @@ pub enum CoreMessage {
     /// A file read for the panel, for the `path` that was asked for.
     #[serde(rename = "file")]
     File { project: String, path: String, file: FileView },
+    /// The absolute path of the file a reply named, for the `path` that `file.find` asked for.
+    #[serde(rename = "file.found")]
+    FileFound { project: String, path: String, file: String },
     /// The answer to `files.search`, with the query it answers: paths relative to the project, best match first.
     #[serde(rename = "files.found")]
     FilesFound { project: String, query: String, paths: Vec<String> },
@@ -1039,6 +1045,9 @@ pub enum ClientMessage {
     /// The files a tab's thread changed, in a Review scope. The core answers with `review`.
     #[serde(rename = "review.get", rename_all = "camelCase")]
     ReviewGet { tab_id: String, scope: String },
+    /// Finds the file a reply names, as the reply wrote it. The core answers with `file.found`.
+    #[serde(rename = "file.find")]
+    FileFind { project: String, path: String },
     /// Reads a file to show in the panel. The core answers with `file`.
     #[serde(rename = "file.read")]
     FileRead { project: String, path: String },
@@ -1247,6 +1256,7 @@ mod tests {
             ClientMessage::TerminalInput { id: "term-1".into(), data: "ls\r".into() },
             ClientMessage::TerminalResize { id: "term-1".into(), cols: 100, rows: 30 },
             ClientMessage::ReviewGet { tab_id: "tab-1".into(), scope: "git".into() },
+            ClientMessage::FileFind { project: "/Users/me/code/web".into(), path: "login.ts".into() },
             ClientMessage::FileRead { project: "/Users/me/code/web".into(), path: "src/login.ts".into() },
             ClientMessage::FileOpen { project: "/Users/me/code/web".into(), path: "src/login.ts".into(), line: Some(12) },
             ClientMessage::WindowFocus { focused: false },

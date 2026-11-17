@@ -76,6 +76,14 @@ impl ShownFile {
     }
 }
 
+/// A file link pressed in a tab's thread: the path as the reply wrote it, and the line it points at.
+struct Finding {
+    tab: String,
+    project: String,
+    path: String,
+    line: Option<u32>,
+}
+
 #[derive(Default)]
 pub struct Panel {
     reviews: HashMap<String, Review>,
@@ -85,6 +93,8 @@ pub struct Panel {
     files: HashMap<(String, String), ShownFile>,
     /// The file tab last read, so a file reads again each time it comes to the front.
     file_shown: Option<String>,
+    /// The file link last pressed, while the core finds the file it names.
+    finding: Option<Finding>,
     /// Whether a Markdown file tab shows its source, once someone chose, by file tab id.
     markdown_source: HashMap<String, bool>,
     /// How diffs draw, in every tab.
@@ -183,16 +193,27 @@ impl Desk {
         self.sync_panel();
     }
 
-    /// Shows a file from the thread in the tab's panel. A relative path is in the project.
+    /// Shows a file Desk knows is there, such as a changed file, in the tab's panel. A relative path is in the project.
     pub fn open_file(&mut self, tab: &str, path: &str, line: Option<u32>) {
         let Some(project) = self.workspace.tabs.iter().find(|t| t.id == tab).map(|t| t.project.clone()) else { return };
-        let absolute = match path.strip_prefix("~/") {
-            Some(rest) => format!("{}/{rest}", std::env::var("HOME").unwrap_or_default()),
-            None if path.starts_with('/') => path.to_owned(),
-            None => format!("{}/{}", project.trim_end_matches('/'), path.trim_start_matches("./")),
-        };
+        let absolute = if path.starts_with('/') { path.to_owned() } else { format!("{}/{}", project.trim_end_matches('/'), path.trim_start_matches("./")) };
         self.workspace.open_file_tab(tab, &absolute, line, &self.core);
         self.sync_panel();
+    }
+
+    /// Shows the file a reply names in the tab's panel, once the core finds it. A reply may shorten the
+    /// path, so the core looks it up. Only the link pressed last opens.
+    pub fn open_named_file(&mut self, tab: &str, path: &str, line: Option<u32>) {
+        let Some(project) = self.workspace.tabs.iter().find(|t| t.id == tab).map(|t| t.project.clone()) else { return };
+        self.core.send(&ClientMessage::FileFind { project: project.clone(), path: path.to_owned() });
+        self.panel.finding = Some(Finding { tab: tab.to_owned(), project, path: path.to_owned(), line });
+    }
+
+    /// The core found the file a link named. It opens if that link was the last pressed.
+    pub fn file_found(&mut self, project: &str, path: &str, file: &str) {
+        let pressed = self.panel.finding.as_ref().is_some_and(|f| f.project == project && f.path == path);
+        let Some(finding) = self.panel.finding.take_if(|_| pressed) else { return };
+        self.open_file(&finding.tab, file, finding.line);
     }
 
     /// Shows a tab of the pane at once, with no fade of its parts, as a tab bar switches.
@@ -490,10 +511,14 @@ fn shows_source(s: &Desk, file: &FileTabInfo) -> bool {
 
 /// A file open in the panel, after OpenCode: its path, a button to open it in the editor, then its lines.
 /// A Markdown file has a switch between its preview and its source.
+/// A missing file says so, with nothing to open.
 fn file_view(s: &Desk, tab: &TabInfo, file: &FileTabInfo, k: &Kit) -> El {
     let (path, line) = (file.path.as_str(), file.line);
     let (project, open_path) = (tab.project.clone(), path.to_owned());
-    let markdown = is_markdown(path);
+    let shown = s.panel.files.get(&(tab.project.clone(), path.to_owned()));
+    // A missing file has nothing to open or preview.
+    let missing = shown.is_some_and(|shown| shown.file.missing);
+    let markdown = is_markdown(path) && !missing;
     let source = !markdown || shows_source(s, file);
     let switch = markdown.then(|| {
         let id = file.id.clone();
@@ -516,14 +541,15 @@ fn file_view(s: &Desk, tab: &TabInfo, file: &FileTabInfo, k: &Kit) -> El {
         .pt(2.0)
         .child(text(path.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate().grow(1.0))
         .children(switch)
-        .child(
+        .children((!missing).then(|| {
             crate::theme::small_button("Open in editor")
                 .variant(ButtonVariant::Ghost)
                 .on_press(move |s: &mut Desk| s.core.send(&ClientMessage::FileOpen { project: project.clone(), path: open_path.clone(), line }))
-                .build(k),
-        );
-    let body = match s.panel.files.get(&(tab.project.clone(), path.to_owned())) {
+                .build(k)
+        }));
+    let body = match shown {
         None => centred(k, "Reading the file…"),
+        Some(_) if missing => centred(k, "No file is at this path."),
         Some(shown) if shown.file.binary => centred(k, "This is a binary file. Open it in the editor to see it."),
         Some(shown) => {
             let truncated = shown.file.truncated.then(|| text("The file is long, so only its first megabyte shows.").font(crate::theme::text(12.0)).color(k.c.text_faint).px(12.0).pb(8.0));
@@ -584,11 +610,44 @@ fn code(tab: &TabInfo, path: &str, shown: &ShownFile, line: Option<u32>, k: &Kit
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::Event;
+    use crate::protocol::CoreMessage;
+
+    fn desk() -> Desk {
+        let mut s = Desk::default();
+        let tabs = serde_json::json!({ "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "Fix login", "project": "/code/web", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] });
+        s.receive(Event::Message(serde_json::from_value(tabs).unwrap())).unwrap();
+        let _ = s.core.sent();
+        s
+    }
+
+    fn found(path: &str, file: &str) -> Event {
+        Event::Message(CoreMessage::FileFound { project: "/code/web".into(), path: path.into(), file: file.into() })
+    }
+
+    fn open_files(s: &Desk) -> Vec<(String, Option<u32>)> {
+        s.workspace.active_tab().map(|t| t.files.iter().map(|f| (f.path.clone(), f.line)).collect()).unwrap_or_default()
+    }
+
+    #[test]
+    fn a_file_link_opens_the_file_the_core_finds_and_only_the_last_link_pressed_opens() {
+        let mut s = desk();
+        s.open_named_file("t", "login.ts", Some(4));
+        s.open_named_file("t", "models/user.rb", None);
+        let sent = serde_json::to_value(s.core.sent()).unwrap();
+        assert_eq!(sent[1], serde_json::json!({ "type": "file.find", "project": "/code/web", "path": "models/user.rb" }));
+        s.receive(found("login.ts", "/code/web/src/login.ts")).unwrap();
+        assert!(open_files(&s).is_empty(), "a later link was pressed, so login.ts does not open");
+        s.receive(found("models/user.rb", "/code/web/app/models/user.rb")).unwrap();
+        assert_eq!(open_files(&s), [("/code/web/app/models/user.rb".to_owned(), None)]);
+        s.receive(found("models/user.rb", "/code/web/app/models/user.rb")).unwrap();
+        assert_eq!(open_files(&s).len(), 1, "an answer opens its file once");
+    }
 
     #[test]
     fn each_line_takes_the_highlights_inside_it_measured_from_its_start() {
         let text = "let a = 1;\n// two\nlet b = \"x\";\n";
-        let shown = ShownFile::new("main.rs", FileView { path: "main.rs".into(), text: Some(text.into()), binary: false, truncated: false });
+        let shown = ShownFile::new("main.rs", FileView { path: "main.rs".into(), text: Some(text.into()), binary: false, truncated: false, missing: false });
         assert_eq!(shown.lines, vec![0..10, 11..17, 18..30]);
         let theme = crate::theme::code_colors(true);
         // The comment covers the whole second line, from its own start.
