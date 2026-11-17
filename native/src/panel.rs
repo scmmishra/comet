@@ -213,6 +213,8 @@ impl Desk {
     pub fn file_found(&mut self, project: &str, path: &str, file: &str) {
         let pressed = self.panel.finding.as_ref().is_some_and(|f| f.project == project && f.path == path);
         let Some(finding) = self.panel.finding.take_if(|_| pressed) else { return };
+        // A press reads the file again, so a file made since its tab said it was missing shows.
+        self.panel.file_shown = None;
         self.open_file(&finding.tab, file, finding.line);
     }
 
@@ -642,6 +644,11 @@ mod tests {
         assert_eq!(open_files(&s), [("/code/web/app/models/user.rb".to_owned(), None)]);
         s.receive(found("models/user.rb", "/code/web/app/models/user.rb")).unwrap();
         assert_eq!(open_files(&s).len(), 1, "an answer opens its file once");
+        let _ = s.core.sent();
+        s.open_named_file("t", "models/user.rb", None);
+        s.receive(found("models/user.rb", "/code/web/app/models/user.rb")).unwrap();
+        let sent = serde_json::to_value(s.core.sent()).unwrap();
+        assert!(sent.as_array().unwrap().iter().any(|m| m["type"] == "file.read"), "pressing the link again reads the file again: {sent}");
     }
 
     #[test]
