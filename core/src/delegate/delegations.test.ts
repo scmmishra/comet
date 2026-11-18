@@ -39,7 +39,15 @@ test("gives each session a server under its own token, and knows no other caller
   expect(server).toMatchObject({ url: "http://127.0.0.1:4000/mcp" })
   expect(service.open(host).tools.authorization).not.toBe(server.authorization)
   expect(service.toolsFor("Bearer nope")).toBeUndefined()
-  expect(service.toolsFor(server.authorization)!.tools.map((tool) => tool.name)).toEqual(["list_agents", "delegate"])
+  expect(service.toolsFor(server.authorization)!.tools.map((tool) => tool.name)).toEqual(["list_agents", "delegate", "show"])
+})
+
+test("offers every session the show tool, tells it when to use it, and answers a call at once", async () => {
+  const { server, tools } = await delegations()
+  expect(server.instructions).toContain("Call `show` with the data.")
+  const signal = new AbortController().signal
+  expect(await tools.call("show", { parts: [{ type: "actions", options: ["Go on"] }] }, signal)).toEqual({ text: "Shown to the user, above your reply." })
+  expect(tools.call("show", { parts: [{ type: "html" }] }, signal)).rejects.toThrow("Part 1's `type` is one of: table, chart, diagram, actions.")
 })
 
 test("lists the agents with their models, and why one is not ready", async () => {

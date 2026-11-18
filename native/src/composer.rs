@@ -234,13 +234,19 @@ impl Comet {
             self.drafts.edit(&tab).clear();
             return;
         }
-        let follow_up = self.busy(&tab).then(|| self.follow_up(alternate).for_text(&text).name().to_owned());
+        self.send_message(&tab, text, images, alternate);
+        self.drafts.edit(&tab).clear();
+    }
+
+    /// Sends a message in a tab's thread, as the composer does and as a press of a visual's action does.
+    /// While the agent works, it steers or queues, and `alternate` picks the other.
+    pub fn send_message(&mut self, tab: &str, text: String, images: Vec<crate::protocol::ImageAttachment>, alternate: bool) {
+        let follow_up = self.busy(tab).then(|| self.follow_up(alternate).for_text(&text).name().to_owned());
         // A message sent while the agent works joins its turn or waits, so its subagents stay.
         if follow_up.is_none() {
-            self.threads.new_turn(&tab);
+            self.threads.new_turn(tab);
         }
-        self.core.send(&ClientMessage::SessionSend { tab_id: tab.clone(), text, images, follow_up });
-        self.drafts.edit(&tab).clear();
+        self.core.send(&ClientMessage::SessionSend { tab_id: tab.to_owned(), text, images, follow_up });
     }
 
     /// Adds image files to the active tab's message. A file that is not an image the agents read says why.
@@ -990,6 +996,18 @@ mod tests {
         s.submit(true);
         let follow: Vec<_> = s.core.sent().into_iter().filter(|m| m["type"] == "session.send").map(|m| m["followUp"].clone()).collect();
         assert_eq!(follow, ["steer", "queue"]);
+    }
+
+    #[test]
+    fn a_visuals_action_sends_its_option_and_leaves_the_draft() {
+        let mut s = comet();
+        type_text(&mut s, "half a thought");
+        s.send_message("t", "Show last week".into(), Vec::new(), false);
+        s.threads.apply("t", ThreadEvent::Status { busy: true });
+        s.send_message("t", "Export as CSV".into(), Vec::new(), false);
+        let sent: Vec<_> = s.core.sent().into_iter().filter(|m| m["type"] == "session.send").map(|m| (m["text"].clone(), m["followUp"].clone())).collect();
+        assert_eq!(sent, [("Show last week".into(), serde_json::Value::Null), ("Export as CSV".into(), "steer".into())]);
+        assert_eq!(s.drafts.text("t"), "half a thought");
     }
 
     #[test]

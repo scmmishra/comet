@@ -2,6 +2,7 @@ import { DEFAULT_MODEL, PERMISSION_MODES, type AgentId, type AgentInfo, type Mod
 import type { AgentSession, ToolServer } from "../agents/agent"
 import type { Agents } from "../agents/registry"
 import type { ToolResult, ToolSet } from "./mcp"
+import { show, SHOW, SHOW_INSTRUCTIONS } from "../visuals/show"
 import { DELEGATE, INSTRUCTIONS, LIST_AGENTS, MOVE_INSTRUCTIONS, MOVE_TO_WORKTREE, taskWords } from "./tools"
 
 /** What Comet reads about the session whose agent hands work off. */
@@ -72,7 +73,7 @@ export class Delegations {
       return !!child
     }
     return {
-      tools: { url: this.endpoint(), authorization: `Bearer ${token}`, instructions: host.moveTo ? `${INSTRUCTIONS}\n${MOVE_INSTRUCTIONS}` : INSTRUCTIONS },
+      tools: { url: this.endpoint(), authorization: `Bearer ${token}`, instructions: [INSTRUCTIONS, ...(host.moveTo ? [MOVE_INSTRUCTIONS] : []), SHOW_INSTRUCTIONS].join("\n") },
       answerPermission: (requestId, reply) => answer(requestId, (session) => session.answerPermission(requestId, reply)),
       answerQuestion: (requestId, answers) => answer(requestId, (session) => session.answerQuestion(requestId, answers)),
       pending: () => [...caller.children].flatMap((child) => [...child.requests.values()]),
@@ -93,11 +94,12 @@ export class Delegations {
     if (!caller) return undefined
     const { moveTo } = caller.host
     return {
-      tools: [LIST_AGENTS, DELEGATE, ...(moveTo ? [MOVE_TO_WORKTREE] : [])],
+      tools: [LIST_AGENTS, DELEGATE, ...(moveTo ? [MOVE_TO_WORKTREE] : []), SHOW],
       call: async (name, input, signal) => {
         if (name === LIST_AGENTS.name) return { text: JSON.stringify({ agents: this.agents.all().flatMap((agent) => listed(this.agents.info(agent.id))) }, null, 2) }
         if (name === DELEGATE.name) return this.delegate(caller, input, signal)
         if (name === MOVE_TO_WORKTREE.name && moveTo) return { text: `Comet moves this thread to ${moveTo(String(input.path ?? ""))} when this turn ends.` }
+        if (name === SHOW.name) return show(input)
         throw new Error(`Comet has no tool called ${name}.`)
       },
     }

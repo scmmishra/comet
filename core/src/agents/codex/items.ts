@@ -1,5 +1,6 @@
 import type { ThreadItem } from "@comet/protocol"
 import { cometToolLabel, cometToolSummary, SERVER_NAME } from "../../delegate/tools"
+import { visualItem } from "../../visuals/show"
 import { firstLine } from "../../text"
 import { commandLabel, cutOutput, relativeTo, thought, tool } from "../steps"
 import { fileEdits } from "./diff"
@@ -33,6 +34,9 @@ export function threadItems(dir: string, item: CodexItem, done: boolean, at?: nu
     case "fileChange":
       return item.changes.map((change, index) => fileItem(dir, `${item.id}:${index}`, change, done ? item.status !== "completed" : undefined))
     case "mcpToolCall": {
+      // A visual draws in place of its call, and its result adds nothing to it.
+      const visual = item.server === SERVER_NAME ? visualItem(item.id, item.tool, item.arguments) : undefined
+      if (visual) return [visual]
       const result = done ? (item.error ? { output: item.error.message, isError: true } : { output: cutOutput(contentText(item.result?.content ?? [])), isError: item.status === "failed" }) : undefined
       const name = `${item.server}.${item.tool}`
       // A tool of Comet's own reads the same in every agent's thread.

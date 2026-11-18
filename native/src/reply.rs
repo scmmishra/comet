@@ -98,6 +98,12 @@ fn is_hostname(segment: &str) -> bool {
 /// The reply's text as Comet renders it: outside code fences, a single newline becomes a hard break, and
 /// inline code that names a file becomes a link to it labelled with its name and line.
 pub fn prepare(text: &str) -> String {
+    break_lines(text, true)
+}
+
+/// The text with a hard break at each single newline outside code fences. With `files`, inline code that
+/// names a file becomes a link to it.
+fn break_lines(text: &str, files: bool) -> String {
     let lines: Vec<&str> = text.split('\n').collect();
     let mut out = String::with_capacity(text.len() + 16);
     let mut fence: Option<&str> = None;
@@ -112,7 +118,7 @@ pub fn prepare(text: &str) -> String {
             _ => {}
         }
         let fenced = in_code || marker.is_some();
-        out.push_str(&if fenced { (*line).to_owned() } else { link_files(line) });
+        out.push_str(&if fenced || !files { (*line).to_owned() } else { link_files(line) });
         if i + 1 < lines.len() {
             let next = lines[i + 1];
             // A line followed by another line, outside code, breaks there, as Claude Code shows it.
@@ -156,6 +162,16 @@ fn link_files(line: &str) -> String {
 /// rather than wrapping.
 pub fn document(text: &str) -> Markdown {
     Markdown::new(prepare(text)).scroll_wide(true)
+}
+
+/// Markdown that comes from outside an agent, such as a plugin's: a single newline breaks the line, as in
+/// a reply, and a link opens in the browser. Inline code stays code, since it names no file of the tab's.
+pub fn outside(text: &str) -> Markdown {
+    Markdown::new(break_lines(text, false)).scroll_wide(true).on_link_tx(|s: &mut Comet, url: &str, tx: &mut Tx| {
+        if let Err(e) = tx.open_url(url) {
+            s.toasts.show(e.to_string(), true);
+        }
+    })
 }
 
 /// `document` with its links and code blocks working: a file link opens the file it names in the tab's view pane,
@@ -253,5 +269,6 @@ mod tests {
     fn inline_code_naming_a_file_becomes_a_link() {
         assert_eq!(prepare("See `src/login.ts:12` and `parse`."), "See [login.ts · L12](<comet-file:src/login.ts:12>) and `parse`.");
         assert_eq!(prepare("```\n`src/a.ts`\n```"), "```\n`src/a.ts`\n```");
+        assert_eq!(break_lines("See `src/a.ts`\nthen", false), "See `src/a.ts`  \nthen");
     }
 }

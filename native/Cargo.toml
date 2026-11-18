@@ -7,7 +7,7 @@ publish = false
 [dependencies]
 # Rune is pre-release. Apps pin a rev of its `dev` branch, which is never rewritten.
 rune = { git = "https://github.com/anomalyco/rune", rev = "47195cfae0fef50997a167e2d75afde901054d2a", features = ["native-file-dialog", "svg"] }
-rune-kit = { git = "https://github.com/anomalyco/rune", rev = "47195cfae0fef50997a167e2d75afde901054d2a", features = ["markdown"] }
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "47195cfae0fef50997a167e2d75afde901054d2a", features = ["markdown", "mermaid"] }
 rune-theme-opencode = { git = "https://github.com/anomalyco/rune", rev = "47195cfae0fef50997a167e2d75afde901054d2a" }
 alacritty_terminal = "0.26"
 libc = "0.2"

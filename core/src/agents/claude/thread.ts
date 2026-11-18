@@ -2,6 +2,7 @@ import type { SDKAPIRetryMessage, SDKAssistantMessage, SDKMessage, SDKMessageOri
 import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, type ThreadItem } from "@comet/protocol"
 import { cutOutput, relativeTo, thought, unfinishedResult } from "../steps"
 import { cometToolSummary } from "../../delegate/tools"
+import { visualItem } from "../../visuals/show"
 import { resultId } from "../turn-items"
 import { modelLabel } from "./models"
 import { cometTool, toolStep } from "./steps"
@@ -252,6 +253,10 @@ export class ThreadMapper {
         return [thought(`${uuid}:${index}`, block.thinking)]
       }
       if (block.type === "tool_use") {
+        // A visual draws in place of its call, and its result adds nothing to it.
+        const comet = cometTool(block.name)
+        const visual = comet && visualItem(block.id, comet, block.input)
+        if (visual) return [visual]
         const tool = toolItem(this.dir, block.id, block.name, block.input as Record<string, unknown>)
         this.tools.set(tool.id, tool)
         return [tool]

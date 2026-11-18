@@ -2875,8 +2875,17 @@ dependencies = [
  "pulldown-cmark",
  "rune",
  "rune-highlights",
+ "rune-mermaid",
  "rune-motion",
  "unicode-segmentation",
+]
+
+[[package]]
+name = "rune-mermaid"
+version = "0.0.1"
+source = "git+https://github.com/anomalyco/rune?rev=47195cfae0fef50997a167e2d75afde901054d2a#47195cfae0fef50997a167e2d75afde901054d2a"
+dependencies = [
+ "rune",
 ]
 
 [[package]]

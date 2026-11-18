@@ -82,6 +82,16 @@ test("ends each tool call that has no result as unfinished, failed or stopped", 
   expect(mapper.settleOpen("stopped")).toEqual([expect.objectContaining({ id: "t3", label: "Stopped sleep", result: { output: "The tool call did not finish.", isError: true, stopped: true } })])
 })
 
+test("draws a show call as its visual, which its result leaves as it is", () => {
+  const mapper = new ThreadMapper(DIR)
+  const input = { title: "Next", parts: [{ type: "actions", options: ["Go on"] }] }
+  const called = mapper.map(sdk({ type: "assistant", uuid: "a1", parent_tool_use_id: null, message: { content: [{ type: "tool_use", id: "t1", name: "mcp__comet__show", input }] } }))
+  expect(called).toEqual([{ kind: "item", item: { type: "visual", id: "t1", title: "Next", parts: [{ type: "actions", options: ["Go on"] }] } }])
+  expect(mapper.map(sdk({ type: "user", uuid: "u1", parent_tool_use_id: null, message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "Shown" }] } }))).toEqual([])
+  expect(mapper.settleOpen("stopped")).toEqual([])
+  expect(toolItem(DIR, "t2", "mcp__comet__show", { parts: [] })).toMatchObject({ summary: "", label: "Showing a visual" })
+})
+
 test("shows Claude Code's notices and warnings, but not transcript notes or a Stop hook's passive summary", () => {
   const mapper = new ThreadMapper(DIR)
   const notice = (uuid: string, level: string, content: string, extra: object = {}) => mapper.map(sdk({ type: "system", subtype: "informational", uuid, level, content, ...extra }))

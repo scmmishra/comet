@@ -694,6 +694,17 @@ pub enum ThreadItem {
     Notice { id: String, text: String, warning: bool },
     /// The files a turn changed, added once the turn ends.
     Changes { id: String, files: Vec<ChangedFile> },
+    /// What the agent showed with Comet's `show` tool, in place of the tool call.
+    Visual { id: String, title: Option<String>, parts: Vec<VisualPart> },
+}
+
+/// One part of a visual. The core turns a table, a chart or a diagram into Markdown. A press of an
+/// action sends its option as the user's next message.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum VisualPart {
+    Markdown { text: String },
+    Actions { options: Vec<String> },
 }
 
 impl ThreadItem {
@@ -709,7 +720,8 @@ impl ThreadItem {
             | ThreadItem::Result { id, .. }
             | ThreadItem::Error { id, .. }
             | ThreadItem::Notice { id, .. }
-            | ThreadItem::Changes { id, .. } => id,
+            | ThreadItem::Changes { id, .. }
+            | ThreadItem::Visual { id, .. } => id,
         }
     }
 }

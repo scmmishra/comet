@@ -13,6 +13,16 @@ test("shows a call of Comet's tools in the words every agent's thread uses", () 
   expect(threadItems(DIR, listAgents, true)[0]).toMatchObject({ name: "comet.list_agents", summary: "", label: "Listed the agents" })
 })
 
+test("draws a show call as its visual, and one Comet cannot draw as a failed call", () => {
+  const call = { type: "mcpToolCall", id: "m1", server: "comet", tool: "show", status: "completed", arguments: { title: "Next", parts: [{ type: "actions", options: ["Go on"] }] }, result: { content: [{ type: "text", text: "Shown" }] }, error: null } as const
+  const visual = { type: "visual", id: "m1", title: "Next", parts: [{ type: "actions", options: ["Go on"] }] } as const
+  expect(threadItems(DIR, call, false)).toEqual([visual])
+  expect(threadItems(DIR, call, true)).toEqual([visual])
+  const wrong = { ...call, status: "failed", arguments: { title: "Next", parts: [] }, result: null, error: { message: "`parts` needs at least one part." } } as const
+  expect(threadItems(DIR, wrong, true)).toEqual([{ type: "tool", id: "m1", name: "comet.show", summary: "Next", result: { output: "`parts` needs at least one part.", isError: true }, kind: "other", label: "Tried to show Next" }])
+  expect(threadItems(DIR, { ...call, server: "github" }, true)[0]).toMatchObject({ type: "tool", name: "github.show" })
+})
+
 test("shows another MCP server's call by server and tool, with its text result or its error", () => {
   const call = { type: "mcpToolCall", id: "m1", server: "github", tool: "search", status: "completed", arguments: { q: "bug" }, result: { content: [{ type: "text", text: "Done" }, { type: "image" }] }, error: null } as const
   expect(threadItems(DIR, call, true)).toEqual([

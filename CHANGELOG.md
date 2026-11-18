@@ -4,6 +4,10 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- A plugin's messages draw their Markdown, and their links open in the browser.
+- An agent can show a visual in the thread: a table, a bar or line chart, a Mermaid diagram and buttons for what to ask next. It sends the data and Comet draws it. A press of a button sends its text as your next message. Claude and Codex threads draw visuals. An Antigravity thread shows the call as a step.
+- A Mermaid block in a reply draws as a diagram.
+
 ## 0.1.0
 
 - Desk is now Comet, with a new logo. On its first start, Comet moves your data from `~/.desk` to `~/.comet`. Quit Desk first, because Comet does not start while Desk runs. Links use `comet://`, the command is `comet` and environment variables start with `COMET_`. Plugins import `@comet/plugin` instead of `@desk/plugin`.

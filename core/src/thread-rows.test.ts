@@ -47,6 +47,12 @@ test("a finished turn folds everything before its answer, text included, and kee
   expect(kinds((rows[1] as Extract<ThreadRow, { type: "fold" }>).rows, items)).toEqual(["group", "text", "group"])
 })
 
+test("keeps a visual out of the fold, above the answer", () => {
+  const items: ThreadItem[] = [user("u1"), tool("a"), { type: "visual", id: "v", parts: [{ type: "actions", options: ["Go on"] }] }, tool("b"), text("answer"), { type: "result", id: "r", durationMs: 1, isError: false }]
+  expect(laidOut(items, true)).toEqual(["user", "working", "group", "visual", "group", "text"])
+  expect(laidOut(items, false)).toEqual(["user", "fold", "visual", "text"])
+})
+
 test("a turn of text alone has nothing to fold", () => {
   expect(laidOut([user("u1"), text("hi")], false)).toEqual(["user", "text"])
 })

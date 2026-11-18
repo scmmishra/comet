@@ -142,6 +142,18 @@ export type ThreadItem =
   | { readonly type: "notice"; readonly id: string; readonly text: string; readonly warning: boolean }
   /** The files a turn changed, without their diffs, added once the turn ends. */
   | { readonly type: "changes"; readonly id: string; readonly files: readonly ChangedFile[] }
+  /**
+   * What the agent showed with Comet's `show` tool: a table, a chart, a diagram or actions. It takes the
+   * place of the tool call, and stays out of its turn's fold.
+   */
+  | { readonly type: "visual"; readonly id: string; readonly title?: string; readonly parts: readonly VisualPart[] }
+
+/**
+ * One part of a visual, shaped for drawing. The core turns the data the agent sent into Markdown: a table
+ * as a Markdown table, a chart or a diagram as a Mermaid block. Actions are buttons, and a press sends
+ * the option's text as the user's next message.
+ */
+export type VisualPart = { readonly type: "markdown"; readonly text: string } | { readonly type: "actions"; readonly options: readonly string[] }
 
 /** What a permission request would let the agent do, which picks its icon and label, after T3 Code. */
 export type PermissionKind = "command" | "file-change" | "file-read" | "permission"
@@ -773,6 +785,7 @@ export type ButtonVariant = "primary" | "secondary" | "ghost"
 /** One message in a conversation. `note` sets it apart as private, `activity` draws it as one quiet line. */
 export interface MessageData {
   readonly id: string
+  /** Markdown. A single newline breaks the line. An activity's text draws as it is. */
   readonly text: string
   readonly author?: string
   /** Milliseconds since the epoch. */

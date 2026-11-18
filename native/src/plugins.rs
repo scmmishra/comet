@@ -257,7 +257,7 @@ fn node_view(s: &Comet, plugin: &str, id: u64, project: &str, frame: Frame, k: &
             .w_full()
             .min_h(0.0)
             .scroll(ScrollSpec { stick_bottom: false })
-            .child(crate::reply::document(prop(props, "text").unwrap_or("")).style(theme::markdown(k, s.account.text_size())).build(k)),
+            .child(crate::reply::outside(prop(props, "text").unwrap_or("")).style(theme::markdown(k, s.account.text_size())).build(k)),
         other => text(format!("{other} is not a Comet element.")).font(crate::theme::text(13.0)).color(k.c.text_faint),
     }
 }
@@ -379,7 +379,7 @@ fn messages_view(props: &Map<String, Value>, k: &Kit) -> El {
         };
         let column = col().w_full().gap(4.0);
         let column = if incoming { column.items_start() } else { column.items_end() };
-        let bubble = el().shrink().min_w(0.0).radius(10.0).fill(fill).px(12.0).py(8.0).child(text(words).font(crate::theme::text(13.0)).color(k.c.text_base).wrap().shrink().min_w(0.0));
+        let bubble = el().shrink().min_w(0.0).radius(10.0).fill(fill).px(12.0).py(8.0).child(crate::reply::outside(&words).style(theme::markdown(k, 13.0)).build(k).shrink().min_w(0.0));
         // `max-w-[90%]`: a spacer keeps a tenth of the row, so the bubble wraps within the rest of the panel.
         let room = el().w_frac(0.1);
         let line = if incoming { row().w_full().child(bubble).child(room) } else { row().w_full().justify_end().child(room).child(bubble) };

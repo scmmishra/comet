@@ -1,5 +1,6 @@
 import { basename } from "node:path"
 import { firstLine } from "../text"
+import { SHOW } from "../visuals/show"
 import type { Tool } from "./mcp"
 
 /** The name agents know Comet's tools under, such as `mcp__comet__delegate` in Claude Code. */
@@ -67,6 +68,8 @@ export function cometToolSummary(tool: string, input: unknown): string | undefin
   if (tool === LIST_AGENTS.name) return ""
   const given = typeof input === "object" && input !== null ? (input as Record<string, unknown>) : {}
   if (tool === MOVE_TO_WORKTREE.name) return basename(String(given.path ?? ""))
+  // A visual draws in place of its call. Only a call Comet could not draw shows as a row.
+  if (tool === SHOW.name) return typeof given.title === "string" ? given.title : ""
   if (tool !== DELEGATE.name) return undefined
   return `${String(given.agent ?? "another agent")}: ${taskWords(typeof given.title === "string" && given.title.trim() ? given.title : String(given.task ?? ""))}`
 }
@@ -75,5 +78,6 @@ export function cometToolSummary(tool: string, input: unknown): string | undefin
 export function cometToolLabel(tool: string, summary: string, done: boolean): string {
   if (tool === LIST_AGENTS.name) return done ? "Listed the agents" : "Listing the agents"
   if (tool === MOVE_TO_WORKTREE.name) return `${done ? "Moved to" : "Moving to"} ${summary}`
+  if (tool === SHOW.name) return `${done ? "Tried to show" : "Showing"} ${summary || "a visual"}`
   return `${done ? "Handed a task to" : "Handing a task to"} ${summary}`
 }
