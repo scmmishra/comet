@@ -1,4 +1,4 @@
-import { ROOT_NODE, TEXT_NODE, type UiOp, type UiValue } from "@desk/protocol"
+import { ROOT_NODE, TEXT_NODE, type UiOp, type UiValue } from "@comet/protocol"
 import { createRenderer } from "solid-js/universal"
 
 /**

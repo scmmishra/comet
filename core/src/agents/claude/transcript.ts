@@ -32,7 +32,7 @@ export class Transcript {
 
   private indexOf(messageId: string) {
     const index = this.messages.findIndex((message) => message.uuid === messageId)
-    if (index < 0 || !this.prompts.has(messageId)) throw new Error("Desk could not find that message in the thread's transcript.")
+    if (index < 0 || !this.prompts.has(messageId)) throw new Error("Comet could not find that message in the thread's transcript.")
     return index
   }
 }

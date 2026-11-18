@@ -1,6 +1,6 @@
 # Plugins
 
-A plugin adds UI to Desk: a sidebar, panels, cards in the card stack, setups and palette commands. This page describes the first version, and lists what comes later.
+A plugin adds UI to Comet: a sidebar, panels, cards in the card stack, setups and palette commands. This page describes the first version, and lists what comes later.
 
 ## Goals
 
@@ -11,7 +11,7 @@ A plugin adds UI to Desk: a sidebar, panels, cards in the card stack, setups and
 
 ## Terms
 
-- **Plugin.** A module in `~/.desk/plugins/<name>/`, starting from `index.tsx` or `index.ts`. It runs in a worker in the core.
+- **Plugin.** A module in `~/.comet/plugins/<name>/`, starting from `index.tsx` or `index.ts`. It runs in a worker in the core.
 - **Contribution.** One thing a plugin registers. It is named `<plugin>.<name>`, such as `support.inbox`.
 - **Sidebar.** A view in the column beside the thread, for navigation, such as an inbox. A tab shows at most one.
 - **Panel.** A view type for a tab in the view pane, such as a PR or a conversation. A panel can take parameters.
@@ -22,9 +22,9 @@ A plugin adds UI to Desk: a sidebar, panels, cards in the card stack, setups and
 
 ## Where plugins are on
 
-Plugins live only in `~/.desk/plugins`. A repo never holds plugins, so opening a repo runs no code from it.
+Plugins live only in `~/.comet/plugins`. A repo never holds plugins, so opening a repo runs no code from it.
 
-`~/.desk/plugins.json` turns plugins on:
+`~/.comet/plugins.json` turns plugins on:
 
 ```json
 {
@@ -54,13 +54,13 @@ Plugins live only in `~/.desk/plugins`. A repo never holds plugins, so opening a
 ## API
 
 ```ts
-export default definePlugin((desk) => {
-  desk.sidebar(name, { title, view })
-  desk.panel(name, { title, params?, single?, view })
-  desk.card(name, { title, view })
-  desk.setup(name, { title, sidebar?, panels?, hideCards? })
-  desk.command(name, { title, input?, run })
-  desk.onTurnEnd(({ key, tabId, outcome }) => { … })
+export default definePlugin((comet) => {
+  comet.sidebar(name, { title, view })
+  comet.panel(name, { title, params?, single?, view })
+  comet.card(name, { title, view })
+  comet.setup(name, { title, sidebar?, panels?, hideCards? })
+  comet.command(name, { title, input?, run })
+  comet.onTurnEnd(({ key, tabId, outcome }) => { … })
 })
 ```
 
@@ -71,9 +71,9 @@ export default definePlugin((desk) => {
 - A panel with `single: true` has one instance per tab. Opening another replaces it in place, as the support inbox does with conversations.
 - A panel's `title` is a string, or a function of its parameters.
 - A command with `input` asks for text in the palette, and `run` gets it.
-- `desk.onTurnEnd` runs a handler each time a turn ends in a thread the plugin opened with `ctx.openThread`. `key` is the key the plugin passed. `outcome` is `done`, `error` or `interrupted`. A plugin can register more than one handler, during setup only. Turns in other threads, such as a tab's own thread, never reach the plugin.
+- `comet.onTurnEnd` runs a handler each time a turn ends in a thread the plugin opened with `ctx.openThread`. `key` is the key the plugin passed. `outcome` is `done`, `error` or `interrupted`. A plugin can register more than one handler, during setup only. Turns in other threads, such as a tab's own thread, never reach the plugin.
 - A turn can end while a background task it started still runs. The handler runs when the turn ends, not when the task ends.
-- `desk.env` holds the core's environment, such as an API key. `desk.toast` shows a short message.
+- `comet.env` holds the core's environment, such as an API key. `comet.toast` shows a short message.
 
 ### View context
 
@@ -88,7 +88,7 @@ Each view and command gets a `ctx` for its tab:
 | `ctx.openThread({ key, title?, prompt? })` | Opens or resumes the tab's thread for `key`, on the tab's agent. Keys belong to the plugin, so two plugins never share a thread. |
 | `ctx.toast(message)` | Shows a short message. |
 
-A view's context also has `ctx.visible()`. It is true while the view is on screen: its tab is the active tab and Desk's window has focus. A panel must also be the panel in front, with the view pane open. It updates as that changes, so an effect can start work when the view shows and stop it when the view hides:
+A view's context also has `ctx.visible()`. It is true while the view is on screen: its tab is the active tab and Comet's window has focus. A panel must also be the panel in front, with the view pane open. It updates as that changes, so an effect can start work when the view shows and stop it when the view hides:
 
 ```tsx
 createEffect(() => {
@@ -101,7 +101,7 @@ createEffect(() => {
 A view's context also has `ctx.thread()`. It is the key of the plugin's thread the tab shows, as the plugin passed it to `ctx.openThread`. It is undefined while the tab shows its own thread or another plugin's. It updates as the tab moves between threads. A card about the open conversation reads it to know which conversation to show:
 
 ```tsx
-desk.card("conversation", {
+comet.card("conversation", {
   title: "Conversation",
   view: (ctx) => <Show when={conversationOf(ctx.thread())}>{(id) => <Text>#{id()}</Text>}</Show>,
 })
@@ -136,7 +136,7 @@ A panel's context also has `ctx.params` and `ctx.close()`. A command's context h
 | `setup.open` | Lays out a saved tab as a setup says. |
 | `plugin.command` | Runs a command for a tab. |
 | `plugin.event` | Runs a handler a plugin's node holds. |
-| `window.focus` | Says Desk's window gained or lost focus. With `tabs.save`, it decides which views are on screen. |
+| `window.focus` | Says Comet's window gained or lost focus. With `tabs.save`, it decides which views are on screen. |
 
 | From the core | Carries |
 |---|---|
@@ -153,7 +153,7 @@ A panel's context also has `ctx.params` and `ctx.close()`. A command's context h
 - Each view is drawn once per tab and kept while the tab shows it. On every layout change the core tells each plugin the full set of its views a tab shows, and the plugin draws what it lacks and disposes the rest.
 - A sidebar or panel that cannot be drawn is closed. A card that cannot be drawn is left out of the tab. The user is told once.
 - A plugin that fails to start, or stops, is reported once and stays off until the plugins reload. Its views leave every tab.
-- Reload plugins, in the palette, stops every plugin and lays out every tab again. Each plugin starts again from its files, so an edit takes effect without restarting Desk. A plugin loses what it held in memory.
+- Reload plugins, in the palette, stops every plugin and lays out every tab again. Each plugin starts again from its files, so an edit takes effect without restarting Comet. A plugin loses what it held in memory.
 - The core works out which views are on screen when the tabs, a layout or the window's focus change. It tells each plugin only of its own views, and only when they change.
 - The core tells a plugin which of its threads a tab shows, with each `show` and each time the tab moves to another thread.
 - The core tells a plugin when a turn ends in one of its threads, even when the plugin moved the tab to another thread while the turn ran.
@@ -162,7 +162,7 @@ A panel's context also has `ctx.params` and `ctx.close()`. A command's context h
 
 ## Example
 
-`examples/plugins/support` is a support inbox on made-up conversations. It registers an inbox sidebar, a conversation panel and a setup. Picking a conversation opens its panel and its thread. Link it to `~/.desk/plugins/support` and turn it on for a project.
+`examples/plugins/support` is a support inbox on made-up conversations. It registers an inbox sidebar, a conversation panel and a setup. Picking a conversation opens its panel and its thread. Link it to `~/.comet/plugins/support` and turn it on for a project.
 
 ## Later
 
@@ -172,5 +172,5 @@ A panel's context also has `ctx.params` and `ctx.close()`. A command's context h
 - Hiding and ordering cards per project.
 - Plugin settings, with a page in Settings.
 - Reloading a plugin when its files change, without the palette.
-- A manifest that lists a plugin's contributions, so Desk can list them without starting the worker.
+- A manifest that lists a plugin's contributions, so Comet can list them without starting the worker.
 - A key per repo, such as its `origin` remote, so clones and worktrees share settings.

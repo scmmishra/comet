@@ -1,4 +1,4 @@
-//! The composer's model button. Its popover has a rail of the agents Desk runs, the chosen agent's models
+//! The composer's model button. Its popover has a rail of the agents Comet runs, the chosen agent's models
 //! beside it, and the model's effort on the right, with speed and the permission mode under them. The
 //! button shows the agent's mark and names the model that runs, so "Default" reads as "Opus 5.5".
 //!
@@ -9,7 +9,7 @@ use crate::agents::{self, mark, state_label};
 use crate::icons;
 use crate::models::{self, effort_label, option_label, permission, permission_for, permission_modes};
 use crate::protocol::{AgentInfo, AgentState, ModelOption, TabInfo};
-use crate::shell::Desk;
+use crate::shell::Comet;
 use crate::theme;
 use crate::workspace::Place;
 use rune::{El, col, el, icon, row, text};
@@ -42,7 +42,7 @@ pub struct Picker {
     modes_open: bool,
 }
 
-impl Desk {
+impl Comet {
     fn model_option(&self, tab: &TabInfo) -> Option<&ModelOption> {
         self.account.model(&tab.agent, &tab.model)
     }
@@ -116,7 +116,7 @@ impl Desk {
     }
 }
 
-pub fn model_picker(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
+pub fn model_picker(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let selected = s.model_option(tab);
     let ran = s.threads.get(&tab.id).and_then(|t| t.model.clone());
     let name = selected.map(|o| option_label(o).to_owned()).or(ran).unwrap_or_else(|| s.agent_name(&tab.agent).to_owned());
@@ -134,7 +134,7 @@ pub fn model_picker(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
         .role("button")
         .label(format!("{} model", s.agent_name(&tab.agent)))
         .expanded(s.picker.open)
-        .on_press(|s: &mut Desk| s.toggle_picker())
+        .on_press(|s: &mut Comet| s.toggle_picker())
         .child(agent_mark(&tab.agent, tab.fast == Some(true), k))
         .child(text(name).font(crate::theme::text(13.0)).color(k.c.text_base))
         .children(effort.map(|e| faint(effort_label(&e).to_owned())))
@@ -144,13 +144,13 @@ pub fn model_picker(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
     if !s.picker.open {
         return trigger;
     }
-    // rune-kit's Popover caps its width at 320, `@opencode/ui`'s default. Desk widens this one, so it
+    // rune-kit's Popover caps its width at 320, `@opencode/ui`'s default. Comet widens this one, so it
     // builds the surface from the same parts.
     // The permission menu anchors to its button inside the picker, so it goes in after the picker: a popover
     // ahead of its anchor in the layer finds no place for it and opens in the window's corner.
     let mut menus = Vec::new();
     let body = popover_body(s, tab, selected, k, &mut menus).role("dialog").label("Agent, model and effort");
-    let picker = crate::ui::popover(k, body).modal(true, |s: &mut Desk| s.picker = Picker::default());
+    let picker = crate::ui::popover(k, body).modal(true, |s: &mut Comet| s.picker = Picker::default());
     layer.push(popover::anchored(k, picker, "model-picker", Placement::TopEnd, 8.0));
     layer.extend(menus);
     trigger
@@ -162,7 +162,7 @@ fn agent_mark(agent: &str, fast: bool, k: &Kit) -> El {
     el().size(16.0, 16.0).child(mark(agent, 16.0, k)).children(bolt)
 }
 
-fn popover_body(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &Kit, layer: &mut Vec<El>) -> El {
+fn popover_body(s: &Comet, tab: &TabInfo, selected: Option<&ModelOption>, k: &Kit, layer: &mut Vec<El>) -> El {
     let viewed = s.viewed_agent(tab);
     // The effort belongs to the tab's model, so it shows only beside the tab's own agent.
     let own = viewed == tab.agent;
@@ -176,7 +176,7 @@ fn popover_body(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &Kit
             "Speed",
             &[crate::ui::Segment { icon: None, words: Some("Standard"), name: "Standard" }, crate::ui::Segment { icon: Some(&icons::BOLT), words: Some("Fast"), name: "Fast" }],
             usize::from(tab.fast == Some(true)),
-            move |s: &mut Desk, i| {
+            move |s: &mut Comet, i| {
                 let id = id.clone();
                 s.workspace.change_tab(&id, |t| t.fast = Some(i == 1), &s.core);
             },
@@ -196,7 +196,7 @@ fn popover_body(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &Kit
 
 /// The agents, one mark each. The agent on show is raised, and one that is not ready draws faint with a
 /// dot, so its state reads before it is picked.
-fn rail(s: &Desk, tab: &TabInfo, viewed: &str, k: &Kit) -> El {
+fn rail(s: &Comet, tab: &TabInfo, viewed: &str, k: &Kit) -> El {
     let button = |id: &str, name: &str, state: AgentState| {
         let on = id == viewed;
         let ready = state == AgentState::Ready;
@@ -214,7 +214,7 @@ fn rail(s: &Desk, tab: &TabInfo, viewed: &str, k: &Kit) -> El {
             .label(name.to_owned())
             .help(if ready { name.to_owned() } else { format!("{name} · {}", state_label(state)) })
             .help_side(rune::Side::Right)
-            .on_press(move |s: &mut Desk| s.view_agent(&pick))
+            .on_press(move |s: &mut Comet| s.view_agent(&pick))
             .child(mark(id, RAIL_MARK, k).opacity(if ready || on { 1.0 } else { NOT_READY }))
             .children(dot)
     };
@@ -234,7 +234,7 @@ fn rail(s: &Desk, tab: &TabInfo, viewed: &str, k: &Kit) -> El {
         .label("Provider settings")
         .help("Provider settings")
         .help_side(rune::Side::Right)
-        .on_press(|s: &mut Desk| {
+        .on_press(|s: &mut Comet| {
             s.picker = Picker::default();
             s.open_settings("providers");
         })
@@ -258,8 +258,8 @@ fn heading(k: &Kit, words: String, aside: Option<String>) -> El {
     row().w_full().h(36.0).items_center().px(14.0).pt(6.0).gap(8.0).child(faint(words).grow(1.0)).children(aside.map(|a| faint(a).truncate()))
 }
 
-/// The models of the agent on show, or what stands between Desk and them.
-fn model_column(s: &Desk, tab: &TabInfo, viewed: &str, k: &Kit) -> El {
+/// The models of the agent on show, or what stands between Comet and them.
+fn model_column(s: &Comet, tab: &TabInfo, viewed: &str, k: &Kit) -> El {
     let agent = s.account.agent(viewed);
     let name = s.agent_name(viewed).to_owned();
     let plan = agent.and_then(|a| a.account.as_ref()?.plan.as_deref()).map(|p| format!("{} plan", agents::capitalized(p)));
@@ -271,7 +271,7 @@ fn model_column(s: &Desk, tab: &TabInfo, viewed: &str, k: &Kit) -> El {
     col().grow(1.0).min_w(0.0).h_full().child(heading(k, name, plan)).child(content)
 }
 
-fn model_list(s: &Desk, tab: &TabInfo, agent: &AgentInfo, k: &Kit) -> El {
+fn model_list(s: &Comet, tab: &TabInfo, agent: &AgentInfo, k: &Kit) -> El {
     // A thread keeps the agent it started on, so another agent's models open a new tab instead.
     let locked = agent.id != tab.agent && s.started(&tab.id);
     let recent: Vec<&ModelOption> = agent.models.iter().filter(|o| !o.older).collect();
@@ -296,10 +296,10 @@ fn model_list(s: &Desk, tab: &TabInfo, agent: &AgentInfo, k: &Kit) -> El {
             .child(text(option.runs.as_ref().map_or_else(|| option.description.clone(), |runs| format!("{runs} · {}", option.description))).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate().grow(1.0))
             .children(picked.then(check))
             .children(shortcut.map(|n| Keybind::new(&["⌘", n.as_str()]).variant(KeybindVariant::Ghost).build(k)));
-        if locked { line } else { line.hover(k.c.hover).on_press(move |s: &mut Desk| s.pick_model(&id, &on, &value)) }
+        if locked { line } else { line.hover(k.c.hover).on_press(move |s: &mut Comet| s.pick_model(&id, &on, &value)) }
     });
     let older = (!s.picker.show_older && agent.models.len() > recent.len()).then(|| {
-        row().key("show-older").h(ROW_HEIGHT).items_center().px(10.0).radius(7.0).hover(k.c.hover).role("button").on_press(|s: &mut Desk| s.picker.show_older = true).child(text("Show older models").font(crate::theme::text(13.0)).color(k.c.text_faint))
+        row().key("show-older").h(ROW_HEIGHT).items_center().px(10.0).radius(7.0).hover(k.c.hover).role("button").on_press(|s: &mut Comet| s.picker.show_older = true).child(text("Show older models").font(crate::theme::text(13.0)).color(k.c.text_faint))
     });
     let loading = agent.models.is_empty().then(|| row().px(10.0).py(8.0).child(text("Loading models…").font(crate::theme::text(13.0)).color(k.c.text_faint)));
     let list = col().w_full().gap(1.0).padding(6.0).children(loading).children(rows).children(older);
@@ -312,7 +312,7 @@ fn model_list(s: &Desk, tab: &TabInfo, agent: &AgentInfo, k: &Kit) -> El {
 }
 
 /// Says why another agent's models cannot be picked in a started thread, and opens a new tab on that agent.
-fn other_agent_notice(s: &Desk, tab: &TabInfo, agent: &AgentInfo, k: &Kit) -> El {
+fn other_agent_notice(s: &Comet, tab: &TabInfo, agent: &AgentInfo, k: &Kit) -> El {
     let on = agent.id.clone();
     let words = format!("This thread runs on {}. A thread keeps the agent it started on.", s.agent_name(&tab.agent));
     col()
@@ -327,7 +327,7 @@ fn other_agent_notice(s: &Desk, tab: &TabInfo, agent: &AgentInfo, k: &Kit) -> El
                 .radius(7.0)
                 .fill(k.c.layer_01)
                 .child(text(words).font(crate::theme::text(12.0).lh(18.0)).color(k.c.text_muted).wrap())
-                .child(row().child(crate::theme::small_button(format!("New tab on {}", agent.name)).variant(ButtonVariant::Outline).on_press(move |s: &mut Desk| s.new_tab_on(&on)).build(k))),
+                .child(row().child(crate::theme::small_button(format!("New tab on {}", agent.name)).variant(ButtonVariant::Outline).on_press(move |s: &mut Comet| s.new_tab_on(&on)).build(k))),
         )
 }
 
@@ -367,7 +367,7 @@ fn effort_column(tab: &TabInfo, selected: Option<&ModelOption>, own: bool, k: &K
                 .radius(7.0)
                 .hover(k.c.hover)
                 .role("button")
-                .on_press(move |s: &mut Desk| {
+                .on_press(move |s: &mut Comet| {
                     let value = value.clone();
                     s.workspace.change_tab(&id, |t| t.effort = value, &s.core);
                 })
@@ -386,7 +386,7 @@ fn effort_column(tab: &TabInfo, selected: Option<&ModelOption>, own: bool, k: &K
 }
 
 /// The permission mode: a menu that opens above its button, over the model list.
-fn permission_menu(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &Kit, layer: &mut Vec<El>) -> El {
+fn permission_menu(s: &Comet, tab: &TabInfo, selected: Option<&ModelOption>, k: &Kit, layer: &mut Vec<El>) -> El {
     let (label, _, mark) = permission(&tab.permission_mode);
     let trigger = row()
         .key("permission-trigger")
@@ -397,15 +397,15 @@ fn permission_menu(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &
         .radius(8.0)
         .hover(k.c.hover)
         .role("button")
-        .on_press(|s: &mut Desk| s.picker.modes_open = !s.picker.modes_open)
+        .on_press(|s: &mut Comet| s.picker.modes_open = !s.picker.modes_open)
         .child(icon(mark, 15.0).color(k.c.text_muted))
         .child(text(label).font(crate::theme::text(13.0)).color(k.c.text_muted))
         .child(icon(&ic::CHEVRON_DOWN, crate::icons::SIZE).color(k.c.text_faint));
-    let mut menu = Menu::new("permission-menu").trigger(trigger).open(s.picker.modes_open).placement(Placement::TopEnd).min_width(320.0).on_close(|s: &mut Desk| s.picker.modes_open = false);
+    let mut menu = Menu::new("permission-menu").trigger(trigger).open(s.picker.modes_open).placement(Placement::TopEnd).min_width(320.0).on_close(|s: &mut Comet| s.picker.modes_open = false);
     for mode in permission_modes(selected) {
         let (label, description, mark) = permission(mode);
         let id = tab.id.clone();
-        menu = menu.item(MenuItem::new(label).icon(mark).description(description).checked(mode == tab.permission_mode).on_select(move |s: &mut Desk| {
+        menu = menu.item(MenuItem::new(label).icon(mark).description(description).checked(mode == tab.permission_mode).on_select(move |s: &mut Comet| {
             s.workspace.change_tab(&id, |t| t.permission_mode = mode.to_owned(), &s.core);
             s.picker.modes_open = false;
         }));
@@ -417,11 +417,11 @@ fn permission_menu(s: &Desk, tab: &TabInfo, selected: Option<&ModelOption>, k: &
 mod tests {
     use crate::core::Event;
     use crate::protocol::CoreMessage;
-    use crate::shell::Desk;
+    use crate::shell::Comet;
 
     /// A window with one Claude tab, and Claude and Codex both ready. Codex's defaults name a model and an effort.
-    fn desk() -> Desk {
-        let mut s = Desk::default();
+    fn comet() -> Comet {
+        let mut s = Comet::default();
         let model = |value: &str, older: bool| serde_json::json!({ "value": value, "label": value, "description": "", "efforts": ["low", "high"], "fast": value == "default", "permissionModes": ["default", "acceptEdits", "bypassPermissions"], "older": older });
         let messages = serde_json::json!([
             { "type": "settings", "settings": {
@@ -442,14 +442,14 @@ mod tests {
         s
     }
 
-    fn start_thread(s: &mut Desk) {
+    fn start_thread(s: &mut Comet) {
         let message = serde_json::json!({ "type": "thread.session", "tabId": "t", "sessionId": "s1", "agent": "claude" });
         s.receive(Event::Message(serde_json::from_value(message).unwrap())).unwrap();
     }
 
     #[test]
     fn a_number_picks_a_model_on_show_only_while_the_picker_is_open() {
-        let mut s = desk();
+        let mut s = comet();
         assert!(!s.pick_model_by_number(1), "a closed picker leaves ⌘2 to the tabs");
         s.toggle_picker();
         assert!(s.pick_model_by_number(1));
@@ -460,7 +460,7 @@ mod tests {
 
     #[test]
     fn a_model_of_another_agent_moves_a_tab_that_has_not_started_and_drops_what_the_model_does_not_take() {
-        let mut s = desk();
+        let mut s = comet();
         s.toggle_picker();
         s.view_agent("codex");
         assert!(s.pick_model_by_number(1));
@@ -472,7 +472,7 @@ mod tests {
 
     #[test]
     fn a_started_thread_keeps_its_agent_and_another_agent_opens_a_new_tab() {
-        let mut s = desk();
+        let mut s = comet();
         start_thread(&mut s);
         s.toggle_picker();
         s.view_agent("codex");

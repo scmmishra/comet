@@ -1,17 +1,17 @@
-//! An agent's Markdown as Desk shows it: a single newline breaks
+//! An agent's Markdown as Comet shows it: a single newline breaks
 //! the line, as Claude Code shows it, inline code that names a file opens the file, and each code block
 //! has a header with its language and a Copy button.
 //!
 //! A file link draws as a chip in the accent, without its icon: rune-kit's Markdown puts
 //! icons only before links to web pages.
 
-use crate::shell::Desk;
+use crate::shell::Comet;
 use crate::theme;
 use rune::{LinkPaint, Span, Tx, col, row, text};
 use rune_kit::{Kit, Markdown};
 
 /// The scheme of a link `prepare` makes for a file, which the thread opens in the view pane.
-const FILE_SCHEME: &str = "desk-file:";
+const FILE_SCHEME: &str = "comet-file:";
 
 /// A file a reply names, with the line it points at.
 #[derive(Debug, PartialEq)]
@@ -38,7 +38,7 @@ pub fn file_reference(text: &str) -> Option<FileReference> {
     if !explicit && (is_hostname(path.split('/').next().unwrap_or(path)) || has_version_suffix(basename(path))) {
         return None;
     }
-    // Without an extension or a line, `/api` is a route and `~/code/desk` a folder, and Desk opens only files.
+    // Without an extension or a line, `/api` is a route and `~/code/comet` a folder, and Comet opens only files.
     if line.is_none() && !has_extension(basename(path)) {
         return None;
     }
@@ -95,7 +95,7 @@ fn is_hostname(segment: &str) -> bool {
     lower.rsplit_once('.').is_some_and(|(name, top)| TOP.contains(&top) && !name.is_empty() && name.split('.').all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')))
 }
 
-/// The reply's text as Desk renders it: outside code fences, a single newline becomes a hard break, and
+/// The reply's text as Comet renders it: outside code fences, a single newline becomes a hard break, and
 /// inline code that names a file becomes a link to it labelled with its name and line.
 pub fn prepare(text: &str) -> String {
     let lines: Vec<&str> = text.split('\n').collect();
@@ -171,11 +171,11 @@ pub fn interactive(markdown: Markdown, tab: &str, id: &str, copied: Option<&str>
     let accent = k.c.text_accent;
     let soft = theme::accent_soft(k.dark);
     markdown
-        // `.desk-file`: the accent at weight 500, on `accent-soft` under the pointer.
+        // `.comet-file`: the accent at weight 500, on `accent-soft` under the pointer.
         .link_style(move |url| url.starts_with(FILE_SCHEME).then(|| (Span::new(0, 0).color(accent).weight(500.0), LinkPaint::new().color(accent).bg(soft))))
         // The chip's title: the file's path and line, as the reply named it.
         .link_help(|url| url.strip_prefix(FILE_SCHEME).map(str::to_owned))
-        .on_link_tx(move |s: &mut Desk, url: &str, tx: &mut Tx| match url.strip_prefix(FILE_SCHEME) {
+        .on_link_tx(move |s: &mut Comet, url: &str, tx: &mut Tx| match url.strip_prefix(FILE_SCHEME) {
             Some(target) => {
                 let (path, line) = split_position(target);
                 s.open_named_file(&tab, path, line);
@@ -200,15 +200,15 @@ pub fn interactive(markdown: Markdown, tab: &str, id: &str, copied: Option<&str>
                 .hover(hover)
                 .role("button")
                 .label("Copy code")
-                .on_press_tx(move |s: &mut Desk, tx: &mut Tx| {
+                .on_press_tx(move |s: &mut Comet, tx: &mut Tx| {
                     tx.copy(source.clone());
                     s.copied = Some((copy_key.clone(), std::time::Instant::now()));
                 })
                 .child(text(if done { "Copied" } else { "Copy" }).font(theme::text(11.0)).color(if done { text_base } else { ink }))
                 .group_color(text_base);
-            // `.desk-code-header`: the language and Copy on the block's own surface.
+            // `.comet-code-header`: the language and Copy on the block's own surface.
             let header = row().w_full().gap(8.0).items_center().pt(6.0).pr(6.0).pl(12.0).children(frame.language.map(|l| text(l.to_owned()).font(theme::text(11.0)).color(ink))).child(row().grow(1.0)).child(copy);
-            // One surface, `.desk-code`, under the header and the code.
+            // One surface, `.comet-code`, under the header and the code.
             col().key(key).w_full().radius(10.0).clip_rounded(10.0).fill(surface).child(header).child(card)
         })
 }
@@ -232,7 +232,7 @@ mod tests {
 
     #[test]
     fn leaves_code_that_is_not_a_path_alone() {
-        for text in ["parseChanges", "git status --short", "a/b", "src/", "https://example.com/a.ts", "github.com/owner/repo", "v1.2.3/x", "src/…/x.ts", "README.md", "/api", "/api/v1/accounts", "~/code/desk"] {
+        for text in ["parseChanges", "git status --short", "a/b", "src/", "https://example.com/a.ts", "github.com/owner/repo", "v1.2.3/x", "src/…/x.ts", "README.md", "/api", "/api/v1/accounts", "~/code/comet"] {
             assert_eq!(file_reference(text), None, "{text}");
         }
     }
@@ -251,7 +251,7 @@ mod tests {
 
     #[test]
     fn inline_code_naming_a_file_becomes_a_link() {
-        assert_eq!(prepare("See `src/login.ts:12` and `parse`."), "See [login.ts · L12](<desk-file:src/login.ts:12>) and `parse`.");
+        assert_eq!(prepare("See `src/login.ts:12` and `parse`."), "See [login.ts · L12](<comet-file:src/login.ts:12>) and `parse`.");
         assert_eq!(prepare("```\n`src/a.ts`\n```"), "```\n`src/a.ts`\n```");
     }
 }

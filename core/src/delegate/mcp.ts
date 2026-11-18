@@ -1,8 +1,8 @@
 import { errorMessage } from "../errors"
 
 /**
- * A Model Context Protocol server over HTTP, as much of it as serving tools takes. Every agent Desk runs
- * connects to an MCP server at a URL, so this is how Desk offers them tools of its own. Each request is
+ * A Model Context Protocol server over HTTP, as much of it as serving tools takes. Every agent Comet runs
+ * connects to an MCP server at a URL, so this is how Comet offers them tools of its own. Each request is
  * one JSON-RPC message, answered with one JSON message. The server sends nothing unasked, so it opens no
  * event stream.
  */
@@ -26,10 +26,10 @@ export interface ToolSet {
   call(name: string, input: Record<string, unknown>, signal: AbortSignal): Promise<ToolResult>
 }
 
-/** The protocol version Desk speaks when a client names none. Desk answers with the client's own when it names one. */
+/** The protocol version Comet speaks when a client names none. Comet answers with the client's own when it names one. */
 const PROTOCOL_VERSION = "2025-03-26"
-const SERVER_INFO = { name: "desk", version: "1" }
-/** JSON-RPC's codes for a message that is no request, and for a method Desk does not have. */
+const SERVER_INFO = { name: "comet", version: "1" }
+/** JSON-RPC's codes for a message that is no request, and for a method Comet does not have. */
 const INVALID_REQUEST = -32600
 const METHOD_NOT_FOUND = -32601
 
@@ -37,12 +37,12 @@ type Request = { readonly id?: number | string; readonly method?: unknown; reado
 
 /**
  * Answers one HTTP request to the MCP endpoint. `toolsFor` names the caller's tools from its
- * Authorization header, or nothing for a caller Desk does not know, who is refused.
+ * Authorization header, or nothing for a caller Comet does not know, who is refused.
  */
 export async function serveMcp(request: globalThis.Request, toolsFor: (authorization: string) => ToolSet | undefined): Promise<Response> {
   const tools = toolsFor(request.headers.get("authorization") ?? "")
   if (!tools) return new Response("Unauthorized", { status: 401 })
-  // A client asks for an event stream with GET and ends its session with DELETE. Desk keeps neither.
+  // A client asks for an event stream with GET and ends its session with DELETE. Comet keeps neither.
   if (request.method === "DELETE") return new Response(null, { status: 200 })
   if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405, headers: { allow: "POST, DELETE" } })
   let message: Request
@@ -77,7 +77,7 @@ async function answer(message: Request, tools: ToolSet, signal: AbortSignal): Pr
       return { content: [{ type: "text", text: result.text }], isError: !!result.isError }
     }
     default:
-      throw new Error(`Desk's MCP server has no method ${String(message.method)}.`)
+      throw new Error(`Comet's MCP server has no method ${String(message.method)}.`)
   }
 }
 

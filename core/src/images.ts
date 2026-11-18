@@ -1,4 +1,4 @@
-import { IMAGE_TYPES, MAX_IMAGE_BYTES, type ImageAttachment } from "@desk/protocol"
+import { IMAGE_TYPES, MAX_IMAGE_BYTES, type ImageAttachment } from "@comet/protocol"
 
 /** The images a message carries, checked where they enter the core, so an agent never gets one it refuses. */
 export function checkImages(images: readonly ImageAttachment[]): readonly ImageAttachment[] {

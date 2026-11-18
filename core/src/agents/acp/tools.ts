@@ -1,4 +1,4 @@
-import type { StepKind, TextEdit, ThreadItem } from "@desk/protocol"
+import type { StepKind, TextEdit, ThreadItem } from "@comet/protocol"
 import { commandLabel, cutOutput, relativeTo, tool } from "../steps"
 import type { ToolCall, ToolKind } from "./protocol"
 

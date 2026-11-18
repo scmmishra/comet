@@ -1,5 +1,5 @@
-import type { ViewRequest } from "@desk/plugin/host"
-import { panelInstanceId, splitContributionId, type CoreMessage, type DrawnView, type PanelParams, type PluginLayout, type TabInfo, type TabLayout } from "@desk/protocol"
+import type { ViewRequest } from "@comet/plugin/host"
+import { panelInstanceId, splitContributionId, type CoreMessage, type DrawnView, type PanelParams, type PluginLayout, type TabInfo, type TabLayout } from "@comet/protocol"
 import type { Plugins } from "./plugins"
 
 /** Where a tab's project and saved layout live. The window keeps them with the tab. */
@@ -29,7 +29,7 @@ export class Layouts {
   /** The layout last sent for each tab, which says what the tab draws. */
   private shown = new Map<string, TabLayout>()
   /**
-   * Whether Desk's window has focus, as the app last said. It starts true, since Desk opens in front.
+   * Whether Comet's window has focus, as the app last said. It starts true, since Comet opens in front.
    * After the core restarts behind an unfocused window, it stays true until the window's focus next changes.
    */
   private focused = true

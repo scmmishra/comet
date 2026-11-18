@@ -1,4 +1,4 @@
-import type { FileChange } from "@desk/protocol"
+import type { FileChange } from "@comet/protocol"
 import { copyFileSync, existsSync, mkdtempSync, rmSync, statSync, utimesSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { isAbsolute, join } from "node:path"
@@ -6,7 +6,7 @@ import { instanceName } from "./data-files"
 import { git } from "./git"
 
 /**
- * Checkpoints of the working tree, so Desk can show what a turn or a thread changed, after T3 Code. A
+ * Checkpoints of the working tree, so Comet can show what a turn or a thread changed, after T3 Code. A
  * snapshot is a Git tree built in a temporary index file, and a checkpoint is a commit of that tree.
  * The user's index, working tree and branches are never touched. Untracked files that are not ignored
  * are included, because new files are changes too. A project in a subfolder of a repo snapshots only
@@ -17,9 +17,9 @@ import { git } from "./git"
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 /** Who checkpoint commits name as their author, so they never need the user's identity. */
-const CHECKPOINT_AUTHOR = { GIT_AUTHOR_NAME: "Desk", GIT_AUTHOR_EMAIL: "desk@localhost", GIT_COMMITTER_NAME: "Desk", GIT_COMMITTER_EMAIL: "desk@localhost" }
+const CHECKPOINT_AUTHOR = { GIT_AUTHOR_NAME: "Comet", GIT_AUTHOR_EMAIL: "comet@localhost", GIT_COMMITTER_NAME: "Comet", GIT_COMMITTER_EMAIL: "comet@localhost" }
 
-/** The most Desk reads of one diff, after T3 Code. A longer file list fails, and a longer patch is cut. */
+/** The most Comet reads of one diff, after T3 Code. A longer file list fails, and a longer patch is cut. */
 const MAX_DIFF_BYTES = 10_000_000
 
 /**
@@ -32,7 +32,7 @@ const GIT_DEFAULTS = ["-c", "diff.relative=false", "-c", "core.quotePath=false",
 /** The status each of Git's raw status letters stands for. A copy is a new file. A type change is a change to the file. */
 const STATUS_OF: Readonly<Record<string, FileChange["status"]>> = { A: "added", C: "added", D: "deleted", R: "renamed", M: "modified", T: "modified" }
 
-/** How Git diffs two trees for Desk: renames found, and no external diff tools or text conversion. */
+/** How Git diffs two trees for Comet: renames found, and no external diff tools or text conversion. */
 const DIFF_FLAGS = ["-M", "--no-ext-diff", "--no-textconv", "--submodule=short"]
 
 /** The tree of the project's folder as it is now, or undefined outside a Git repo or when Git fails. */
@@ -49,7 +49,7 @@ export async function snapshot(dir: string): Promise<string | undefined> {
  * names it from `dir`. It throws with Git's message when Git fails.
  */
 async function snapshotTree(dir: string, userIndex: string): Promise<string> {
-  const scratch = mkdtempSync(join(tmpdir(), "desk-index-"))
+  const scratch = mkdtempSync(join(tmpdir(), "comet-index-"))
   const index = join(scratch, "index")
   const env = { GIT_INDEX_FILE: index }
   try {
@@ -123,8 +123,8 @@ export async function branchBase(dir: string): Promise<string | undefined> {
   return headTree(dir)
 }
 
-/** Where Desk's checkpoint refs live. Each Desk instance keeps its own, so one never removes another's. */
-const refPrefix = () => `refs/desk/${instanceName()}/checkpoints/`
+/** Where Comet's checkpoint refs live. Each Comet instance keeps its own, so one never removes another's. */
+const refPrefix = () => `refs/comet/${instanceName()}/checkpoints/`
 
 /**
  * Takes a checkpoint of the project and returns its commit, or undefined outside a Git repo. The commit
@@ -141,7 +141,7 @@ export async function capture(dir: string): Promise<string | undefined> {
   const [inWorkTree, userIndex] = where
   if (inWorkTree !== "true" || !userIndex) return undefined
   const tree = await snapshotTree(dir, userIndex)
-  const commit = (await git(dir, ["commit-tree", tree, ...(head ? ["-p", head] : []), "-m", "Desk checkpoint"], { env: CHECKPOINT_AUTHOR })).trim()
+  const commit = (await git(dir, ["commit-tree", tree, ...(head ? ["-p", head] : []), "-m", "Comet checkpoint"], { env: CHECKPOINT_AUTHOR })).trim()
   await git(dir, ["update-ref", `${refPrefix()}${commit}`, commit])
   return commit
 }
@@ -172,7 +172,7 @@ export async function releaseCheckpoints(threads: readonly { readonly project: s
   for (const { dir, keep } of repos.values()) await keepCheckpoints(dir, keep).catch(() => undefined)
 }
 
-/** Removes the refs of this Desk's checkpoints in a repo that `keep` does not name, so Git may prune them. */
+/** Removes the refs of this Comet's checkpoints in a repo that `keep` does not name, so Git may prune them. */
 async function keepCheckpoints(dir: string, keep: ReadonlySet<string>): Promise<void> {
   const refs = (await git(dir, ["for-each-ref", "--format=%(refname)", refPrefix()])).split("\n").filter(Boolean)
   const stale = refs.filter((ref) => !keep.has(ref.slice(refPrefix().length)))

@@ -8,7 +8,7 @@ const LAUNCHD_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 
 /** A program that prints the path it ran from and the environment it got. */
 const REPORTER = `#!/bin/sh
-printf '%s\\n' "$0" "$PATH" "\${CLAUDECODE-unset}" "\${CLAUDE_CONFIG_DIR-unset}" "\${DESK_EXTRA-unset}"
+printf '%s\\n' "$0" "$PATH" "\${CLAUDECODE-unset}" "\${CLAUDE_CONFIG_DIR-unset}" "\${COMET_EXTRA-unset}"
 `
 
 /** The core's environment setup, run the way main.ts runs it, reporting what the core then sees. */
@@ -27,7 +27,7 @@ const run = async (command: string[], env?: Record<string, string>) => {
     return null
   }
 }
-console.log(JSON.stringify({ readyMs, claude, path: process.env.PATH, gh: await run(["gh"]), extra: await run(["gh"], { DESK_EXTRA: "yes" }) }))
+console.log(JSON.stringify({ readyMs, claude, path: process.env.PATH, gh: await run(["gh"]), extra: await run(["gh"], { COMET_EXTRA: "yes" }) }))
 `
 
 interface Report {
@@ -53,11 +53,11 @@ function makeHome() {
     return folder
   }
   const profile = (file: ".zprofile" | ".zshrc", text: string) => writeFileSync(join(home, file), text)
-  return { dir, home, tools, profile, cache: join(dir, "desk", "shell-environment.json") }
+  return { dir, home, tools, profile, cache: join(dir, "comet", "shell-environment.json") }
 }
 
 /**
- * Starts the core's environment setup in a fresh Bun, as Desk opened from the Dock starts it: launchd's
+ * Starts the core's environment setup in a fresh Bun, as Comet opened from the Dock starts it: launchd's
  * PATH and Claude Code's session markers. It must run in its own process: Bun copies the environment
  * at start, and the test runner's environment already holds the user's tools.
  */
@@ -71,7 +71,7 @@ async function startFromDock(home: ReturnType<typeof makeHome>, options: { shell
     stderr: "pipe",
     env: {
       HOME: home.home,
-      DESK_HOME: join(home.dir, "desk"),
+      COMET_HOME: join(home.dir, "comet"),
       PATH: LAUNCHD_PATH,
       SHELL: options.shell ?? "/bin/zsh",
       CLAUDECODE: "1",
@@ -84,7 +84,7 @@ async function startFromDock(home: ReturnType<typeof makeHome>, options: { shell
   return { ...(JSON.parse(out) as Report), ms: performance.now() - started }
 }
 
-test("Desk opened from the Dock finds claude on the PATH .zprofile sets", async () => {
+test("Comet opened from the Dock finds claude on the PATH .zprofile sets", async () => {
   const home = makeHome()
   const tools = home.tools("tools")
   home.profile(".zprofile", `export PATH="${tools}:$PATH"\n`)
@@ -95,7 +95,7 @@ test("Desk opened from the Dock finds claude on the PATH .zprofile sets", async 
   expect(path.split(":")).toContain("/usr/sbin")
 })
 
-test("Desk finds claude on a PATH only .zshrc sets, though .zshrc prints and leaves a job running", async () => {
+test("Comet finds claude on a PATH only .zshrc sets, though .zshrc prints and leaves a job running", async () => {
   const home = makeHome()
   const tools = home.tools("tools")
   home.profile(".zshrc", `echo "Welcome back"\n(sleep 5) &\nexport PATH="${tools}:$PATH"\n`)

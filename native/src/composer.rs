@@ -5,7 +5,7 @@
 use crate::protocol::{ClientMessage, Question, QueuedMessage, Skill};
 use crate::questions::{self, Advance, QuestionDraft};
 use crate::triggers::{self, Trigger, TriggerKind};
-use crate::shell::Desk;
+use crate::shell::Comet;
 use crate::theme;
 use crate::thread_view::COLUMN;
 use rune::{El, Key, KeyEvent, TextEdit, auto_grow, col, el, icon, row, text, text_input};
@@ -27,7 +27,7 @@ const ANSWER_PLACEHOLDER: &str = "Type your own answer, or leave this blank to u
 const NUMBERED_OPTIONS: usize = 9;
 /// The queue shows this many messages until the user asks for all of them.
 const QUEUE_SHOWN: usize = 3;
-/// A question scrolls past this height, Desk's `max-h-[40vh]` on a typical window.
+/// A question scrolls past this height, Comet's `max-h-[40vh]` on a typical window.
 const QUESTION_MAX: f32 = 320.0;
 /// An attached image's thumbnail, `size-14`.
 const THUMB: f32 = 56.0;
@@ -37,14 +37,14 @@ const LIST_MAX: f32 = 280.0;
 const SAVE_DELAY: std::time::Duration = std::time::Duration::from_millis(400);
 const DRAFTS_FILE: &str = "drafts.json";
 
-/// Desk's own commands, after T3 Code's. They act at once, rather than going to the agent.
-const DESK_COMMANDS: [(&str, &str); 2] = [("model", "Switch the model for this tab"), ("clear", "Start a fresh session; the thread starts empty")];
+/// Comet's own commands, after T3 Code's. They act at once, rather than going to the agent.
+const COMET_COMMANDS: [(&str, &str); 2] = [("model", "Switch the model for this tab"), ("clear", "Start a fresh session; the thread starts empty")];
 
 /// One row of the file and command list.
 #[derive(Clone, Debug, PartialEq)]
 enum Suggestion {
     File(String),
-    Desk(&'static str, &'static str),
+    Comet(&'static str, &'static str),
     Skill(Skill),
 }
 
@@ -166,7 +166,7 @@ impl Drafts {
     }
 }
 
-impl Desk {
+impl Comet {
     fn follow_up(&self, alternate: bool) -> FollowUp {
         let chosen = FollowUp::from_setting(self.account.settings.as_ref().map_or("steer", |s| s.threads.follow_up.as_str()));
         if alternate { chosen.other() } else { chosen }
@@ -295,19 +295,19 @@ impl Desk {
                 // An agent that does not run skills from a `/` offers none here, such as Codex, which takes `$` and a skill input.
                 let slash = self.account.can(&info.agent, "slash-commands");
                 let skills = self.projects.get(&info.project).and_then(|p| p.skills_of(&info.agent)).filter(|_| slash).unwrap_or(&[]);
-                let all: Vec<Suggestion> = DESK_COMMANDS.iter().map(|(n, d)| Suggestion::Desk(n, d)).chain(skills.iter().cloned().map(Suggestion::Skill)).collect();
+                let all: Vec<Suggestion> = COMET_COMMANDS.iter().map(|(n, d)| Suggestion::Comet(n, d)).chain(skills.iter().cloned().map(Suggestion::Skill)).collect();
                 triggers::match_commands(&all, &trigger.query, suggestion_name, suggestion_description).into_iter().cloned().collect()
             }
         }
     }
 
-    /// Puts the picked row in place of the trigger, or runs one of Desk's own commands.
+    /// Puts the picked row in place of the trigger, or runs one of Comet's own commands.
     fn pick_suggestion(&mut self, tab: &str, index: usize) {
         let (Some(trigger), Some(picked)) = (self.trigger(tab), self.suggestions(tab).into_iter().nth(index)) else { return };
         let inserted = match picked {
             Suggestion::File(path) => format!("@{path}"),
             Suggestion::Skill(skill) => format!("/{}", skill.name),
-            Suggestion::Desk(name, _) => {
+            Suggestion::Comet(name, _) => {
                 self.drafts.edit(tab).clear();
                 if name == "model" {
                     self.toggle_picker();
@@ -382,7 +382,7 @@ pub enum ListAt {
 }
 
 /// The composer of `tab`, with the queue above it. The caller places it in the thread's lane.
-pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &Kit, layer: &mut Vec<El>) -> El {
+pub fn composer(s: &Comet, info: &crate::protocol::TabInfo, list_at: ListAt, k: &Kit, layer: &mut Vec<El>) -> El {
     let tab = info.id.as_str();
     if let Some(list) = suggestion_list(s, tab, k) {
         let placement = if list_at == ListAt::Above { Placement::TopStart } else { Placement::BottomStart };
@@ -398,16 +398,16 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &
         .color(k.c.text_base)
         .placeholder(if question.is_some() { ANSWER_PLACEHOLDER } else { PLACEHOLDER }, k.c.text_faint)
         .caret(k.c.text_base, k.selection())
-        .on_edit(|s: &mut Desk| {
+        .on_edit(|s: &mut Comet| {
             let tab = s.workspace.active.clone().unwrap_or_default();
             s.drafts.edit(&tab)
         })
-        .on_submit(|s: &mut Desk, _| {
+        .on_submit(|s: &mut Comet, _| {
             let alternate = s.cmd_held();
             s.submit(alternate);
         })
-        .on_input_paste(|s: &mut Desk, content, _| s.paste(content))
-        .on_input_key(|s: &mut Desk, key: &KeyEvent, tx| {
+        .on_input_paste(|s: &mut Comet, content, _| s.paste(content))
+        .on_input_key(|s: &mut Comet, key: &KeyEvent, tx| {
             let Some(tab) = s.workspace.active.clone() else { return false };
             // ⌘Enter sends with the other follow-up: it queues while Enter steers.
             // Rune's field submits on Enter alone.
@@ -440,9 +440,9 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &
         .variant(IconButtonVariant::Ghost)
         .control_size(ControlSize::Large)
         .label("Add images")
-        .on_press_tx(|_: &mut Desk, tx| {
+        .on_press_tx(|_: &mut Comet, tx| {
             let options = rune::FileDialogOptions { title: "Add images".into(), ..Default::default() }.filter("Images", &crate::attachments::EXTENSIONS);
-            tx.open_file(options, |s: &mut Desk, result, _| match result {
+            tx.open_file(options, |s: &mut Comet, result, _| match result {
                 Ok(Some(path)) => s.attach(&[path]),
                 Ok(None) => {}
                 Err(e) => s.toasts.show(e.to_string(), true),
@@ -465,14 +465,14 @@ pub fn composer(s: &Desk, info: &crate::protocol::TabInfo, list_at: ListAt, k: &
         .children(thumbs)
         .child(input)
         .child(actions)
-        .on_drop_files(|s: &mut Desk, paths: &[std::path::PathBuf], _| s.attach(paths));
+        .on_drop_files(|s: &mut Comet, paths: &[std::path::PathBuf], _| s.attach(paths));
     col().w_full().children(queue_view(s, tab, k)).children(crate::branch_notice::notice(s, info, k)).child(card)
 }
 
 fn suggestion_name(s: &Suggestion) -> &str {
     match s {
         Suggestion::File(path) => path,
-        Suggestion::Desk(name, _) => name,
+        Suggestion::Comet(name, _) => name,
         Suggestion::Skill(skill) => &skill.name,
     }
 }
@@ -480,13 +480,13 @@ fn suggestion_name(s: &Suggestion) -> &str {
 fn suggestion_description(s: &Suggestion) -> &str {
     match s {
         Suggestion::File(_) => "",
-        Suggestion::Desk(_, description) => description,
+        Suggestion::Comet(_, description) => description,
         Suggestion::Skill(skill) => &skill.description,
     }
 }
 
 /// The files or commands that complete what was typed, one row each.
-fn suggestion_list(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
+fn suggestion_list(s: &Comet, tab: &str, k: &Kit) -> Option<El> {
     let rows = s.suggestions(tab);
     if rows.is_empty() {
         return None;
@@ -498,7 +498,7 @@ fn suggestion_list(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
                 let (dir, name) = path.rsplit_once('/').map_or(("", path.as_str()), |(d, n)| (d, n));
                 (crate::icons::file_icon(path), name.to_owned(), if dir.is_empty() { String::new() } else { format!("{dir}/") })
             }
-            Suggestion::Desk(name, description) => (&ic::SETTINGS_GEAR, format!("/{name}"), (*description).to_owned()),
+            Suggestion::Comet(name, description) => (&ic::SETTINGS_GEAR, format!("/{name}"), (*description).to_owned()),
             Suggestion::Skill(skill) => (
                 if skill.builtin { &ic::OUTLINE_CONSOLE } else { &ic::POST_SKILL },
                 format!("/{}{}", skill.name, skill.argument_hint.as_ref().map_or(String::new(), |h| format!(" {h}"))),
@@ -517,7 +517,7 @@ fn suggestion_list(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
             .fill(if i == active { k.c.hover } else { rune::Color::TRANSPARENT })
             .role("option")
             .position_in_set(i + 1, rows.len())
-            .on_press(move |s: &mut Desk| s.pick_suggestion(&tab, i))
+            .on_press(move |s: &mut Comet| s.pick_suggestion(&tab, i))
             .child(icon(mark, crate::icons::SIZE).color(k.c.text_faint))
             .child(text(label).font(crate::theme::text(13.0)).color(k.c.text_base))
             .child(text(detail).font(crate::theme::text(13.0)).color(k.c.text_faint).truncate().grow(1.0))
@@ -540,7 +540,7 @@ fn suggestion_list(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
 }
 
 /// Asks the core for what the list needs as the user types, and saves the drafts after a pause.
-pub fn poll(s: &mut Desk, tx: &mut rune::Tx) -> bool {
+pub fn poll(s: &mut Comet, tx: &mut rune::Tx) -> bool {
     if let Some(wait) = sync(s) {
         tx.wake_after(wait);
     }
@@ -550,7 +550,7 @@ pub fn poll(s: &mut Desk, tx: &mut rune::Tx) -> bool {
     false
 }
 
-impl Desk {
+impl Comet {
     /// Whether a composer just appeared, so typing starts there: in a new tab, in a tab brought to the front, and at the bottom of a thread the first
     /// message started. The palette and Settings keep the keyboard while they show.
     fn composer_appeared(&mut self) -> bool {
@@ -569,7 +569,7 @@ impl Desk {
 }
 
 /// What `poll` does, without the event loop. Returns how long until the drafts are due to be saved.
-fn sync(s: &mut Desk) -> Option<std::time::Duration> {
+fn sync(s: &mut Comet) -> Option<std::time::Duration> {
     let tab = s.workspace.active_tab().cloned()?;
     if let Some(trigger) = s.trigger(&tab.id) {
         match trigger.kind {
@@ -598,7 +598,7 @@ fn sync(s: &mut Desk) -> Option<std::time::Duration> {
     None
 }
 
-impl Desk {
+impl Comet {
     /// Takes the paths the core found, for the query the list asked about.
     pub fn found_files(&mut self, project: String, query: String, paths: Vec<String>) {
         self.palette_files(&project, &query, &paths);
@@ -609,7 +609,7 @@ impl Desk {
 }
 
 /// An attached image, with a button to take it off the message.
-fn thumbnail(s: &Desk, tab: &str, index: usize, image: &crate::protocol::ImageAttachment, k: &Kit) -> El {
+fn thumbnail(s: &Comet, tab: &str, index: usize, image: &crate::protocol::ImageAttachment, k: &Kit) -> El {
     let picture = match s.images.get(image) {
         Some(decoded) => el().size(THUMB, THUMB).radius(10.0).clip_rounded(10.0).border(1.0, k.c.border_base).pixels_fit(decoded.pixels(), rune::SurfaceFit::Fill),
         None => el().size(THUMB, THUMB).radius(10.0).fill(k.c.layer_02),
@@ -619,7 +619,7 @@ fn thumbnail(s: &Desk, tab: &str, index: usize, image: &crate::protocol::ImageAt
         .variant(IconButtonVariant::Contrast)
         .control_size(ControlSize::Small)
         .label("Remove image")
-        .on_press(move |s: &mut Desk| {
+        .on_press(move |s: &mut Comet| {
             if let Some(images) = s.drafts.images.get_mut(&tab)
                 && index < images.len()
             {
@@ -634,7 +634,7 @@ fn thumbnail(s: &Desk, tab: &str, index: usize, image: &crate::protocol::ImageAt
 }
 
 /// "Next question", or "Submit answer(s)" on the last one. It waits for the question to have an answer.
-fn answer_button(s: &Desk, tab: &str, request: &str, questions: &[Question], empty: bool, k: &Kit) -> El {
+fn answer_button(s: &Comet, tab: &str, request: &str, questions: &[Question], empty: bool, k: &Kit) -> El {
     let draft = s.drafts.questions.get(request).cloned().unwrap_or_default();
     let answered = !empty || questions.get(draft.index).is_some_and(|q| questions::answer_of(q, &draft).is_some());
     let label = if draft.index + 1 < questions.len() {
@@ -648,7 +648,7 @@ fn answer_button(s: &Desk, tab: &str, request: &str, questions: &[Question], emp
     crate::theme::button(label)
         .variant(ButtonVariant::Contrast)
         .disabled(!answered)
-        .on_press(move |s: &mut Desk| s.advance_question(&tab, &request, &questions))
+        .on_press(move |s: &mut Comet| s.advance_question(&tab, &request, &questions))
         .build(k)
         .radius(16.0)
         .key("answer")
@@ -656,13 +656,13 @@ fn answer_button(s: &Desk, tab: &str, request: &str, questions: &[Question], emp
 
 /// The agent's questions, at the top of the composer, after T3 Code. One question shows at a time with its
 /// options. The header folds the question away, and the cross dismisses it.
-fn question_panel(s: &Desk, tab: &str, request: &str, questions: &[Question], k: &Kit) -> El {
+fn question_panel(s: &Comet, tab: &str, request: &str, questions: &[Question], k: &Kit) -> El {
     let draft = s.drafts.questions.get(request).cloned().unwrap_or_default();
     let Some(current) = questions.get(draft.index) else { return el() };
     let folded = s.drafts.folded.contains(request);
     let fold = {
         let request = request.to_owned();
-        move |s: &mut Desk, _: &mut rune::Tx| {
+        move |s: &mut Comet, _: &mut rune::Tx| {
             if !s.drafts.folded.remove(&request) {
                 s.drafts.folded.insert(request.clone());
             }
@@ -670,7 +670,7 @@ fn question_panel(s: &Desk, tab: &str, request: &str, questions: &[Question], k:
     };
     let dismiss = {
         let (tab, request) = (tab.to_owned(), request.to_owned());
-        move |s: &mut Desk| s.core.send(&ClientMessage::QuestionAnswer { tab_id: tab.clone(), request_id: request.clone(), answers: None })
+        move |s: &mut Comet| s.core.send(&ClientMessage::QuestionAnswer { tab_id: tab.clone(), request_id: request.clone(), answers: None })
     };
     let small = |words: String, color| text(words).font(crate::theme::text(12.0)).color(color);
     let head = row()
@@ -705,7 +705,7 @@ fn question_panel(s: &Desk, tab: &str, request: &str, questions: &[Question], k:
                 .radius(7.0)
                 .hover(if picked { rune::Color::TRANSPARENT } else { k.c.hover })
                 .role("button")
-                .on_press(move |s: &mut Desk| s.pick(&tab, &request, &label))
+                .on_press(move |s: &mut Comet| s.pick(&tab, &request, &label))
                 .child(option_mark(picked, current.multi_select, k).mt(2.0))
                 .child(
                     col()
@@ -731,7 +731,7 @@ fn question_panel(s: &Desk, tab: &str, request: &str, questions: &[Question], k:
     col().key("question").w_full().px(16.0).pt(10.0).pb(9.0).border_sides([0.0, 0.0, 1.0, 0.0], k.c.border_base).child(head).children(body)
 }
 
-/// A radio or checkbox mark, drawn as Desk draws it.
+/// A radio or checkbox mark, drawn as Comet draws it.
 fn option_mark(checked: bool, multiple: bool, k: &Kit) -> El {
     let mark = el().size(16.0, 16.0).radius(if multiple { 4.0 } else { 8.0 }).center().border(1.0, if checked { k.c.text_base } else { k.c.text_faint });
     if !checked {
@@ -743,7 +743,7 @@ fn option_mark(checked: bool, multiple: bool, k: &Kit) -> El {
 
 /// A tab's queued messages, above the composer, after T3 Code: dashed bubbles waiting for the turn to end.
 /// Each can be sent now, edited in the composer, or removed. A stop or an error pauses the queue.
-fn queue_view(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
+fn queue_view(s: &Comet, tab: &str, k: &Kit) -> Option<El> {
     let thread = s.threads.get(tab)?;
     if thread.queue.is_empty() {
         return None;
@@ -757,13 +757,13 @@ fn queue_view(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
             .gap(8.0)
             .items_center()
             .child(small("The queue paused when the turn stopped."))
-            .child(crate::theme::small_button("Resume").on_press(move |s: &mut Desk| s.core.send(&ClientMessage::QueueResume { tab_id: tab.clone() })).build(k))
+            .child(crate::theme::small_button("Resume").on_press(move |s: &mut Comet| s.core.send(&ClientMessage::QueueResume { tab_id: tab.clone() })).build(k))
     });
     let messages = thread.queue[..shown].iter().map(|message| queued(s, tab, message, k));
     let more = (thread.queue.len() > QUEUE_SHOWN).then(|| {
         let tab = tab.to_owned();
         let words = if all { "Show fewer".to_owned() } else { format!("Show all {} queued", thread.queue.len()) };
-        text(words).font(crate::theme::text(12.0)).color(k.c.text_faint).role("button").on_press(move |s: &mut Desk| {
+        text(words).font(crate::theme::text(12.0)).color(k.c.text_faint).role("button").on_press(move |s: &mut Comet| {
             if !s.drafts.all_queued.remove(&tab) {
                 s.drafts.all_queued.insert(tab.clone());
             }
@@ -772,7 +772,7 @@ fn queue_view(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
     Some(col().key("queue").w_full().items_end().gap(6.0).mb(8.0).children(held).children(messages).children(more))
 }
 
-fn queued(s: &Desk, tab: &str, message: &QueuedMessage, k: &Kit) -> El {
+fn queued(s: &Comet, tab: &str, message: &QueuedMessage, k: &Kit) -> El {
     let ids = || (tab.to_owned(), message.id.clone());
     let bubble = el()
         .max_w(COLUMN * 0.8)
@@ -806,7 +806,7 @@ fn queued(s: &Desk, tab: &str, message: &QueuedMessage, k: &Kit) -> El {
             crate::theme::small_button("Send now")
                 .variant(ButtonVariant::GhostMuted)
                 .icon(&ic::ARROW_UP)
-                .on_press(move |s: &mut Desk| s.core.send(&ClientMessage::QueueSend { tab_id: send_tab.clone(), id: send_id.clone() }))
+                .on_press(move |s: &mut Comet| s.core.send(&ClientMessage::QueueSend { tab_id: send_tab.clone(), id: send_id.clone() }))
                 .build(k),
         )
         .child(
@@ -815,7 +815,7 @@ fn queued(s: &Desk, tab: &str, message: &QueuedMessage, k: &Kit) -> El {
                 .control_size(ControlSize::Small)
                 .label("Edit queued message")
                 .help("Edit in the composer")
-                .on_press(move |s: &mut Desk| s.edit_queued(&edit_tab, &edit_id, &message_for_edit))
+                .on_press(move |s: &mut Comet| s.edit_queued(&edit_tab, &edit_id, &message_for_edit))
                 .build(k),
         )
         .child(
@@ -824,14 +824,14 @@ fn queued(s: &Desk, tab: &str, message: &QueuedMessage, k: &Kit) -> El {
                 .control_size(ControlSize::Small)
                 .label("Remove queued message")
                 .help("Remove from queue")
-                .on_press(move |s: &mut Desk| s.core.send(&ClientMessage::QueueRemove { tab_id: remove_tab.clone(), id: remove_id.clone() }))
+                .on_press(move |s: &mut Comet| s.core.send(&ClientMessage::QueueRemove { tab_id: remove_tab.clone(), id: remove_id.clone() }))
                 .build(k),
         );
     col().key(message.id.clone()).w_full().items_end().gap(4.0).child(bubble).child(actions)
 }
 
 /// A queued message's image, a 26 point tile. It shows grey until it is decoded.
-fn queued_image(s: &Desk, image: &crate::protocol::ImageAttachment, k: &Kit) -> El {
+fn queued_image(s: &Comet, image: &crate::protocol::ImageAttachment, k: &Kit) -> El {
     const SIZE: f32 = 26.0;
     const RADIUS: f32 = 4.875;
     let tile = el().size(SIZE, SIZE).radius(RADIUS).clip_rounded(RADIUS).border(1.0, k.c.border_base);
@@ -841,7 +841,7 @@ fn queued_image(s: &Desk, image: &crate::protocol::ImageAttachment, k: &Kit) -> 
     }
 }
 
-impl Desk {
+impl Comet {
     /// Takes a queued message back into the composer to edit, after anything already typed, with its images.
     fn edit_queued(&mut self, tab: &str, id: &str, message: &QueuedMessage) {
         self.core.send(&ClientMessage::QueueRemove { tab_id: tab.to_owned(), id: id.to_owned() });
@@ -857,11 +857,11 @@ impl Desk {
     }
 }
 
-fn send_button(s: &Desk, tab: &str, empty: bool, k: &Kit) -> El {
+fn send_button(s: &Comet, tab: &str, empty: bool, k: &Kit) -> El {
     // `size="large" class="size-8 rounded-full"`: a large button, grown to 32 points and round.
     let round = |b: IconButton| b.control_size(ControlSize::Large).build(k).size(32.0, 32.0).radius(16.0);
     if !s.busy(tab) {
-        return round(IconButton::new(&ic::ARROW_UP).variant(IconButtonVariant::Submit).label("Send").disabled(empty).on_press_tx(|s: &mut Desk, _| {
+        return round(IconButton::new(&ic::ARROW_UP).variant(IconButtonVariant::Submit).label("Send").disabled(empty).on_press_tx(|s: &mut Comet, _| {
             let alternate = s.cmd_held();
             s.submit(alternate);
         }))
@@ -869,7 +869,7 @@ fn send_button(s: &Desk, tab: &str, empty: bool, k: &Kit) -> El {
     }
     if empty {
         let tab = tab.to_owned();
-        return round(IconButton::new(&ic::STOP).variant(IconButtonVariant::Contrast).label("Stop").on_press_tx(move |s: &mut Desk, _| s.interrupt(&tab))).key("stop");
+        return round(IconButton::new(&ic::STOP).variant(IconButtonVariant::Contrast).label("Stop").on_press_tx(move |s: &mut Comet, _| s.interrupt(&tab))).key("stop");
     }
     let follow = s.follow_up(false);
     round(
@@ -877,7 +877,7 @@ fn send_button(s: &Desk, tab: &str, empty: bool, k: &Kit) -> El {
             .variant(IconButtonVariant::Submit)
             .label(follow.label())
             .help(format!("Click to {}, ⌘-click or ⌘Enter to {}", follow.name(), follow.other().name()))
-            .on_press_tx(|s: &mut Desk, _| {
+            .on_press_tx(|s: &mut Comet, _| {
                 let alternate = s.cmd_held();
                 s.submit(alternate);
             }),
@@ -893,21 +893,21 @@ mod tests {
     use serde_json::Map;
 
     /// A window with one untitled tab, as restored from the core.
-    fn desk() -> Desk {
-        let mut s = Desk::default();
+    fn comet() -> Comet {
+        let mut s = Comet::default();
         let tab = TabInfo { id: "t".into(), title: crate::workspace::NEW_TAB_TITLE.into(), project: "/code/x".into(), terminals: vec![], agent: "claude".into(), model: "default".into(), effort: None, fast: None, permission_mode: "auto".into(), files: vec![], panel_active: None, review_scope: None, panel_open: None, rest: Map::new() };
         s.receive(Event::Message(CoreMessage::Tabs { tabs: vec![tab], active: Some("t".into()) })).unwrap();
         let _ = s.core.sent();
         s
     }
 
-    fn type_text(s: &mut Desk, words: &str) {
+    fn type_text(s: &mut Comet, words: &str) {
         s.drafts.edit("t").text = words.into();
     }
 
     #[test]
     fn a_tab_that_starts_in_a_new_worktree_asks_for_it_and_holds_its_message() {
-        let mut s = desk();
+        let mut s = comet();
         s.pick_checkout("t", None);
         type_text(&mut s, "Add tests");
         s.submit(false);
@@ -917,23 +917,23 @@ mod tests {
 
     #[test]
     fn a_paste_attaches_a_screenshot_or_files_and_leaves_text_alone() {
-        let mut s = desk();
+        let mut s = comet();
         // A 1×1 PNG's signature and header, which is all the clipboard checks.
         let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
         png.extend([0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]);
         let shot = rune::ClipboardContent::new("").with_image(rune::ClipboardImage::from_png(png).expect("a PNG"));
         assert!(s.paste(&shot));
         assert_eq!(s.drafts.images["t"].iter().map(|i| i.media_type.as_str()).collect::<Vec<_>>(), ["image/png"]);
-        let text = std::env::temp_dir().join("desk-paste-note.txt");
+        let text = std::env::temp_dir().join("comet-paste-note.txt");
         std::fs::write(&text, "x").unwrap();
         assert!(s.paste(&rune::ClipboardContent::new("").with_files([text])), "files paste as attachments");
-        assert_eq!(s.toasts.messages(), ["desk-paste-note.txt is not a PNG, JPEG, GIF or WebP image."]);
+        assert_eq!(s.toasts.messages(), ["comet-paste-note.txt is not a PNG, JPEG, GIF or WebP image."]);
         assert!(!s.paste(&rune::ClipboardContent::new("hello")), "text goes into the message");
     }
 
     #[test]
     fn the_composer_takes_the_keyboard_when_it_appears_and_not_again() {
-        let mut s = desk();
+        let mut s = comet();
         assert!(s.composer_appeared(), "a tab's composer takes focus as it shows");
         assert!(!s.composer_appeared(), "and leaves focus alone after");
         s.threads.apply("t", ThreadEvent::Item { item: crate::protocol::ThreadItem::User { id: "u".into(), text: "hi".into(), images: vec![], at: None, steered: false, waiting: false, self_started: false } });
@@ -947,7 +947,7 @@ mod tests {
 
     #[test]
     fn editing_a_queued_message_takes_back_its_text_and_images() {
-        let mut s = desk();
+        let mut s = comet();
         let image = crate::protocol::ImageAttachment { media_type: "image/png".into(), data: "iVBORw==".into() };
         let message = QueuedMessage { id: "m1".into(), text: "Then this".into(), images: vec![image.clone()] };
         type_text(&mut s, "First");
@@ -959,7 +959,7 @@ mod tests {
 
     #[test]
     fn a_message_put_back_in_the_composer_goes_under_the_draft() {
-        let mut s = desk();
+        let mut s = comet();
         type_text(&mut s, "A draft");
         let image = crate::protocol::ImageAttachment { media_type: "image/png".into(), data: "iVBORw==".into() };
         s.put_in_draft("t", "Now add a test", std::slice::from_ref(&image));
@@ -969,7 +969,7 @@ mod tests {
 
     #[test]
     fn sending_names_an_untitled_tab_and_clears_the_draft() {
-        let mut s = desk();
+        let mut s = comet();
         type_text(&mut s, "  Fix the login form  ");
         s.submit(false);
         let sent = s.core.sent();
@@ -982,7 +982,7 @@ mod tests {
 
     #[test]
     fn while_claude_works_a_message_steers_and_cmd_queues() {
-        let mut s = desk();
+        let mut s = comet();
         s.threads.apply("t", ThreadEvent::Status { busy: true });
         type_text(&mut s, "go on");
         s.submit(false);
@@ -994,7 +994,7 @@ mod tests {
 
     #[test]
     fn a_pick_answers_a_single_question_and_typed_text_answers_in_its_place() {
-        let mut s = desk();
+        let mut s = comet();
         let item: crate::protocol::ThreadItem = serde_json::from_value(serde_json::json!({
             "type": "question", "id": "q", "requestId": "r",
             "questions": [
@@ -1013,7 +1013,7 @@ mod tests {
     }
 
     /// Types `words` with the caret at their end, in a focused composer.
-    fn type_focused(s: &mut Desk, words: &str) {
+    fn type_focused(s: &mut Comet, words: &str) {
         let edit = s.drafts.edit("t");
         edit.replace_text(words);
         edit.set_caret(words.len());
@@ -1022,7 +1022,7 @@ mod tests {
 
     #[test]
     fn a_file_mention_asks_the_core_and_picks_a_path() {
-        let mut s = desk();
+        let mut s = comet();
         type_focused(&mut s, "look at @log");
         s.drafts.edited_at = None;
         sync(&mut s);
@@ -1036,7 +1036,7 @@ mod tests {
 
     #[test]
     fn typing_more_highlights_the_top_suggestion_again() {
-        let mut s = desk();
+        let mut s = comet();
         type_focused(&mut s, "@log");
         sync(&mut s);
         s.found_files("/code/x".into(), "log".into(), vec!["src/login.ts".into(), "src/logout.ts".into()]);
@@ -1047,8 +1047,8 @@ mod tests {
     }
 
     #[test]
-    fn commands_list_desk_s_own_first_and_clear_runs_at_once() {
-        let mut s = desk();
+    fn commands_list_comet_s_own_first_and_clear_runs_at_once() {
+        let mut s = comet();
         type_focused(&mut s, "/cl");
         let names: Vec<String> = s.suggestions("t").iter().map(|x| suggestion_name(x).to_owned()).collect();
         assert_eq!(names, ["clear"]);
@@ -1059,7 +1059,7 @@ mod tests {
 
     #[test]
     fn skills_list_only_for_an_agent_that_runs_them_from_a_slash() {
-        let mut s = desk();
+        let mut s = comet();
         let messages = serde_json::json!([
             { "type": "project", "project": "/code/x", "part": "skills", "value": { "claude": [{ "name": "pdf", "description": "Reads PDFs", "ownProject": false, "group": "User" }] } },
             { "type": "agents", "agents": [{ "id": "claude", "name": "Claude Code", "state": "ready", "features": [], "models": [] }] }
@@ -1077,7 +1077,7 @@ mod tests {
 
     #[test]
     fn escape_closes_the_list_for_that_trigger() {
-        let mut s = desk();
+        let mut s = comet();
         type_focused(&mut s, "/");
         assert!(!s.suggestions("t").is_empty());
         assert!(s.list_key("t", &Key::Escape));
@@ -1086,8 +1086,8 @@ mod tests {
 
     #[test]
     fn images_go_with_the_message_and_alone_are_enough_to_send() {
-        let mut s = desk();
-        let dir = std::env::temp_dir().join(format!("desk-composer-{}", std::process::id()));
+        let mut s = comet();
+        let dir = std::env::temp_dir().join(format!("comet-composer-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let (png, text) = (dir.join("a.png"), dir.join("a.txt"));
         std::fs::write(&png, [137, 80, 78, 71]).unwrap();
@@ -1104,7 +1104,7 @@ mod tests {
 
     #[test]
     fn escape_stops_claude_only_when_pressed_twice() {
-        let mut s = desk();
+        let mut s = comet();
         s.threads.apply("t", ThreadEvent::Status { busy: true });
         s.escape("t");
         assert!(s.core.sent().is_empty());

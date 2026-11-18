@@ -5,7 +5,7 @@ use crate::protocol::ModelOption;
 use rune::Icon;
 use rune_theme_opencode::icons as ic;
 
-/// Each effort's words. A level Desk has no words for shows as its agent names it.
+/// Each effort's words. A level Comet has no words for shows as its agent names it.
 pub fn effort_label(effort: &str) -> &str {
     match effort {
         "low" => "Low",
@@ -39,7 +39,7 @@ pub fn effort_for(option: &ModelOption, effort: Option<&str>) -> Option<String> 
     effort.filter(|e| option.efforts.iter().any(|x| x == e)).map(str::to_owned)
 }
 
-/// The permission modes a model takes, in Desk's order. Before the models arrive, every mode but Auto shows,
+/// The permission modes a model takes, in Comet's order. Before the models arrive, every mode but Auto shows,
 /// since Auto needs a model that supports it.
 pub fn permission_modes(option: Option<&ModelOption>) -> impl Iterator<Item = &'static str> + '_ {
     PERMISSION.iter().map(|p| p.0).filter(move |mode| option.map_or(*mode != "auto", |o| o.permission_modes.iter().any(|m| m == mode)))

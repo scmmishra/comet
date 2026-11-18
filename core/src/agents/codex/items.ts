@@ -1,5 +1,5 @@
-import type { ThreadItem } from "@desk/protocol"
-import { deskToolLabel, deskToolSummary, SERVER_NAME } from "../../delegate/tools"
+import type { ThreadItem } from "@comet/protocol"
+import { cometToolLabel, cometToolSummary, SERVER_NAME } from "../../delegate/tools"
 import { firstLine } from "../../text"
 import { commandLabel, cutOutput, relativeTo, thought, tool } from "../steps"
 import { fileEdits } from "./diff"
@@ -16,7 +16,7 @@ type ToolItem = Extract<ThreadItem, { type: "tool" }>
 /**
  * A Codex item as thread items. `done` says the item has completed, and `at` stamps finished text. A
  * file change becomes one item per file. A user message makes none, since the session or the history
- * adds the user's messages itself. Items Desk does not show, such as plans, make none.
+ * adds the user's messages itself. Items Comet does not show, such as plans, make none.
  */
 export function threadItems(dir: string, item: CodexItem, done: boolean, at?: number): ThreadItem[] {
   switch (item.type) {
@@ -35,10 +35,10 @@ export function threadItems(dir: string, item: CodexItem, done: boolean, at?: nu
     case "mcpToolCall": {
       const result = done ? (item.error ? { output: item.error.message, isError: true } : { output: cutOutput(contentText(item.result?.content ?? [])), isError: item.status === "failed" }) : undefined
       const name = `${item.server}.${item.tool}`
-      // A tool of Desk's own reads the same in every agent's thread.
-      const desk = item.server === SERVER_NAME ? deskToolSummary(item.tool, item.arguments) : undefined
-      const summary = desk ?? argumentsSummary(item.arguments)
-      return [tool({ type: "tool", id: item.id, name, summary, ...(result ? { result } : {}) }, "other", desk === undefined ? `${name} ${summary}` : deskToolLabel(item.tool, summary, done))]
+      // A tool of Comet's own reads the same in every agent's thread.
+      const comet = item.server === SERVER_NAME ? cometToolSummary(item.tool, item.arguments) : undefined
+      const summary = comet ?? argumentsSummary(item.arguments)
+      return [tool({ type: "tool", id: item.id, name, summary, ...(result ? { result } : {}) }, "other", comet === undefined ? `${name} ${summary}` : cometToolLabel(item.tool, summary, done))]
     }
     case "webSearch":
       return [tool({ type: "tool", id: item.id, name: "WebSearch", summary: item.query, ...finished(done, false) }, "web", `Searched the web for ${item.query}`)]
@@ -89,7 +89,7 @@ function fileItem(dir: string, id: string, change: FileUpdate, isError: boolean 
 /** The paths a patch changes, relative to the project, for the request that asks to apply it. */
 export const changedPaths = (dir: string, changes: readonly { readonly path: string }[]) => changes.map((change) => relativeTo(dir, change.path))
 
-/** A result with no output, for a call whose output Desk does not show. A call still running has none. */
+/** A result with no output, for a call whose output Comet does not show. A call still running has none. */
 const finished = (done: boolean, isError: boolean) => (done ? { result: { output: "", isError } } : {})
 
 /** Why Codex made no image. Codex names one reason, a used-up limit. */

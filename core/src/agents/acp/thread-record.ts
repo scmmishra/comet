@@ -1,4 +1,4 @@
-import type { ThreadItem } from "@desk/protocol"
+import type { ThreadItem } from "@comet/protocol"
 import { existsSync, readFileSync } from "node:fs"
 import { readdir, readFile, rm } from "node:fs/promises"
 import { join } from "node:path"
@@ -25,8 +25,8 @@ function readThread(folder: string, threadId: string): SavedThread | undefined {
 }
 
 /**
- * Desk's own record of one ACP session's thread. ACP reads a session back only by replaying it, and not
- * every agent can, so Desk keeps the items it showed. A resumed session adds to what was saved before.
+ * Comet's own record of one ACP session's thread. ACP reads a session back only by replaying it, and not
+ * every agent can, so Comet keeps the items it showed. A resumed session adds to what was saved before.
  */
 export class ThreadRecord {
   private readonly items = new Map<string, ThreadItem>()
@@ -63,7 +63,7 @@ export class ThreadRecord {
 
 /**
  * Where an ACP agent's threads are saved, one file per session in `folder`. Sessions write their records
- * here, and Desk reads them back as `AgentThreads`. The folder is read at each call, so a test can move it.
+ * here, and Comet reads them back as `AgentThreads`. The folder is read at each call, so a test can move it.
  */
 export class AcpThreadStore implements AgentThreads {
   constructor(private readonly folder: () => string) {}

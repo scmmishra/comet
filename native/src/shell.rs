@@ -24,7 +24,7 @@ const TOGGLE_INSET: (f32, f32) = (9.0, 10.0);
 /// How fast Rune's animations run: 1.2 plays every entry, exit and fade in five sixths of its time.
 /// Scrolling and growing lists keep their own pace.
 const ANIMATION_SPEED: f32 = 1.2;
-/// The main panel's corners, Desk's `rounded-3xl`.
+/// The main panel's corners, Comet's `rounded-3xl`.
 const PANEL_RADIUS: f32 = 12.0;
 /// How far Settings' card sits below the top of the main panel, so the tab's card shows behind its top edge.
 const SETTINGS_TOP: f32 = 16.0;
@@ -50,7 +50,7 @@ pub enum CoreState {
 }
 
 #[derive(Default)]
-pub struct Desk {
+pub struct Comet {
     pub core: Core,
     pub status: CoreState,
     pub account: Account,
@@ -86,9 +86,9 @@ pub struct Desk {
     pub worktrees: crate::worktrees::Worktrees,
 }
 
-impl Desk {
-    pub fn new(core: Core) -> Desk {
-        Desk { core, drafts: Drafts::load(), ..Desk::default() }
+impl Comet {
+    pub fn new(core: Core) -> Comet {
+        Comet { core, drafts: Drafts::load(), ..Comet::default() }
     }
 
     /// Takes what the core said. An empty window with no project needs a folder, which the caller asks for.
@@ -251,7 +251,7 @@ impl Desk {
         })
     }
 
-    fn dark(&self, cx: &Cx<Desk>) -> bool {
+    fn dark(&self, cx: &Cx<Comet>) -> bool {
         match self.account.theme() {
             ThemeChoice::Dark => true,
             ThemeChoice::Light => false,
@@ -263,7 +263,7 @@ impl Desk {
 /// Asks for a folder and opens a tab in it.
 pub fn open_folder(tx: &mut Tx) {
     let options = FileDialogOptions { title: "Open Folder".into(), ..Default::default() };
-    tx.open_folder(options, |s: &mut Desk, result, tx| match result {
+    tx.open_folder(options, |s: &mut Comet, result, tx| match result {
         Ok(Some(dir)) => s.new_tab(Place::End, Some(dir.to_string_lossy().into_owned()), tx),
         Ok(None) => {}
         Err(e) => s.toasts.show(e.to_string(), true),
@@ -274,16 +274,16 @@ pub fn open_folder(tx: &mut Tx) {
 pub mod commands {
     use super::*;
 
-    pub fn new_session(s: &mut Desk, tx: &mut Tx) {
+    pub fn new_session(s: &mut Comet, tx: &mut Tx) {
         s.new_tab(Place::End, None, tx);
     }
 
-    pub fn open_folder(_: &mut Desk, tx: &mut Tx) {
+    pub fn open_folder(_: &mut Comet, tx: &mut Tx) {
         super::open_folder(tx);
     }
 
     /// Closes the tab, or Settings while they cover it.
-    pub fn close_tab(s: &mut Desk, tx: &mut Tx) {
+    pub fn close_tab(s: &mut Comet, tx: &mut Tx) {
         if s.workspace.settings_page.is_some() {
             s.close_settings();
             return;
@@ -293,17 +293,17 @@ pub mod commands {
         }
     }
 
-    pub fn reopen_tab(s: &mut Desk, _: &mut Tx) {
+    pub fn reopen_tab(s: &mut Comet, _: &mut Tx) {
         s.core.send(&ClientMessage::TabReopen);
     }
 
-    /// Starts every plugin again from its files, so an edit takes effect without restarting Desk.
-    pub fn reload_plugins(s: &mut Desk, _: &mut Tx) {
+    /// Starts every plugin again from its files, so an edit takes effect without restarting Comet.
+    pub fn reload_plugins(s: &mut Comet, _: &mut Tx) {
         s.core.send(&ClientMessage::PluginsReload);
     }
 
     /// ⌘1 to ⌘9: a model while the model picker is open, else a tab.
-    pub fn show_tab<const INDEX: usize>(s: &mut Desk, _: &mut Tx) {
+    pub fn show_tab<const INDEX: usize>(s: &mut Comet, _: &mut Tx) {
         if s.pick_model_by_number(INDEX) {
             return;
         }
@@ -312,38 +312,38 @@ pub mod commands {
         s.sync_panel();
     }
 
-    pub fn toggle_panel(s: &mut Desk, _: &mut Tx) {
+    pub fn toggle_panel(s: &mut Comet, _: &mut Tx) {
         s.toggle_panel();
     }
 
-    pub fn new_terminal(s: &mut Desk, _: &mut Tx) {
+    pub fn new_terminal(s: &mut Comet, _: &mut Tx) {
         s.new_terminal();
     }
 
-    pub fn settings(s: &mut Desk, tx: &mut Tx) {
+    pub fn settings(s: &mut Comet, tx: &mut Tx) {
         s.open_settings("providers");
         tx.focus("settings", false);
     }
 
-    pub fn palette(s: &mut Desk, tx: &mut Tx) {
+    pub fn palette(s: &mut Comet, tx: &mut Tx) {
         s.toggle_palette(Vec::new(), tx);
     }
 
     /// The palette, opened on the active project's threads.
-    pub fn search_threads(s: &mut Desk, tx: &mut Tx) {
+    pub fn search_threads(s: &mut Comet, tx: &mut Tx) {
         let pages = s.workspace.active_tab().map(|t| crate::palette::Page::Threads(t.project.clone())).into_iter().collect();
         s.toggle_palette(pages, tx);
     }
 
     /// The palette, opened on the active project's files.
-    pub fn search_files(s: &mut Desk, tx: &mut Tx) {
+    pub fn search_files(s: &mut Comet, tx: &mut Tx) {
         let pages = s.workspace.active_tab().map(|t| crate::palette::Page::Files(t.project.clone())).into_iter().collect();
         s.toggle_palette(pages, tx);
     }
 }
 
 /// Ticks the clock each second while something with a timer runs. A still window does no work.
-pub fn poll(s: &mut Desk, _: f64, tx: &mut Tx) -> bool {
+pub fn poll(s: &mut Comet, _: f64, tx: &mut Tx) -> bool {
     s.sync_palette();
     s.sync_plugin_inputs();
     s.sync_branch_notice();
@@ -364,7 +364,7 @@ pub fn poll(s: &mut Desk, _: f64, tx: &mut Tx) -> bool {
 }
 
 /// Takes toasts down when their time is up.
-fn toasts_poll(s: &mut Desk, tx: &mut Tx) -> bool {
+fn toasts_poll(s: &mut Comet, tx: &mut Tx) -> bool {
     let (changed, next) = s.toasts.expire();
     if let Some(next) = next {
         tx.wake_after(next);
@@ -376,7 +376,7 @@ fn toasts_poll(s: &mut Desk, tx: &mut Tx) -> bool {
 const COPIED: Duration = Duration::from_millis(1500);
 
 /// Turns a copy button's check back after a while.
-fn copied_poll(s: &mut Desk, tx: &mut Tx) -> bool {
+fn copied_poll(s: &mut Comet, tx: &mut Tx) -> bool {
     let Some((_, at)) = &s.copied else { return false };
     if at.elapsed() >= COPIED {
         s.copied = None;
@@ -386,24 +386,24 @@ fn copied_poll(s: &mut Desk, tx: &mut Tx) -> bool {
     false
 }
 
-/// A `desk://open?dir=` link, as `bin/desk` opens it: the folder opens in a new tab.
-pub fn open_url(s: &mut Desk, url: &str, _: &mut Tx) {
+/// A `comet://open?dir=` link, as `bin/comet` opens it: the folder opens in a new tab.
+pub fn open_url(s: &mut Comet, url: &str, _: &mut Tx) {
     let Some(dir) = crate::opening::folder_from_url(url) else { return };
     s.workspace.open_asked(dir, &s.account, &s.core);
     s.sync_start();
 }
 
-/// The input method, for the editors Desk draws itself. Text fields hear it on their own.
-pub fn ime(s: &mut Desk, event: &rune::Ime, _: &mut Tx) -> bool {
+/// The input method, for the editors Comet draws itself. Text fields hear it on their own.
+pub fn ime(s: &mut Comet, event: &rune::Ime, _: &mut Tx) -> bool {
     s.terminal_ime(event)
 }
 
 /// Hears the modifier keys held down each time they change.
-pub fn modifiers(s: &mut Desk, mods: rune::Mods, _: &mut Tx) {
+pub fn modifiers(s: &mut Comet, mods: rune::Mods, _: &mut Tx) {
     s.cmd_held = mods.cmd;
 }
 
-pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
+pub fn view(s: &Comet, cx: &mut Cx<Comet>) -> El {
     cx.time_scale(ANIMATION_SPEED);
     theme::use_color_theme(s.account.color_theme());
     let k = theme::kit(s.dark(cx));
@@ -467,8 +467,8 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
     let main = col().key("main").w_full().grow(1.0).min_h(0.0).px(PANEL_INSET).pb(PANEL_INSET).child(cards).children(settings);
     crate::palette::palette(s, cx.layout_size("window").map_or(820.0, |size| size[1]), k, &mut layer);
     layer.extend(crate::toasts::region(s, k));
-    // Coming back to the window is when files and usage most likely changed outside Desk. Plugins hear of
-    // both gaining and losing focus, so they can pause work while Desk is in the background.
+    // Coming back to the window is when files and usage most likely changed outside Comet. Plugins hear of
+    // both gaining and losing focus, so they can pause work while Comet is in the background.
     let window = col()
         .key("window")
         .w_full()
@@ -476,7 +476,7 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
         .fill(k.c.bg_deep)
         .child(titlebar)
         .child(main)
-        .on_window_focus(|s: &mut Desk, focused, _| {
+        .on_window_focus(|s: &mut Comet, focused, _| {
         if s.status == CoreState::Ready {
             s.core.send(&ClientMessage::WindowFocus { focused });
             if focused {
@@ -490,7 +490,7 @@ pub fn view(s: &Desk, cx: &mut Cx<Desk>) -> El {
 
 /// A tab's session: its header and its thread.
 /// `size` is the room inside the session card, and `window` the window's, which the start screen scales by.
-fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, window: Option<[f32; 2]>, layer: &mut Vec<El>) -> El {
+fn session(s: &Comet, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, window: Option<[f32; 2]>, layer: &mut Vec<El>) -> El {
     let width = size.map(|size| size[0]);
     let k = theme::kit(dark);
     let name = project_label(s, &tab.project);
@@ -557,8 +557,8 @@ fn session(s: &Desk, tab: &TabInfo, dark: bool, size: Option<[f32; 2]>, window: 
     col().key(format!("session-{}", tab.id)).transition(rune::Transition::none()).w_full().grow(1.0).min_h(0.0).child(header).child(body)
 }
 
-/// The composer under a thread, on its lane, `desk-lane pb-4 pt-1.5`, under the lines on what the running turn does now.
-fn thread_composer(s: &Desk, tab: &TabInfo, lane: Option<crate::cards::Lane>, k: &rune_kit::Kit, layer: &mut Vec<El>) -> El {
+/// The composer under a thread, on its lane, `comet-lane pb-4 pt-1.5`, under the lines on what the running turn does now.
+fn thread_composer(s: &Comet, tab: &TabInfo, lane: Option<crate::cards::Lane>, k: &rune_kit::Kit, layer: &mut Vec<El>) -> El {
     let now = crate::thread_now::lines(s, &tab.id, k);
     let now = (!now.is_empty()).then(|| col().w_full().pb(8.0).children(now));
     thread_view::in_lane(col().w_full().pt(6.0).pb(16.0).children(now).child(composer::composer(s, tab, composer::ListAt::Above, k, layer)), lane)
@@ -567,12 +567,12 @@ fn thread_composer(s: &Desk, tab: &TabInfo, lane: Option<crate::cards::Lane>, k:
 /// A project's mark: the icon Settings chose, on its own, else
 /// the initial on a tile in the project's colour.
 /// A project's name as the user set it. A folder in a worktree takes its repo's.
-pub fn project_label(s: &Desk, project: &str) -> String {
+pub fn project_label(s: &Comet, project: &str) -> String {
     s.account.project_label(s.projects.home(project))
 }
 
 /// A project's mark. A folder in a worktree takes its repo's.
-pub fn project_mark(s: &Desk, project: &str, k: &rune_kit::Kit) -> El {
+pub fn project_mark(s: &Comet, project: &str, k: &rune_kit::Kit) -> El {
     let project = s.projects.home(project);
     let icon = s.account.project_icon(project).and_then(|path| s.images.file(&std::path::Path::new(project).join(path)));
     match icon {
@@ -609,15 +609,15 @@ mod tests {
         TabInfo { id: id.into(), title: title.into(), project: format!("/code/{id}"), terminals: vec![], agent: "claude".into(), model: "default".into(), effort: None, fast: None, permission_mode: "auto".into(), files: vec![], panel_active: None, review_scope: None, panel_open: None, rest: Map::new() }
     }
 
-    fn runtime(tabs: Vec<TabInfo>, active: &str) -> Runtime<Desk> {
-        let mut rt = Runtime::new(Desk { status: CoreState::Ready, ..Desk::default() }, view, (1280.0, 820.0), Env { system_dark: true, scale: 2.0 });
+    fn runtime(tabs: Vec<TabInfo>, active: &str) -> Runtime<Comet> {
+        let mut rt = Runtime::new(Comet { status: CoreState::Ready, ..Comet::default() }, view, (1280.0, 820.0), Env { system_dark: true, scale: 2.0 });
         let message = CoreMessage::Tabs { tabs, active: Some(active.into()) };
         rt.update(move |s, tx| s.receive_in(Event::Message(message), tx));
         rt.frame(0.0);
         rt
     }
 
-    fn texts(rt: &Runtime<Desk>) -> Vec<String> {
+    fn texts(rt: &Runtime<Comet>) -> Vec<String> {
         rt.elements().into_iter().filter_map(|e| e.text).collect()
     }
 

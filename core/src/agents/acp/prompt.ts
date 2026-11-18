@@ -1,4 +1,4 @@
-import type { ImageAttachment } from "@desk/protocol"
+import type { ImageAttachment } from "@comet/protocol"
 import type { ContentBlock } from "./protocol"
 
 /**
@@ -13,6 +13,6 @@ export const takesInstructions = (text: string) => !text.trimStart().startsWith(
  * user's words.
  */
 export function promptContent(text: string, images: readonly ImageAttachment[], instructions?: string): ContentBlock[] {
-  const words = instructions ? `<desk_instructions>\n${instructions.trim()}\n</desk_instructions>\n\n<user_request>\n${text}\n</user_request>` : text
+  const words = instructions ? `<comet_instructions>\n${instructions.trim()}\n</comet_instructions>\n\n<user_request>\n${text}\n</user_request>` : text
   return [...(words ? [{ type: "text" as const, text: words }] : []), ...images.map((image) => ({ type: "image" as const, data: image.data, mimeType: image.mediaType }))]
 }

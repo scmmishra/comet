@@ -1,11 +1,11 @@
 import { existsSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import { PLUGIN_NAME } from "@desk/protocol"
-import { deskHome } from "../data-files"
+import { PLUGIN_NAME } from "@comet/protocol"
+import { cometHome } from "../data-files"
 
 /**
- * The plugins on in a project, from `~/.desk/plugins.json`:
+ * The plugins on in a project, from `~/.comet/plugins.json`:
  * `{ "everywhere": ["newrelic"], "projects": { "~/Chatwoot/chatwoot": ["support"] } }`.
  * A project is named by its folder. The file is read on each ask, so an edit applies the next time a
  * project's plugins are read. A missing file turns every plugin off. A broken one turns every plugin
@@ -46,6 +46,6 @@ export function pluginProjects(): string[] {
   }
 }
 
-const configFile = () => join(deskHome(), "plugins.json")
+const configFile = () => join(cometHome(), "plugins.json")
 
 const expandHome = (folder: string) => (folder === "~" || folder.startsWith("~/") ? join(homedir(), folder.slice(1)) : folder).replace(/(.)\/+$/, "$1")

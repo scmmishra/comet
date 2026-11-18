@@ -2,11 +2,11 @@
 bun = "1.4.4"
 
 [tasks.dev]
-description = "Run Desk in development, from the repo"
+description = "Run Comet in development, from the repo"
 run = "cargo run --manifest-path native/Cargo.toml"
 
 [tasks.test]
-description = "Test the core and the native Desk"
+description = "Test the core and the native Comet"
 run = "bun test core protocol && cargo test --manifest-path native/Cargo.toml"
 
 [tasks.check]
@@ -14,11 +14,11 @@ description = "Typecheck, lint and test"
 run = "bun run typecheck && bun test core protocol && cargo clippy --manifest-path native/Cargo.toml --all-targets -- -D warnings && cargo test --manifest-path native/Cargo.toml"
 
 [tasks.package]
-description = "Build Desk.app in dist/mac-arm64"
+description = "Build Comet.app in dist/mac-arm64"
 run = "scripts/package.sh"
 
 [tasks.install]
-description = "Build Desk.app and install it in /Applications, or update the running Desk"
+description = "Build Comet.app and install it in /Applications, or update the running Comet"
 run = "scripts/install.sh"
 
 [tasks.icons]

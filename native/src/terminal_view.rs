@@ -3,7 +3,7 @@
 //! `terminal.rs`, and the shell runs in the core.
 
 use crate::protocol::ClientMessage;
-use crate::shell::Desk;
+use crate::shell::Comet;
 use crate::terminal::{FOREGROUND, Mouse, Row, Screen, Size, Spot, key_bytes, mouse_bytes, paste_bytes};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::vte::ansi::Rgb;
@@ -13,9 +13,9 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-/// Desk's terminal font size.
+/// Comet's terminal font size.
 const FONT_SIZE: f32 = 12.0;
-/// The room around the grid, Desk's `px-3 pb-3`.
+/// The room around the grid, Comet's `px-3 pb-3`.
 const PAD: f32 = 12.0;
 /// What a shell shows when it ends.
 const EXITED: &[u8] = b"\r\n\x1b[2m[Process exited]\x1b[0m\r\n";
@@ -40,7 +40,7 @@ pub struct Terminals {
     focused: Option<String>,
     /// What the input method has composed and not yet typed, drawn at the caret.
     preedit: String,
-    /// Each terminal's rows as last given to the grid, by id. The view reads `&Desk`, so it keeps them
+    /// Each terminal's rows as last given to the grid, by id. The view reads `&Comet`, so it keeps them
     /// behind a `RefCell`.
     built: RefCell<HashMap<String, Vec<BuiltRow>>>,
 }
@@ -67,7 +67,7 @@ impl Terminals {
     }
 }
 
-impl Desk {
+impl Comet {
     /// Opens the active tab's terminals in the core, once each. The core replays what a running one showed.
     pub fn open_terminals(&mut self) {
         let Some(tab) = self.workspace.active_tab() else { return };
@@ -222,7 +222,7 @@ impl Desk {
                 // ⌘V pastes, bracketed when the program asks for it.
                 Key::Command('v') => {
                     let id = id.to_owned();
-                    tx.read_clipboard(move |s: &mut Desk, content, _| {
+                    tx.read_clipboard(move |s: &mut Comet, content, _| {
                         let bracketed = s.terminals.screens.get(&id).is_some_and(|t| t.mode().contains(TermMode::BRACKETED_PASTE));
                         s.type_into(&id, paste_bytes(content.text(), bracketed));
                     });
@@ -251,13 +251,13 @@ fn rgb(c: Rgb) -> Color {
     rune::color::hex(&format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)).unwrap_or(Color::WHITE)
 }
 
-/// A cell's text colour: the theme's foreground draws in Desk's own ink.
+/// A cell's text colour: the theme's foreground draws in Comet's own ink.
 fn fg_color(fg: Rgb, ink: Color) -> Color {
     if fg == FOREGROUND { ink } else { rgb(fg) }
 }
 
 /// A terminal's screen, filling the pane, sized to whole cells.
-pub fn terminal(s: &Desk, id: &str, k: &Kit) -> El {
+pub fn terminal(s: &Comet, id: &str, k: &Kit) -> El {
     let Some(screen) = s.terminals.screens.get(id) else { return el().grow(1.0) };
     let f = font();
     let (cw, ch) = s.terminals.cell.unwrap_or((7.2, f.line_height));
@@ -293,15 +293,15 @@ pub fn terminal(s: &Desk, id: &str, k: &Kit) -> El {
         .focusable(true)
         .role("textbox")
         .label("Terminal")
-        .on_layout(move |s: &mut Desk, r| s.resize_terminal(&resize_id, r[2], r[3]))
-        .on_key(move |s: &mut Desk, event: &KeyEvent, tx| s.terminal_key(&key_id, event, tx))
-        .on_drag(move |s: &mut Desk, d: &mut Drag, tx| s.terminal_drag(&drag_id, d.phase, d.x, d.y, d.clicks, tx.mods()))
-        .on_pointer_move_local(move |s: &mut Desk, p, tx| {
+        .on_layout(move |s: &mut Comet, r| s.resize_terminal(&resize_id, r[2], r[3]))
+        .on_key(move |s: &mut Comet, event: &KeyEvent, tx| s.terminal_key(&key_id, event, tx))
+        .on_drag(move |s: &mut Comet, d: &mut Drag, tx| s.terminal_drag(&drag_id, d.phase, d.x, d.y, d.clicks, tx.mods()))
+        .on_pointer_move_local(move |s: &mut Comet, p, tx| {
             s.terminal_hover(&hover_id, p.x, p.y);
             // A move only reaches the program. Nothing on screen changes, so the view is not built again.
             tx.live_only();
         })
-        .on_wheel(move |s: &mut Desk, e, _| {
+        .on_wheel(move |s: &mut Comet, e, _| {
             let (_, ch) = s.terminals.cell.unwrap_or((7.2, 15.0));
             s.terminals.wheel += e.dy;
             let lines = (s.terminals.wheel / ch).trunc();
@@ -317,7 +317,7 @@ pub fn terminal(s: &Desk, id: &str, k: &Kit) -> El {
 }
 
 /// Notes which terminal has the keyboard, from `shell::poll`. True when that changed.
-pub fn poll(s: &mut Desk, tx: &Tx) -> bool {
+pub fn poll(s: &mut Comet, tx: &Tx) -> bool {
     s.follow_focus(tx.focused())
 }
 
@@ -410,9 +410,9 @@ mod tests {
     use super::*;
     use crate::terminal::palette;
 
-    /// A Desk with one 20×5 terminal, "t", on 10×20 cells.
-    fn desk(output: &[u8]) -> Desk {
-        let mut s = Desk::default();
+    /// A Comet with one 20×5 terminal, "t", on 10×20 cells.
+    fn comet(output: &[u8]) -> Comet {
+        let mut s = Comet::default();
         s.terminals.cell = Some((10.0, 20.0));
         let mut screen = Screen::new(Size { cols: 20, rows: 5 });
         screen.feed(output);
@@ -420,7 +420,7 @@ mod tests {
         s
     }
 
-    fn sent(s: &Desk) -> Vec<String> {
+    fn sent(s: &Comet) -> Vec<String> {
         s.core.sent().into_iter().filter(|m| m["type"] == "terminal.input").map(|m| m["data"].as_str().unwrap().to_owned()).collect()
     }
 
@@ -433,10 +433,10 @@ mod tests {
 
     #[test]
     fn each_run_colours_its_cells_and_the_foreground_draws_in_ink() {
-        let s = desk(b"hi \x1b[1;4;31mred\x1b[0m \x1b[42m ok \x1b[0m");
+        let s = comet(b"hi \x1b[1;4;31mred\x1b[0m \x1b[42m ok \x1b[0m");
         let row = &s.terminals.screens["t"].rows[0];
         let spans = spans(row, LOOK.ink);
-        assert_eq!(spans.first().and_then(|sp| sp.color), Some(LOOK.ink), "plain text draws in Desk's ink");
+        assert_eq!(spans.first().and_then(|sp| sp.color), Some(LOOK.ink), "plain text draws in Comet's ink");
         let red = spans.iter().find(|sp| &row.text[sp.start as usize..sp.end as usize] == "red").expect("a span for the red word");
         assert_eq!((red.color, red.weight, red.underline), (Some(rgb(palette(1))), Some(700.0), Some(rgb(palette(1)))));
         assert_eq!(spans.last().map(|sp| sp.end as usize), Some(row.text.len()), "the spans cover the whole row");
@@ -445,8 +445,8 @@ mod tests {
 
     #[test]
     fn a_row_is_built_again_only_when_it_its_selection_or_the_theme_changes() {
-        let mut s = desk(b"one\r\ntwo");
-        let rows = |s: &Desk, look| s.terminals.grid_rows("t", &s.terminals.screens["t"], look);
+        let mut s = comet(b"one\r\ntwo");
+        let rows = |s: &Comet, look| s.terminals.grid_rows("t", &s.terminals.screens["t"], look);
         let first = rows(&s, LOOK);
         assert!(first.iter().zip(rows(&s, LOOK)).all(|(a, b)| Rc::ptr_eq(a, &b)), "an unchanged screen hands back the same rows");
         s.terminals.screens.get_mut("t").unwrap().feed(b"!");
@@ -461,10 +461,10 @@ mod tests {
 
     #[test]
     fn the_grid_reads_each_row_and_puts_the_caret_on_the_cursor() {
-        fn view(s: &Desk, _: &mut rune::Cx<Desk>) -> El {
+        fn view(s: &Comet, _: &mut rune::Cx<Comet>) -> El {
             terminal(s, "t", crate::theme::kit(true))
         }
-        let mut rt = rune::Runtime::new(desk(b"$ ls\r\n\xe6\x97\xa5x"), view, (400.0, 200.0), rune::Env { system_dark: true, scale: 2.0 });
+        let mut rt = rune::Runtime::new(comet(b"$ ls\r\n\xe6\x97\xa5x"), view, (400.0, 200.0), rune::Env { system_dark: true, scale: 2.0 });
         rt.frame(0.0);
         let tree = rt.accessibility_tree();
         let lines: Vec<&str> = tree.nodes.iter().filter_map(|(_, n)| (format!("{:?}", n.role()) == "TextRun").then(|| n.value()).flatten()).collect();
@@ -475,7 +475,7 @@ mod tests {
 
     #[test]
     fn a_program_that_tracks_the_mouse_hears_the_press_and_shift_still_selects() {
-        let mut s = desk(b"one two\x1b[?1000h\x1b[?1006h");
+        let mut s = comet(b"one two\x1b[?1000h\x1b[?1006h");
         let (x, y) = at(2, 1);
         s.terminal_drag("t", Phase::Down, x, y, 1, Mods::default());
         s.terminal_drag("t", Phase::Up, x, y, 1, Mods::default());
@@ -492,7 +492,7 @@ mod tests {
 
     #[test]
     fn a_drag_reports_each_new_cell_once() {
-        let mut s = desk(b"\x1b[?1002h\x1b[?1006h");
+        let mut s = comet(b"\x1b[?1002h\x1b[?1006h");
         let points = [at(1, 0), at(1, 0), at(2, 0)];
         s.terminal_drag("t", Phase::Down, points[0].0, points[0].1, 1, Mods::default());
         for (x, y) in &points[1..] {
@@ -503,7 +503,7 @@ mod tests {
 
     #[test]
     fn the_input_method_types_into_the_terminal_with_the_keyboard() {
-        let mut s = desk(b"");
+        let mut s = comet(b"");
         assert!(!s.terminal_ime(&Ime::Commit("é".into())), "with no terminal focused, the input method goes elsewhere");
         assert!(s.follow_focus(Some("terminal-t")));
         assert!(!s.follow_focus(Some("terminal-t")), "the same focus is no change");
@@ -521,7 +521,7 @@ mod tests {
 
     #[test]
     fn the_wheel_scrolls_back_or_sends_arrows_to_a_full_screen_program() {
-        let mut s = desk(b"");
+        let mut s = comet(b"");
         let (x, y) = at(0, 0);
         s.terminal_wheel("t", 2, x, y, Mods::default());
         assert!(sent(&s).is_empty(), "the shell's own screen scrolls back");

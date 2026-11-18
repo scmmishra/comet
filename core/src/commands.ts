@@ -1,4 +1,4 @@
-import type { CommandInfo, CommandProcess, CommandRun, SpaceCommand } from "@desk/protocol"
+import type { CommandInfo, CommandProcess, CommandRun, SpaceCommand } from "@comet/protocol"
 import { spawn, type ChildProcess } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { projectDataPath, writeJsonFile } from "./data-files"
@@ -71,7 +71,7 @@ export class Commands {
     // A process group of its own, so Stop also ends the processes the command starts, such as a dev server's workers.
     const child = spawn(shell!, args, {
       cwd: this.dir,
-      env: { ...process.env, DESK_SPACE_ROOT: this.dir },
+      env: { ...process.env, COMET_SPACE_ROOT: this.dir },
       stdio: "ignore",
       detached: true,
     })

@@ -67,9 +67,9 @@ pub struct DiffView<S> {
     fold_row: FoldRow,
     annotation: Option<Rc<dyn Fn(&S, &Annotation) -> El>>,
     header: Option<Rc<dyn Fn(&S, usize) -> El>>,
-    /// Desk's change: the app's own file header, in place of the built-in one.
+    /// Comet's change: the app's own file header, in place of the built-in one.
     file_header: Option<Rc<dyn Fn(&S, usize, bool) -> El>>,
-    /// Desk's change: the code's syntax colours and font, in place of the kit's.
+    /// Comet's change: the code's syntax colours and font, in place of the kit's.
     syntax: Option<SyntaxTheme>,
     code_font: Option<TextStyle>,
     on_select: Option<Rc<dyn Fn(&mut S, Option<LineRange>, &mut Tx)>>,
@@ -141,19 +141,19 @@ impl<S: 'static> DiffView<S> {
         self
     }
 
-    /// Desk's change: draws each file's header with `f`, given the file and whether it is collapsed,
+    /// Comet's change: draws each file's header with `f`, given the file and whether it is collapsed,
     /// in place of the built-in header. The row keeps its height, its stickiness and its lines; the
     /// app folds a file with [`DiffState::set_collapsed`].
     pub fn file_header(mut self, f: impl Fn(&S, usize, bool) -> El + 'static) -> Self {
         self.file_header = Some(Rc::new(f));
         self
     }
-    /// Desk's change: the code's syntax colours, in place of [`SyntaxTheme::from_kit`].
+    /// Comet's change: the code's syntax colours, in place of [`SyntaxTheme::from_kit`].
     pub fn syntax_theme(mut self, theme: SyntaxTheme) -> Self {
         self.syntax = Some(theme);
         self
     }
-    /// Desk's change: the code's font, in place of 13 point mono. Rows keep their height.
+    /// Comet's change: the code's font, in place of 13 point mono. Rows keep their height.
     pub fn code_font(mut self, font: TextStyle) -> Self {
         self.code_font = Some(font);
         self
@@ -169,8 +169,8 @@ impl<S: 'static> DiffView<S> {
         }
         let v = Rc::new(View { look, d: self });
         let count = st.rows.len();
-        // Desk's change: rows that leave, as when unchanged lines fold away, go with a quick fade, and the
-        // list closes up on a faster spring than rune-kit's 0.32. Files fold at once, from Desk's header.
+        // Comet's change: rows that leave, as when unchanged lines fold away, go with a quick fade, and the
+        // list closes up on a faster spring than rune-kit's 0.32. Files fold at once, from Comet's header.
         let growth = GrowthSpec { spring: rune::Spring::new(0.18, 0.0), ..GrowthSpec::default() };
         let mut list = col().key("rows").w_full().growth(growth).child_exit(crate::theme::quick_exit()).selection_group(true).role("list").label("Diff");
         if !wrap {
@@ -783,7 +783,7 @@ impl<S: 'static> View<S> {
     fn file_header(&self, s: &S, st: &DiffState, f: usize, sticky: bool) -> El {
         let l = &self.look;
         if let Some(custom) = &self.d.file_header {
-            // Desk's change: hairlines, half a point, between files.
+            // Comet's change: hairlines, half a point, between files.
             let line = |key: &'static str, c: Color| col().key(key).w_full().h(0.5).fill(c).a11y_hidden();
             let mut h = col().w_full().h(HEADER_H).fill(l.header_bg).role("heading").label(st.files()[f].path().to_owned());
             if let (false, Some(w)) = (sticky, self.view_w(st, false)) {

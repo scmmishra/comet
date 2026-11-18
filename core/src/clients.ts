@@ -1,4 +1,4 @@
-import type { CoreMessage } from "@desk/protocol"
+import type { CoreMessage } from "@comet/protocol"
 import { ThreadRows } from "./thread-rows"
 
 type Send = (message: CoreMessage) => void

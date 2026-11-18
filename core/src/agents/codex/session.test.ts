@@ -1,5 +1,5 @@
 import { expect, jest, test } from "bun:test"
-import type { PermissionAnswer, RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
+import type { PermissionAnswer, RunSettings, ThreadEvent, ThreadItem } from "@comet/protocol"
 import { until } from "../../test-support"
 import type { SessionOptions } from "../agent"
 import { REQUEST_TOO_LARGE } from "./history"
@@ -61,7 +61,7 @@ test("runs a whole turn: the thread, the message with its settings, and every it
       approvalsReviewer: "user",
       sandbox: "workspace-write",
       model: "gpt-6-luna",
-      config: { "mcp_servers.desk": { url: tools.url, http_headers: { Authorization: "Bearer t" }, tool_timeout_sec: 3900 } },
+      config: { "mcp_servers.comet": { url: tools.url, http_headers: { Authorization: "Bearer t" }, tool_timeout_sec: 3900 } },
       developerInstructions: "Hand work to other agents.",
     },
   ])
@@ -385,11 +385,11 @@ test("a request Codex settles itself leaves the thread, and Codex gets no second
   expect(s.codex.replies(7)).toEqual([{ id: 7, result: { decision: "decline" } }])
 })
 
-test("approves a call of Desk's own tools itself, and asks the user about another MCP server's", async () => {
+test("approves a call of Comet's own tools itself, and asks the user about another MCP server's", async () => {
   const s = setup()
   await started(s)
   const form = { type: "object", properties: { remember: { type: "boolean", default: false } } }
-  s.codex.ask(0, "mcpServer/elicitation/request", { threadId: THREAD, turnId: TURN, serverName: "desk", mode: "form", _meta: null, message: "Allow desk to run list_agents?", requestedSchema: form })
+  s.codex.ask(0, "mcpServer/elicitation/request", { threadId: THREAD, turnId: TURN, serverName: "comet", mode: "form", _meta: null, message: "Allow comet to run list_agents?", requestedSchema: form })
   await until(() => s.codex.reply(0) !== undefined)
   expect(s.codex.reply(0)).toEqual({ id: 0, result: { action: "accept", content: { remember: false }, _meta: null } })
   expect(s.last("permission")).toBeUndefined()
@@ -424,7 +424,7 @@ test("in full access, asks Codex for MCP prompts and accepts each without a card
   expect(s.last("permission")).toBeUndefined()
 })
 
-test("cancels an MCP prompt Desk cannot answer: one that opens a page, and a form with a required field it cannot fill", async () => {
+test("cancels an MCP prompt Comet cannot answer: one that opens a page, and a form with a required field it cannot fill", async () => {
   for (const permissionMode of ["default", "bypassPermissions"] as const) {
     const s = setup({ settings: { ...SETTINGS, permissionMode } })
     await started(s)
@@ -439,12 +439,12 @@ test("cancels an MCP prompt Desk cannot answer: one that opens a page, and a for
   expect(s.codex.reply(0)).toEqual({ id: 0, result: { action: "cancel", content: null, _meta: null } })
 })
 
-test("refuses a request Desk does not handle", async () => {
+test("refuses a request Comet does not handle", async () => {
   const s = setup()
   await started(s)
   s.codex.ask(0, "item/tool/call", { threadId: THREAD, turnId: TURN, callId: "c1", tool: "lookup", arguments: {} })
   await until(() => s.codex.reply(0) !== undefined)
-  expect(s.codex.reply(0)).toEqual({ id: 0, error: { code: -32601, message: "Desk does not handle that request." } })
+  expect(s.codex.reply(0)).toEqual({ id: 0, error: { code: -32601, message: "Comet does not handle that request." } })
 })
 
 test("takes requests from the threads of agents Codex starts", async () => {

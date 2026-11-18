@@ -1,5 +1,5 @@
 import type { AccountInfo, EffortLevel, ModelInfo, Query } from "@anthropic-ai/claude-agent-sdk"
-import { DEFAULT_MODEL, PERMISSION_MODES, type AgentAccount, type Effort, type ModelOption, type PermissionMode } from "@desk/protocol"
+import { DEFAULT_MODEL, PERMISSION_MODES, type AgentAccount, type Effort, type ModelOption, type PermissionMode } from "@comet/protocol"
 
 /** A model pinned to one version, such as "claude-opus-4-8". An alias such as "opus" follows the newest of its family. */
 const PINNED = /^claude-/
@@ -8,7 +8,7 @@ const MODES_WITHOUT_AUTO: readonly PermissionMode[] = PERMISSION_MODES.filter((m
 
 /**
  * The SDK's settings read, which it ships without a type. `applied.effort` is the effort the next
- * message would use. Desk only reads it, so a change to it costs the Default label, not a session.
+ * message would use. Comet only reads it, so a change to it costs the Default label, not a session.
  */
 type SettingsReader = { getSettings(): Promise<{ applied?: { effort?: Effort | null } }> }
 
@@ -34,7 +34,7 @@ export async function defaultEfforts(running: Query, models: readonly ModelInfo[
   return efforts
 }
 
-/** The account as Desk shows it. Claude Code reports an empty account when no one is signed in. */
+/** The account as Comet shows it. Claude Code reports an empty account when no one is signed in. */
 export function claudeAccount(account: AccountInfo | undefined): AgentAccount | undefined {
   if (!account || (!account.email && !account.apiKeySource && (!account.apiProvider || account.apiProvider === "firstParty"))) return undefined
   const method = account.email ? undefined : account.apiKeySource ? `an API key from ${account.apiKeySource}` : account.apiProvider

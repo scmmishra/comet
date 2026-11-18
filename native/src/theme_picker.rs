@@ -1,8 +1,8 @@
 //! Appearance's mode tiles and theme cards, after T3 Code's theme settings. Each mode tile draws a small
-//! Desk window in the chosen theme, and each theme card shows its light and dark flavour as two circles.
-//! rune-kit has no picker of this kind, so these are Desk's own.
+//! Comet window in the chosen theme, and each theme card shows its light and dark flavour as two circles.
+//! rune-kit has no picker of this kind, so these are Comet's own.
 
-use crate::Desk;
+use crate::Comet;
 use crate::protocol::{ColorTheme, ThemeChoice};
 use crate::theme::{self, Swatch};
 use rune::{El, col, icon, row, text};
@@ -22,7 +22,7 @@ const CIRCLE_ROOM: f32 = 68.0;
 const RING: f32 = 2.0;
 
 /// System, Light and Dark, each drawn in the chosen theme.
-pub fn modes(s: &Desk, k: &Kit) -> El {
+pub fn modes(s: &Comet, k: &Kit) -> El {
     let theme = s.account.color_theme();
     let mode = s.account.theme();
     row().key("appearance-modes").w_full().gap(12.0).children(MODES.map(|choice| {
@@ -50,14 +50,14 @@ pub fn modes(s: &Desk, k: &Kit) -> El {
             .role("radio")
             .checked(picked)
             .label(choice.label())
-            .on_press(move |s: &mut Desk| s.set_theme(choice.id()))
+            .on_press(move |s: &mut Comet| s.set_theme(choice.id()))
             .child(drawing)
             .child(text(choice.label()).font(theme::medium(12.0)).color(if picked { k.c.text_base } else { k.c.text_muted }));
         if picked { tile.border(RING, k.c.border_focus) } else { tile.border(1.0, k.c.border_muted) }
     }))
 }
 
-/// A Desk window in `c`: tabs on the ground, then the session's card with a message, a reply and the message box.
+/// A Comet window in `c`: tabs on the ground, then the session's card with a message, a reply and the message box.
 fn window(c: &Swatch) -> El {
     let bar = |w: f32, color| col().size(w, 4.0).radius(2.0).fill(color);
     let tab = |left: f32, w: f32, color| col().absolute(left, 6.0).size(w, 8.0).radius(3.0).fill(color);
@@ -85,7 +85,7 @@ fn window(c: &Swatch) -> El {
 }
 
 /// A card for each theme. Pressing a card uses its theme. Pressing a flavour's circle also switches to its mode.
-pub fn themes(s: &Desk, k: &Kit) -> El {
+pub fn themes(s: &Comet, k: &Kit) -> El {
     let current = s.account.color_theme();
     let mode = s.account.theme();
     row().key("appearance-themes").w_full().gap(12.0).children(ColorTheme::ALL.map(|theme| {
@@ -109,7 +109,7 @@ pub fn themes(s: &Desk, k: &Kit) -> El {
             .role("radio")
             .checked(picked)
             .label(format!("{} theme", theme.label()))
-            .on_press(move |s: &mut Desk| s.set_color_theme(theme))
+            .on_press(move |s: &mut Comet| s.set_color_theme(theme))
             .child(circles)
             .child(text(theme.label()).font(theme::medium(13.0)).color(k.c.text_base));
         if picked { card.border(RING, k.c.border_focus) } else { card.border(1.0, k.c.border_muted) }
@@ -143,7 +143,7 @@ fn flavour(k: &Kit, theme: ColorTheme, dark: bool, shown: bool) -> El {
         .label(format!("Use {} {name}", theme.label()))
         .help(format!("Use {} in {name} mode", theme.label()))
         .press_scale(0.96)
-        .on_press(move |s: &mut Desk| s.set_look(theme, if dark { ThemeChoice::Dark } else { ThemeChoice::Light }))
+        .on_press(move |s: &mut Comet| s.set_look(theme, if dark { ThemeChoice::Dark } else { ThemeChoice::Light }))
         .child(disc);
     if !shown {
         return room;

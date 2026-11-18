@@ -1,4 +1,4 @@
-import type { AgentVersion } from "@desk/protocol"
+import type { AgentVersion } from "@comet/protocol"
 import { existsSync, mkdirSync } from "node:fs"
 import { spawn } from "../../environment"
 import type { Agent, AgentHost } from "../agent"
@@ -19,7 +19,7 @@ interface AntigravityOptions {
 }
 
 /**
- * Google Antigravity, run as the ACP server of Google's `agy` CLI, not the Antigravity app. Desk installs
+ * Google Antigravity, run as the ACP server of Google's `agy` CLI, not the Antigravity app. Comet installs
  * the CLI itself and updates it, and the user signs in with their Google account, so their Google AI plan is used.
  */
 export function antigravityAgent(host: AgentHost, options: AntigravityOptions = {}): Agent {
@@ -27,7 +27,7 @@ export function antigravityAgent(host: AgentHost, options: AntigravityOptions = 
   const flavor = antigravityFlavor(host, models)
   const threads = new AcpThreadStore(threadsFolder)
   const check = options.checkForUpdate ?? ((installed: string) => checkForUpdate(installed))
-  /** The process of a sign-in that runs, which closing Desk ends. */
+  /** The process of a sign-in that runs, which closing Comet ends. */
   let signingIn: Process | undefined
   return {
     id: "antigravity",
@@ -35,11 +35,11 @@ export function antigravityAgent(host: AgentHost, options: AntigravityOptions = 
     features: ["delete", "install", "sign-in"],
     threads,
 
-    /** Reads the install and the token the agent writes once signed in, then asks Google for a newer release of Desk's install. */
+    /** Reads the install and the token the agent writes once signed in, then asks Google for a newer release of Comet's install. */
     async inspect() {
       const runtime = resolveRuntime()
       if (!runtime) return host.publish({ state: "missing", problem: onlyServerInstalled() ? SERVER_PROBLEM : INSTALL_PROBLEM })
-      // Only Desk's install has a version Desk knows and can update.
+      // Only Comet's install has a version Comet knows and can update.
       const installed = runtime.version
       const version = { ...(installed ? { installed } : {}), updateAvailable: false, updatable: !!installed }
       if (!existsSync(tokenPath())) host.publish({ state: "signed-out", problem: SIGN_IN_PROBLEM, version })

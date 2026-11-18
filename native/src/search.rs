@@ -1,5 +1,5 @@
-//! How Desk matches what the user typed against a name: case, accents and full-width letters are
-//! ignored, as `rune_kit::search` folds them, so "cafe" finds "Café" and "ｃａｆｅ" finds "cafe". Desk's
+//! How Comet matches what the user typed against a name: case, accents and full-width letters are
+//! ignored, as `rune_kit::search` folds them, so "cafe" finds "Café" and "ｃａｆｅ" finds "cafe". Comet's
 //! interface is English, so it folds with no language's special rules.
 
 use rune_kit::search::Fold;

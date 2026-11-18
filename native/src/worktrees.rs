@@ -5,7 +5,7 @@
 
 use crate::format;
 use crate::protocol::{ClientMessage, ImageAttachment, Space, TabInfo};
-use crate::shell::Desk;
+use crate::shell::Comet;
 use rune::{El, icon, row, text};
 use rune_kit::{ButtonVariant, ControlSize, Dialog, IconButton, IconButtonVariant, Kit, Menu, MenuItem, Placement};
 use rune_theme_opencode::icons as ic;
@@ -26,7 +26,7 @@ pub struct Worktrees {
     removing: Option<String>,
 }
 
-impl Desk {
+impl Comet {
     /// Whether a tab's first message makes a new worktree before it goes out.
     pub fn makes_worktree(&self, tab: &str) -> bool {
         self.worktrees.new_for.contains(tab)
@@ -89,7 +89,7 @@ impl Desk {
 
 /// The start screen's checkout menu, beside the project: the checkout the tab's thread starts in. A folder
 /// outside a Git repo has none.
-pub fn checkout_menu(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
+pub fn checkout_menu(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
     let project = s.projects.get(&tab.project)?;
     let space = project.space.as_ref()?;
     let (mark, words) = if s.worktrees.waiting.contains_key(&tab.id) {
@@ -110,7 +110,7 @@ pub fn checkout_menu(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> O
         .radius(8.0)
         .hover(k.c.hover)
         .role("button")
-        .on_press(|s: &mut Desk| s.worktrees.menu = !s.worktrees.menu)
+        .on_press(|s: &mut Comet| s.worktrees.menu = !s.worktrees.menu)
         .child(icon(mark, 15.0).color(k.c.text_muted))
         .child(text(words).font(crate::theme::text(13.0)).color(k.c.text_muted))
         .child(icon(&ic::CHEVRON_DOWN, crate::icons::SIZE).color(k.c.text_faint));
@@ -121,7 +121,7 @@ pub fn checkout_menu(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> O
         .gutter(8.0)
         .min_width(280.0)
         .group_label("Checkouts")
-        .on_close(|s: &mut Desk| s.worktrees.menu = false);
+        .on_close(|s: &mut Comet| s.worktrees.menu = false);
     let new = s.makes_worktree(&tab.id);
     // Before the list is read, the menu offers the tab's own checkout.
     let listed = project.worktrees.clone().unwrap_or_default();
@@ -133,10 +133,10 @@ pub fn checkout_menu(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> O
         };
         let mark = if worktree.main { &ic::BRANCH } else { &ic::OUTLINE_WORKTREE };
         let (id, path) = (tab.id.clone(), worktree.path.clone());
-        menu = menu.item(MenuItem::new(label).lead(icon(mark, 15.0).color(k.c.text_muted)).checked(!new && worktree.path == tab.project).on_select(move |s: &mut Desk| s.pick_checkout(&id, Some(path.clone()))));
+        menu = menu.item(MenuItem::new(label).lead(icon(mark, 15.0).color(k.c.text_muted)).checked(!new && worktree.path == tab.project).on_select(move |s: &mut Comet| s.pick_checkout(&id, Some(path.clone()))));
     }
     let id = tab.id.clone();
-    Some(menu.separator().item(MenuItem::new(format!("New worktree from {}", space.branch)).lead(icon(&ic::OUTLINE_WORKTREE, 15.0).color(k.c.text_muted)).checked(new).on_select(move |s: &mut Desk| s.pick_checkout(&id, None))).build(k, layer))
+    Some(menu.separator().item(MenuItem::new(format!("New worktree from {}", space.branch)).lead(icon(&ic::OUTLINE_WORKTREE, 15.0).color(k.c.text_muted)).checked(new).on_select(move |s: &mut Comet| s.pick_checkout(&id, None))).build(k, layer))
 }
 
 /// The Space card's line for a worktree: its folder's name, the checkout it came from, and a button that removes it.
@@ -147,7 +147,7 @@ pub fn space_line(space: &Space, tab: &str, k: &Kit) -> Option<El> {
         .variant(IconButtonVariant::GhostMuted)
         .control_size(ControlSize::Small)
         .label("Remove worktree")
-        .on_press(move |s: &mut Desk| s.worktrees.removing = Some(id.clone()))
+        .on_press(move |s: &mut Comet| s.worktrees.removing = Some(id.clone()))
         .build(k)
         .key("remove-worktree");
     Some(
@@ -165,12 +165,12 @@ pub fn space_line(space: &Space, tab: &str, k: &Kit) -> Option<El> {
 }
 
 /// The confirmation before a tab's worktree goes, with what is uncommitted in it.
-pub fn remove_dialog(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) {
+pub fn remove_dialog(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) {
     if s.worktrees.removing.as_deref() != Some(tab.id.as_str()) {
         return;
     }
     let Some(space) = s.projects.get(&tab.project).and_then(|p| p.space.as_ref()) else { return };
-    let mut words = format!("Desk deletes {} and closes this tab. The branch {} stays.", format::short_path(&space.root), space.branch);
+    let mut words = format!("Comet deletes {} and closes this tab. The branch {} stays.", format::short_path(&space.root), space.branch);
     if space.changes.files > 0 {
         let files = if space.changes.files == 1 { "file".to_owned() } else { "files".to_owned() };
         words.push_str(&format!(" The {} uncommitted {files} in it will be lost.", space.changes.files));
@@ -179,12 +179,12 @@ pub fn remove_dialog(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) {
         .w_full()
         .gap(8.0)
         .child(row().grow(1.0))
-        .child(crate::theme::button("Cancel").variant(ButtonVariant::Ghost).on_press(|s: &mut Desk| s.worktrees.removing = None).build(k))
-        .child(crate::theme::button("Remove worktree").variant(ButtonVariant::Danger).on_press(|s: &mut Desk| s.remove_worktree()).build(k));
+        .child(crate::theme::button("Cancel").variant(ButtonVariant::Ghost).on_press(|s: &mut Comet| s.worktrees.removing = None).build(k))
+        .child(crate::theme::button("Remove worktree").variant(ButtonVariant::Danger).on_press(|s: &mut Comet| s.remove_worktree()).build(k));
     Dialog::new("remove-worktree", "Remove this worktree?")
         .open(true)
         .fit()
-        .on_close(|s: &mut Desk| s.worktrees.removing = None)
+        .on_close(|s: &mut Comet| s.worktrees.removing = None)
         .child(rune::col().w_full().gap(16.0).px(16.0).pb(16.0).child(text(words).font(crate::theme::text(13.0)).color(k.c.text_muted).wrap()).child(footer))
         .build(k, layer);
 }
@@ -196,8 +196,8 @@ mod tests {
     use crate::protocol::CoreMessage;
 
     /// Two tabs in a repo's main checkout, the first one active.
-    fn desk() -> Desk {
-        let mut s = Desk::default();
+    fn comet() -> Comet {
+        let mut s = Comet::default();
         let tab = |id: &str| serde_json::json!({ "id": id, "title": "New session", "project": "/code/web", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" });
         let messages = serde_json::json!([{ "type": "tabs", "active": "t", "tabs": [tab("t"), tab("u")] }]);
         for message in serde_json::from_value::<Vec<CoreMessage>>(messages).unwrap() {
@@ -207,13 +207,13 @@ mod tests {
         s
     }
 
-    fn project(s: &Desk, tab: &str) -> String {
+    fn project(s: &Comet, tab: &str) -> String {
         s.workspace.tabs.iter().find(|t| t.id == tab).unwrap().project.clone()
     }
 
     #[test]
     fn a_new_worktree_is_made_before_the_first_message_goes_out_there() {
-        let mut s = desk();
+        let mut s = comet();
         s.pick_checkout("t", None);
         assert!(s.makes_worktree("t"));
         s.create_worktree("t", "Add tests".into(), vec![]);
@@ -233,10 +233,10 @@ mod tests {
 
     #[test]
     fn a_worktree_that_could_not_be_made_gives_the_message_back() {
-        let mut s = desk();
+        let mut s = comet();
         s.pick_checkout("t", None);
         s.create_worktree("t", "Add tests".into(), vec![]);
-        s.receive(Event::Message(CoreMessage::Error { message: "Desk could not make the worktree".into(), detail: None })).unwrap();
+        s.receive(Event::Message(CoreMessage::Error { message: "Comet could not make the worktree".into(), detail: None })).unwrap();
         assert!(s.drafts.has_content("t"));
         assert!(s.makes_worktree("t"), "sending again makes the worktree again");
         assert_eq!(project(&s, "t"), "/code/web");
@@ -244,7 +244,7 @@ mod tests {
 
     #[test]
     fn a_tab_follows_its_thread_and_picks_a_checkout_that_exists() {
-        let mut s = desk();
+        let mut s = comet();
         s.pick_checkout("t", None);
         s.pick_checkout("t", Some("/w/side".into()));
         assert!(!s.makes_worktree("t"));
@@ -255,7 +255,7 @@ mod tests {
 
     #[test]
     fn a_removed_worktree_closes_its_tab_once_confirmed() {
-        let mut s = desk();
+        let mut s = comet();
         s.worktrees.removing = Some("t".into());
         s.remove_worktree();
         assert_eq!(s.core.sent(), [serde_json::json!({ "type": "worktree.remove", "tabId": "t" })]);

@@ -1,19 +1,19 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { deskHome, writeJsonFile } from "./data-files"
+import { cometHome, writeJsonFile } from "./data-files"
 import { spawn } from "./environment"
 import { userShell } from "./shell"
 
 /**
- * What Claude Code sets for the processes it starts. A Desk started from inside a Claude Code session
- * inherits them, and the sessions Desk starts would take themselves for children of that session:
+ * What Claude Code sets for the processes it starts. A Comet started from inside a Claude Code session
+ * inherits them, and the sessions Comet starts would take themselves for children of that session:
  * Claude Code then stops saving their transcripts, so they cannot be resumed. Rune hit the same issue.
  * Other CLAUDE_ variables, such as CLAUDE_CONFIG_DIR, are the user's own and stay.
  */
 const isAgentSessionMarker = (name: string) => name.startsWith("CLAUDE_CODE_") || ["CLAUDECODE", "CLAUDE_PID", "CLAUDE_EFFORT", "CLAUDE_PLUGIN_DATA"].includes(name)
 
 /**
- * The variables Desk takes from the user's shell, after T3 Code. PATH finds their tools. SSH_AUTH_SOCK
+ * The variables Comet takes from the user's shell, after T3 Code. PATH finds their tools. SSH_AUTH_SOCK
  * reaches the SSH agent they set up, such as 1Password's, for git over SSH. The locale keeps non-ASCII
  * text intact. The certificate variables let tools trust a company proxy.
  */
@@ -29,15 +29,15 @@ const LOGIN_TIMEOUT_MS = 2_000
 const LAUNCHCTL_TIMEOUT_MS = 1_000
 
 /** Markers around the environment, so text that .zshrc prints is not read as a variable. */
-const START = "__DESK_ENV_START__"
-const END = "__DESK_ENV_END__"
+const START = "__COMET_ENV_START__"
+const END = "__COMET_ENV_END__"
 const CAPTURE = `printf '%s' ${START}; /usr/bin/env -0; printf '%s' ${END}`
 
-const cachePath = () => join(deskHome(), "shell-environment.json")
+const cachePath = () => join(cometHome(), "shell-environment.json")
 
 /**
- * Sets the environment that everything the core starts runs with. Desk opened from the Dock or Finder
- * starts with launchd's environment, whose PATH lacks Homebrew, mise and ~/.local/bin, so Desk could
+ * Sets the environment that everything the core starts runs with. Comet opened from the Dock or Finder
+ * starts with launchd's environment, whose PATH lacks Homebrew, mise and ~/.local/bin, so Comet could
  * not find claude, gh or the user's editor. It takes the variables a new terminal has instead.
  *
  * `ready` settles once the environment is in place: at once from the cache, or after the shell answers
@@ -112,12 +112,12 @@ async function read(command: string[], timeout: number, end?: string): Promise<s
     return undefined
   } finally {
     clearTimeout(timer)
-    // Closes Desk's end of the output, which a background job may still hold open.
+    // Closes Comet's end of the output, which a background job may still hold open.
     void reader.cancel()
   }
 }
 
-/** The variables Desk takes, from the NUL-separated `env -0` output between the markers. */
+/** The variables Comet takes, from the NUL-separated `env -0` output between the markers. */
 function parse(output: string): Captured {
   const from = output.indexOf(START)
   const to = output.lastIndexOf(END)

@@ -1,5 +1,5 @@
 import { basename } from "node:path"
-import type { Space } from "@desk/protocol"
+import type { Space } from "@comet/protocol"
 import { uncommittedCounts } from "./checkpoints"
 import { git } from "./git"
 import { spawn } from "./environment"

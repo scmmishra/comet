@@ -3,10 +3,10 @@
 //! the branches match again. Restore branch switches the project back, and asks first when uncommitted
 //! changes would come along.
 //!
-//! rune-kit has no notice row for a composer, so this one is Desk's own, drawn as the queue's line is.
+//! rune-kit has no notice row for a composer, so this one is Comet's own, drawn as the queue's line is.
 
 use crate::protocol::{ClientMessage, TabInfo};
-use crate::shell::Desk;
+use crate::shell::Comet;
 use rune::{El, icon, row, text};
 use rune_kit::{ButtonVariant, ControlSize, Dialog, IconButton, IconButtonVariant, Kit};
 use rune_theme_opencode::icons as ic;
@@ -14,7 +14,7 @@ use std::collections::{HashMap, HashSet};
 
 #[derive(Default)]
 pub struct BranchNotices {
-    /// The changes of branch the user dismissed, by tab. They stay dismissed while Desk runs.
+    /// The changes of branch the user dismissed, by tab. They stay dismissed while Comet runs.
     dismissed: HashSet<(String, Mismatch)>,
     /// The change of branch each tab's notice last showed for. The notice stays once the composer empties, as after a send.
     shown: HashMap<String, Mismatch>,
@@ -57,7 +57,7 @@ fn should_show(dismissed: bool, has_content: bool, shown_before: bool) -> bool {
     !dismissed && (has_content || shown_before)
 }
 
-impl Desk {
+impl Comet {
     /// The change of branch the notice shows for `tab`, if it shows.
     fn branch_notice(&self, tab: &TabInfo) -> Option<Mismatch> {
         let thread = self.threads.get(&tab.id).and_then(|t| t.branch.as_deref());
@@ -106,7 +106,7 @@ impl Desk {
 }
 
 /// The notice above `tab`'s composer, while it shows.
-pub fn notice(s: &Desk, tab: &TabInfo, k: &Kit) -> Option<El> {
+pub fn notice(s: &Comet, tab: &TabInfo, k: &Kit) -> Option<El> {
     let found = s.branch_notice(tab)?;
     let restoring = s.branch_notices.restoring.contains(&tab.project);
     let explain = format!("This thread last ran on {}. Sending will continue on {}.", found.thread, found.current);
@@ -121,7 +121,7 @@ pub fn notice(s: &Desk, tab: &TabInfo, k: &Kit) -> Option<El> {
     let restore = crate::theme::small_button(if restoring { "Restoring…" } else { "Restore branch" })
         .variant(ButtonVariant::Ghost)
         .disabled(restoring)
-        .on_press(move |s: &mut Desk| s.restore_branch(&id))
+        .on_press(move |s: &mut Comet| s.restore_branch(&id))
         .build(k)
         .key("restore-branch");
     let id = tab.id.clone();
@@ -129,7 +129,7 @@ pub fn notice(s: &Desk, tab: &TabInfo, k: &Kit) -> Option<El> {
         .variant(IconButtonVariant::GhostMuted)
         .control_size(ControlSize::Small)
         .label("Dismiss branch change notice")
-        .on_press(move |s: &mut Desk| s.dismiss_branch_notice(&id, found.clone()))
+        .on_press(move |s: &mut Comet| s.dismiss_branch_notice(&id, found.clone()))
         .build(k)
         .key("dismiss-branch-notice");
     // A design border takes room, and Rune's does not, so the padding grows by its width.
@@ -154,7 +154,7 @@ pub fn notice(s: &Desk, tab: &TabInfo, k: &Kit) -> Option<El> {
 }
 
 /// The confirmation before a restore carries uncommitted changes to the other branch, for the tab it was asked in.
-pub fn dialog(s: &Desk, tab: &str, k: &Kit, layer: &mut Vec<El>) {
+pub fn dialog(s: &Comet, tab: &str, k: &Kit, layer: &mut Vec<El>) {
     if s.branch_notices.confirming.as_deref() != Some(tab) {
         return;
     }
@@ -165,12 +165,12 @@ pub fn dialog(s: &Desk, tab: &str, k: &Kit, layer: &mut Vec<El>) {
         .w_full()
         .gap(8.0)
         .child(row().grow(1.0))
-        .child(crate::theme::button("Cancel").variant(ButtonVariant::Ghost).on_press(|s: &mut Desk| s.branch_notices.confirming = None).build(k))
-        .child(crate::theme::button("Switch branch").variant(ButtonVariant::Submit).on_press(|s: &mut Desk| s.confirm_restore()).build(k));
+        .child(crate::theme::button("Cancel").variant(ButtonVariant::Ghost).on_press(|s: &mut Comet| s.branch_notices.confirming = None).build(k))
+        .child(crate::theme::button("Switch branch").variant(ButtonVariant::Submit).on_press(|s: &mut Comet| s.confirm_restore()).build(k));
     Dialog::new("restore-branch", format!("Switch to {branch}?"))
         .open(true)
         .fit()
-        .on_close(|s: &mut Desk| s.branch_notices.confirming = None)
+        .on_close(|s: &mut Comet| s.branch_notices.confirming = None)
         .child(rune::col().w_full().gap(16.0).px(16.0).pb(16.0).child(explain).child(footer))
         .build(k, layer);
 }
@@ -182,8 +182,8 @@ mod tests {
     use crate::protocol::CoreMessage;
 
     /// A tab whose thread last ran on `login`, in a project now on `main` with `changed` uncommitted files.
-    fn desk(changed: u32) -> Desk {
-        let mut s = Desk::default();
+    fn comet(changed: u32) -> Comet {
+        let mut s = Comet::default();
         let messages = serde_json::json!([
             { "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "Fix the login form", "project": "/code/web", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] },
             { "type": "thread.branch", "tabId": "t", "branch": "login" },
@@ -196,11 +196,11 @@ mod tests {
         s
     }
 
-    fn shown(s: &Desk) -> Option<Mismatch> {
+    fn shown(s: &Comet) -> Option<Mismatch> {
         s.branch_notice(s.workspace.active_tab().unwrap())
     }
 
-    fn type_text(s: &mut Desk, words: &str) {
+    fn type_text(s: &mut Comet, words: &str) {
         s.put_in_draft("t", words, &[]);
     }
 
@@ -214,7 +214,7 @@ mod tests {
 
     #[test]
     fn the_notice_shows_once_the_user_types_and_stays_after_the_composer_empties() {
-        let mut s = desk(0);
+        let mut s = comet(0);
         assert_eq!(shown(&s), None, "an empty composer shows no notice");
         type_text(&mut s, "Go on");
         s.sync_branch_notice();
@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn a_dismissed_notice_stays_hidden_for_that_change_of_branch() {
-        let mut s = desk(0);
+        let mut s = comet(0);
         type_text(&mut s, "Go on");
         let found = shown(&s).unwrap();
         s.dismiss_branch_notice("t", found);
@@ -239,7 +239,7 @@ mod tests {
 
     #[test]
     fn a_clean_checkout_restores_at_once_and_waits_for_the_space() {
-        let mut s = desk(0);
+        let mut s = comet(0);
         s.restore_branch("t");
         assert!(s.core.sent().iter().any(|m| m["type"] == "branch.restore" && m["tabId"] == "t"));
         assert!(s.branch_notices.restoring.contains("/code/web"));
@@ -249,7 +249,7 @@ mod tests {
 
     #[test]
     fn uncommitted_changes_ask_first() {
-        let mut s = desk(2);
+        let mut s = comet(2);
         s.restore_branch("t");
         assert!(s.core.sent().is_empty(), "nothing goes before the user confirms");
         assert_eq!(s.branch_notices.confirming.as_deref(), Some("t"));

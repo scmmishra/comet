@@ -1,4 +1,4 @@
-import type { Step, StepKind } from "@desk/protocol"
+import type { Step, StepKind } from "@comet/protocol"
 
 /** A step as the mapper makes it, before it is named. */
 export type BareStep = Step extends infer T ? (T extends Step ? Omit<T, "kind" | "label"> : never) : never

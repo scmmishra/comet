@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { ThreadEvent } from "@desk/protocol"
+import type { ThreadEvent } from "@comet/protocol"
 import { acpToolReader } from "./tools"
 import { UpdateMapper } from "./updates"
 

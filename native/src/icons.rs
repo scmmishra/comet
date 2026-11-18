@@ -1,4 +1,4 @@
-//! Glyphs `@opencode/ui` has no icon for, drawn on a 16-unit grid, Desk's file icons and its disclosure chevron. Everything else comes from the OpenCode catalog.
+//! Glyphs `@opencode/ui` has no icon for, drawn on a 16-unit grid, Comet's file icons and its disclosure chevron. Everything else comes from the OpenCode catalog.
 
 use rune::Icon;
 
@@ -68,11 +68,11 @@ pub fn file_icon(path: &str) -> &'static Icon {
     if icon.name == "readme" { rune_theme_opencode::file_icons::file("file.md") } else { icon }
 }
 
-/// The size every icon draws at, `@opencode/ui`'s 15 points. Desk's design asks some at 12, 13 or 14,
+/// The size every icon draws at, `@opencode/ui`'s 15 points. Comet's design asks some at 12, 13 or 14,
 /// and `@opencode/ui` draws those at 15 too.
 pub const SIZE: f32 = 15.0;
 
-/// Desk's disclosure chevron: it points right, and turns down while open.
+/// Comet's disclosure chevron: it points right, and turns down while open.
 pub fn chevron(k: &rune_kit::Kit, open: bool) -> rune::El {
     rune::icon(&rune_theme_opencode::icons::CHEVRON_RIGHT, SIZE).color(k.c.text_faint).rotate(if open { std::f32::consts::FRAC_PI_2 } else { 0.0 }).motion(k.motion.control)
 }

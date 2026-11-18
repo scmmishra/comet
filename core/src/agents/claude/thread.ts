@@ -1,10 +1,10 @@
 import type { SDKAPIRetryMessage, SDKAssistantMessage, SDKMessage, SDKMessageOrigin, SDKPartialAssistantMessage, SessionMessage } from "@anthropic-ai/claude-agent-sdk"
-import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, type ThreadItem } from "@desk/protocol"
+import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, type ThreadItem } from "@comet/protocol"
 import { cutOutput, relativeTo, thought, unfinishedResult } from "../steps"
-import { deskToolSummary } from "../../delegate/tools"
+import { cometToolSummary } from "../../delegate/tools"
 import { resultId } from "../turn-items"
 import { modelLabel } from "./models"
-import { deskTool, toolStep } from "./steps"
+import { cometTool, toolStep } from "./steps"
 
 /** What Claude Code writes into a transcript when the user stops a turn, with or without "for tool use". */
 const INTERRUPTED = /^\[Request interrupted by user/
@@ -135,7 +135,7 @@ export class ThreadMapper {
   /**
    * Takes out the items of messages a later one replaces. Claude Code replaces a response the model refused
    * once another model answers, and one whose tool call it could not parse once the model answers again.
-   * A tool call goes with its result, since the call was never made. A message Desk does not know is skipped.
+   * A tool call goes with its result, since the call was never made. A message Comet does not know is skipped.
    */
   private remove(uuids: readonly string[] | undefined): ThreadEvent[] {
     const ids = new Set((uuids ?? []).flatMap((uuid) => this.madeBy.get(uuid) ?? []))
@@ -346,8 +346,8 @@ const item = (found: ThreadItem): ThreadEvent => ({ kind: "item", item: found })
 export function toolItem(dir: string, id: string, name: string, input: Record<string, unknown>): ToolItem {
   const edits = toolEdits(name, input)
   const field = SUMMARY_FIELDS.find((found) => typeof input[found] === "string")
-  const desk = deskTool(name)
-  const summary = (desk && deskToolSummary(desk, input)) ?? (field ? relativeTo(dir, String(input[field])) : JSON.stringify(input))
+  const comet = cometTool(name)
+  const summary = (comet && cometToolSummary(comet, input)) ?? (field ? relativeTo(dir, String(input[field])) : JSON.stringify(input))
   return toolStep({
     type: "tool",
     id,

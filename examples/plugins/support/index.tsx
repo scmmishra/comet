@@ -1,11 +1,11 @@
-import { definePlugin, Item, List, Messages, Stack, Text, type MessageData } from "@desk/plugin"
+import { definePlugin, Item, List, Messages, Stack, Text, type MessageData } from "@comet/plugin"
 import { For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 
 /**
- * A support inbox, as a Desk plugin, on made-up conversations. It calls no service. The inbox sidebar
+ * A support inbox, as a Comet plugin, on made-up conversations. It calls no service. The inbox sidebar
  * lists open conversations. Picking one opens it as a panel in the view pane and opens the Claude
- * thread kept for it. Turn it on for a project in `~/.desk/plugins.json`.
+ * thread kept for it. Turn it on for a project in `~/.comet/plugins.json`.
  */
 
 interface Conversation {
@@ -63,11 +63,11 @@ const SAMPLE: Conversation[] = [
   },
 ]
 
-export default definePlugin((desk) => {
+export default definePlugin((comet) => {
   const [conversations, setConversations] = createStore<Conversation[]>(structuredClone(SAMPLE))
   const find = (id: unknown) => conversations.find((conversation) => conversation.id === id)
 
-  desk.sidebar("inbox", {
+  comet.sidebar("inbox", {
     title: "Inbox",
     view: (ctx) => (
       <Show when={conversations.length > 0} fallback={<Text tone="muted">No open conversations.</Text>}>
@@ -97,7 +97,7 @@ export default definePlugin((desk) => {
     ),
   })
 
-  desk.panel<{ id: number }>("conversation", {
+  comet.panel<{ id: number }>("conversation", {
     title: (params) => `#${params.id} ${find(params.id)?.customer ?? ""}`,
     params: ["id"],
     single: true,
@@ -118,5 +118,5 @@ export default definePlugin((desk) => {
     ),
   })
 
-  desk.setup("support", { title: "Support", sidebar: "support.inbox" })
+  comet.setup("support", { title: "Support", sidebar: "support.inbox" })
 })

@@ -1,4 +1,4 @@
-import type { TextEdit } from "@desk/protocol"
+import type { TextEdit } from "@comet/protocol"
 import type { FileUpdate } from "./protocol"
 
 /**

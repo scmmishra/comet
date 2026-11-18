@@ -1,4 +1,4 @@
-import type { PermissionMode } from "@desk/protocol"
+import type { PermissionMode } from "@comet/protocol"
 import type { Process } from "../process"
 import type { ConnectOptions } from "./connection"
 import type { ConfigOption, PermissionRequest } from "./protocol"
@@ -16,7 +16,7 @@ export interface AcpFlavor {
    */
   launch(dir: string): Process
   readonly connect: ConnectOptions
-  /** The agent's mode for one of Desk's permission modes. */
+  /** The agent's mode for one of Comet's permission modes. */
   modeId(mode: PermissionMode): string
   readonly tools: ToolReader
   /** Whether a permission request asks a multiple-choice question instead. */
@@ -27,7 +27,7 @@ export interface AcpFlavor {
   signedOut(): string
   /**
    * The session's settings as the agent reported them, such as its models. `opened` marks a new
-   * session's first report, before Desk changed anything, so its model is the account's default.
+   * session's first report, before Comet changed anything, so its model is the account's default.
    */
   learn(options: readonly ConfigOption[], opened: boolean): void
 }

@@ -1,7 +1,7 @@
 //! Short messages at the bottom right, after `@opencode/ui`'s toasts:
 //! errors the core reports, its notices, and hints such as the first Escape.
 
-use crate::shell::Desk;
+use crate::shell::Comet;
 use rune::{El, icon};
 use rune_kit::{Kit, Toast, ToastRegion};
 use rune_theme_opencode::icons as ic;
@@ -55,13 +55,13 @@ impl Toasts {
     }
 }
 
-pub fn region(s: &Desk, k: &Kit) -> Option<El> {
+pub fn region(s: &Comet, k: &Kit) -> Option<El> {
     if s.toasts.items.is_empty() {
         return None;
     }
     let toasts = s.toasts.items.iter().map(|t| {
         let id = t.id;
-        let toast = Toast::new(format!("toast-{id}"), t.message.clone()).closable().on_close(move |s: &mut Desk| s.toasts.items.retain(|x| x.id != id));
+        let toast = Toast::new(format!("toast-{id}"), t.message.clone()).closable().on_close(move |s: &mut Comet| s.toasts.items.retain(|x| x.id != id));
         let toast = if t.error { toast.lead(icon(&ic::CIRCLE_EXCLAMATION, 16.0).color(k.c.danger.fg)) } else { toast };
         let toast = match &t.detail {
             Some(detail) => toast.description(detail.clone()),

@@ -1,4 +1,4 @@
-/** Messages between the Desk app and the core, sent as JSON over one WebSocket. */
+/** Messages between the Comet app and the core, sent as JSON over one WebSocket. */
 
 import type { IconName } from "./icon-names"
 
@@ -9,11 +9,11 @@ export interface CoreReady {
   readonly port: number
 }
 
-/** The coding agents Desk runs, in the order Desk lists them. */
+/** The coding agents Comet runs, in the order Comet lists them. */
 export const AGENTS = ["claude", "codex", "antigravity"] as const
 export type AgentId = (typeof AGENTS)[number]
 
-/** The agent a tab runs when nothing says otherwise, such as a tab saved before Desk ran more than one. */
+/** The agent a tab runs when nothing says otherwise, such as a tab saved before Comet ran more than one. */
 export const DEFAULT_AGENT: AgentId = "claude"
 
 /** How full a thread's context window is. */
@@ -31,7 +31,7 @@ export interface TextEdit {
 
 /** The image types every agent reads. */
 export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const
-/** The largest image Desk sends, in bytes before base64. It is Claude's limit, the lowest of the agents'. */
+/** The largest image Comet sends, in bytes before base64. It is Claude's limit, the lowest of the agents'. */
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 /**
@@ -208,7 +208,7 @@ export type ThreadEvent =
   /** Items the agent took back, such as a reply it replaced with another. An id the thread does not hold is skipped. */
   | { readonly kind: "items.remove"; readonly ids: readonly string[] }
   | { readonly kind: "status"; readonly busy: boolean }
-  /** The model that runs, by the name Desk shows for it, such as "Opus 5.5". */
+  /** The model that runs, by the name Comet shows for it, such as "Opus 5.5". */
   | { readonly kind: "init"; readonly model: string }
   /** Read after each turn. */
   | { readonly kind: "context"; readonly reading: ContextReading }
@@ -233,24 +233,24 @@ export interface BackgroundTask {
   readonly id: string
   /** What it runs, as the agent describes it: the command, or what the agent named it. */
   readonly label: string
-  /** When Desk first saw it, in milliseconds since the epoch. */
+  /** When Comet first saw it, in milliseconds since the epoch. */
   readonly startedAt: number
 }
 
 /**
  * A subagent the agent started in a turn: one of its own, such as Claude's Explore agent, or another
- * agent it handed work to through Desk. It runs beside the thread, so Desk shows it in its own card, not
+ * agent it handed work to through Comet. It runs beside the thread, so Comet shows it in its own card, not
  * in the thread. `items` is what it has done so far, shaped as thread items.
  */
 export interface Subagent {
-  /** The agent's task id, or Desk's id for work handed to another agent. */
+  /** The agent's task id, or Comet's id for work handed to another agent. */
   readonly id: string
   readonly description: string
   /** The kind of agent, such as "Explore". */
   readonly type?: string
   /** The agent that runs it. Absent for an agent's own subagent, which runs on the agent that started it. */
   readonly agent?: AgentId
-  /** The model it runs on, by the name Desk shows for it, when it is not the thread's. */
+  /** The model it runs on, by the name Comet shows for it, when it is not the thread's. */
   readonly model?: string
   readonly status: "running" | "completed" | "failed" | "stopped"
   /** Whether it runs in the background, so the turn that started it can end first. */
@@ -353,7 +353,7 @@ export interface ModelOption {
   readonly value: string
   readonly label: string
   readonly description: string
-  /** The model that runs, by the name Desk shows for it, when the label does not say: "Default" runs "Opus 5.5". */
+  /** The model that runs, by the name Comet shows for it, when the label does not say: "Default" runs "Opus 5.5". */
   readonly runs?: string
   /** The effort levels the model takes, from least to most. Empty when it takes none. */
   readonly efforts: readonly Effort[]
@@ -374,8 +374,8 @@ export interface ModelOption {
  * - `rewind`: a thread goes back to before a message. `restore-files` also takes its file changes back.
  * - `fork`, `rename`, `delete`: what the session menu does to a thread.
  * - `compact-idle`: the agent compacts a large thread that sat idle.
- * - `sign-in`: Desk can start the agent's sign-in. `install`: Desk can install the agent.
- * - `mcp`: Desk lists the agent's MCP servers in a project and turns them on or off.
+ * - `sign-in`: Comet can start the agent's sign-in. `install`: Comet can install the agent.
+ * - `mcp`: Comet lists the agent's MCP servers in a project and turns them on or off.
  * - `slash-commands`: the agent runs a skill or command named after a `/` in a message, so the composer offers them.
  */
 export const AGENT_FEATURES = ["steer", "rewind", "restore-files", "fork", "rename", "delete", "compact-idle", "sign-in", "install", "mcp", "slash-commands"] as const
@@ -387,7 +387,7 @@ export interface AgentVersion {
   /** The newest version on the user's update channel. */
   readonly latest?: string
   readonly updateAvailable: boolean
-  /** Whether Desk can update it. */
+  /** Whether Comet can update it. */
   readonly updatable: boolean
 }
 
@@ -402,12 +402,12 @@ export interface AgentAccount {
 }
 
 /**
- * An agent as Desk knows it now. `state` says where it stands:
- * - `checking`: Desk is still reading it.
+ * An agent as Comet knows it now. `state` says where it stands:
+ * - `checking`: Comet is still reading it.
  * - `ready`: installed and signed in.
  * - `missing`: not installed on this Mac.
  * - `signed-out`: installed, with no account.
- * - `installing`, `signing-in` and `updating`: Desk is doing so, as the user asked.
+ * - `installing`, `signing-in` and `updating`: Comet is doing so, as the user asked.
  * `problem` says what to do about a state that is not ready, in one line.
  */
 export interface AgentInfo {
@@ -456,11 +456,11 @@ export interface Worktree {
 export const THEMES = ["dark", "light", "auto"] as const
 export type ThemeChoice = (typeof THEMES)[number]
 
-/** The colours Desk draws in. Each has a light and a dark flavour, and the theme above picks between them. */
-export const COLOR_THEMES = ["desk", "verdigris"] as const
+/** The colours Comet draws in. Each has a light and a dark flavour, and the theme above picks between them. */
+export const COLOR_THEMES = ["comet", "verdigris"] as const
 export type ColorTheme = (typeof COLOR_THEMES)[number]
 
-/** Thread text sizes Desk allows, in px. Outside them, text either crowds or no longer fits a line. */
+/** Thread text sizes Comet allows, in px. Outside them, text either crowds or no longer fits a line. */
 export const FONT_SIZES = { min: 11, max: 20 } as const
 
 export interface AppearanceSettings {
@@ -468,9 +468,9 @@ export interface AppearanceSettings {
   readonly colorTheme: ColorTheme
   /** Thread text, in px. Code and the composer follow it. */
   readonly fontSize: number
-  /** A CSS font family list for the interface. Empty means Desk's own. */
+  /** A CSS font family list for the interface. Empty means Comet's own. */
   readonly uiFont: string
-  /** A CSS font family list for code and terminals. Empty means Desk's own. */
+  /** A CSS font family list for code and terminals. Empty means Comet's own. */
   readonly codeFont: string
 }
 
@@ -498,7 +498,7 @@ export interface ThreadSettings {
 export const PROJECT_COLORS = ["orange", "yellow", "cyan", "green", "red", "pink", "blue", "purple", "gray"] as const
 export type ProjectColor = (typeof PROJECT_COLORS)[number]
 
-/** How a project shows in tabs and menus. Each is optional. Without one, Desk uses the folder's. */
+/** How a project shows in tabs and menus. Each is optional. Without one, Comet uses the folder's. */
 export interface ProjectSettings {
   readonly name?: string
   readonly color?: ProjectColor
@@ -508,7 +508,7 @@ export interface ProjectSettings {
 
 /**
  * An MCP server an agent loads in a project, and how its connection stands. `not-started` means the agent
- * starts it only inside a thread, so Desk cannot see it connect.
+ * starts it only inside a thread, so Comet cannot see it connect.
  */
 export interface McpServer {
   readonly name: string
@@ -523,7 +523,7 @@ export interface McpServer {
   readonly tools: number
   /** Why it failed, when it did. */
   readonly error?: string
-  /** Whether Desk can turn it on or off. Codex lets Desk change only the user's own config, so a project's or a plugin's server stays as it is. */
+  /** Whether Comet can turn it on or off. Codex lets Comet change only the user's own config, so a project's or a plugin's server stays as it is. */
   readonly toggleable: boolean
 }
 
@@ -543,11 +543,11 @@ export interface Skill {
   readonly ownProject: boolean
   /** Where a skill available to every project comes from, such as "User" or "Plugin: figma". */
   readonly group: string
-  /** The file that defines it, such as its SKILL.md, when the agent says or Desk finds it. */
+  /** The file that defines it, such as its SKILL.md, when the agent says or Comet finds it. */
   readonly path?: string
 }
 
-export interface DeskSettings {
+export interface CometSettings {
   readonly appearance: AppearanceSettings
   readonly threads: ThreadSettings
   /** What a new tab starts each agent with. */
@@ -556,9 +556,9 @@ export interface DeskSettings {
   readonly projects: Readonly<Record<string, ProjectSettings>>
 }
 
-/** Desk's settings before anyone changes them. The app uses them until the core sends the saved ones. */
-export const DEFAULT_SETTINGS: DeskSettings = {
-  appearance: { theme: "dark", colorTheme: "desk", fontSize: 14, uiFont: "", codeFont: "" },
+/** Comet's settings before anyone changes them. The app uses them until the core sends the saved ones. */
+export const DEFAULT_SETTINGS: CometSettings = {
+  appearance: { theme: "dark", colorTheme: "comet", fontSize: 14, uiFont: "", codeFont: "" },
   threads: { agent: DEFAULT_AGENT, followUp: "steer", compactIdle: false },
   agents: {
     claude: { model: DEFAULT_MODEL, permissionMode: "auto" },
@@ -619,7 +619,7 @@ export interface CommandSource {
 }
 
 /**
- * What Desk reads about a project, by part. The app asks for a part and the core answers with a
+ * What Comet reads about a project, by part. The app asks for a part and the core answers with a
  * `project` message. Commands are sent again whenever they change, such as a command's run.
  */
 export interface ProjectParts {
@@ -679,7 +679,7 @@ export interface PluginLayout {
   readonly hiddenCards: readonly string[]
 }
 
-/** A plugin's name: its folder in `~/.desk/plugins`. It holds no dot, so a contribution's full id splits at its first dot. */
+/** A plugin's name: its folder in `~/.comet/plugins`. It holds no dot, so a contribution's full id splits at its first dot. */
 export const PLUGIN_NAME = /^[a-z0-9][a-z0-9_-]*$/
 
 /** The full id of something a plugin registers, such as `support.inbox`. Thread keys a plugin opens are scoped the same way. */
@@ -810,7 +810,7 @@ export interface UiPrimitives {
     onSelect?: () => void
   }
   button: { label: string; variant?: ButtonVariant; disabled?: boolean; onClick: () => void }
-  /** A text field. Desk keeps what is typed and reports it through `onInput`. Setting `value` replaces it, such as "" to clear it. */
+  /** A text field. Comet keeps what is typed and reports it through `onInput`. Setting `value` replaces it, such as "" to clear it. */
   textinput: { value: string; placeholder?: string; multiline?: boolean; onInput: (value: string) => void; /** Enter, or ⌘Enter in a multiline field. */ onSubmit?: () => void }
   /** A conversation, oldest first. */
   messages: { items: readonly MessageData[] }
@@ -820,7 +820,7 @@ export type UiPrimitive = keyof UiPrimitives
 
 /**
  * One change to a plugin's UI tree, after the remote-DOM idea MCP-UI used: the plugin's code builds the
- * tree in the core, and the app draws each node with Desk's own component of that name. Node ids are
+ * tree in the core, and the app draws each node with Comet's own component of that name. Node ids are
  * unique within a plugin, and the app keeps one copy of each plugin's nodes.
  */
 export type UiOp =
@@ -928,7 +928,7 @@ export type ClientMessage =
   | { readonly type: "tab.reopen" }
   /** The window's tabs, in order, sent whenever they change. */
   | { readonly type: "tabs.save"; readonly tabs: readonly TabInfo[]; readonly active?: string }
-  /** Desk's window gained or lost focus. Plugins hear which of their views are on screen. */
+  /** Comet's window gained or lost focus. Plugins hear which of their views are on screen. */
   | { readonly type: "window.focus"; readonly focused: boolean }
   /** Opens a file from the thread in the editor. A relative path is in the project. The core refuses anything that is not a file. */
   | { readonly type: "file.open"; readonly project: string; readonly path: string; readonly line?: number }
@@ -995,8 +995,8 @@ export type ClientMessage =
   | { readonly type: "plugins.reload" }
 
 export type CoreMessage =
-  /** Desk's settings, sent on connect and again after every change. */
-  | { readonly type: "settings"; readonly settings: DeskSettings }
+  /** Comet's settings, sent on connect and again after every change. */
+  | { readonly type: "settings"; readonly settings: CometSettings }
   /**
    * The window's saved tabs, sent once on connect. Each restored tab's thread follows as a
    * session.history message.
@@ -1005,7 +1005,7 @@ export type CoreMessage =
   /** Folders tabs have opened, most recent first, a worktree's by its repo's main checkout. Sent on connect, before the tabs, and when a tab opens a folder. */
   | { readonly type: "recent"; readonly projects: readonly string[] }
   | { [K in ProjectPart]: { readonly type: "project"; readonly project: string; readonly part: K; readonly value: ProjectParts[K] } }[ProjectPart]
-  /** Every agent as Desk knows it now, in Desk's order, sent whole each time one changes. */
+  /** Every agent as Comet knows it now, in Comet's order, sent whole each time one changes. */
   | { readonly type: "agents"; readonly agents: readonly AgentInfo[] }
   /** An agent's MCP servers in a project, to the client that asked. Null when the agent could not be asked. */
   | { readonly type: "mcp"; readonly project: string; readonly agent: AgentId; readonly servers: readonly McpServer[] | null }

@@ -1,4 +1,4 @@
-import type { Skill } from "@desk/protocol"
+import type { Skill } from "@comet/protocol"
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { configDir } from "./config-dir"
@@ -9,7 +9,7 @@ const PLUGIN_GROUP = "Plugin: "
 /**
  * Each skill with the file that defines it, where Claude Code keeps it: a skill's SKILL.md or a command's
  * Markdown file, in the project's .claude folder, the user's, or the plugin's install folder. Claude Code
- * does not say where a skill lives, so Desk looks. A skill synced from claude.ai, or one Desk does not
+ * does not say where a skill lives, so Comet looks. A skill synced from claude.ai, or one Comet does not
  * find, has no file. Claude Code's own commands have none.
  */
 export function withFiles(dir: string, skills: readonly Skill[], root = configDir()): Skill[] {

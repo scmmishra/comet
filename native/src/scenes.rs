@@ -3,17 +3,17 @@
 
 use crate::core::Event;
 use crate::protocol::CoreMessage;
-use crate::shell::{CoreState, Desk};
+use crate::shell::{CoreState, Comet};
 
 /// A scene: its name, and what it sets in a fresh window.
-type Scene = (&'static str, fn(&mut Desk));
+type Scene = (&'static str, fn(&mut Comet));
 
 pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("models-other-agent", models_other_agent), ("models-missing-agent", models_missing_agent), ("models-new-tab", models_new_tab), ("start", start), ("worktree", worktree), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-codex", settings_codex), ("settings-antigravity", settings_antigravity), ("settings-signing-in", settings_signing_in), ("models-signing-in", models_signing_in), ("settings-projects", settings_projects), ("settings-appearance", settings_appearance), ("settings-verdigris", settings_verdigris), ("extensions", extensions), ("extensions-skills", extensions_skills), ("stop-notice", stop_notice), ("branch-notice", branch_notice), ("branch-confirm", branch_confirm), ("markdown", markdown), ("file", file)];
 
-/// The core messages in the JSON file `DESK_SCENE_FILE` names, with the thread rows in its `open` list
+/// The core messages in the JSON file `COMET_SCENE_FILE` names, with the thread rows in its `open` list
 /// opened.
-fn file(s: &mut Desk) {
-    let path = std::env::var("DESK_SCENE_FILE").expect("DESK_SCENE_FILE names the scene's file");
+fn file(s: &mut Comet) {
+    let path = std::env::var("COMET_SCENE_FILE").expect("COMET_SCENE_FILE names the scene's file");
     let scene: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).expect("the scene's file reads")).expect("the scene's file is JSON");
     s.status = CoreState::Ready;
     s.now_ms = crate::format::now_ms();
@@ -46,26 +46,26 @@ fn file(s: &mut Desk) {
 }
 
 /// Settings on Providers: Claude Code with an update out and plan usage, Codex signed in, and Antigravity not installed.
-fn settings(s: &mut Desk) {
+fn settings(s: &mut Comet) {
     models(s);
     s.picker = Default::default();
     s.open_settings("providers");
 }
 
 /// Settings on Projects.
-fn settings_projects(s: &mut Desk) {
+fn settings_projects(s: &mut Comet) {
     settings(s);
     s.open_settings("projects");
 }
 
-/// Settings on Appearance, in Desk's colours, dark.
-fn settings_appearance(s: &mut Desk) {
+/// Settings on Appearance, in Comet's colours, dark.
+fn settings_appearance(s: &mut Comet) {
     settings(s);
     s.open_settings("appearance");
 }
 
 /// Settings on Appearance in Verdigris, following the system, so `--theme` picks its flavour.
-fn settings_verdigris(s: &mut Desk) {
+fn settings_verdigris(s: &mut Comet) {
     settings_appearance(s);
     if let Some(settings) = s.account.settings.as_mut() {
         settings.appearance.color_theme = crate::protocol::ColorTheme::Verdigris;
@@ -74,13 +74,13 @@ fn settings_verdigris(s: &mut Desk) {
 }
 
 /// The session header's MCP servers and skills, open on a thread with its servers beside it, one of each kind.
-fn extensions(s: &mut Desk) {
+fn extensions(s: &mut Comet) {
     extensions_menu(s);
     s.show_extensions_list(crate::extensions::List::Mcp);
 }
 
 /// The same menu with its skills beside it, more than the list holds.
-fn extensions_skills(s: &mut Desk) {
+fn extensions_skills(s: &mut Comet) {
     extensions_menu(s);
     s.show_extensions_list(crate::extensions::List::Skills);
     let tab = s.workspace.active_tab().expect("the thread scene has a tab").clone();
@@ -89,7 +89,7 @@ fn extensions_skills(s: &mut Desk) {
     s.receive(Event::Message(serde_json::from_value(message).expect("the skills decode"))).expect("the scene has a tab");
 }
 
-fn extensions_menu(s: &mut Desk) {
+fn extensions_menu(s: &mut Comet) {
     thread(s);
     let agents = serde_json::json!({ "type": "agents", "agents": [{ "id": "claude", "name": "Claude Code", "state": "ready", "features": ["mcp", "slash-commands"], "models": [] }] });
     s.receive(Event::Message(serde_json::from_value(agents).expect("the agents decode"))).expect("agents need no folder");
@@ -114,7 +114,7 @@ fn extensions_menu(s: &mut Desk) {
 }
 
 /// A tab laid out by a plugin's setup: a sidebar listing made-up conversations, and a card.
-fn plugin(s: &mut Desk) {
+fn plugin(s: &mut Comet) {
     start(s);
     let item = |id: u64, title: &str, subtitle: &str, badge: Option<(&str, &str)>, selected: bool| {
         let mut ops = vec![
@@ -154,13 +154,13 @@ fn plugin(s: &mut Desk) {
 }
 
 /// A new tab with the command palette open.
-fn palette(s: &mut Desk) {
+fn palette(s: &mut Comet) {
     start(s);
     s.show_palette(Vec::new());
 }
 
 /// The thread with a terminal open in the pane, showing coloured output, wide characters and a box.
-fn terminal(s: &mut Desk) {
+fn terminal(s: &mut Comet) {
     thread(s);
     s.new_terminal();
     let id = s.workspace.active_tab().and_then(|t| t.terminals.first()).map(|t| t.id.clone()).expect("a terminal");
@@ -169,7 +169,7 @@ fn terminal(s: &mut Desk) {
 }
 
 /// The thread with the view pane open on Review.
-fn review(s: &mut Desk) {
+fn review(s: &mut Comet) {
     thread(s);
     s.receive(Event::Message(serde_json::from_value(serde_json::json!({ "type": "review", "tabId": "tab", "scope": "thread", "files": [
         { "path": "src/login.ts", "status": "modified", "additions": 2, "deletions": 1,
@@ -179,7 +179,7 @@ fn review(s: &mut Desk) {
 }
 
 /// The thread with a README open in the pane, on its preview.
-fn markdown(s: &mut Desk) {
+fn markdown(s: &mut Comet) {
     thread(s);
     s.open_file("tab", "README.md", None);
     let text = "# Web\n\nThe login form and its **retry** flow.\nA second line joins the first.\n\n## Run\n\n- `npm install`\n- `npm test`\n\n```sh\nnpm run dev\n```\n\n> Read [the guide](https://example.com) first.\n\n| Script | Does |\n| --- | --- |\n| dev | Serves the app |\n";
@@ -187,7 +187,7 @@ fn markdown(s: &mut Desk) {
 }
 
 /// A new tab in a project with past threads.
-fn start(s: &mut Desk) {
+fn start(s: &mut Comet) {
     s.status = CoreState::Ready;
     let now = crate::format::now_ms();
     let messages = serde_json::json!([
@@ -196,12 +196,12 @@ fn start(s: &mut Desk) {
         { "type": "project", "project": "/Users/me/code/web", "part": "space", "value": { "name": "web", "root": "/Users/me/code/web", "branch": "main", "changes": {} } },
         { "type": "project", "project": "/Users/me/code/web", "part": "threads", "value": [
             { "id": "s1", "agent": "claude", "title": "Fix the login form", "updatedAt": now - 5.0 * 60_000.0, "project": "/Users/me/code/web" },
-            { "id": "s2", "agent": "codex", "title": "Add a dark theme to the settings page", "branch": "desk/dark-theme", "updatedAt": now - 3.0 * 3_600_000.0, "project": "/Users/me/.desk/worktrees/web/dark-theme" },
+            { "id": "s2", "agent": "codex", "title": "Add a dark theme to the settings page", "branch": "comet/dark-theme", "updatedAt": now - 3.0 * 3_600_000.0, "project": "/Users/me/.comet/worktrees/web/dark-theme" },
             { "id": "s3", "agent": "claude", "title": "Speed up the build", "updatedAt": now - 2.0 * 86_400_000.0, "project": "/Users/me/code/web" }
         ] },
         { "type": "project", "project": "/Users/me/code/web", "part": "worktrees", "value": [
             { "path": "/Users/me/code/web", "branch": "main", "main": true },
-            { "path": "/Users/me/.desk/worktrees/web/dark-theme", "branch": "desk/dark-theme", "main": false }
+            { "path": "/Users/me/.comet/worktrees/web/dark-theme", "branch": "comet/dark-theme", "main": false }
         ] }
     ]);
     for message in serde_json::from_value::<Vec<CoreMessage>>(messages).expect("the scene's messages decode") {
@@ -210,16 +210,16 @@ fn start(s: &mut Desk) {
 }
 
 /// A new tab in a worktree of a project, whose Space card names the worktree.
-fn worktree(s: &mut Desk) {
+fn worktree(s: &mut Comet) {
     s.status = CoreState::Ready;
-    let dir = "/Users/me/.desk/worktrees/web/dark-theme";
+    let dir = "/Users/me/.comet/worktrees/web/dark-theme";
     let messages = serde_json::json!([
         { "type": "recent", "projects": ["/Users/me/code/web"] },
         { "type": "tabs", "active": "tab", "tabs": [{ "id": "tab", "title": "New session", "project": dir, "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] },
-        { "type": "project", "project": dir, "part": "space", "value": { "name": "dark-theme", "root": dir, "branch": "desk/dark-theme", "worktree": { "main": "/Users/me/code/web" }, "changes": { "files": 2, "additions": 12, "deletions": 3 } } },
+        { "type": "project", "project": dir, "part": "space", "value": { "name": "dark-theme", "root": dir, "branch": "comet/dark-theme", "worktree": { "main": "/Users/me/code/web" }, "changes": { "files": 2, "additions": 12, "deletions": 3 } } },
         { "type": "project", "project": dir, "part": "worktrees", "value": [
             { "path": "/Users/me/code/web", "branch": "main", "main": true },
-            { "path": dir, "branch": "desk/dark-theme", "main": false }
+            { "path": dir, "branch": "comet/dark-theme", "main": false }
         ] }
     ]);
     for message in serde_json::from_value::<Vec<CoreMessage>>(messages).expect("the scene's messages decode") {
@@ -228,38 +228,38 @@ fn worktree(s: &mut Desk) {
 }
 
 /// Providers on Codex, which has no update and no idle compaction.
-fn settings_codex(s: &mut Desk) {
+fn settings_codex(s: &mut Comet) {
     settings(s);
     s.show_settings_agent("codex");
 }
 
 /// Providers on Antigravity, which is not installed.
-fn settings_antigravity(s: &mut Desk) {
+fn settings_antigravity(s: &mut Comet) {
     settings(s);
     s.show_settings_agent("antigravity");
 }
 
 /// Antigravity signing in, with the page it opened, in Providers and in the picker.
-fn signing_in(s: &mut Desk) {
+fn signing_in(s: &mut Comet) {
     let agents: Vec<serde_json::Value> = s.account.agents.iter().map(|a| serde_json::json!({ "id": a.id, "name": a.name, "state": "ready", "features": a.features, "models": [] })).collect();
     let mut agents = agents;
     agents[2] = serde_json::json!({ "id": "antigravity", "name": "Antigravity", "state": "signing-in", "signInLink": "https://accounts.google.com/o/oauth2/v2/auth?state=s", "features": ["delete", "install", "sign-in"], "models": [] });
     s.receive(Event::Message(serde_json::from_value(serde_json::json!({ "type": "agents", "agents": agents })).expect("the agents decode"))).expect("agents need no folder");
 }
 
-fn settings_signing_in(s: &mut Desk) {
+fn settings_signing_in(s: &mut Comet) {
     settings_antigravity(s);
     signing_in(s);
 }
 
-fn models_signing_in(s: &mut Desk) {
+fn models_signing_in(s: &mut Comet) {
     models_missing_agent(s);
     signing_in(s);
 }
 
 /// The settings and the agents every scene with a picker or a settings page starts from: Claude Code
 /// and Codex ready, each on a plan, and Antigravity not installed.
-fn agents(s: &mut Desk) {
+fn agents(s: &mut Comet) {
     let modes = ["default", "acceptEdits", "auto", "bypassPermissions"];
     let codex_efforts = ["low", "medium", "high", "xhigh", "max", "ultra"];
     let messages = serde_json::json!([
@@ -305,14 +305,14 @@ fn agents(s: &mut Desk) {
 }
 
 /// The thread with the model picker open, on the thread's own agent.
-fn models(s: &mut Desk) {
+fn models(s: &mut Comet) {
     thread(s);
     agents(s);
     s.toggle_picker();
 }
 
 /// The picker of a started thread, showing another agent: its models, and the way to a new tab on it.
-fn models_other_agent(s: &mut Desk) {
+fn models_other_agent(s: &mut Comet) {
     models(s);
     let session = serde_json::json!({ "type": "thread.session", "tabId": "tab", "sessionId": "s1", "agent": "claude" });
     s.receive(Event::Message(serde_json::from_value(session).expect("the session decodes"))).expect("a session needs no folder");
@@ -320,13 +320,13 @@ fn models_other_agent(s: &mut Desk) {
 }
 
 /// The picker showing an agent that is not installed.
-fn models_missing_agent(s: &mut Desk) {
+fn models_missing_agent(s: &mut Comet) {
     models(s);
     s.view_agent("antigravity");
 }
 
 /// A new tab's picker, showing Codex, whose models the tab can take.
-fn models_new_tab(s: &mut Desk) {
+fn models_new_tab(s: &mut Comet) {
     start(s);
     agents(s);
     s.toggle_picker();
@@ -334,7 +334,7 @@ fn models_new_tab(s: &mut Desk) {
 }
 
 /// The thread with its stop unanswered for 20 seconds, and the agent retrying a failed request.
-fn stop_notice(s: &mut Desk) {
+fn stop_notice(s: &mut Comet) {
     thread(s);
     let since = s.now_ms - 20_000.0;
     let messages = serde_json::json!([
@@ -347,7 +347,7 @@ fn stop_notice(s: &mut Desk) {
 }
 
 /// The thread, last run on `login` while the project is on `fix-login`, with a message typed.
-fn branch_notice(s: &mut Desk) {
+fn branch_notice(s: &mut Comet) {
     thread(s);
     let messages = serde_json::json!([
         { "type": "thread.branch", "tabId": "tab", "branch": "login" },
@@ -361,13 +361,13 @@ fn branch_notice(s: &mut Desk) {
 }
 
 /// Restore branch pressed with uncommitted changes: the confirmation is open.
-fn branch_confirm(s: &mut Desk) {
+fn branch_confirm(s: &mut Comet) {
     branch_notice(s);
     s.restore_branch("tab");
 }
 
 /// A tab with a finished turn, a steered message, and a running turn with a live group and a steer that waits.
-fn thread(s: &mut Desk) {
+fn thread(s: &mut Comet) {
     s.status = CoreState::Ready;
     // Times count back from now, as the working head reads the clock.
     let now = crate::format::now_ms();

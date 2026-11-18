@@ -1,4 +1,4 @@
-import type { ImageAttachment, ThreadItem } from "@desk/protocol"
+import type { ImageAttachment, ThreadItem } from "@comet/protocol"
 import { errorMessage } from "../errors"
 
 /**
@@ -15,7 +15,7 @@ export function userItem(id: string, text: string, images: readonly ImageAttachm
   return { type: "user", id, text, ...(images.length ? { images } : {}), at: Date.now(), ...(steered ? { steered: true } : {}) }
 }
 
-/** The id of the result of the turn a message opened. A thread read back from a transcript names its results this way, so what Desk saved about a turn finds it again. */
+/** The id of the result of the turn a message opened. A thread read back from a transcript names its results this way, so what Comet saved about a turn finds it again. */
 export const resultId = (messageId: string) => `${RESULT_PREFIX}${messageId}`
 
 /** The message whose turn a restored result closes. */

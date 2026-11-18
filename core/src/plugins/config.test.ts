@@ -15,9 +15,9 @@ test("turns plugins on everywhere and for a project named by its folder, with ~ 
 })
 
 test("turns every plugin off without a file, and reports a broken one", () => {
-  rmSync(join(process.env.DESK_HOME!, "plugins.json"), { force: true })
+  rmSync(join(process.env.COMET_HOME!, "plugins.json"), { force: true })
   expect(pluginsOn("/work/chatwoot")).toEqual([])
-  writeFileSync(join(process.env.DESK_HOME!, "plugins.json"), "{ not json")
+  writeFileSync(join(process.env.COMET_HOME!, "plugins.json"), "{ not json")
   expect(() => pluginsOn("/work/chatwoot")).toThrow("not valid JSON")
 })
 

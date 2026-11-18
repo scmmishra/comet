@@ -11,7 +11,7 @@ test("labels a thought by its heading or first sentence, and a thought with no t
 })
 
 test("labels a command by the program it runs, past setup, variables and wrappers", () => {
-  expect(commandLabel(". /tmp/env.sh; cd /work/desk && python3 - <<'EOF'\nprint(1)\nEOF", done)).toBe("Ran python3")
+  expect(commandLabel(". /tmp/env.sh; cd /work/comet && python3 - <<'EOF'\nprint(1)\nEOF", done)).toBe("Ran python3")
   expect(commandLabel("CI=1 sudo /usr/local/bin/bun test core", done)).toBe("Ran bun")
   expect(commandLabel("git log --oneline | head -3", done)).toBe("Ran git")
   expect(commandLabel("cd app", done)).toBe("Ran cd")

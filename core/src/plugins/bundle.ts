@@ -4,26 +4,26 @@ import { dirname, join, resolve } from "node:path"
 import { instanceHome, writeJsonFile } from "../data-files"
 
 const SOLID = dirname(Bun.resolveSync("solid-js/package.json", import.meta.dir))
-const PLUGIN_PACKAGE = dirname(Bun.resolveSync("@desk/plugin/package.json", import.meta.dir))
+const PLUGIN_PACKAGE = dirname(Bun.resolveSync("@comet/plugin/package.json", import.meta.dir))
 const pluginExports = (await Bun.file(join(PLUGIN_PACKAGE, "package.json")).json()).exports as Record<string, string>
-/** Packages a plugin imports, which a plugin folder outside Desk cannot resolve on its own. Solid's are its browser builds. */
+/** Packages a plugin imports, which a plugin folder outside Comet cannot resolve on its own. Solid's are its browser builds. */
 const PACKAGES: Record<string, string> = {
   "solid-js": join(SOLID, "dist/solid.js"),
   "solid-js/store": join(SOLID, "store/dist/store.js"),
   "solid-js/universal": join(SOLID, "universal/dist/universal.js"),
-  ...Object.fromEntries(Object.entries(pluginExports).map(([path, file]) => [join("@desk/plugin", path), join(PLUGIN_PACKAGE, file)])),
+  ...Object.fromEntries(Object.entries(pluginExports).map(([path, file]) => [join("@comet/plugin", path), join(PLUGIN_PACKAGE, file)])),
 }
 
 /**
- * Builds a plugin into one file a worker can load. Solid's JSX compiles against Desk's UI renderer,
+ * Builds a plugin into one file a worker can load. Solid's JSX compiles against Comet's UI renderer,
  * not the DOM, so the plugin builds data the app draws. The bundle takes Solid's browser build: under
  * Bun, `solid-js` resolves to its server build, which has no reactivity, and the plugin, Solid and the
  * renderer must share one copy of it.
  */
 const solidJsx: BunPlugin = {
-  name: "desk-solid-jsx",
+  name: "comet-solid-jsx",
   setup(build) {
-    build.onResolve({ filter: /^(solid-js|@desk\/plugin)/ }, (args) => (PACKAGES[args.path] ? { path: PACKAGES[args.path] } : undefined))
+    build.onResolve({ filter: /^(solid-js|@comet\/plugin)/ }, (args) => (PACKAGES[args.path] ? { path: PACKAGES[args.path] } : undefined))
     build.onLoad({ filter: /\.tsx$/ }, async (args) => {
       // Babel takes about 100 ms to import. A launch that reuses every plugin's bundle never needs it.
       const [{ transformAsync }, { default: solid }] = await Promise.all([import("@babel/core"), import("babel-preset-solid")])
@@ -32,7 +32,7 @@ const solidJsx: BunPlugin = {
         babelrc: false,
         configFile: false,
         parserOpts: { plugins: ["typescript", "jsx"] },
-        presets: [[solid, { generate: "universal", moduleName: "@desk/plugin/renderer" }]],
+        presets: [[solid, { generate: "universal", moduleName: "@comet/plugin/renderer" }]],
       })
       return { contents: result?.code ?? "", loader: "ts" }
     })
@@ -41,8 +41,8 @@ const solidJsx: BunPlugin = {
 
 /**
  * What a bundle was built from and what it wrote: the plugin's module, the Bun that built it, each file the
- * build read, with its size and when it last changed, and each file it wrote. Desk's own files count among
- * those read, such as this one and the renderer, so a new Desk builds again.
+ * build read, with its size and when it last changed, and each file it wrote. Comet's own files count among
+ * those read, such as this one and the renderer, so a new Comet builds again.
  */
 interface Built {
   readonly plugin: string
@@ -63,7 +63,7 @@ export async function bundlePlugin(name: string, plugin: string): Promise<string
   if (isCurrent(builtFile, plugin)) return bundle
   // The bundle starts from a small module that hands the plugin to the host, so both share one renderer.
   const entry = join(outdir, `${name}.entry.ts`)
-  await Bun.write(entry, `import { startHost } from "@desk/plugin/host"\nimport plugin from ${JSON.stringify(plugin)}\nstartHost(plugin)\n`)
+  await Bun.write(entry, `import { startHost } from "@comet/plugin/host"\nimport plugin from ${JSON.stringify(plugin)}\nstartHost(plugin)\n`)
   const result = await Bun.build({
     entrypoints: [entry],
     outdir,
@@ -76,7 +76,7 @@ export async function bundlePlugin(name: string, plugin: string): Promise<string
     publicPath: `${outdir}/`,
     metafile: true,
   })
-  if (!result.success) throw new Error(`Desk could not build the plugin ${name}: ${result.logs.map(String).join("\n")}`)
+  if (!result.success) throw new Error(`Comet could not build the plugin ${name}: ${result.logs.map(String).join("\n")}`)
   // The metafile names inputs from the working folder. This file shapes every bundle without being one of them.
   const read = [...Object.keys(result.metafile!.inputs).map((path) => resolve(path)), import.meta.path]
   const wrote = result.outputs.map((output) => output.path)

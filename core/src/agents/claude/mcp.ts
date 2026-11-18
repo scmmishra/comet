@@ -1,5 +1,5 @@
 import type { McpServerStatus, Query } from "@anthropic-ai/claude-agent-sdk"
-import type { McpServer } from "@desk/protocol"
+import type { McpServer } from "@comet/protocol"
 import type { AgentMcp } from "../agent"
 import { probe } from "./probe"
 

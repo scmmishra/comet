@@ -1,4 +1,4 @@
-import type { FileView } from "@desk/protocol"
+import type { FileView } from "@comet/protocol"
 import { closeSync, openSync, readSync, statSync } from "node:fs"
 import { homedir } from "node:os"
 import { join, resolve, sep } from "node:path"
@@ -10,8 +10,8 @@ const MAX_VIEW_BYTES = 1_000_000
 /** How much of a file is looked at to tell text from binary. Git looks at the same amount. */
 const SNIFF_BYTES = 8000
 
-/** The editor command, which takes `path:line`. Zed's CLI does. DESK_EDITOR names another. */
-const editor = () => process.env.DESK_EDITOR ?? "zed"
+/** The editor command, which takes `path:line`. Zed's CLI does. COMET_EDITOR names another. */
+const editor = () => process.env.COMET_EDITOR ?? "zed"
 
 /** A path as a reply names it, made absolute: a relative path is in the project, and ~/ is the home folder. */
 function namedPath(dir: string, path: string): string {

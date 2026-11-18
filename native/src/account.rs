@@ -1,6 +1,6 @@
-//! What the core says about Desk's settings and the agents it runs.
+//! What the core says about Comet's settings and the agents it runs.
 
-use crate::protocol::{AgentDefaults, AgentInfo, ColorTheme, DeskSettings, ModelOption, PlanUsage, ProjectSettings, ThemeChoice};
+use crate::protocol::{AgentDefaults, AgentInfo, ColorTheme, CometSettings, ModelOption, PlanUsage, ProjectSettings, ThemeChoice};
 
 /// The thread's text size before the settings arrive, as `DEFAULT_SETTINGS` has it.
 const DEFAULT_TEXT_SIZE: f32 = 14.0;
@@ -12,8 +12,8 @@ pub const DEFAULT_MODEL: &str = "default";
 #[derive(Default)]
 pub struct Account {
     /// None until the core sends them, which it does first on connect.
-    pub settings: Option<DeskSettings>,
-    /// The agents Desk runs, in Desk's order. Empty until the core sends them.
+    pub settings: Option<CometSettings>,
+    /// The agents Comet runs, in Comet's order. Empty until the core sends them.
     pub agents: Vec<AgentInfo>,
 }
 
@@ -48,17 +48,17 @@ impl Account {
         self.settings.as_ref()?.projects.get(dir)
     }
 
-    /// The chosen theme. Until the core sends the settings, Desk follows macOS, so a light Mac does not open dark.
+    /// The chosen theme. Until the core sends the settings, Comet follows macOS, so a light Mac does not open dark.
     pub fn theme(&self) -> ThemeChoice {
         self.settings.as_ref().map_or(ThemeChoice::Auto, |s| s.appearance.theme)
     }
 
-    /// The chosen colour theme, Desk's own until the core sends the settings.
+    /// The chosen colour theme, Comet's own until the core sends the settings.
     pub fn color_theme(&self) -> ColorTheme {
-        self.settings.as_ref().map_or(ColorTheme::Desk, |s| s.appearance.color_theme)
+        self.settings.as_ref().map_or(ColorTheme::Comet, |s| s.appearance.color_theme)
     }
 
-    /// The thread's text size, Desk's `--desk-text-size`.
+    /// The thread's text size, Comet's `--comet-text-size`.
     pub fn text_size(&self) -> f32 {
         self.settings.as_ref().map_or(DEFAULT_TEXT_SIZE, |s| s.appearance.font_size)
     }

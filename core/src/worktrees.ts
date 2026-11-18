@@ -1,7 +1,7 @@
-import type { Worktree } from "@desk/protocol"
+import type { Worktree } from "@comet/protocol"
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs"
 import { basename, dirname, join, relative, resolve } from "node:path"
-import { deskHome } from "./data-files"
+import { cometHome } from "./data-files"
 import { git } from "./git"
 
 /**
@@ -10,10 +10,10 @@ import { git } from "./git"
  * main checkout, and creates, lists and removes worktrees.
  */
 
-/** New worktrees go under `~/.desk/worktrees/<repo>/`, outside the repo, so its watchers and searches never see them. */
-const worktreesHome = () => join(deskHome(), "worktrees")
-/** Every branch Desk makes for a new worktree starts with this. */
-const BRANCH_PREFIX = "desk/"
+/** New worktrees go under `~/.comet/worktrees/<repo>/`, outside the repo, so its watchers and searches never see them. */
+const worktreesHome = () => join(cometHome(), "worktrees")
+/** Every branch Comet makes for a new worktree starts with this. */
+const BRANCH_PREFIX = "comet/"
 /** A branch name from a message keeps this many characters at most. */
 const NAME_LENGTH = 40
 
@@ -91,13 +91,13 @@ export async function listWorktrees(dir: string): Promise<Worktree[]> {
 
 /**
  * Makes a worktree for `dir`'s repo, on a new branch from what `dir` has checked out. The branch is named
- * from `words`, such as the thread's first message, under `desk/`. Returns the folder in the new worktree
+ * from `words`, such as the thread's first message, under `comet/`. Returns the folder in the new worktree
  * that matches `dir`.
  */
 export async function createWorktree(dir: string, words: string): Promise<string> {
   const main = mainCheckout(dir)
   const root = checkoutRoot(main)
-  if (!root) throw new Error("Desk can make a worktree only in a Git repo.")
+  if (!root) throw new Error("Comet can make a worktree only in a Git repo.")
   const name = await freeName(root, slug(words))
   const path = join(worktreesHome(), basename(root), name)
   await git(dir, ["worktree", "add", "-b", `${BRANCH_PREFIX}${name}`, path, "HEAD"])

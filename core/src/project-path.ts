@@ -7,7 +7,7 @@ export function isProjectFolder(dir: string) {
 }
 
 export function requireProjectFolder(dir: string) {
-  if (!isProjectFolder(dir)) throw new Error(`Desk cannot open ${dir}: it is not a folder.`)
+  if (!isProjectFolder(dir)) throw new Error(`Comet cannot open ${dir}: it is not a folder.`)
 }
 
 /**

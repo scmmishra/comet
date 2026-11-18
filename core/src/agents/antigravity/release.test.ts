@@ -25,11 +25,11 @@ test("reads Google's manifest, and refuses one that names an old release or an a
   expect(parseRelease(null)).toBeUndefined()
 })
 
-test("says in plain words when Google's channel names no release Desk installs", async () => {
+test("says in plain words when Google's channel names no release Comet installs", async () => {
   const unreachable = async (): Promise<Response> => {
     throw new TypeError("getaddrinfo ENOTFOUND")
   }
-  const message = "Desk could not read the newest Antigravity release from Google. Check the network connection, then try again."
+  const message = "Comet could not read the newest Antigravity release from Google. Check the network connection, then try again."
   await expect(latestRelease({ fetcher: unreachable })).rejects.toThrow(message)
   await expect(latestRelease({ fetcher: async () => Response.json({ version: "1.4.5" }) })).rejects.toThrow(message)
   expect(await latestRelease({ fetcher: async () => Response.json(MANIFEST) })).toMatchObject({ version: "1.5.9" })

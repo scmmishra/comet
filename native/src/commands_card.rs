@@ -3,7 +3,7 @@
 //! edits or deletes a row, and the editor adds, changes or removes commands.
 
 use crate::protocol::{ClientMessage, CommandInfo, CommandProcess, CommandRun, CommandSource, FoundCommand};
-use crate::shell::Desk;
+use crate::shell::Comet;
 use rune::{El, PointerPress, TextEdit, col, el, icon, row, text};
 use rune_kit::{ButtonVariant, ControlSize, Dialog, IconButton, IconButtonVariant, Kit, Menu, MenuItem, Placement, TextInput, context_menu};
 use rune_theme_opencode::icons as ic;
@@ -115,7 +115,7 @@ pub struct CommandsCard {
     draft: Option<Draft>,
 }
 
-impl Desk {
+impl Comet {
     fn edit_commands(&mut self, project: &str, name: Option<&str>, members: &[CommandInfo]) {
         let processes = if members.is_empty() {
             vec![(None, TextEdit::new(""), TextEdit::new(""))]
@@ -153,7 +153,7 @@ impl Desk {
     }
 }
 
-pub fn card(s: &Desk, project: &str, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
+pub fn card(s: &Comet, project: &str, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
     let commands = s.projects.get(project)?.commands.as_ref()?;
     let rows: Vec<El> = entries(commands)
         .into_iter()
@@ -173,7 +173,7 @@ pub fn card(s: &Desk, project: &str, k: &Kit, layer: &mut Vec<El>) -> Option<El>
         .radius(8.0)
         .hover(k.c.bg_base)
         .role("button")
-        .on_press(move |s: &mut Desk| s.edit_commands(&dir, None, &[]))
+        .on_press(move |s: &mut Comet| s.edit_commands(&dir, None, &[]))
         .child(icon(&ic::PLUS, 15.0).color(k.c.text_faint))
         .child(text("Add command").font(crate::theme::text(13.0)).color(k.c.text_faint));
     editor(s, k, layer);
@@ -204,7 +204,7 @@ fn run_button(name: &str, running: bool, project: &str, ids: Vec<String>, k: &Ki
     IconButton::new(if running { &ic::STOP } else { &crate::icons::PLAY })
         .variant(IconButtonVariant::GhostMuted)
         .label(format!("{} {name}", if running { "Stop" } else { "Run" }))
-        .on_press(move |s: &mut Desk| s.command_message(&project, ids.clone(), !running))
+        .on_press(move |s: &mut Comet| s.command_message(&project, ids.clone(), !running))
         .build(k)
 }
 
@@ -216,25 +216,25 @@ struct Target {
 }
 
 /// A row with a right-click menu to edit or delete what it shows.
-fn with_menu(s: &Desk, key: String, target: Target, content: El, k: &Kit, layer: &mut Vec<El>) -> El {
+fn with_menu(s: &Comet, key: String, target: Target, content: El, k: &Kit, layer: &mut Vec<El>) -> El {
     let Target { project, name, members } = target;
     let project = project.as_str();
     let point = s.commands_card.menu.as_ref().filter(|(k, _)| *k == key).map(|(_, p)| *p);
     let menu_key = key.clone();
-    let trigger = content.on_secondary_press(move |s: &mut Desk, point, _| s.commands_card.menu = Some((menu_key.clone(), point)));
+    let trigger = content.on_secondary_press(move |s: &mut Comet, point, _| s.commands_card.menu = Some((menu_key.clone(), point)));
     let (edit_project, edit_name, edit_members) = (project.to_owned(), name, members.clone());
     let (delete_project, ids) = (project.to_owned(), members.iter().map(|m| m.id.clone()).collect::<Vec<_>>());
     context_menu(format!("{key}-menu"), trigger, point)
-        .item(MenuItem::new("Edit…").on_select(move |s: &mut Desk| {
+        .item(MenuItem::new("Edit…").on_select(move |s: &mut Comet| {
             s.commands_card.menu = None;
             s.edit_commands(&edit_project, Some(&edit_name), &edit_members);
         }))
         .separator()
-        .item(MenuItem::new("Delete").danger(true).on_select(move |s: &mut Desk| {
+        .item(MenuItem::new("Delete").danger(true).on_select(move |s: &mut Comet| {
             s.commands_card.menu = None;
             s.core.send(&ClientMessage::CommandsRemove { project: delete_project.clone(), ids: ids.clone() });
         }))
-        .on_close(|s: &mut Desk| s.commands_card.menu = None)
+        .on_close(|s: &mut Comet| s.commands_card.menu = None)
         .build(k, layer)
 }
 
@@ -242,7 +242,7 @@ fn line(k: &Kit) -> El {
     row().w_full().gap(10.0).items_center().pl(8.0).pr(4.0).py(3.0).radius(8.0).hover(k.c.bg_base)
 }
 
-fn command_row(s: &Desk, project: &str, command: &CommandInfo, k: &Kit, layer: &mut Vec<El>) -> El {
+fn command_row(s: &Comet, project: &str, command: &CommandInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let content = line(k)
         .key(format!("command-{}", command.id))
         .child(run_dot(&command.run, k))
@@ -253,7 +253,7 @@ fn command_row(s: &Desk, project: &str, command: &CommandInfo, k: &Kit, layer: &
 }
 
 /// A group as one row that runs and stops all its commands. It opens to show each command.
-fn group_row(s: &Desk, project: &str, name: &str, members: &[&CommandInfo], k: &Kit, layer: &mut Vec<El>) -> El {
+fn group_row(s: &Comet, project: &str, name: &str, members: &[&CommandInfo], k: &Kit, layer: &mut Vec<El>) -> El {
     let open = s.commands_card.open_groups.contains(name);
     let ids: Vec<String> = members.iter().map(|m| m.id.clone()).collect();
     let running = members.iter().filter(|m| m.run.state == "running").count();
@@ -269,7 +269,7 @@ fn group_row(s: &Desk, project: &str, name: &str, members: &[&CommandInfo], k: &
                 .items_center()
                 .role("button")
                 .expanded(open)
-                .on_press(move |s: &mut Desk| {
+                .on_press(move |s: &mut Comet| {
                     if !s.commands_card.open_groups.remove(&toggle) {
                         s.commands_card.open_groups.insert(toggle.clone());
                     }
@@ -287,7 +287,7 @@ fn group_row(s: &Desk, project: &str, name: &str, members: &[&CommandInfo], k: &
 }
 
 /// The command editor, as a dialog.
-fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
+fn editor(s: &Comet, k: &Kit, layer: &mut Vec<El>) {
     let Some(draft) = &s.commands_card.draft else { return };
     let editing = !draft.original.is_empty();
     let title = match (editing, draft.grouped) {
@@ -296,17 +296,17 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
         _ => "Add command",
     };
     let field = |label: &str, input: El| col().w_full().gap(6.0).child(text(label.to_owned()).font(crate::theme::medium(12.0)).color(k.c.text_muted)).child(input);
-    let name = TextInput::new(&draft.name).placeholder("Dev server").width(None).on_edit(|s: &mut Desk| &mut s.commands_card.draft.as_mut().expect("the editor is open").name).build(k);
+    let name = TextInput::new(&draft.name).placeholder("Dev server").width(None).on_edit(|s: &mut Comet| &mut s.commands_card.draft.as_mut().expect("the editor is open").name).build(k);
     let processes = draft.processes.iter().enumerate().map(|(i, (_, process, command))| {
         let process_name = draft.grouped.then(|| {
-            TextInput::new(process).placeholder("Name").label("Process name").width(Some(140.0)).on_edit(move |s: &mut Desk| &mut s.commands_card.draft.as_mut().expect("the editor is open").processes[i].1).build(k)
+            TextInput::new(process).placeholder("Name").label("Process name").width(Some(140.0)).on_edit(move |s: &mut Comet| &mut s.commands_card.draft.as_mut().expect("the editor is open").processes[i].1).build(k)
         });
         let command = TextInput::new(command)
             .placeholder("bun run dev")
             .label("Command")
             .text_style(crate::theme::mono(12.0))
             .width(None)
-            .on_edit(move |s: &mut Desk| &mut s.commands_card.draft.as_mut().expect("the editor is open").processes[i].2)
+            .on_edit(move |s: &mut Comet| &mut s.commands_card.draft.as_mut().expect("the editor is open").processes[i].2)
             .build(k)
             .grow(1.0);
         let remove = draft.grouped.then(|| {
@@ -314,7 +314,7 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
                 .variant(IconButtonVariant::GhostMuted)
                 .control_size(ControlSize::Large)
                 .label("Remove process")
-                .on_press(move |s: &mut Desk| {
+                .on_press(move |s: &mut Comet| {
                     if let Some(d) = s.commands_card.draft.as_mut() {
                         d.remove_process(i);
                     }
@@ -326,7 +326,7 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
     let add = crate::theme::button("Add process")
         .variant(ButtonVariant::Ghost)
         .icon(&ic::PLUS)
-        .on_press(|s: &mut Desk| {
+        .on_press(|s: &mut Comet| {
             if let Some(d) = s.commands_card.draft.as_mut() {
                 d.add_process("", "");
             }
@@ -342,7 +342,7 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
         let (project, ids) = (draft.project.clone(), draft.original.clone());
         crate::theme::button(if draft.grouped { "Delete group" } else { "Delete" })
             .variant(ButtonVariant::Danger)
-            .on_press(move |s: &mut Desk| {
+            .on_press(move |s: &mut Comet| {
                 s.core.send(&ClientMessage::CommandsRemove { project: project.clone(), ids: ids.clone() });
                 s.commands_card.draft = None;
             })
@@ -355,8 +355,8 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
         .children(delete)
         .children(import)
         .child(row().grow(1.0))
-        .child(crate::theme::button("Cancel").variant(ButtonVariant::Ghost).on_press(|s: &mut Desk| s.commands_card.draft = None).build(k))
-        .child(crate::theme::button("Save").variant(ButtonVariant::Submit).disabled(!ready).on_press(|s: &mut Desk| s.save_commands()).build(k));
+        .child(crate::theme::button("Cancel").variant(ButtonVariant::Ghost).on_press(|s: &mut Comet| s.commands_card.draft = None).build(k))
+        .child(crate::theme::button("Save").variant(ButtonVariant::Submit).disabled(!ready).on_press(|s: &mut Comet| s.save_commands()).build(k));
     let body = col()
         .w_full()
         .gap(12.0)
@@ -371,7 +371,7 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
         .fit()
         // A press on the import menu, which draws outside the dialog, must not close it.
         .click_outside(!draft.importing)
-        .on_close(|s: &mut Desk| s.commands_card.draft = None)
+        .on_close(|s: &mut Comet| s.commands_card.draft = None)
         .child(body)
         .build(k, layer);
     layer.extend(menus);
@@ -380,11 +380,11 @@ fn editor(s: &Desk, k: &Kit, layer: &mut Vec<El>) {
 /// "Import from…": the commands the project's Procfiles, mise tasks and package.json define, by file.
 /// Picking one fills a process, and "Import all as a group"
 /// fills one per command. The core leaves out commands already saved.
-fn import_menu(s: &Desk, project: &str, open: bool, k: &Kit, layer: &mut Vec<El>) -> El {
+fn import_menu(s: &Comet, project: &str, open: bool, k: &Kit, layer: &mut Vec<El>) -> El {
     let dir = project.to_owned();
     let trigger = crate::theme::button("Import from…")
         .variant(ButtonVariant::Ghost)
-        .on_press(move |s: &mut Desk| {
+        .on_press(move |s: &mut Comet| {
             let Some(d) = s.commands_card.draft.as_mut() else { return };
             d.importing = !d.importing;
             // The files may have changed since the last look, so the menu reads them each time it opens.
@@ -393,7 +393,7 @@ fn import_menu(s: &Desk, project: &str, open: bool, k: &Kit, layer: &mut Vec<El>
             }
         })
         .build(k);
-    let close = |s: &mut Desk| {
+    let close = |s: &mut Comet| {
         if let Some(d) = s.commands_card.draft.as_mut() {
             d.importing = false;
         }
@@ -407,7 +407,7 @@ fn import_menu(s: &Desk, project: &str, open: bool, k: &Kit, layer: &mut Vec<El>
                 menu = menu.group_label(source.name.clone());
                 if source.commands.len() > 1 {
                     let all = source.clone();
-                    menu = menu.item(MenuItem::new("Import all as a group").on_select(move |s: &mut Desk| {
+                    menu = menu.item(MenuItem::new("Import all as a group").on_select(move |s: &mut Comet| {
                         if let Some(d) = s.commands_card.draft.as_mut() {
                             d.import_all(&all);
                             d.importing = false;
@@ -416,7 +416,7 @@ fn import_menu(s: &Desk, project: &str, open: bool, k: &Kit, layer: &mut Vec<El>
                 }
                 for found in &source.commands {
                     let found = found.clone();
-                    menu = menu.item(MenuItem::new(found.name.clone()).description(found.command.clone()).on_select(move |s: &mut Desk| {
+                    menu = menu.item(MenuItem::new(found.name.clone()).description(found.command.clone()).on_select(move |s: &mut Comet| {
                         if let Some(d) = s.commands_card.draft.as_mut() {
                             d.import(&found);
                             d.importing = false;
@@ -492,7 +492,7 @@ mod tests {
 
     #[test]
     fn a_lone_process_saves_under_the_command_s_name() {
-        let mut s = Desk::default();
+        let mut s = Comet::default();
         s.edit_commands("/code/x", None, &[]);
         let draft = s.commands_card.draft.as_mut().unwrap();
         draft.name = TextEdit::new("Tests");

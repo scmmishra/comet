@@ -1,13 +1,13 @@
-import type { Skill } from "@desk/protocol"
+import type { Skill } from "@comet/protocol"
 import type { CodexSkill } from "./protocol"
 import type { AppServer } from "./server"
 
-/** How Desk groups Codex's skills by where they come from. A plugin's skills group under the plugin. */
+/** How Comet groups Codex's skills by where they come from. A plugin's skills group under the plugin. */
 const SCOPE_GROUPS: Record<CodexSkill["scope"], string> = { repo: "Project", user: "User", system: "Codex", admin: "Admin" }
 /** Groups that lead the list, in this order. Plugins follow, by name, then the rest. */
 const LEADING = ["Project", "User"]
 
-/** The skills Codex offers in a folder. Codex leaves a skill the user turned off out of a turn, so Desk leaves it out too. */
+/** The skills Codex offers in a folder. Codex leaves a skill the user turned off out of a turn, so Comet leaves it out too. */
 export async function readSkills(server: AppServer, dir: string): Promise<Skill[] | null> {
   try {
     const { data } = await server.request<{ data: readonly { readonly skills: readonly CodexSkill[] }[] }>("skills/list", { cwds: [dir] })

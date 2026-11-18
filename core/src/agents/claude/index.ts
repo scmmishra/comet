@@ -14,7 +14,7 @@ const SIGN_IN = "Run `claude` in a terminal to sign in."
 const NO_ANSWER = "Claude Code did not answer. Run `claude` in a terminal to see why."
 
 /**
- * Claude Code, run through the Claude Agent SDK. Desk runs the `claude` installed on this Mac, so it
+ * Claude Code, run through the Claude Agent SDK. Comet runs the `claude` installed on this Mac, so it
  * uses the account, the plan and the settings Claude Code already has.
  */
 export function claudeAgent(host: AgentHost): Agent {

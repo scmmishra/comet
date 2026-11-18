@@ -1,7 +1,7 @@
-import { panelInstanceId, splitContributionId, type PanelParams, type PluginLayout, type UiOp, type UiValue } from "@desk/protocol"
+import { panelInstanceId, splitContributionId, type PanelParams, type PluginLayout, type UiOp, type UiValue } from "@comet/protocol"
 import { basename } from "node:path"
 import { createRoot as solidRoot, createSignal, type Accessor, type JSX, type Setter } from "solid-js"
-import type { Desk, PanelContext, PanelOptions, PluginDefinition, SetupOptions, TabContext, TurnEnd, TurnOutcome, ViewContext } from "./index"
+import type { Comet, PanelContext, PanelOptions, PluginDefinition, SetupOptions, TabContext, TurnEnd, TurnOutcome, ViewContext } from "./index"
 import { callHandler, createRoot, createComponent, dispose, onOps, render, snapshot, type PluginNode } from "./renderer"
 
 export type ViewKind = "sidebar" | "panel" | "card"
@@ -108,10 +108,10 @@ export function startHost(plugin: PluginDefinition) {
       names.add(name)
       into.set(name, options)
     }
-  const desk: Desk = {
+  const comet: Comet = {
     env: process.env,
     sidebar: register("sidebar", sidebars),
-    panel: register("panel", panels) as Desk["panel"],
+    panel: register("panel", panels) as Comet["panel"],
     card: register("card", cards),
     // A setup may name the views of a plugin that is off in a project, and those are left out. A name
     // with no plugin can never match, so it is refused here, where the plugin's author sees why.
@@ -128,7 +128,7 @@ export function startHost(plugin: PluginDefinition) {
     toast: (message) => post({ type: "toast", message }),
   }
   try {
-    solidRoot(() => plugin.setup(desk))
+    solidRoot(() => plugin.setup(comet))
   } catch (error) {
     post({ type: "failed", message: messageOf(error) })
     return
@@ -154,7 +154,7 @@ export function startHost(plugin: PluginDefinition) {
     open: (panel, params) => post({ type: "open", tabId, panel, ...(params ? { params } : {}) }),
     isOpen: (panel, params) => tabOf(tabId).open().has(panelInstanceId(panel, params)),
     openThread: (thread) => post({ type: "thread", tabId, ...thread }),
-    toast: desk.toast,
+    toast: comet.toast,
   })
   const undraw = (tab: Tab, key: string) => {
     const drawn = tab.drawn.get(key)

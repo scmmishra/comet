@@ -1,6 +1,6 @@
-import type { ThreadItem, ThreadRow } from "@desk/protocol"
+import type { ThreadItem, ThreadRow } from "@comet/protocol"
 import { expect, test } from "bun:test"
-import type { StepKind } from "@desk/protocol"
+import type { StepKind } from "@comet/protocol"
 import { thought as thoughtStep, tool as toolStep } from "./agents/steps"
 import { ThreadRows, threadRows } from "./thread-rows"
 

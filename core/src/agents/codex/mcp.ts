@@ -1,4 +1,4 @@
-import type { McpServer } from "@desk/protocol"
+import type { McpServer } from "@comet/protocol"
 import type { AgentMcp } from "../agent"
 import type { CodexConfigLayer, CodexConfigRead, CodexMcpConfig, CodexMcpStatus } from "./protocol"
 import type { AppServer } from "./server"
@@ -32,7 +32,7 @@ export function codexMcp(server: AppServer): AgentMcp {
     /** Writes the choice into the user's config, where Codex keeps it, and reloads the servers. */
     async toggle(dir, name, enabled, publish) {
       const entry = (await readConfig(server, dir)).find((found) => found.name === name)
-      if (!entry?.toggleable) throw new Error(`Desk can turn ${name} on or off only when ~/.codex/config.toml configures it.`)
+      if (!entry?.toggleable) throw new Error(`Comet can turn ${name} on or off only when ~/.codex/config.toml configures it.`)
       await server.request("config/value/write", { keyPath: `mcp_servers.${name}.enabled`, value: enabled, mergeStrategy: "replace" })
       await server.request("config/mcpServer/reload")
       await read(dir, publish)
@@ -75,7 +75,7 @@ export function merged(configured: readonly Configured[], statuses: ReadonlyMap<
   return [...configured.map((entry) => described(entry, statuses.get(entry.name), true)), ...added]
 }
 
-/** A server as Desk shows it. Before Codex reports, an enabled server is pending. */
+/** A server as Comet shows it. Before Codex reports, an enabled server is pending. */
 function described(entry: Configured, status: CodexMcpStatus | undefined, reported: boolean): McpServer {
   const { url, command, args } = entry.config
   const target = url ?? (command ? [command, ...(args ?? [])].join(" ") : undefined)

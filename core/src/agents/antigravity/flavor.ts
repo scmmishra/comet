@@ -10,15 +10,15 @@ import { signInLink } from "./sign-in-link"
 
 /** What to do when Antigravity is not installed, as the app shows it after its own "Antigravity is not installed". */
 export const INSTALL_PROBLEM = "Install it to use the models of your Google account."
-/** What to do when only the ACP server an earlier Desk installed is there. Its sign-in carries over to the CLI. */
-export const SERVER_PROBLEM = "Desk now runs Google's Antigravity CLI, not the server it installed before. Install the CLI to go on. You stay signed in."
+/** What to do when only the ACP server an earlier Comet installed is there. Its sign-in carries over to the CLI. */
+export const SERVER_PROBLEM = "Comet now runs Google's Antigravity CLI, not the server it installed before. Install the CLI to go on. You stay signed in."
 /** What to do when Antigravity is not signed in, as the app shows it after its own "Antigravity is not signed in". */
 export const SIGN_IN_PROBLEM = "Sign in with your Google account to use its models."
 /** What a turn says when Antigravity needs a sign-in. */
 const SIGN_IN_TO_SEND = "Sign in to Antigravity in Settings, then send again."
 
-/** How Desk names itself to Antigravity. The core does not know Desk's version, so it gives its own. */
-const CLIENT_INFO = { name: "desk", version: coreVersion }
+/** How Comet names itself to Antigravity. The core does not know Comet's version, so it gives its own. */
+const CLIENT_INFO = { name: "comet", version: coreVersion }
 
 /** The method that signs in with a personal Google account, so its Google AI plan is used. */
 const PERSONAL_GOOGLE_AUTH = "oauth-personal"
@@ -33,7 +33,7 @@ export function launchAntigravity(dir: string): Process {
   return launch(runtime, dir)
 }
 
-/** How Desk runs Antigravity over ACP. */
+/** How Comet runs Antigravity over ACP. */
 export function antigravityFlavor(host: AgentHost, models: ModelCache): AcpFlavor {
   return {
     launch: launchAntigravity,

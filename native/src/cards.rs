@@ -5,7 +5,7 @@
 use crate::format;
 use crate::icons;
 use crate::protocol::{ClientMessage, Space, Subagent, TabInfo, ThreadItem};
-use crate::shell::Desk;
+use crate::shell::Comet;
 use crate::theme;
 use rune::{El, ScrollSpec, col, el, icon, row, text};
 use rune_kit::{Badge, BadgeVariant, IconButton, IconButtonVariant, Kit, Placement, popover};
@@ -14,11 +14,11 @@ use rune_theme_opencode::icons as ic;
 /// The rail's width, `w-[264px]`, and its distance from the session's edge.
 pub const RAIL_WIDTH: f32 = 264.0;
 const RAIL_EDGE: f32 = 8.0;
-/// The cards' 264 points, their 8 from the edge, and a 16 point gap to the lane, Desk's `--rail-space`.
+/// The cards' 264 points, their 8 from the edge, and a 16 point gap to the lane, Comet's `--rail-space`.
 const RAIL_SPACE: f32 = 288.0;
-/// From this session width, the rail shows beside the lane, Desk's `@container session (min-width: 904px)`.
+/// From this session width, the rail shows beside the lane, Comet's `@container session (min-width: 904px)`.
 const RAIL_FROM: f32 = 904.0;
-/// The lane keeps this far from the session's sides, Desk's `--lane-edge`.
+/// The lane keeps this far from the session's sides, Comet's `--lane-edge`.
 const EDGE: f32 = 16.0;
 /// A subagent's detail, `w-[min(440px,…)]`.
 const DETAIL_WIDTH: f32 = 440.0;
@@ -31,7 +31,7 @@ pub struct Lane {
 }
 
 impl Lane {
-    /// The lane for a session `width` wide, as `.desk-lane` places it: centred, unless the rail shows, when it
+    /// The lane for a session `width` wide, as `.comet-lane` places it: centred, unless the rail shows, when it
     /// moves left as far as it must to keep clear of the cards.
     pub fn for_session(width: f32, column: f32) -> Lane {
         if width >= RAIL_FROM {
@@ -56,7 +56,7 @@ pub struct Cards {
 }
 
 /// The rail of cards for a tab, pinned to the session's top right.
-pub fn rail(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
+pub fn rail(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let subagents = subagents_card(s, tab, k, layer);
     let space = s.projects.get(&tab.project).and_then(|p| p.space.as_ref()).map(|space| space_card(space, &tab.id, k));
     col()
@@ -76,9 +76,9 @@ pub fn rail(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
 /// A project's cards folded into a chip in the session header, for when the session is too narrow for the
 /// rail. A click on the chip opens the project's cards and the plugin cards, and a click outside them or Escape closes
 /// them. They do not open on hover: the pointer lost them crossing the gap between the chip and the cards.
-/// Like Desk's other popovers, the cards are a modal. Rune lights a `.hover()` under the pointer even beneath an
+/// Like Comet's other popovers, the cards are a modal. Rune lights a `.hover()` under the pointer even beneath an
 /// overlay, unless a modal makes it inert.
-pub fn space_chip(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
+pub fn space_chip(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let space = s.projects.get(&tab.project).and_then(|p| p.space.as_ref());
     let words = |w: String, color| text(w).font(crate::theme::text(12.0)).color(color);
     let chip = row()
@@ -92,7 +92,7 @@ pub fn space_chip(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
         .role("button")
         .label("Project cards")
         .expanded(s.cards.chip_open)
-        .on_press(|s: &mut Desk| s.cards.chip_open = !s.cards.chip_open);
+        .on_press(|s: &mut Comet| s.cards.chip_open = !s.cards.chip_open);
     let chip = match space {
         Some(space) => chip.child(icon(&ic::BRANCH, icons::SIZE).color(k.c.text_muted)).child(words(space.branch.clone(), k.c.text_base).truncate().max_w(160.0)).child(changes(space, k)),
         None => chip.child(words("Commands".into(), k.c.text_base)),
@@ -107,7 +107,7 @@ pub fn space_chip(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .children(space.map(|space| space_card(space, &tab.id, k)))
             .children(crate::commands_card::card(s, &tab.project, k, layer))
             .children(plugin_cards(s, tab, k))
-            .modal(true, |s: &mut Desk| s.cards.chip_open = false);
+            .modal(true, |s: &mut Comet| s.cards.chip_open = false);
         layer.push(popover::anchored(k, cards, "space-chip", Placement::BottomEnd, 4.0));
     }
     chip
@@ -127,7 +127,7 @@ fn changes(space: &Space, k: &Kit) -> El {
 }
 
 /// Plugin cards, after the project's own. A card that draws nothing is left out.
-fn plugin_cards(s: &Desk, tab: &TabInfo, k: &Kit) -> Vec<El> {
+fn plugin_cards(s: &Comet, tab: &TabInfo, k: &Kit) -> Vec<El> {
     let Some(layout) = s.plugins.layouts.get(&tab.id) else { return Vec::new() };
     layout
         .cards
@@ -176,7 +176,7 @@ fn space_card(space: &Space, tab: &str, k: &Kit) -> El {
     let place = crate::worktrees::space_line(space, tab, k).unwrap_or_else(|| line(k, &ic::FOLDER, format::short_path(&space.root), None));
     let tab = tab.to_owned();
     // The card counts uncommitted work, so it opens Review on the same changes.
-    let changes_line = line(k, &ic::REVIEW, "Changes".into(), Some(changes)).hover(k.c.bg_base).role("button").on_press(move |s: &mut Desk| s.open_review(&tab, "git"));
+    let changes_line = line(k, &ic::REVIEW, "Changes".into(), Some(changes)).hover(k.c.bg_base).role("button").on_press(move |s: &mut Comet| s.open_review(&tab, "git"));
     let local = col().w_full().padding(6.0).child(place).child(line(k, &ic::BRANCH, space.branch.clone(), upstream)).child(changes_line);
     let pr = space.pr.as_ref().map(|pr| {
         let (state, accent) = match (pr.state.as_str(), pr.draft) {
@@ -195,7 +195,7 @@ fn space_card(space: &Space, tab: &str, k: &Kit) -> El {
             .radius(7.0)
             .hover(k.c.bg_base)
             .role("link")
-            .on_press_tx(move |s: &mut Desk, tx| {
+            .on_press_tx(move |s: &mut Comet, tx| {
                 if let Err(e) = tx.open_url(&url) {
                     s.toasts.show(e.to_string(), true);
                 }
@@ -250,7 +250,7 @@ fn status_mark(subagent: &Subagent, thread_agent: &str, k: &Kit) -> El {
 
 /// The subagents the agent started, at the top of the stack. The card shows while one runs, or while the turn
 /// that started them runs. A subagent opens beside the card with what it has done so far.
-fn subagents_card(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
+fn subagents_card(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
     let thread = s.threads.get(&tab.id)?;
     let mut list: Vec<&Subagent> = thread.subagents.iter().collect();
     list.sort_by(|a, b| a.started_at.total_cmp(&b.started_at));
@@ -265,7 +265,7 @@ fn subagents_card(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Opti
         let id = subagent.id.clone();
         let key = format!("subagent-{}", subagent.id);
         if open {
-            let detail = crate::ui::popover(k, subagent_detail(s, subagent, &tab.agent, now, k)).modal(true, |s: &mut Desk| s.cards.open_subagent = None);
+            let detail = crate::ui::popover(k, subagent_detail(s, subagent, &tab.agent, now, k)).modal(true, |s: &mut Comet| s.cards.open_subagent = None);
             layer.push(popover::anchored(k, detail, &key, Placement::Left, 12.0));
         }
         row()
@@ -280,7 +280,7 @@ fn subagents_card(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Opti
             .hover(k.c.bg_base)
             .role("button")
             .expanded(open)
-            .on_press(move |s: &mut Desk| s.cards.open_subagent = if s.cards.open_subagent.as_deref() == Some(id.as_str()) { None } else { Some(id.clone()) })
+            .on_press(move |s: &mut Comet| s.cards.open_subagent = if s.cards.open_subagent.as_deref() == Some(id.as_str()) { None } else { Some(id.clone()) })
             .child(status_mark(subagent, &tab.agent, k))
             .child(text(subagent.description.clone()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate().grow(1.0))
             .child(text(elapsed(subagent, now)).font(crate::theme::text(12.0)).color(k.c.text_faint))
@@ -292,7 +292,7 @@ fn subagents_card(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Opti
 /// The commands the agent left running in the background, after T3 Code: what each runs, for how long, and a
 /// Stop for each. Once the turn has ended, the agent picks up again when one finishes, and the card says so.
 /// Subagents have their own card, so they stay out of this one.
-fn background_card(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
+fn background_card(s: &Comet, tab: &str, k: &Kit) -> Option<El> {
     let thread = s.threads.get(tab)?;
     if thread.background.is_empty() {
         return None;
@@ -304,7 +304,7 @@ fn background_card(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
             .variant(IconButtonVariant::GhostMuted)
             .label("Stop command")
             .help("Stop")
-            .on_press(move |s: &mut Desk| s.core.send(&ClientMessage::TasksStop { tab_id: tab.clone(), ids: vec![id.clone()] }))
+            .on_press(move |s: &mut Comet| s.core.send(&ClientMessage::TasksStop { tab_id: tab.clone(), ids: vec![id.clone()] }))
             .build(k);
         row()
             .key(format!("background-{}", task.id))
@@ -333,7 +333,7 @@ fn background_card(s: &Desk, tab: &str, k: &Kit) -> Option<El> {
 }
 
 /// What a subagent was asked, how it stands, and its steps so far.
-fn subagent_detail(s: &Desk, subagent: &Subagent, thread_agent: &str, now: f64, k: &Kit) -> El {
+fn subagent_detail(s: &Comet, subagent: &Subagent, thread_agent: &str, now: f64, k: &Kit) -> El {
     // Work handed to another agent names that agent and its model, since neither is the thread's.
     let runs_on = subagent.agent.as_deref().map(|agent| [Some(s.agent_name(agent).to_owned()), subagent.model.clone()].into_iter().flatten().collect::<Vec<_>>().join(" "));
     let facts: Vec<String> = [runs_on, subagent.kind.clone(), Some(status(subagent).0.to_owned()), Some(elapsed(subagent, now)), (subagent.tool_uses > 0).then(|| format::plural(subagent.tool_uses as usize, "tool use"))].into_iter().flatten().collect();
@@ -370,7 +370,7 @@ mod tests {
 
     #[test]
     fn the_background_card_shows_only_while_commands_run() {
-        let mut s = Desk::default();
+        let mut s = Comet::default();
         let k = theme::kit(true);
         let tab = serde_json::json!({ "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "New session", "project": "/code/web", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] });
         s.receive(crate::core::Event::Message(serde_json::from_value(tab).unwrap())).unwrap();

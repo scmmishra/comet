@@ -1,5 +1,5 @@
 import { afterAll } from "bun:test"
-import type { AgentFeature, AgentId, ThreadEvent } from "@desk/protocol"
+import type { AgentFeature, AgentId, ThreadEvent } from "@comet/protocol"
 import type { Agent, AgentHost, AgentSession, Rewound, SessionOptions } from "./agents/agent"
 import type { Transport } from "./agents/json-rpc"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
@@ -14,14 +14,14 @@ export async function until(check: () => boolean, ms = 5000) {
 
 /** A temporary folder, removed after the file's tests. */
 export function tempFolder(prefix: string) {
-  const dir = mkdtempSync(join(tmpdir(), `desk-${prefix}-`))
+  const dir = mkdtempSync(join(tmpdir(), `comet-${prefix}-`))
   afterAll(() => rmSync(dir, { recursive: true, force: true }))
   return dir
 }
 
-/** Points Desk's data folder at a temporary one for the file's tests, so they never touch ~/.desk. */
+/** Points Comet's data folder at a temporary one for the file's tests, so they never touch ~/.comet. */
 export function useTempHome() {
-  process.env.DESK_HOME = tempFolder("home")
+  process.env.COMET_HOME = tempFolder("home")
 }
 
 /** A Git repo whose first commit holds `files`, and a way to run git in it. */
@@ -29,8 +29,8 @@ export function gitRepo(files: Record<string, string>) {
   const dir = tempFolder("repo")
   const git = (...args: string[]) => new TextDecoder().decode(Bun.spawnSync(["git", ...args], { cwd: dir, stdout: "pipe", stderr: "ignore" }).stdout).trim()
   git("init", "-q", "-b", "main")
-  git("config", "user.email", "desk@example.com")
-  git("config", "user.name", "Desk")
+  git("config", "user.email", "comet@example.com")
+  git("config", "user.name", "Comet")
   const write = (path: string, text: string) => {
     mkdirSync(dirname(join(dir, path)), { recursive: true })
     writeFileSync(join(dir, path), text)

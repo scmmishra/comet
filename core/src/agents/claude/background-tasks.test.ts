@@ -1,4 +1,4 @@
-import type { ThreadEvent } from "@desk/protocol"
+import type { ThreadEvent } from "@comet/protocol"
 import { expect, test } from "bun:test"
 import { BackgroundTasks } from "./background-tasks"
 

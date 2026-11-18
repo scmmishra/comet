@@ -41,7 +41,7 @@ mod tests {
 
     #[test]
     fn refuses_other_files_and_reads_an_image() {
-        let dir = std::env::temp_dir().join(format!("desk-attach-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("comet-attach-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let (text, png) = (dir.join("notes.txt"), dir.join("shot.PNG"));
         std::fs::write(&text, "hi").unwrap();

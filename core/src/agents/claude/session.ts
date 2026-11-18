@@ -1,5 +1,5 @@
 import { query, type CanUseTool, type PermissionResult, type Query, type SDKMessage, type SDKRateLimitInfo, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
-import type { ImageAttachment, PermissionAnswer, RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
+import type { ImageAttachment, PermissionAnswer, RunSettings, ThreadEvent, ThreadItem } from "@comet/protocol"
 import { SERVER_NAME } from "../../delegate/tools"
 import type { AgentHost, AgentSession, Emit, SessionOptions, ToolServer } from "../agent"
 import { Requests, type OpenRequest } from "../requests"
@@ -12,7 +12,7 @@ import { BackgroundTasks } from "./background-tasks"
 import { claudeCodePath } from "./executable"
 import { Subagents } from "./subagents"
 import { ASK_USER_QUESTION, permissionItem, permissionResult, questionItem, questionResult } from "./requests"
-import { DESK_TOOL, toolStep } from "./steps"
+import { COMET_TOOL, toolStep } from "./steps"
 import { ThreadMapper } from "./thread"
 
 /** A queue the SDK reads user messages from. A session stays open between turns while it waits. */
@@ -195,7 +195,7 @@ export class ClaudeSession implements AgentSession {
    */
   async restoreFiles(messageId: string) {
     if (!this.started) await this.start()
-    if (!this.query) throw new Error("Claude Code did not start, so Desk could not restore the files.")
+    if (!this.query) throw new Error("Claude Code did not start, so Comet could not restore the files.")
     const result = await this.query.rewindFiles(messageId)
     if (!result.canRewind) throw new Error(result.error ?? "Claude Code kept no copies of the files from that message.")
   }
@@ -235,11 +235,11 @@ export class ClaudeSession implements AgentSession {
         pathToClaudeCodeExecutable: executable,
         cwd: this.dir,
         includePartialMessages: true,
-        // A subagent's text and thinking reach Desk too, with a one-line status, for its card.
+        // A subagent's text and thinking reach Comet too, with a one-line status, for its card.
         forwardSubagentText: true,
         agentProgressSummaries: true,
         systemPrompt: { type: "preset", preset: "claude_code", ...(this.options.tools ? { append: this.options.tools.instructions } : {}) },
-        ...(this.options.tools ? { mcpServers: toolServers(this.options.tools), allowedTools: [`${DESK_TOOL}*`] } : {}),
+        ...(this.options.tools ? { mcpServers: toolServers(this.options.tools), allowedTools: [`${COMET_TOOL}*`] } : {}),
         canUseTool: this.askPermission,
         model: sdkModel(this.settings.model),
         ...(this.settings.effort ? { effort: sdkEffort(this.settings.effort) } : {}),
@@ -257,7 +257,7 @@ export class ClaudeSession implements AgentSession {
         supportedDialogKinds: ["resume_return"],
         onUserDialog: async (request) =>
           request.dialogKind === "resume_return" ? { behavior: "completed", result: this.options.compactIdle() ? "compact" : "continue" } : { behavior: "cancelled" },
-        // Desk cannot show an MCP elicitation, so the user made no choice. MCP keeps "decline" for an explicit no.
+        // Comet cannot show an MCP elicitation, so the user made no choice. MCP keeps "decline" for an explicit no.
         onElicitation: async () => ({ action: "cancel" }),
       },
     })
@@ -487,7 +487,7 @@ function echoedUuids(message: SDKMessage): readonly string[] {
   return typeof uuid === "string" ? [uuid] : []
 }
 
-/** Desk's tools as an MCP server Claude Code connects to over HTTP. */
+/** Comet's tools as an MCP server Claude Code connects to over HTTP. */
 const toolServers = (tools: ToolServer) => ({ [SERVER_NAME]: { type: "http" as const, url: tools.url, headers: { Authorization: tools.authorization } } })
 
 /** A message's content for Claude. Images go before the text, as the API recommends. */

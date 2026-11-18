@@ -9,7 +9,7 @@ import { BROWSER_COMMAND } from "./sign-in-link"
 
 /**
  * Variables that would sign the agent in some other way than the user's Google account, as T3 Code
- * removes them. BROWSER is replaced by Desk's helper.
+ * removes them. BROWSER is replaced by Comet's helper.
  */
 const REMOVED = [
   "GEMINI_API_KEY",
@@ -23,18 +23,18 @@ const REMOVED = [
   "CLOUDSDK_CORE_PROJECT",
 ]
 
-/** The `agy` CLI Desk runs, with its version when Desk installed it. */
+/** The `agy` CLI Comet runs, with its version when Comet installed it. */
 export interface Runtime {
   readonly command: string
   readonly version?: string
 }
 
 /**
- * The `agy` CLI Desk runs: DESK_ANTIGRAVITY when set, by path or by name on the PATH, else the newest
- * one Desk installed. It is not the Antigravity app, which serves no ACP.
+ * The `agy` CLI Comet runs: COMET_ANTIGRAVITY when set, by path or by name on the PATH, else the newest
+ * one Comet installed. It is not the Antigravity app, which serves no ACP.
  */
 export function resolveRuntime(): Runtime | undefined {
-  const override = process.env.DESK_ANTIGRAVITY
+  const override = process.env.COMET_ANTIGRAVITY
   if (override) {
     const path = override.includes("/") ? override : which(override)
     return path && executable(path) ? { command: path } : undefined
@@ -43,7 +43,7 @@ export function resolveRuntime(): Runtime | undefined {
   return version ? { command: join(runtimeFolder(version), EXECUTABLE), version } : undefined
 }
 
-/** Whether Desk once installed Google's ACP server, which it no longer runs, and has no CLI in its place. */
+/** Whether Comet once installed Google's ACP server, which it no longer runs, and has no CLI in its place. */
 export const onlyServerInstalled = () => !resolveRuntime() && installedVersions().some((installed) => isNewer(MIN_VERSION, installed))
 
 function executable(path: string) {
@@ -55,7 +55,7 @@ function executable(path: string) {
   }
 }
 
-/** Starts the CLI's ACP server in a folder, signed in through Desk's own Gemini folder. If it ends, the error says how and what it printed on stderr. */
+/** Starts the CLI's ACP server in a folder, signed in through Comet's own Gemini folder. If it ends, the error says how and what it printed on stderr. */
 export function launch(runtime: Runtime, dir: string): Process {
   mkdirSync(geminiHome(), { recursive: true, mode: 0o700 })
   return explainEnd(run([runtime.command, "acp", "--gemini-dir", geminiHome(), "--app-data-dir", APP_DATA], { cwd: dir, env: environment() }), "Antigravity")

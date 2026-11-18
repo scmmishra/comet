@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { DEFAULT_MODEL, PERMISSION_MODES } from "@desk/protocol"
+import { DEFAULT_MODEL, PERMISSION_MODES } from "@comet/protocol"
 import { modelName, modelOptions, turnModel } from "./models"
 import { MODELS } from "./test-app-server"
 

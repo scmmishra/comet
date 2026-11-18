@@ -1,10 +1,10 @@
-import type { PermissionAnswer, PermissionKind, ThreadItem } from "@desk/protocol"
+import type { PermissionAnswer, PermissionKind, ThreadItem } from "@comet/protocol"
 import type { PermissionOptionKind, PermissionRequest, PermissionResponse, ToolKind } from "./protocol"
 import type { ToolReader } from "./tools"
 
 /**
- * What Desk shows for an ACP agent's permission requests, and how the user's answers go back. A request
- * offers options of four kinds, and Desk's answers pick one of them. Some agents also ask multiple-choice
+ * What Comet shows for an ACP agent's permission requests, and how the user's answers go back. A request
+ * offers options of four kinds, and Comet's answers pick one of them. Some agents also ask multiple-choice
  * questions through the same request, which show as a `question` item.
  */
 
@@ -24,7 +24,7 @@ const KINDS: Partial<Record<ToolKind, PermissionKind>> = {
   search: "file-read",
 }
 
-/** The option kinds each of Desk's answers takes, in the order it prefers them. */
+/** The option kinds each of Comet's answers takes, in the order it prefers them. */
 const ANSWER_OPTIONS: Record<Exclude<PermissionAnswer, "cancel">, readonly PermissionOptionKind[]> = {
   allow: ["allow_once"],
   "allow-session": ["allow_always", "allow_once"],

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { PlanUsage } from "@desk/protocol"
+import type { PlanUsage } from "@comet/protocol"
 import { applyRateLimit, usageFromResponse } from "./usage"
 
 test("reads the session and weekly windows from the usage response", () => {

@@ -1,4 +1,4 @@
-import type { CoreMessage } from "@desk/protocol"
+import type { CoreMessage } from "@comet/protocol"
 import { Layouts, type LayoutStore } from "./layouts"
 import { Plugins, type KeyedThread } from "./plugins"
 

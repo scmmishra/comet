@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { CoreMessage, ThreadItem } from "@desk/protocol"
+import type { CoreMessage, ThreadItem } from "@comet/protocol"
 import { Clients } from "./clients"
 
 /** A client that keeps what it was sent. */

@@ -1,16 +1,16 @@
-import { applyOps, type CoreMessage, type PluginLayout, type TabInfo, type TabLayout, type UiNode } from "@desk/protocol"
+import { applyOps, type CoreMessage, type PluginLayout, type TabInfo, type TabLayout, type UiNode } from "@comet/protocol"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tempFolder } from "../test-support"
 import { startPlugins } from "."
 
 export function installPlugin(name: string, source: string) {
-  mkdirSync(join(process.env.DESK_HOME!, "plugins", name), { recursive: true })
-  writeFileSync(join(process.env.DESK_HOME!, "plugins", name, "index.tsx"), source)
+  mkdirSync(join(process.env.COMET_HOME!, "plugins", name), { recursive: true })
+  writeFileSync(join(process.env.COMET_HOME!, "plugins", name, "index.tsx"), source)
 }
 
 export function turnOn(config: { everywhere?: string[]; projects?: Record<string, string[]> }) {
-  writeFileSync(join(process.env.DESK_HOME!, "plugins.json"), JSON.stringify(config))
+  writeFileSync(join(process.env.COMET_HOME!, "plugins.json"), JSON.stringify(config))
 }
 
 /**

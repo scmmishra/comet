@@ -1,10 +1,10 @@
 //! Plugin views. Plugin code runs in
 //! the core and sends its UI as operations on a tree of nodes. The app keeps each plugin's nodes and
-//! draws each node with Desk's own component for its primitive.
+//! draws each node with Comet's own component for its primitive.
 
 use crate::format;
 use crate::protocol::{ClientMessage, DrawnView, TabLayout, UiOp};
-use crate::shell::Desk;
+use crate::shell::Comet;
 use crate::theme;
 use crate::icons;
 use rune::{El, ScrollSpec, TextEdit, col, el, icon, row, text, text_input};
@@ -126,7 +126,7 @@ fn prop<'a>(props: &'a Map<String, Value>, name: &str) -> Option<&'a str> {
     props.get(name)?.as_str()
 }
 
-impl Desk {
+impl Comet {
     /// Asks the core for the active tab's layout, once per tab.
     pub fn load_layout(&mut self) {
         let Some(tab) = self.workspace.active.clone() else { return };
@@ -196,7 +196,7 @@ impl Desk {
     }
 }
 
-/// Where a plugin's view sits. A card's rows take the spacing of Desk's own cards, such as Subagents, so
+/// Where a plugin's view sits. A card's rows take the spacing of Comet's own cards, such as Subagents, so
 /// the stack reads as one. A sidebar's and a panel's take a list's.
 #[derive(Clone, Copy, PartialEq)]
 pub enum Frame {
@@ -205,15 +205,15 @@ pub enum Frame {
 }
 
 /// A view a plugin drew for a tab. Where it sits gives it its frame.
-pub fn view(s: &Desk, view: &DrawnView, project: &str, frame: Frame, k: &Kit) -> El {
+pub fn view(s: &Comet, view: &DrawnView, project: &str, frame: Frame, k: &Kit) -> El {
     node_view(s, &view.plugin, view.root, project, frame, k)
 }
 
-fn children(s: &Desk, plugin: &str, node: &Node, project: &str, frame: Frame, k: &Kit) -> Vec<El> {
+fn children(s: &Comet, plugin: &str, node: &Node, project: &str, frame: Frame, k: &Kit) -> Vec<El> {
     node.children.iter().map(|c| node_view(s, plugin, *c, project, frame, k).key(format!("node-{c}"))).collect()
 }
 
-fn node_view(s: &Desk, plugin: &str, id: u64, project: &str, frame: Frame, k: &Kit) -> El {
+fn node_view(s: &Comet, plugin: &str, id: u64, project: &str, frame: Frame, k: &Kit) -> El {
     let Some(node) = s.plugins.node(plugin, id) else { return el() };
     let props = &node.props;
     let plugin_owned = plugin.to_owned();
@@ -248,7 +248,7 @@ fn node_view(s: &Desk, plugin: &str, id: u64, project: &str, frame: Frame, k: &K
             crate::theme::button(prop(props, "label").unwrap_or(""))
                 .variant(variant)
                 .disabled(props.get("disabled").and_then(Value::as_bool) == Some(true))
-                .on_press(move |s: &mut Desk| s.fire(&plugin_owned, on_click, Vec::new()))
+                .on_press(move |s: &mut Comet| s.fire(&plugin_owned, on_click, Vec::new()))
                 .build(k)
         }
         "textinput" => input_view(s, plugin, id, props, k),
@@ -258,12 +258,12 @@ fn node_view(s: &Desk, plugin: &str, id: u64, project: &str, frame: Frame, k: &K
             .min_h(0.0)
             .scroll(ScrollSpec { stick_bottom: false })
             .child(crate::reply::document(prop(props, "text").unwrap_or("")).style(theme::markdown(k, s.account.text_size())).build(k)),
-        other => text(format!("{other} is not a Desk element.")).font(crate::theme::text(13.0)).color(k.c.text_faint),
+        other => text(format!("{other} is not a Comet element.")).font(crate::theme::text(13.0)).color(k.c.text_faint),
     }
 }
 
 /// One row of a list. It is selectable when it has `onSelect`, and opens its `href` in the browser when it has one.
-fn item_view(s: &Desk, props: &Map<String, Value>, plugin: String, frame: Frame, k: &Kit) -> El {
+fn item_view(s: &Comet, props: &Map<String, Value>, plugin: String, frame: Frame, k: &Kit) -> El {
     let selected = props.get("selected").and_then(Value::as_bool) == Some(true);
     let on_select = handler(props, "onSelect");
     let href = prop(props, "href").map(str::to_owned);
@@ -286,15 +286,15 @@ fn item_view(s: &Desk, props: &Map<String, Value>, plugin: String, frame: Frame,
         };
         crate::ui::tinted_badge(words, fill, ink)
     });
-    // A link says it leaves Desk with an arrow after the title.
+    // A link says it leaves Comet with an arrow after the title.
     let out = href.is_some().then(|| icon(&ic::ARROW_UP_RIGHT, icons::SIZE).color(k.c.text_faint));
     let head = row().w_full().gap(8.0).items_center().child(text(prop(props, "title").unwrap_or("").to_owned()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate().grow(1.0)).children(badge).children(out);
     // The title and its badge on one line, the quieter lines under it, no gap
-    // between, rounded to 0.5rem of Desk's 13 pixel root.
+    // between, rounded to 0.5rem of Comet's 13 pixel root.
     let lines = col().grow(1.0).min_w(0.0).child(head).children(line("subtitle")).children(line("detail"));
-    // The icon sits on the title's line, 20 points tall at Desk's 13 point text.
+    // The icon sits on the title's line, 20 points tall at Comet's 13 point text.
     let lead = lead.map(|lead| el().h(20.0).center().child(lead));
-    // A card's row is one of its lines, as in the Subagents card. A list's row is 0.5rem of Desk's 13 pixel root.
+    // A card's row is one of its lines, as in the Subagents card. A list's row is 0.5rem of Comet's 13 pixel root.
     let (gap, px, py, radius, hover) = match frame {
         Frame::Card => (10.0, 8.0, 7.0, 7.0, k.c.bg_base),
         Frame::Pane => (8.0, 10.0, 8.0, 6.5, k.c.hover),
@@ -316,13 +316,13 @@ fn item_view(s: &Desk, props: &Map<String, Value>, plugin: String, frame: Frame,
         .children(lead)
         .child(lines);
     match (href, on_select) {
-        (Some(url), _) => item.hover(hover).role("link").on_press_tx(move |s: &mut Desk, tx| {
+        (Some(url), _) => item.hover(hover).role("link").on_press_tx(move |s: &mut Comet, tx| {
             if let Err(e) = tx.open_url(&url) {
                 s.toasts.show(e.to_string(), true);
             }
             s.fire(&plugin, on_select, Vec::new());
         }),
-        (None, Some(_)) => item.hover(hover).role("button").on_press(move |s: &mut Desk| s.fire(&plugin, on_select, Vec::new())),
+        (None, Some(_)) => item.hover(hover).role("button").on_press(move |s: &mut Comet| s.fire(&plugin, on_select, Vec::new())),
         (None, None) => item,
     }
 }
@@ -333,7 +333,7 @@ fn catalog_icon(name: &str) -> Option<&'static rune::Icon> {
 }
 
 /// A plugin's text field. What is typed stays here, so typing never waits on the plugin.
-fn input_view(s: &Desk, plugin: &str, id: u64, props: &Map<String, Value>, k: &Kit) -> El {
+fn input_view(s: &Comet, plugin: &str, id: u64, props: &Map<String, Value>, k: &Kit) -> El {
     let key = (plugin.to_owned(), id);
     let edit = s.plugins.inputs.get(&key).map(|(e, _)| e.clone()).unwrap_or_else(|| TextEdit::new(prop(props, "value").unwrap_or("")));
     let multiline = props.get("multiline").and_then(Value::as_bool) == Some(true);
@@ -345,8 +345,8 @@ fn input_view(s: &Desk, plugin: &str, id: u64, props: &Map<String, Value>, k: &K
         .color(k.c.text_base)
         .placeholder(prop(props, "placeholder").unwrap_or("").to_owned(), k.c.text_faint)
         .caret(k.c.text_base, k.selection())
-        .on_edit(move |s: &mut Desk| &mut s.plugins.inputs.entry(edit_key.clone()).or_insert_with(|| (TextEdit::new(initial.clone()), initial.clone())).0)
-        .on_submit(move |s: &mut Desk, _| {
+        .on_edit(move |s: &mut Comet| &mut s.plugins.inputs.entry(edit_key.clone()).or_insert_with(|| (TextEdit::new(initial.clone()), initial.clone())).0)
+        .on_submit(move |s: &mut Comet, _| {
             // Enter submits, or ⌘Enter in a multiline field.
             if !multiline || s.cmd_held() {
                 s.sync_plugin_inputs();

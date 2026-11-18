@@ -1,13 +1,13 @@
-import type { Step, StepKind } from "@desk/protocol"
-import { deskToolLabel, SERVER_NAME } from "../../delegate/tools"
+import type { Step, StepKind } from "@comet/protocol"
+import { cometToolLabel, SERVER_NAME } from "../../delegate/tools"
 import { commandLabel, tool, type BareStep } from "../steps"
 import { ASK_USER_QUESTION } from "./requests"
 
 type Tool = Extract<Step, { type: "tool" }>
 type BareTool = Extract<BareStep, { type: "tool" }>
 
-/** How Claude Code names a tool of Desk's own MCP server, such as `mcp__desk__delegate`. */
-export const DESK_TOOL = `mcp__${SERVER_NAME}__`
+/** How Claude Code names a tool of Comet's own MCP server, such as `mcp__comet__delegate`. */
+export const COMET_TOOL = `mcp__${SERVER_NAME}__`
 
 /** What each of Claude Code's tools does, which picks its icon. Others are plain tools. */
 const KIND_BY_TOOL: Record<string, StepKind> = {
@@ -55,14 +55,14 @@ function label(step: BareTool): string {
     case "Agent":
       return `Started an agent: ${target}`
     default: {
-      const desk = deskTool(step.name)
-      return desk ? deskToolLabel(desk, step.summary, !!step.result) : `${step.name} ${target}`.trim()
+      const comet = cometTool(step.name)
+      return comet ? cometToolLabel(comet, step.summary, !!step.result) : `${step.name} ${target}`.trim()
     }
   }
 }
 
-/** The tool of Desk's that a tool name stands for, or undefined for any other tool. */
-export const deskTool = (name: string) => (name.startsWith(DESK_TOOL) ? name.slice(DESK_TOOL.length) : undefined)
+/** The tool of Comet's that a tool name stands for, or undefined for any other tool. */
+export const cometTool = (name: string) => (name.startsWith(COMET_TOOL) ? name.slice(COMET_TOOL.length) : undefined)
 
 /** A call of one of Claude Code's tools as a step, with its kind and label. */
 export const toolStep = (step: BareTool): Tool => tool(step, KIND_BY_TOOL[step.name] ?? "other", label(step))

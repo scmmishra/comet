@@ -113,16 +113,16 @@ export const CORE_MESSAGES = [
   { type: "session.event", tabId: "tab-1", event: { kind: "retry", attempt: 6, delayMs: 0, error: "Waiting for the network" } },
   { type: "thread.branch", tabId: "tab-1", branch: "login" },
   { type: "thread.branch", tabId: "tab-2" },
-  { type: "worktree.created", tabId: "tab-2", project: "/Users/me/.desk/worktrees/web/add-tests" },
+  { type: "worktree.created", tabId: "tab-2", project: "/Users/me/.comet/worktrees/web/add-tests" },
   { type: "worktree.removed", tabId: "tab-2" },
-  { type: "tab.moved", tabId: "tab-1", project: "/Users/me/.desk/worktrees/web/fix-login" },
+  { type: "tab.moved", tabId: "tab-1", project: "/Users/me/.comet/worktrees/web/fix-login" },
   {
     type: "project",
     project: "/Users/me/code/web",
     part: "threads",
     value: [
       { id: "s1", agent: "claude", title: "Fix the login form", branch: "login", updatedAt: 1_700_000_000_000, tabId: "tab-1", project: "/Users/me/code/web" },
-      { id: "s2", agent: "codex", title: "Add tests", updatedAt: 1_699_000_000_000, project: "/Users/me/.desk/worktrees/web/add-tests" },
+      { id: "s2", agent: "codex", title: "Add tests", updatedAt: 1_699_000_000_000, project: "/Users/me/.comet/worktrees/web/add-tests" },
     ],
   },
   {
@@ -131,15 +131,15 @@ export const CORE_MESSAGES = [
     part: "worktrees",
     value: [
       { path: "/Users/me/code/web", branch: "main", main: true },
-      { path: "/Users/me/.desk/worktrees/web/add-tests", branch: "desk/add-tests", main: false },
+      { path: "/Users/me/.comet/worktrees/web/add-tests", branch: "comet/add-tests", main: false },
       { path: "/Users/me/code/web-detached", main: false },
     ],
   },
   {
     type: "project",
-    project: "/Users/me/.desk/worktrees/web/add-tests",
+    project: "/Users/me/.comet/worktrees/web/add-tests",
     part: "space",
-    value: { name: "add-tests", root: "/Users/me/.desk/worktrees/web/add-tests", branch: "desk/add-tests", worktree: { main: "/Users/me/code/web" }, changes: { files: 0, additions: 0, deletions: 0 } },
+    value: { name: "add-tests", root: "/Users/me/.comet/worktrees/web/add-tests", branch: "comet/add-tests", worktree: { main: "/Users/me/code/web" }, changes: { files: 0, additions: 0, deletions: 0 } },
   },
   {
     type: "project",
@@ -197,7 +197,7 @@ export const CORE_MESSAGES = [
   { type: "files.found", project: "/Users/me/code/web", query: "login", paths: ["src/login.ts", "test/login.test.ts"] },
   { type: "queue", tabId: "tab-1", messages: [{ id: "m1", text: "Then add a test" }], held: true },
   { type: "error", message: "The folder does not exist." },
-  { type: "error", message: "The support plugin could not start", detail: "desk.onTurnEnd is not a function." },
+  { type: "error", message: "The support plugin could not start", detail: "comet.onTurnEnd is not a function." },
   { type: "notice", message: "Copied the link." },
   {
     type: "mcp",

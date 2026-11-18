@@ -1,19 +1,19 @@
-import type { IconName, MessageData, PanelParams, Tint, UiPrimitive, UiPrimitives } from "@desk/protocol"
+import type { IconName, MessageData, PanelParams, Tint, UiPrimitive, UiPrimitives } from "@comet/protocol"
 import type { JSX } from "solid-js"
 import { createElement, spread } from "./renderer"
 
 export type { IconName, MessageData, PanelParams, Tint }
 
 /**
- * Desk's plugin API. A plugin is a TSX module in `~/.desk/plugins/<name>/index.tsx` whose default
- * export is `definePlugin(setup)`. Desk runs it in the core, in a worker of its own, and draws its views
- * with Desk's own components. A plugin returns data and handlers, never markup.
+ * Comet's plugin API. A plugin is a TSX module in `~/.comet/plugins/<name>/index.tsx` whose default
+ * export is `definePlugin(setup)`. Comet runs it in the core, in a worker of its own, and draws its views
+ * with Comet's own components. A plugin returns data and handlers, never markup.
  *
- * `setup` runs once, for every tab. It registers what the plugin offers. Each view Desk draws gets a
+ * `setup` runs once, for every tab. It registers what the plugin offers. Each view Comet draws gets a
  * context for its own tab, so state made in `setup` is shared by every tab and state made in a view is not.
  */
 
-/** What a view or a command can ask of Desk, for the tab it runs in. */
+/** What a view or a command can ask of Comet, for the tab it runs in. */
 export interface TabContext {
   /** The folder the tab works in, and its name. */
   readonly project: { readonly path: string; readonly name: string }
@@ -32,7 +32,7 @@ export interface TabContext {
 /** What a view gets: its tab's context, and whether the view is on screen. */
 export interface ViewContext extends TabContext {
   /**
-   * Whether the view is on screen: its tab is the active tab and Desk has focus. A panel must also be the
+   * Whether the view is on screen: its tab is the active tab and Comet has focus. A panel must also be the
    * panel in front, with the view pane open. It updates as that changes, so an effect can start and stop work.
    */
   visible(): boolean
@@ -79,7 +79,7 @@ export interface SetupOptions {
 }
 
 /** What `setup` gets: the calls that register what the plugin offers, each under a name unique in the plugin. */
-export interface Desk {
+export interface Comet {
   /** The core's environment, such as an API key. */
   readonly env: Readonly<Record<string, string | undefined>>
   /** A view for the column beside the thread, such as an inbox. */
@@ -100,14 +100,14 @@ export interface Desk {
 }
 
 export interface PluginDefinition {
-  readonly setup: (desk: Desk) => void
+  readonly setup: (comet: Comet) => void
 }
 
 export function definePlugin(setup: PluginDefinition["setup"]): PluginDefinition {
   return { setup }
 }
 
-/** A primitive: a node of `type` with these props. Desk draws it with its component of that name. */
+/** A primitive: a node of `type` with these props. Comet draws it with its component of that name. */
 function primitive<T extends UiPrimitive, C = {}>(type: T) {
   return (props: UiPrimitives[T] & C): JSX.Element => {
     const node = createElement(type)

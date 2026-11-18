@@ -1,4 +1,4 @@
-import type { ThreadItem } from "@desk/protocol"
+import type { ThreadItem } from "@comet/protocol"
 import type { Emit } from "./agent"
 
 type RequestItem = Extract<ThreadItem, { type: "permission" | "question" }>

@@ -1,11 +1,11 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk"
-import type { BackgroundTask, ThreadEvent } from "@desk/protocol"
+import type { BackgroundTask, ThreadEvent } from "@comet/protocol"
 import { isSubagentTask } from "./subagents"
 
 /**
  * The commands a session runs in the background. Claude Code sends the whole set of live tasks each
  * time it changes, so the set is replaced, never patched. Housekeeping tasks it marks ambient stay out,
- * as it asks. Subagents have their own card, so they stay out too. Each task keeps the time Desk first
+ * as it asks. Subagents have their own card, so they stay out too. Each task keeps the time Comet first
  * saw it, so its timer does not restart. A command's description is the whole command, so the label
  * keeps its first line: the card draws one line per task.
  */

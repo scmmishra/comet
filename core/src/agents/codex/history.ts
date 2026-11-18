@@ -1,4 +1,4 @@
-import type { ThreadItem } from "@desk/protocol"
+import type { ThreadItem } from "@comet/protocol"
 import { resultId } from "../turn-items"
 import { imageAttachment } from "./input"
 import { threadItems } from "./items"
@@ -8,8 +8,8 @@ type UserMessage = Extract<CodexItem, { type: "userMessage" }>
 
 /**
  * Rebuilds a thread from Codex's turns, so a restored tab shows its conversation. A user message keeps
- * the id Desk gave it when it was sent, so live and restored items match. Each turn that has ended
- * closes with a result named after its first message, as Desk names every restored result. A failed
+ * the id Comet gave it when it was sent, so live and restored items match. Each turn that has ended
+ * closes with a result named after its first message, as Comet names every restored result. A failed
  * turn shows its error first.
  */
 export function historyItems(dir: string, turns: readonly CodexTurn[]): ThreadItem[] {
@@ -24,7 +24,7 @@ export function historyItems(dir: string, turns: readonly CodexTurn[]): ThreadIt
   })
 }
 
-/** The id Desk knows a user message by: its own, when Desk sent it, else Codex's. */
+/** The id Comet knows a user message by: its own, when Comet sent it, else Codex's. */
 export const messageId = (message: UserMessage) => message.clientId ?? message.id
 
 /** The end of the turn `message` opened. `stopping` marks a turn the user asked to stop, whatever Codex reports. */

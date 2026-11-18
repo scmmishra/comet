@@ -1,4 +1,4 @@
-import type { ThreadEvent, ThreadItem } from "@desk/protocol"
+import type { ThreadEvent, ThreadItem } from "@comet/protocol"
 import { thought, unfinishedResult } from "../steps"
 import type { SessionUpdate, ToolCall } from "./protocol"
 import { toolItem, type ToolReader } from "./tools"

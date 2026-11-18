@@ -1,5 +1,5 @@
-import type { TurnOutcome } from "@desk/plugin"
-import type { ThreadEvent } from "@desk/protocol"
+import type { TurnOutcome } from "@comet/plugin"
+import type { ThreadEvent } from "@comet/protocol"
 
 /** How a turn ended: for the plugin that owns its thread, and whether the messages that wait should hold. */
 interface TurnEnding {
@@ -18,7 +18,7 @@ const NO_RESULT: TurnOutcome = "error"
 export class TurnWatch {
   private outcome: TurnOutcome = NO_RESULT
   private held = false
-  /** The message the running turn answers, which names what Desk keeps about the turn. */
+  /** The message the running turn answers, which names what Comet keeps about the turn. */
   message?: string
 
   /** Takes the session's next event. Returns how the turn ended when the event ends it. */

@@ -1,5 +1,5 @@
 import type { SlashCommand } from "@anthropic-ai/claude-agent-sdk"
-import type { Skill } from "@desk/protocol"
+import type { Skill } from "@comet/protocol"
 import { probe } from "./probe"
 import { withFiles } from "./skill-files"
 
@@ -21,14 +21,14 @@ export async function readSkills(dir: string): Promise<Skill[] | null> {
   return commands ? withFiles(dir, skillsFrom(commands)) : null
 }
 
-/** Claude Code's commands as Desk lists them, in their groups' order. */
+/** Claude Code's commands as Comet lists them, in their groups' order. */
 export function skillsFrom(commands: readonly SlashCommand[]): Skill[] {
   const skills = commands.map(skill)
   const groups = [...new Set(skills.map((found) => found.group))].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
   return skills.sort((a, b) => groups.indexOf(a.group) - groups.indexOf(b.group))
 }
 
-/** A command as Desk lists it, with the source Claude Code marks in its description moved out of it. */
+/** A command as Comet lists it, with the source Claude Code marks in its description moved out of it. */
 function skill(command: SlashCommand): Skill {
   const hint = command.argumentHint ? { argumentHint: command.argumentHint } : {}
   if (command.builtin) return { name: command.name, description: command.description, ...hint, builtin: true, ownProject: false, group: BUILT_IN }

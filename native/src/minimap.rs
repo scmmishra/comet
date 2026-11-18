@@ -4,7 +4,7 @@
 //! and a click jumps to it. A wide gutter shows the minimap all the time, and a narrow one on hover.
 
 use crate::protocol::ThreadItem;
-use crate::shell::Desk;
+use crate::shell::Comet;
 use crate::threads::Thread;
 use rune::{El, col, el, text};
 use rune_kit::Kit;
@@ -64,7 +64,7 @@ pub struct Minimap {
 }
 
 /// The minimap of `tab`, in a gutter `gutter` wide, over a thread `height` tall.
-pub fn minimap(s: &Desk, tab: &str, thread: &Thread, gutter: f32, height: f32, k: &Kit) -> Option<El> {
+pub fn minimap(s: &Comet, tab: &str, thread: &Thread, gutter: f32, height: f32, k: &Kit) -> Option<El> {
     let marks = marks(&thread.items);
     if marks.len() < MIN_MARKS || gutter < RAIL_LEFT {
         return None;
@@ -111,13 +111,13 @@ pub fn minimap(s: &Desk, tab: &str, thread: &Thread, gutter: f32, height: f32, k
         .h(rail_height)
         .role("button")
         .label("Jump to a message")
-        .on_pointer_move_local(move |s: &mut Desk, p, _| s.minimap.active = Some(mark_at(p.y / rail_height, count)))
-        .on_hover_change(|s: &mut Desk, hovered, _| {
+        .on_pointer_move_local(move |s: &mut Comet, p, _| s.minimap.active = Some(mark_at(p.y / rail_height, count)))
+        .on_hover_change(|s: &mut Comet, hovered, _| {
             if !hovered {
                 s.minimap.active = None;
             }
         })
-        .on_press_tx(move |s: &mut Desk, tx| {
+        .on_press_tx(move |s: &mut Comet, tx| {
             if let Some(i) = s.minimap.active {
                 tx.scroll_into_view_in(format!("thread-{press_tab}"), ids[i].clone());
             }

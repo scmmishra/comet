@@ -156,16 +156,16 @@ test("chains turns: the next turn starts where the last one ended, and counts ed
   expect(paths(await checkpointChanges(dir, start, second))).toEqual(["a.ts", "b.ts", "between.ts"])
 })
 
-test("keeps checkpoints from git gc under this Desk's refs, and lets go of those no thread names", async () => {
+test("keeps checkpoints from git gc under this Comet's refs, and lets go of those no thread names", async () => {
   const { dir, git, write } = gitRepo({ "a.ts": "one\n" })
   const kept = (await capture(dir))!
   write("a.ts", "changed\n")
   const dropped = (await capture(dir))!
-  git("update-ref", `refs/desk/dev/checkpoints/${dropped}`, dropped)
-  expect(git("for-each-ref", "--format=%(refname)", "refs/desk/main/checkpoints/").split("\n").sort()).toEqual([`refs/desk/main/checkpoints/${dropped}`, `refs/desk/main/checkpoints/${kept}`].sort())
+  git("update-ref", `refs/comet/dev/checkpoints/${dropped}`, dropped)
+  expect(git("for-each-ref", "--format=%(refname)", "refs/comet/main/checkpoints/").split("\n").sort()).toEqual([`refs/comet/main/checkpoints/${dropped}`, `refs/comet/main/checkpoints/${kept}`].sort())
 
   await releaseCheckpoints([{ project: dir, commits: [kept] }])
-  expect(git("for-each-ref", "--format=%(refname)", "refs/desk/")).toBe([`refs/desk/dev/checkpoints/${dropped}`, `refs/desk/main/checkpoints/${kept}`].join("\n"))
+  expect(git("for-each-ref", "--format=%(refname)", "refs/comet/")).toBe([`refs/comet/dev/checkpoints/${dropped}`, `refs/comet/main/checkpoints/${kept}`].join("\n"))
   // The user's branches and log are untouched.
   expect(git("branch", "--format=%(refname:short)")).toBe("main")
   expect(git("log", "--format=%s")).toBe("init")
@@ -275,7 +275,7 @@ test("keeps the checkpoints of every project in a repo, whether a folder or a wo
     { project: worktree, commits: [side] },
     { project: tempFolder("not-a-repo"), commits: [] },
   ])
-  const refs = git("for-each-ref", "--format=%(refname:lstrip=-1)", "refs/desk/").split("\n")
+  const refs = git("for-each-ref", "--format=%(refname:lstrip=-1)", "refs/comet/").split("\n")
   expect(refs.sort()).toEqual([app, web, side].sort())
   expect(refs).not.toContain(gone)
 })

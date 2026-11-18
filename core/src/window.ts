@@ -1,5 +1,5 @@
-import type { TurnOutcome } from "@desk/plugin"
-import { followUpFor, type AgentId, type ChangedFile, type CoreMessage, type FileChange, type FollowUp, type ImageAttachment, type PermissionAnswer, type PluginLayout, type QueuedMessage, type ReviewScope, type RunSettings, type TabInfo, type ThreadEvent, type ThreadItem, type ThreadSummary } from "@desk/protocol"
+import type { TurnOutcome } from "@comet/plugin"
+import { followUpFor, type AgentId, type ChangedFile, type CoreMessage, type FileChange, type FollowUp, type ImageAttachment, type PermissionAnswer, type PluginLayout, type QueuedMessage, type ReviewScope, type RunSettings, type TabInfo, type ThreadEvent, type ThreadItem, type ThreadSummary } from "@comet/protocol"
 import { requireFeature, type Agent, type AgentSession } from "./agents/agent"
 import type { Agents } from "./agents/registry"
 import { resultMessage } from "./agents/turn-items"
@@ -42,7 +42,7 @@ interface WindowHooks {
   readonly broadcast: Send
   /** The agents that run the tabs' threads. */
   readonly agents: Pick<Agents, "get" | "all">
-  /** Gives each session Desk's tools, for the work its agent hands another agent. */
+  /** Gives each session Comet's tools, for the work its agent hands another agent. */
   readonly delegations: Pick<Delegations, "open">
   /** A tab closed, so what runs for it can stop. */
   readonly tabClosed: (tabId: string) => void
@@ -61,7 +61,7 @@ interface WindowHooks {
  */
 export class Window {
   private state: WindowState = loadWindowState()
-  /** Each tab's session, once its thread has run a turn in this run of Desk. */
+  /** Each tab's session, once its thread has run a turn in this run of Comet. */
   private sessions = new Map<string, Live>()
   /**
    * Sessions whose turn still runs in a thread a plugin switched the tab away from, by keyed id.
@@ -173,7 +173,7 @@ export class Window {
         this.sessions
           .get(tab.id)
           ?.session.configure(tab)
-          .catch((error) => this.hooks.broadcast({ type: "error", message: "Desk could not change how the thread runs", detail: errorMessage(error) }))
+          .catch((error) => this.hooks.broadcast({ type: "error", message: "Comet could not change how the thread runs", detail: errorMessage(error) }))
     }
     for (const id of before.keys()) {
       if (tabs.some((tab) => tab.id === id)) continue
@@ -214,7 +214,7 @@ export class Window {
   /** Continues a past thread in a tab, on the agent it ran on. The tab may hold a session that never sent a message; the thread replaces it. */
   async resume(tabId: string, agent: AgentId, threadId: string, reply: Send) {
     const tab = this.tab(tabId)
-    // An agent Desk does not run is refused before the tab's own session closes.
+    // An agent Comet does not run is refused before the tab's own session closes.
     this.hooks.agents.get(agent)
     this.closeSession(tabId)
     this.setThread(tabId, { sessionId: threadId, agent })
@@ -294,7 +294,7 @@ export class Window {
     const [next, ...rest] = thread.queue ?? []
     if (!next || thread.queueHeld || this.sessions.get(tabId)?.session.busy) return
     this.setQueue(tabId, rest)
-    this.send(tabId, next.text, next.images).catch((error) => this.hooks.broadcast({ type: "error", message: "Desk could not send a queued message", detail: errorMessage(error) }))
+    this.send(tabId, next.text, next.images).catch((error) => this.hooks.broadcast({ type: "error", message: "Comet could not send a queued message", detail: errorMessage(error) }))
   }
 
   private setQueue(tabId: string, queue: readonly QueuedMessage[], held = this.thread(tabId).queueHeld ?? false) {
@@ -464,7 +464,7 @@ export class Window {
     const { sessionId } = this.thread(tabId)
     if (!to || !sessionId) return false
     if (!isProjectFolder(to)) {
-      this.hooks.broadcast({ type: "error", message: "Desk could not move the thread into the worktree", detail: `${to} is gone.` })
+      this.hooks.broadcast({ type: "error", message: "Comet could not move the thread into the worktree", detail: `${to} is gone.` })
       return false
     }
     const agent = this.agent(this.tab(tabId))
@@ -569,7 +569,7 @@ export class Window {
   /** Starts a terminal in the project of the tab that lists it, or reattaches to it. */
   openTerminal(id: string, cols: number, rows: number) {
     const tab = this.state.tabs.find((found) => found.terminals.some((terminal) => terminal.id === id))
-    if (!tab) throw new Error("Desk could not find the tab this terminal belongs to.")
+    if (!tab) throw new Error("Comet could not find the tab this terminal belongs to.")
     this.terminals.open(id, tab.project, cols, rows)
   }
 
@@ -611,7 +611,7 @@ export class Window {
 
   private tab(tabId: string): TabInfo {
     const tab = this.state.tabs.find((found) => found.id === tabId)
-    if (!tab) throw new Error("Desk could not find the tab.")
+    if (!tab) throw new Error("Comet could not find the tab.")
     return tab
   }
 
@@ -686,7 +686,7 @@ export class Window {
       onSessionId: (sessionId) => saveSession({ sessionId, agent: agent.id }),
       // A lost session is dropped with the rewind that waited on it, so neither comes back after a restart. The thread keeps its agent.
       onSessionLost: () => saveSession({ sessionId: undefined, rewind: undefined }),
-      // The app names the tab and saves it, as after a rename from Desk. A parked thread's tab shows another thread.
+      // The app names the tab and saves it, as after a rename from Comet. A parked thread's tab shows another thread.
       onRenamed: (title) => current() && this.hooks.broadcast({ type: "tab.title", tabId: tab.id, title }),
       ...(agent.movesThreads && !key ? { onMoved: (dir: string) => void (current() && this.askMove(tab.id, dir)) } : {}),
     })
@@ -714,7 +714,7 @@ export class Window {
     if (!tab) return
     // A Git failure leaves the turn with no list of changes, so the user is told why.
     const to = await capture(tab.project).catch((error) => {
-      if (current()) this.hooks.broadcast({ type: "error", message: `Desk could not record what the turn in “${tab.title}” changed`, detail: errorMessage(error) })
+      if (current()) this.hooks.broadcast({ type: "error", message: `Comet could not record what the turn in “${tab.title}” changed`, detail: errorMessage(error) })
       return undefined
     })
     if (!to || !current()) return
@@ -731,7 +731,7 @@ export class Window {
   /** A restored thread, with each turn's saved summary after its result. A thread that cannot be read shows empty, and the user is told. */
   private async history(tab: TabInfo, sessionId: string): Promise<ThreadItem[]> {
     const items = await this.agent(tab).threads.history(tab.project, sessionId).catch((error) => {
-      this.hooks.broadcast({ type: "error", message: `Desk could not read the thread in “${tab.title}”`, detail: errorMessage(error) })
+      this.hooks.broadcast({ type: "error", message: `Comet could not read the thread in “${tab.title}”`, detail: errorMessage(error) })
       return []
     })
     const { turnChanges: saved = {}, rewind } = this.thread(tab.id)

@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL, type Effort, type ModelOption } from "@desk/protocol"
+import { DEFAULT_MODEL, type Effort, type ModelOption } from "@comet/protocol"
 import { existsSync, readFileSync } from "node:fs"
 import { writeJsonFile } from "../../data-files"
 import { choices, modelOption, thoughtOption } from "../acp/config-options"
@@ -21,7 +21,7 @@ export class ModelCache {
   constructor(private readonly path: () => string) {}
 
   /**
-   * Takes what a session reported, and answers the models as Desk lists them. Settings without a model
+   * Takes what a session reported, and answers the models as Comet lists them. Settings without a model
    * change nothing. Only `opened` settings say which model the account runs by default.
    */
   learn(options: readonly ConfigOption[], opened: boolean): ModelOption[] {
@@ -35,7 +35,7 @@ export class ModelCache {
     return this.options()
   }
 
-  /** The models as Desk lists them, with Antigravity's default first. */
+  /** The models as Comet lists them, with Antigravity's default first. */
   options(): ModelOption[] {
     return modelOptions(this.read())
   }
@@ -45,7 +45,7 @@ export class ModelCache {
   }
 }
 
-/** The cached models as Desk lists them. "Default" names the model the account runs by default. */
+/** The cached models as Comet lists them. "Default" names the model the account runs by default. */
 function modelOptions({ current, models, efforts }: CachedModels): ModelOption[] {
   const option = (value: string, label: string, description: string): ModelOption => ({ value, label, description, efforts: efforts[value] ?? [], fast: false, permissionModes: ANTIGRAVITY_MODES })
   const runs = models.find((model) => model.value === current)?.name

@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test"
-import type { AgentVersion } from "@desk/protocol"
+import type { AgentVersion } from "@comet/protocol"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { until, useTempHome } from "../../test-support"
@@ -10,10 +10,10 @@ import { antigravityAgent } from "."
 import { ModelCache } from "./models"
 
 useTempHome()
-const saved = process.env.DESK_ANTIGRAVITY
-delete process.env.DESK_ANTIGRAVITY
+const saved = process.env.COMET_ANTIGRAVITY
+delete process.env.COMET_ANTIGRAVITY
 afterAll(() => {
-  if (saved !== undefined) process.env.DESK_ANTIGRAVITY = saved
+  if (saved !== undefined) process.env.COMET_ANTIGRAVITY = saved
 })
 
 function install(version: string) {
@@ -29,10 +29,10 @@ test("reads where Antigravity stands from its files, then offers the update Goog
   await agent.inspect()
   expect(readings.at(-1)).toEqual({ state: "missing", problem: "Install it to use the models of your Google account." })
 
-  // The ACP server an earlier Desk installed no longer runs, and its sign-in carries over to the CLI.
+  // The ACP server an earlier Comet installed no longer runs, and its sign-in carries over to the CLI.
   install("1.4.5")
   await agent.inspect()
-  expect(readings.at(-1)).toEqual({ state: "missing", problem: "Desk now runs Google's Antigravity CLI, not the server it installed before. Install the CLI to go on. You stay signed in." })
+  expect(readings.at(-1)).toEqual({ state: "missing", problem: "Comet now runs Google's Antigravity CLI, not the server it installed before. Install the CLI to go on. You stay signed in." })
 
   install("1.5.8")
   await agent.inspect()

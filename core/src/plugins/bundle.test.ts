@@ -8,13 +8,13 @@ import { installPlugin } from "./test-plugins"
 useTempHome()
 
 const plugin = (text: string) => `
-import { definePlugin, Text } from "@desk/plugin"
-export default definePlugin((desk) => desk.card("note", { title: "Note", view: () => <Text>${text}</Text> }))
+import { definePlugin, Text } from "@comet/plugin"
+export default definePlugin((comet) => comet.card("note", { title: "Note", view: () => <Text>${text}</Text> }))
 `
 
 test("builds a plugin once, and again only when one of its files changes or its bundle is gone", async () => {
   installPlugin("note", plugin("first"))
-  const entry = join(process.env.DESK_HOME!, "plugins", "note", "index.tsx")
+  const entry = join(process.env.COMET_HOME!, "plugins", "note", "index.tsx")
   const bundle = await bundlePlugin("note", entry)
   expect(await Bun.file(bundle).text()).toContain("first")
   const built = statSync(bundle).mtimeMs

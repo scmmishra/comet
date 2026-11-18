@@ -1,9 +1,9 @@
-import type { AgentFeature, AgentId, AgentInfo, ContextReading, ImageAttachment, McpServer, PermissionAnswer, RunSettings, Skill, ThreadEvent, ThreadItem, ThreadSummary } from "@desk/protocol"
+import type { AgentFeature, AgentId, AgentInfo, ContextReading, ImageAttachment, McpServer, PermissionAnswer, RunSettings, Skill, ThreadEvent, ThreadItem, ThreadSummary } from "@comet/protocol"
 
 /**
- * What Desk needs from a coding agent, such as Claude Code or Codex. An agent runs conversations, keeps
+ * What Comet needs from a coding agent, such as Claude Code or Codex. An agent runs conversations, keeps
  * their transcripts, and says who is signed in and which models they may use. The rest of the core talks
- * to agents only through these types. Each agent turns its own messages into Desk's thread events, so
+ * to agents only through these types. Each agent turns its own messages into Comet's thread events, so
  * nothing outside its folder reads them. AGENTS.md lists the steps to add one.
  */
 export interface Agent {
@@ -13,8 +13,8 @@ export interface Agent {
   /** What the agent can do beyond a conversation. The core refuses what is not listed, and the app does not offer it. */
   readonly features: readonly AgentFeature[]
   /**
-   * Whether the agent resumes a thread in another checkout of its repo, such as a worktree, when Desk names
-   * that folder. Such a thread can move: its agent asks through Desk's `move_to_worktree` tool, or moves
+   * Whether the agent resumes a thread in another checkout of its repo, such as a worktree, when Comet names
+   * that folder. Such a thread can move: its agent asks through Comet's `move_to_worktree` tool, or moves
    * with a tool of its own and reports it through `onMoved`. It resumes in the new folder from its next
    * turn. Any other agent keeps each thread in the folder it started in.
    */
@@ -50,7 +50,7 @@ export interface Agent {
   close(): void
 }
 
-/** What an agent learned about itself. Each field replaces what Desk knew, and absent fields stay. */
+/** What an agent learned about itself. Each field replaces what Comet knew, and absent fields stay. */
 export type AgentReading = Partial<Pick<AgentInfo, "state" | "problem" | "version" | "account" | "models" | "usage" | "signInLink">>
 
 /** What the core gives an agent: where to report what it learns, and the settings it reads. */
@@ -72,17 +72,17 @@ export interface AgentMcp {
   toggle(dir: string, name: string, enabled: boolean, publish: (servers: McpServer[] | null) => void): Promise<void>
 }
 
-/** Tools Desk offers a session over MCP, such as handing work to another agent. The agent adds the server to the session under `SERVER_NAME`. */
+/** Tools Comet offers a session over MCP, such as handing work to another agent. The agent adds the server to the session under `SERVER_NAME`. */
 export interface ToolServer {
   readonly url: string
-  /** The Authorization header that names the session to Desk. */
+  /** The Authorization header that names the session to Comet. */
   readonly authorization: string
   /** What to tell the model about the tools, added to its instructions. */
   readonly instructions: string
 }
 
 export interface SessionOptions {
-  /** A session to continue, from an earlier run of Desk. */
+  /** A session to continue, from an earlier run of Comet. */
   readonly resume?: string
   /**
    * Where a rewound thread resumes, as the agent's `threads.rewind` named it. The agent drops what follows

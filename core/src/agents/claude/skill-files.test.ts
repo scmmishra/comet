@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { Skill } from "@desk/protocol"
+import type { Skill } from "@comet/protocol"
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
@@ -14,7 +14,7 @@ function file(path: string, text = "x") {
 const skill = (name: string, group: string, extra: Partial<Skill> = {}): Skill => ({ name, description: "", ownProject: false, group, ...extra })
 
 test("finds a skill's SKILL.md or a command's file in the project, the user's folder or the plugin's", () => {
-  const base = mkdtempSync(join(tmpdir(), "desk-skill-files-"))
+  const base = mkdtempSync(join(tmpdir(), "comet-skill-files-"))
   const [project, root] = [join(base, "web"), join(base, "claude")]
   const review = file(join(project, ".claude", "skills", "review", "SKILL.md"))
   const pdf = file(join(root, "skills", "pdf", "SKILL.md"))

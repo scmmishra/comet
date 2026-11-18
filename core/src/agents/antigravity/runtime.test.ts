@@ -8,15 +8,15 @@ import { BROWSER_COMMAND } from "./sign-in-link"
 
 useTempHome()
 
-const saved = { PATH: process.env.PATH, DESK_ANTIGRAVITY: process.env.DESK_ANTIGRAVITY }
+const saved = { PATH: process.env.PATH, COMET_ANTIGRAVITY: process.env.COMET_ANTIGRAVITY }
 beforeEach(() => {
   process.env.PATH = ""
-  delete process.env.DESK_ANTIGRAVITY
+  delete process.env.COMET_ANTIGRAVITY
 })
 afterEach(() => {
   process.env.PATH = saved.PATH
-  if (saved.DESK_ANTIGRAVITY === undefined) delete process.env.DESK_ANTIGRAVITY
-  else process.env.DESK_ANTIGRAVITY = saved.DESK_ANTIGRAVITY
+  if (saved.COMET_ANTIGRAVITY === undefined) delete process.env.COMET_ANTIGRAVITY
+  else process.env.COMET_ANTIGRAVITY = saved.COMET_ANTIGRAVITY
 })
 
 /** A program in a new folder, by name, that runs `script`. */
@@ -27,14 +27,14 @@ function program(name: string, script = "") {
   return path
 }
 
-/** Installs a version as Desk would, finished or not. */
+/** Installs a version as Comet would, finished or not. */
 function install(version: string, finished = true) {
   mkdirSync(runtimeFolder(version), { recursive: true })
   writeFileSync(join(runtimeFolder(version), EXECUTABLE), "")
   if (finished) markInstalled(version)
 }
 
-test("runs the newest finished install of the CLI, never the ACP server an earlier Desk installed", () => {
+test("runs the newest finished install of the CLI, never the ACP server an earlier Comet installed", () => {
   install("1.4.5")
   expect(resolveRuntime()).toBeUndefined()
   expect(onlyServerInstalled()).toBe(true)
@@ -45,17 +45,17 @@ test("runs the newest finished install of the CLI, never the ACP server an earli
   expect(onlyServerInstalled()).toBe(false)
 })
 
-test("runs DESK_ANTIGRAVITY first, by name on the PATH or by path, with no version Desk knows", () => {
+test("runs COMET_ANTIGRAVITY first, by name on the PATH or by path, with no version Comet knows", () => {
   install("1.5.9")
   const agy = program("agy")
   process.env.PATH = join(agy, "..")
-  process.env.DESK_ANTIGRAVITY = "agy"
+  process.env.COMET_ANTIGRAVITY = "agy"
   expect(resolveRuntime()).toEqual({ command: agy })
-  process.env.DESK_ANTIGRAVITY = join(agy, "..", "missing")
+  process.env.COMET_ANTIGRAVITY = join(agy, "..", "missing")
   expect(resolveRuntime()).toBeUndefined()
 })
 
-test("starts the CLI's ACP server in Desk's own Gemini folder, without the user's Google credentials", async () => {
+test("starts the CLI's ACP server in Comet's own Gemini folder, without the user's Google credentials", async () => {
   const args = join(tempFolder("antigravity-args"), "args")
   const agy = program("agy", `printf '%s\\n' "$@" > '${args}'`)
   const started = launch({ command: agy }, tempFolder("antigravity-project"))

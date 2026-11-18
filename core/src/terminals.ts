@@ -34,7 +34,7 @@ export class Terminals {
       buffer: "",
       process: spawn(loginShell(), {
         cwd: dir,
-        env: { TERM: "xterm-256color", COLORTERM: "truecolor", TERM_PROGRAM: "Desk" },
+        env: { TERM: "xterm-256color", COLORTERM: "truecolor", TERM_PROGRAM: "Comet" },
         terminal: {
           cols,
           rows,

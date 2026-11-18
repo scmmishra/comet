@@ -44,7 +44,7 @@ test("hands each stderr line to its listeners, and keeps the end of stderr", asy
   expect(program.stderr()).toBe("one\ntwo")
 })
 
-/** Asks a program over JSON-RPC, as Desk does, and gives how the request failed. */
+/** Asks a program over JSON-RPC, as Comet does, and gives how the request failed. */
 async function failureOf(command: string[]) {
   const rpc = new JsonRpc(explainEnd(run(command), "Codex"), { notification: () => {}, request: () => {}, closed: () => {} }, { versioned: false })
   return rpc.request("initialize").then(

@@ -1,4 +1,4 @@
-import type { McpServer } from "@desk/protocol"
+import type { McpServer } from "@comet/protocol"
 import { expect, test } from "bun:test"
 import { codexMcp } from "./mcp"
 import { AppServer } from "./server"

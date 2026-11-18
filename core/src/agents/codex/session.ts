@@ -1,4 +1,4 @@
-import type { ImageAttachment, PermissionAnswer, RunSettings } from "@desk/protocol"
+import type { ImageAttachment, PermissionAnswer, RunSettings } from "@comet/protocol"
 import { SERVER_NAME } from "../../delegate/tools"
 import type { AgentSession, Emit, SessionOptions, ToolServer } from "../agent"
 import type { RequestId } from "../json-rpc"
@@ -14,7 +14,7 @@ import type { CodexConfigRead, CodexItem, CodexModel, CodexTurn, McpStartup, Rea
 import { asksApproval, readRequest, type CodexRequest } from "./requests"
 import type { AppServer, ThreadOwner, ThreadParams } from "./server"
 
-/** How long Codex may take on a call to Desk's tools, in seconds. A handed-off task can run for an hour. */
+/** How long Codex may take on a call to Comet's tools, in seconds. A handed-off task can run for an hour. */
 const TOOL_TIMEOUT_SEC = 3900
 /** How a retry notice gives its attempt, such as "Reconnecting... 2/5". */
 const RETRY_PROGRESS = /\b(\d+)\s*\/\s*(\d+)\b/
@@ -94,7 +94,7 @@ export class CodexSession implements AgentSession, ThreadOwner {
   private turn?: Turn
   private stop: Stop
   private settings: RunSettings
-  /** The model Desk last told the tab runs, by name. */
+  /** The model Comet last told the tab runs, by name. */
   private announced?: string
   private requests: Requests<unknown, WaitingRequest>
   /** The paths of each file change Codex reported, by item id, for the request to apply it. */
@@ -124,7 +124,7 @@ export class CodexSession implements AgentSession, ThreadOwner {
     this.settings = settings
   }
 
-  /** Desk names the message, and Codex keeps the name, so the item has the same id live and restored. */
+  /** Comet names the message, and Codex keeps the name, so the item has the same id live and restored. */
   send(text: string, images: readonly ImageAttachment[] = []) {
     const id = crypto.randomUUID()
     this.emit({ kind: "item", item: userItem(id, text, images) })
@@ -170,7 +170,7 @@ export class CodexSession implements AgentSession, ThreadOwner {
    * Declines every open request and stops a running turn, since the app-server runs on after the session
    * closes. It also unsubscribes from the thread, after T3 Code, so Codex unloads it once idle. A resume of
    * a thread that is still loaded rejoins it with the config it loaded with, which holds this session's
-   * token for Desk's tools. The next session's resume then loads it with its own.
+   * token for Comet's tools. The next session's resume then loads it with its own.
    */
   close() {
     this.dismissRequests()
@@ -274,7 +274,7 @@ export class CodexSession implements AgentSession, ThreadOwner {
     }
   }
 
-  /** Loads the thread into the app-server: a new one, or the one the tab resumes. Desk's tools join it as an MCP server. */
+  /** Loads the thread into the app-server: a new one, or the one the tab resumes. Comet's tools join it as an MCP server. */
   private load(models: readonly CodexModel[]): Promise<string> {
     this.loading ??= this.open(models).catch((error) => {
       this.loading = undefined
@@ -433,7 +433,7 @@ export class CodexSession implements AgentSession, ThreadOwner {
   }
 }
 
-/** Desk's tools as an MCP server Codex connects to over HTTP, with what to tell the model about them. */
+/** Comet's tools as an MCP server Codex connects to over HTTP, with what to tell the model about them. */
 const toolServer = (tools: ToolServer) => ({
   config: { [`mcp_servers.${SERVER_NAME}`]: { url: tools.url, http_headers: { Authorization: tools.authorization }, tool_timeout_sec: TOOL_TIMEOUT_SEC } },
   developerInstructions: tools.instructions,

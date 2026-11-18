@@ -1,5 +1,5 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk"
-import type { Subagent, ThreadEvent, ThreadItem } from "@desk/protocol"
+import type { Subagent, ThreadEvent, ThreadItem } from "@comet/protocol"
 import { ThreadMapper } from "./thread"
 
 /** Claude Code's task type for a subagent. Its other tasks, such as background shells, are not agents. */

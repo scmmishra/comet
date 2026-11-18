@@ -6,15 +6,15 @@ import { codexPath, CodexMissing } from "./executable"
 /** Starts an app-server and gives its stdio. A test passes its own. */
 export type Launch = () => Transport
 
-/** How Desk names itself to Codex. The core does not know Desk's version, so it gives its own. */
-const CLIENT_INFO = { name: "desk", title: "Desk", version: coreVersion }
+/** How Comet names itself to Codex. The core does not know Comet's version, so it gives its own. */
+const CLIENT_INFO = { name: "comet", title: "Comet", version: coreVersion }
 
 /** How long Codex has to answer `initialize`, as in T3 Code. It answers in under a second, and a slow first start has room. */
 const INITIALIZE_TIMEOUT_MS = 30_000
 
 /**
  * Runs `codex app-server`, which speaks one JSON message per line over stdio. It throws `CodexMissing` when
- * Desk finds no Codex. If the process ends, the error says how and what it printed on stderr.
+ * Comet finds no Codex. If the process ends, the error says how and what it printed on stderr.
  */
 export const launchCodex: Launch = () => {
   const path = codexPath()
@@ -40,7 +40,7 @@ export interface ThreadOwner {
 type Listener = (params: never) => void
 
 /**
- * One Codex app-server, shared by Desk's Codex sessions, its thread list and its settings. It starts on
+ * One Codex app-server, shared by Comet's Codex sessions, its thread list and its settings. It starts on
  * the first request. Codex keeps many threads in one process, so the server sends each thread's messages
  * to the owner that claimed the thread. If the process ends, every owner hears so, and the next request
  * starts a new process.
@@ -115,7 +115,7 @@ export class AppServer {
     const silent = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         // Rejected first: closing fails the pending request, and its message would win the race.
-        reject(new Error(`Codex did not answer its first message in ${INITIALIZE_TIMEOUT_MS / 1000} seconds, so Desk stopped it. The next request starts it again.`))
+        reject(new Error(`Codex did not answer its first message in ${INITIALIZE_TIMEOUT_MS / 1000} seconds, so Comet stopped it. The next request starts it again.`))
         rpc.close()
       }, INITIALIZE_TIMEOUT_MS)
     })
@@ -135,7 +135,7 @@ export class AppServer {
   private answer(method: string, params: ThreadParams, id: RequestId) {
     const threadId = params?.threadId ?? params?.conversationId
     const reply = threadId === undefined ? undefined : this.owners.get(threadId)?.request(method, params, id)
-    if (!reply) throw new RpcError("Desk does not handle that request.", METHOD_NOT_FOUND)
+    if (!reply) throw new RpcError("Comet does not handle that request.", METHOD_NOT_FOUND)
     return reply
   }
 
@@ -149,5 +149,5 @@ export class AppServer {
   }
 }
 
-/** Codex's version from its user agent, such as "desk/0.167.0 (Mac OS 26.6.2; arm64) …". */
+/** Codex's version from its user agent, such as "comet/0.167.0 (Mac OS 26.6.2; arm64) …". */
 const installedVersion = (userAgent: string) => /^[^/\s]+\/(\S+)/.exec(userAgent)?.[1]

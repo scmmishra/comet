@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { AgentId, AgentInfo, PermissionMode, Subagent, ThreadEvent } from "@desk/protocol"
+import type { AgentId, AgentInfo, PermissionMode, Subagent, ThreadEvent } from "@comet/protocol"
 import type { AgentHost } from "../agents/agent"
 import { Agents } from "../agents/registry"
 import { fakeAgent } from "../test-support"
@@ -85,13 +85,13 @@ test("a task never runs with more than the thread that started it", async () => 
 test("refuses a task it cannot run, in words the asking agent can pass on", async () => {
   const { call, codex } = await delegations()
   const refusal = (input: Record<string, unknown>) => call(input).then(() => "ran", (error: Error) => error.message)
-  expect(await refusal({ agent: "cursor", task: "x" })).toBe('Desk runs no agent called "cursor". Call list_agents to see the agents it runs.')
+  expect(await refusal({ agent: "cursor", task: "x" })).toBe('Comet runs no agent called "cursor". Call list_agents to see the agents it runs.')
   expect(await refusal({ agent: "codex", task: " " })).toBe("`task` says what the agent should do. It cannot be empty.")
   expect(await refusal({ agent: "codex", task: "x", model: "gpt-9" })).toBe('Fake codex has no model called "gpt-9". Its models are: default.')
   expect(await refusal({ agent: "codex", task: "x", effort: "max" })).toBe('Fake codex\'s Default has no effort level "max". Its levels are: low, high.')
   expect(codex.sessions).toEqual([])
   const signedOut = await delegations("default", { state: "signed-out", problem: "Sign in to use your ChatGPT plan." })
-  expect(await signedOut.call({ agent: "codex", task: "x" }).catch((error: Error) => error.message)).toBe("Fake codex is not ready: Sign in to use your ChatGPT plan. The user can set it up in Desk's Settings, under Providers.")
+  expect(await signedOut.call({ agent: "codex", task: "x" }).catch((error: Error) => error.message)).toBe("Fake codex is not ready: Sign in to use your ChatGPT plan. The user can set it up in Comet's Settings, under Providers.")
 })
 
 test("names a model by its value or the name it runs under", async () => {

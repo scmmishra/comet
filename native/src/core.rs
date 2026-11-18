@@ -17,28 +17,28 @@ const STOP_GRACE: Duration = Duration::from_secs(1);
 /// How long the socket thread waits for a core message before it sends what the app queued. A
 /// message the app sends waits at most this long.
 const SEND_WAIT: Duration = Duration::from_millis(4);
-/// A Desk run from the repo keeps its window and plugin builds in `~/.desk/native`, apart from the
-/// installed Desk's `~/.desk`.
+/// A Comet run from the repo keeps its window and plugin builds in `~/.comet/native`, apart from the
+/// installed Comet's `~/.comet`.
 const DEV_INSTANCE: &str = "native";
 
-/// Where the core runs from, and which Desk it serves.
+/// Where the core runs from, and which Comet it serves.
 #[derive(Debug, PartialEq)]
 pub struct Setup {
     pub bun: PathBuf,
     /// The folder holding `core/src/main.ts`.
     pub dir: PathBuf,
-    /// The instance's folder name under `~/.desk`. None is the installed Desk, which keeps `~/.desk` itself.
+    /// The instance's folder name under `~/.comet`. None is the installed Comet, which keeps `~/.comet` itself.
     pub instance: Option<&'static str>,
 }
 
-/// This Desk's setup: the core in its bundle when it runs as `Desk.app`, else in the repo it was built from.
+/// This Comet's setup: the core in its bundle when it runs as `Comet.app`, else in the repo it was built from.
 pub fn setup() -> Setup {
     let exe = std::env::current_exe().unwrap_or_default();
-    setup_for(&exe, std::env::var_os("DESK_BUN"))
+    setup_for(&exe, std::env::var_os("COMET_BUN"))
 }
 
-/// A bundled Desk carries the core's source, its packages and Bun in `Contents/Resources`, as
-/// `scripts/package.sh` lays them out. Run from the repo, Desk takes `bun` from PATH, or `DESK_BUN`.
+/// A bundled Comet carries the core's source, its packages and Bun in `Contents/Resources`, as
+/// `scripts/package.sh` lays them out. Run from the repo, Comet takes `bun` from PATH, or `COMET_BUN`.
 fn setup_for(exe: &Path, bun: Option<std::ffi::OsString>) -> Setup {
     let contents = exe.parent().filter(|dir| dir.ends_with("Contents/MacOS")).and_then(Path::parent);
     match contents {
@@ -68,7 +68,7 @@ pub struct Core {
     outgoing: Sender<String>,
     /// The other end of `outgoing`, until the socket thread takes it.
     queued: Arc<Mutex<Option<Receiver<String>>>>,
-    /// Desk's folder for the core, in place of `~/.desk`, so a test never touches the user's.
+    /// Comet's folder for the core, in place of `~/.comet`, so a test never touches the user's.
     #[cfg(test)]
     home: Option<PathBuf>,
 }
@@ -108,15 +108,15 @@ impl Core {
         let mut command = Command::new(&setup.bun);
         command.arg("core/src/main.ts").current_dir(&setup.dir);
         if let Some(instance) = setup.instance {
-            command.env("DESK_INSTANCE", instance);
+            command.env("COMET_INSTANCE", instance);
         }
-        // Only tests point the core at a Desk folder of their own.
+        // Only tests point the core at a Comet folder of their own.
         #[cfg(test)]
         if let Some(home) = &self.home {
-            command.env("DESK_HOME", home);
+            command.env("COMET_HOME", home);
         }
         std::thread::Builder::new()
-            .name("desk-core".into())
+            .name("comet-core".into())
             .spawn(move || {
                 if let Err(reason) = run(command, &process, &queued, &on_event) {
                     on_event(Event::Failed(reason));
@@ -169,7 +169,7 @@ fn end(mut child: Child, stdin: ChildStdin, grace: Duration) {
     let _ = exit.recv();
 }
 
-/// The repo this Desk was built from, which a Desk run from the repo starts the core in.
+/// The repo this Comet was built from, which a Comet run from the repo starts the core in.
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
 }
@@ -178,7 +178,7 @@ fn run(mut command: Command, process: &Mutex<Option<(Child, ChildStdin)>>, queue
     let token = ids::hex::<24>();
     let bun = command.get_program().to_string_lossy().into_owned();
     let mut child = command
-        .env("DESK_TOKEN", &token)
+        .env("COMET_TOKEN", &token)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
@@ -195,7 +195,7 @@ fn run(mut command: Command, process: &Mutex<Option<(Child, ChildStdin)>>, queue
         match socket.read() {
             Ok(Message::Text(text)) => match serde_json::from_str(&text) {
                 Ok(message) => on_event(Event::Message(message)),
-                Err(e) => eprintln!("desk: a core message did not decode: {e}"),
+                Err(e) => eprintln!("comet: a core message did not decode: {e}"),
             },
             Ok(_) => {}
             // No message came in time, so send what the app queued.
@@ -265,18 +265,18 @@ mod tests {
     }
 
     #[test]
-    fn a_bundled_desk_runs_the_core_in_its_resources_and_one_from_the_repo_runs_its_own() {
-        let bundled = setup_for(Path::new("/Applications/Desk.app/Contents/MacOS/Desk"), Some("/opt/bun".into()));
-        let resources = Path::new("/Applications/Desk.app/Contents/Resources");
-        assert_eq!(bundled, Setup { bun: resources.join("bun"), dir: resources.join("core"), instance: None }, "a bundle ignores DESK_BUN and serves ~/.desk");
-        let dev = setup_for(Path::new("/code/desk/native/target/debug/desk"), None);
+    fn a_bundled_comet_runs_the_core_in_its_resources_and_one_from_the_repo_runs_its_own() {
+        let bundled = setup_for(Path::new("/Applications/Comet.app/Contents/MacOS/Comet"), Some("/opt/bun".into()));
+        let resources = Path::new("/Applications/Comet.app/Contents/Resources");
+        assert_eq!(bundled, Setup { bun: resources.join("bun"), dir: resources.join("core"), instance: None }, "a bundle ignores COMET_BUN and serves ~/.comet");
+        let dev = setup_for(Path::new("/code/comet/native/target/debug/comet"), None);
         assert_eq!(dev, Setup { bun: "bun".into(), dir: repo(), instance: Some(DEV_INSTANCE) });
-        assert_eq!(setup_for(Path::new("/code/desk/native/target/debug/desk"), Some("/opt/bun".into())).bun, Path::new("/opt/bun"));
+        assert_eq!(setup_for(Path::new("/code/comet/native/target/debug/comet"), Some("/opt/bun".into())).bun, Path::new("/opt/bun"));
     }
 
-    /// A Desk folder of the test's own, with a saved window of two tabs in the native instance.
+    /// A Comet folder of the test's own, with a saved window of two tabs in the native instance.
     fn seeded_home(test: &str) -> PathBuf {
-        let home = std::env::temp_dir().join(format!("desk-native-{test}-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("comet-native-{test}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         let project = home.join("project");
         std::fs::create_dir_all(home.join(DEV_INSTANCE)).unwrap();
@@ -334,11 +334,11 @@ mod tests {
         let tab: crate::protocol::TabInfo = serde_json::from_value(serde_json::json!({ "id": "a", "title": "First", "project": project, "terminals": [{ "id": "term", "title": "Terminal" }], "agent": "claude", "model": "default", "permissionMode": "auto" })).unwrap();
         core.send(&ClientMessage::TabsSave { tabs: vec![tab], active: Some("a".into()) });
         core.send(&ClientMessage::TerminalOpen { id: "term".into(), cols: 60, rows: 10 });
-        core.send(&ClientMessage::TerminalInput { id: "term".into(), data: "echo desk-$((40+2))\r".into() });
+        core.send(&ClientMessage::TerminalInput { id: "term".into(), data: "echo comet-$((40+2))\r".into() });
         let mut screen = crate::terminal::Screen::new(crate::terminal::Size { cols: 60, rows: 10 });
         let deadline = Instant::now() + Duration::from_secs(20);
         let shown = loop {
-            let shown = screen.rows.iter().any(|r| r.text.contains("desk-42"));
+            let shown = screen.rows.iter().any(|r| r.text.contains("comet-42"));
             if shown || Instant::now() > deadline {
                 break shown;
             }

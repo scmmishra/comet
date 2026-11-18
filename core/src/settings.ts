@@ -1,7 +1,7 @@
-import { AGENTS, COLOR_THEMES, DEFAULT_SETTINGS, FOLLOW_UPS, FONT_SIZES, PERMISSION_MODES, PROJECT_COLORS, THEMES, type AgentDefaults, type AgentId, type AppearanceSettings, type DeskSettings, type ProjectSettings, type SettingsChange, type ThreadSettings } from "@desk/protocol"
+import { AGENTS, COLOR_THEMES, DEFAULT_SETTINGS, FOLLOW_UPS, FONT_SIZES, PERMISSION_MODES, PROJECT_COLORS, THEMES, type AgentDefaults, type AgentId, type AppearanceSettings, type CometSettings, type ProjectSettings, type SettingsChange, type ThreadSettings } from "@comet/protocol"
 import { readFileSync } from "node:fs"
 import { isAbsolute, join, relative } from "node:path"
-import { deskHome, writeJsonFile } from "./data-files"
+import { cometHome, writeJsonFile } from "./data-files"
 import { insideProject } from "./project-path"
 
 /** How to read one field: whether a value is valid, how to store it, and what to tell the user when it is not. */
@@ -36,7 +36,7 @@ const THREADS: Record<keyof ThreadSettings, Rule> = {
 
 const named = (value: unknown) => typeof value === "string" && !!value.trim()
 
-// Each agent names its own models and effort levels, so Desk only checks that one is named.
+// Each agent names its own models and effort levels, so Comet only checks that one is named.
 const AGENT_DEFAULTS: Record<keyof AgentDefaults, Rule> = {
   model: { valid: named, clean: (value: string) => value.trim(), message: "A model is named by its value, such as opus." },
   effort: { valid: named, clean: (value: string) => value.trim(), optional: true, message: "An effort is named by its level, such as high." },
@@ -55,10 +55,10 @@ const projectRules = (dir: string): Record<keyof ProjectSettings, Rule> => ({
   },
 })
 
-const settingsPath = () => join(deskHome(), "settings.json")
+const settingsPath = () => join(cometHome(), "settings.json")
 
-/** Desk's settings. A missing or broken file, or a broken value in it, falls back to the default. */
-export function loadSettings(): DeskSettings {
+/** Comet's settings. A missing or broken file, or a broken value in it, falls back to the default. */
+export function loadSettings(): CometSettings {
   let saved: Record<string, unknown>
   try {
     saved = upgrade(section(JSON.parse(readFileSync(settingsPath(), "utf8"))))
@@ -74,12 +74,12 @@ export function loadSettings(): DeskSettings {
   }
 }
 
-export function saveSettings(settings: DeskSettings) {
+export function saveSettings(settings: CometSettings) {
   writeJsonFile(settingsPath(), settings)
 }
 
-/** Applies a change from the app. It refuses a value Desk cannot use, so a bad one never reaches the file. */
-export function updateSettings(current: DeskSettings, change: SettingsChange): DeskSettings {
+/** Applies a change from the app. It refuses a value Comet cannot use, so a bad one never reaches the file. */
+export function updateSettings(current: CometSettings, change: SettingsChange): CometSettings {
   const projects = { ...current.projects }
   if (change.project) {
     const { dir, settings } = change.project
@@ -102,7 +102,7 @@ function agentId(id: unknown): AgentId {
 }
 
 /**
- * Settings saved when Desk ran only Claude Code kept everything about a new tab in one `claude` section.
+ * Settings saved when Comet ran only Claude Code kept everything about a new tab in one `claude` section.
  * Its model, effort and permission mode become Claude's defaults, and the rest become thread settings.
  */
 function upgrade(saved: Record<string, unknown>): Record<string, unknown> {

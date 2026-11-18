@@ -92,30 +92,30 @@ impl ThemeChoice {
     }
 }
 
-/// The colours Desk draws in, Desk's `ColorTheme`. Each has a light and a dark flavour.
+/// The colours Comet draws in, Comet's `ColorTheme`. Each has a light and a dark flavour.
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum ColorTheme {
     #[default]
-    Desk,
+    Comet,
     Verdigris,
 }
 
 impl ColorTheme {
     /// The colour themes, in the order Appearance lists them.
-    pub const ALL: [ColorTheme; 2] = [ColorTheme::Desk, ColorTheme::Verdigris];
+    pub const ALL: [ColorTheme; 2] = [ColorTheme::Comet, ColorTheme::Verdigris];
 
     /// The colour theme as the settings file names it.
     pub fn id(self) -> &'static str {
         match self {
-            ColorTheme::Desk => "desk",
+            ColorTheme::Comet => "comet",
             ColorTheme::Verdigris => "verdigris",
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            ColorTheme::Desk => "Desk",
+            ColorTheme::Comet => "Comet",
             ColorTheme::Verdigris => "Verdigris",
         }
     }
@@ -170,7 +170,7 @@ pub struct ProjectSettings {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct DeskSettings {
+pub struct CometSettings {
     pub appearance: AppearanceSettings,
     pub threads: ThreadSettings,
     /// What a new tab starts each agent with, by agent.
@@ -187,7 +187,7 @@ pub struct AgentVersion {
     pub installed: Option<String>,
     pub latest: Option<String>,
     pub update_available: bool,
-    /// Whether Desk can update it.
+    /// Whether Comet can update it.
     pub updatable: bool,
 }
 
@@ -206,7 +206,7 @@ pub struct AgentAccount {
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum AgentState {
-    /// Desk is still reading it.
+    /// Comet is still reading it.
     #[default]
     Checking,
     Ready,
@@ -251,7 +251,7 @@ pub struct McpServer {
     #[serde(default)]
     pub tools: u32,
     pub error: Option<String>,
-    /// Whether Desk can turn it on or off.
+    /// Whether Comet can turn it on or off.
     pub toggleable: bool,
 }
 
@@ -344,7 +344,7 @@ pub struct PlanUsage {
 }
 
 /// One change to a plugin's UI tree. The plugin's code builds the tree in the core, and the app draws
-/// each node with Desk's own component of that name.
+/// each node with Comet's own component of that name.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "op", rename_all = "lowercase")]
 pub enum UiOp {
@@ -789,7 +789,7 @@ pub struct BackgroundTask {
     pub id: String,
     /// What it runs, as Claude Code describes it.
     pub label: String,
-    /// When Desk first saw it, in milliseconds since the epoch.
+    /// When Comet first saw it, in milliseconds since the epoch.
     pub started_at: f64,
 }
 
@@ -797,7 +797,7 @@ pub struct BackgroundTask {
 #[serde(tag = "type")]
 pub enum CoreMessage {
     #[serde(rename = "settings")]
-    Settings { settings: DeskSettings },
+    Settings { settings: CometSettings },
     /// The window's saved tabs, sent once on connect.
     #[serde(rename = "tabs")]
     Tabs { tabs: Vec<TabInfo>, active: Option<String> },
@@ -1110,7 +1110,7 @@ pub enum ClientMessage {
     /// Stops commands Claude left running in the background in a tab.
     #[serde(rename = "tasks.stop", rename_all = "camelCase")]
     TasksStop { tab_id: String, ids: Vec<String> },
-    /// Desk's window gained or lost focus. Plugins hear which of their views are on screen.
+    /// Comet's window gained or lost focus. Plugins hear which of their views are on screen.
     #[serde(rename = "window.focus")]
     WindowFocus { focused: bool },
     /// The window's tabs, in order, sent whenever they change.
@@ -1137,7 +1137,7 @@ mod tests {
     fn printed(module: &str, name: &str) -> Vec<Value> {
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
         let script = format!("import {{ {name} }} from './protocol/src/{module}.ts'; console.log(JSON.stringify({name}))");
-        let out = Command::new(std::env::var("DESK_BUN").unwrap_or_else(|_| "bun".into()))
+        let out = Command::new(std::env::var("COMET_BUN").unwrap_or_else(|_| "bun".into()))
             .args(["-e", &script])
             .current_dir(repo)
             .output()

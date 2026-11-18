@@ -3,33 +3,33 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "desk",
+      "name": "comet",
       "devDependencies": {
         "@types/bun": "1.4.4",
         "typescript": "7.0.2",
       },
     },
     "core": {
-      "name": "@desk/core",
+      "name": "@comet/core",
       "version": "0.0.1",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "0.3.325",
         "@babel/core": "7.29.13",
-        "@desk/plugin": "workspace:*",
-        "@desk/protocol": "workspace:*",
+        "@comet/plugin": "workspace:*",
+        "@comet/protocol": "workspace:*",
         "babel-preset-solid": "1.9.16",
         "solid-js": "1.9.18",
       },
     },
     "plugin": {
-      "name": "@desk/plugin",
+      "name": "@comet/plugin",
       "dependencies": {
-        "@desk/protocol": "workspace:*",
+        "@comet/protocol": "workspace:*",
         "solid-js": "1.9.18",
       },
     },
     "protocol": {
-      "name": "@desk/protocol",
+      "name": "@comet/protocol",
     },
   },
   "packages": {
@@ -91,11 +91,11 @@
 
     "@babel/types": ["@babel/types@7.29.11", "", { "dependencies": { "@babel/helper-string-parser": "^7.29.11", "@babel/helper-validator-identifier": "^7.29.7" } }, "sha512-WCsemW40Cpc6gouC1SrY6PBaZ+oLRlEVY9XBvZBI7il/HyUrb2nJ505wE1MHEFyDZNnrWDEuy4jL50WVHfTTSQ=="],
 
-    "@desk/core": ["@desk/core@workspace:core"],
+    "@comet/core": ["@comet/core@workspace:core"],
 
-    "@desk/plugin": ["@desk/plugin@workspace:plugin"],
+    "@comet/plugin": ["@comet/plugin@workspace:plugin"],
 
-    "@desk/protocol": ["@desk/protocol@workspace:protocol"],
+    "@comet/protocol": ["@comet/protocol@workspace:protocol"],
 
     "@hono/node-server": ["@hono/node-server@2.1.6", "", { "peerDependencies": { "hono": "^4 || ^5.0.0-0" } }, "sha512-p/KH9MnfNcsm3sR6x4lNgm5j+QN4Et8srKredl9DZfXiyZ1UQ3aQ2YVpFLbqktYN5JI+DB+VZFKM2PqE5hLKjQ=="],
 

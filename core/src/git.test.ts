@@ -23,7 +23,7 @@ test("never runs in a bare repository found inside a project, whose config could
   expect((await git(dir, ["rev-parse", "--show-toplevel"])).trim()).toEndWith(dir.split("/").pop()!)
 })
 
-test("reads its input from what Desk writes", async () => {
+test("reads its input from what Comet writes", async () => {
   const { dir } = gitRepo({ "a.ts": "one\n" })
   expect((await git(dir, ["hash-object", "--stdin"], { input: "one\n" })).trim()).toBe((await git(dir, ["rev-parse", "HEAD:a.ts"])).trim())
 })

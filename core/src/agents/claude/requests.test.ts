@@ -42,7 +42,7 @@ test("reads AskUserQuestion's questions, numbering a headerless one and leaving 
   const item = questionItem(
     {
       questions: [
-        { question: " Which background? ", header: "Desk view", multiSelect: false, options: [{ label: "Top fills the window", description: "The desk's top fills it" }, { label: "Same", description: "Same" }, { label: " " }] },
+        { question: " Which background? ", header: "Comet view", multiSelect: false, options: [{ label: "Top fills the window", description: "The comet's top fills it" }, { label: "Same", description: "Same" }, { label: " " }] },
         { question: "" },
         { question: "Anything else?", multiSelect: true },
       ],
@@ -54,7 +54,7 @@ test("reads AskUserQuestion's questions, numbering a headerless one and leaving 
     id: "question:req-2",
     requestId: "req-2",
     questions: [
-      { header: "Desk view", question: "Which background?", options: [{ label: "Top fills the window", description: "The desk's top fills it" }, { label: "Same" }], multiSelect: false },
+      { header: "Comet view", question: "Which background?", options: [{ label: "Top fills the window", description: "The comet's top fills it" }, { label: "Same" }], multiSelect: false },
       { header: "Question 3", question: "Anything else?", options: [], multiSelect: true },
     ],
   })

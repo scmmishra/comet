@@ -1,4 +1,4 @@
-//! Desk, drawn with Rune. The Bun core does the work. This app draws what it sends.
+//! Comet, drawn with Rune. The Bun core does the work. This app draws what it sends.
 
 mod account;
 mod agents;
@@ -54,12 +54,12 @@ mod workspace;
 mod worktrees;
 
 use rune::{AppSpec, MenuItem, Titlebar, Tx};
-use shell::{Desk, commands};
+use shell::{Comet, commands};
 
 /// A menu item: its title and shortcut, its menu and what it runs.
-type Command = (&'static str, &'static str, &'static str, fn(&mut Desk, &mut Tx));
+type Command = (&'static str, &'static str, &'static str, fn(&mut Comet, &mut Tx));
 
-/// The app menu, Desk's first, which Rune fills when an item names no menu.
+/// The app menu, Comet's first, which Rune fills when an item names no menu.
 const APP_MENU: &str = "";
 
 const COMMANDS: &[Command] = &[
@@ -96,11 +96,15 @@ fn headless() -> bool {
 }
 
 fn main() {
-    // Headless runs, such as `--snap`, start no core and save nothing, so they run beside a Desk.
+    // Headless runs, such as `--snap`, start no core and save nothing, so they run beside a Comet.
     let headless = headless();
+    if !headless && let Err(message) = instance::move_desk_home() {
+        eprintln!("comet: {message}");
+        return;
+    }
     let _lock = if headless { None } else { instance::lock() };
     if !headless && _lock.is_none() {
-        eprintln!("desk: Desk is already running.");
+        eprintln!("comet: Comet is already running.");
         return;
     }
     rune::prewarm_gpu();
@@ -114,21 +118,21 @@ fn main() {
         fonts: theme::FONTS,
         families: theme::FAMILIES,
         poll: Some(shell::poll),
-        setup: Some(|s: &mut Desk, waker| s.images.setup(waker)),
+        setup: Some(|s: &mut Comet, waker| s.images.setup(waker)),
         scenes: scenes::SCENES,
-        ..AppSpec::new("Desk", (1280.0, 820.0), Desk::default, shell::view)
+        ..AppSpec::new("Comet", (1280.0, 820.0), Comet::default, shell::view)
     })
     .init(move || {
-        let mut desk = Desk::new(state.clone());
-        // A Desk run from the repo opens the folder `DESK_DIR` names, as `DESK_DIR=<folder> mise run dev` does.
+        let mut comet = Comet::new(state.clone());
+        // A Comet run from the repo opens the folder `COMET_DIR` names, as `COMET_DIR=<folder> mise run dev` does.
         if let Some(dir) = opening::folder_from_env() {
-            desk.workspace.open_asked(dir, &desk.account, &desk.core);
+            comet.workspace.open_asked(dir, &comet.account, &comet.core);
         }
-        desk
+        comet
     })
     .on_open_url(shell::open_url)
     .on_ime(shell::ime)
-    // Desk's text draws with grayscale smoothing, which is Rune's Off.
+    // Comet's text draws with grayscale smoothing, which is Rune's Off.
     .font_smoothing(rune::FontSmoothing::Off)
     .on_modifiers(shell::modifiers)
     .titlebar(Titlebar::new(shell::TITLEBAR_HEIGHT));
@@ -142,7 +146,7 @@ fn main() {
     if !headless {
         let handle = app.handle();
         core.send(&protocol::ClientMessage::AgentsGet);
-        core.start(move |event| handle.update(move |s: &mut Desk, tx| s.receive_in(event, tx)));
+        core.start(move |event| handle.update(move |s: &mut Comet, tx| s.receive_in(event, tx)));
         core.stop_at_quit();
     }
     // Rune ends the process when the app quits, so code after this line does not run.

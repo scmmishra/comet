@@ -1,10 +1,10 @@
-import { DEFAULT_MODEL, PERMISSION_MODES, type AgentId, type AgentInfo, type ModelOption, type PermissionAnswer, type PermissionMode, type RunSettings, type Subagent, type ThreadEvent, type ThreadItem } from "@desk/protocol"
+import { DEFAULT_MODEL, PERMISSION_MODES, type AgentId, type AgentInfo, type ModelOption, type PermissionAnswer, type PermissionMode, type RunSettings, type Subagent, type ThreadEvent, type ThreadItem } from "@comet/protocol"
 import type { AgentSession, ToolServer } from "../agents/agent"
 import type { Agents } from "../agents/registry"
 import type { ToolResult, ToolSet } from "./mcp"
 import { DELEGATE, INSTRUCTIONS, LIST_AGENTS, MOVE_INSTRUCTIONS, MOVE_TO_WORKTREE, taskWords } from "./tools"
 
-/** What Desk reads about the session whose agent hands work off. */
+/** What Comet reads about the session whose agent hands work off. */
 export interface DelegationHost {
   /** The folder the session works in. */
   readonly project: string
@@ -19,7 +19,7 @@ export interface DelegationHost {
   moveTo?(dir: string): string
 }
 
-/** What one session's agent may hand off: Desk's tools for it, and the tasks that run for it. */
+/** What one session's agent may hand off: Comet's tools for it, and the tasks that run for it. */
 export interface Handoffs {
   readonly tools: ToolServer
   /** Answers a task's permission request. Says whether the request was a task's, so the session itself is not asked. */
@@ -46,22 +46,22 @@ interface Caller {
 }
 
 /**
- * Work one agent hands another, after T3 Code. Each session gets Desk's tools over MCP, under a token
+ * Work one agent hands another, after T3 Code. Each session gets Comet's tools over MCP, under a token
  * that names it. A `delegate` call opens a session on the agent it names, in the caller's folder, sends
  * it the task and answers with its final message. The task shows as a subagent of the caller's thread. Its
  * permission requests and questions show in the thread, since only the user can answer them. A task gets
- * no tools of Desk's, so it cannot hand its work on.
+ * no tools of Comet's, so it cannot hand its work on.
  */
 export class Delegations {
   private readonly callers = new Map<string, Caller>()
 
   constructor(
     private readonly agents: Pick<Agents, "get" | "all" | "info">,
-    /** Where Desk's MCP server listens. */
+    /** Where Comet's MCP server listens. */
     private readonly endpoint: () => string,
   ) {}
 
-  /** Gives a session Desk's tools, under a token of its own. */
+  /** Gives a session Comet's tools, under a token of its own. */
   open(host: DelegationHost): Handoffs {
     const token = crypto.randomUUID() + crypto.randomUUID()
     const caller: Caller = { host, children: new Set() }
@@ -87,7 +87,7 @@ export class Delegations {
     }
   }
 
-  /** The tools of the session an Authorization header names, or nothing for a header Desk did not give out. */
+  /** The tools of the session an Authorization header names, or nothing for a header Comet did not give out. */
   toolsFor(authorization: string): ToolSet | undefined {
     const caller = this.callers.get(authorization.replace(/^Bearer /, ""))
     if (!caller) return undefined
@@ -97,8 +97,8 @@ export class Delegations {
       call: async (name, input, signal) => {
         if (name === LIST_AGENTS.name) return { text: JSON.stringify({ agents: this.agents.all().flatMap((agent) => listed(this.agents.info(agent.id))) }, null, 2) }
         if (name === DELEGATE.name) return this.delegate(caller, input, signal)
-        if (name === MOVE_TO_WORKTREE.name && moveTo) return { text: `Desk moves this thread to ${moveTo(String(input.path ?? ""))} when this turn ends.` }
-        throw new Error(`Desk has no tool called ${name}.`)
+        if (name === MOVE_TO_WORKTREE.name && moveTo) return { text: `Comet moves this thread to ${moveTo(String(input.path ?? ""))} when this turn ends.` }
+        throw new Error(`Comet has no tool called ${name}.`)
       },
     }
   }
@@ -168,14 +168,14 @@ export class Delegations {
   /** An agent that can take a task now. One that cannot says why, in words the asking agent can pass on to the user. */
   private ready(id: string): AgentInfo {
     const info = this.agents.info(id as AgentId)
-    if (!info) throw new Error(`Desk runs no agent called "${id}". Call list_agents to see the agents it runs.`)
+    if (!info) throw new Error(`Comet runs no agent called "${id}". Call list_agents to see the agents it runs.`)
     // A problem may end in a full stop. The message adds its own after it.
-    if (info.state !== "ready") throw new Error(`${info.name} is not ready: ${(info.problem ?? info.state).replace(/\.$/, "")}. The user can set it up in Desk's Settings, under Providers.`)
+    if (info.state !== "ready") throw new Error(`${info.name} is not ready: ${(info.problem ?? info.state).replace(/\.$/, "")}. The user can set it up in Comet's Settings, under Providers.`)
     return info
   }
 }
 
-/** An agent as `list_agents` answers it. An agent Desk has not read yet is left out. */
+/** An agent as `list_agents` answers it. An agent Comet has not read yet is left out. */
 function listed(info: AgentInfo | undefined) {
   if (!info || info.state === "checking") return []
   const models = info.models.map((model) => ({ model: model.value, name: model.runs ?? model.label, ...(model.efforts.length ? { efforts: model.efforts, ...(model.defaultEffort ? { defaultEffort: model.defaultEffort } : {}) } : {}) }))

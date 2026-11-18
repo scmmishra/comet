@@ -44,7 +44,7 @@ test("passes on the peer's notifications, and answers its requests, even ones th
       request: (method, _params, id) => {
         asked.push(id)
         if (method === "approve") return new Promise<string>((resolve) => (approve = resolve)).then((decision) => ({ decision }))
-        throw new RpcError("Desk does not handle that.", -32601)
+        throw new RpcError("Comet does not handle that.", -32601)
       },
       closed: () => {},
     },
@@ -56,7 +56,7 @@ test("passes on the peer's notifications, and answers its requests, even ones th
   await until(() => written.length === 1)
   expect(notes).toEqual([["turn/started", { turnId: "t1" }]])
   expect(asked).toEqual(["a", "b"])
-  expect(written).toEqual([{ id: "b", error: { code: -32601, message: "Desk does not handle that." } }])
+  expect(written).toEqual([{ id: "b", error: { code: -32601, message: "Comet does not handle that." } }])
   approve("accept")
   await until(() => written.length === 2)
   expect(written[1]).toEqual({ id: "a", result: { decision: "accept" } })

@@ -6,7 +6,7 @@
 //! to the window, and a submenu takes no height limit, so a long list would run off the window.
 
 use crate::protocol::{ClientMessage, McpServer, Skill, TabInfo};
-use crate::shell::Desk;
+use crate::shell::Comet;
 use rune::{Align, El, Side, el, icon};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit, Menu, MenuItem, Placement, PopupItem, PopupList, State, Switch};
 use rune_theme_opencode::icons as ic;
@@ -41,7 +41,7 @@ pub struct Extensions {
     active: Option<usize>,
 }
 
-impl Desk {
+impl Comet {
     /// Opens the menu for a tab, reading its agent's servers again, since they connect and fail over
     /// time. Skills are read once per project, as the composer reads them.
     pub fn open_extensions(&mut self, tab: &TabInfo) {
@@ -64,7 +64,7 @@ impl Desk {
 }
 
 /// The header button, and its menu while open. None for an agent without `mcp`.
-pub fn button(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
+pub fn button(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
     if !s.account.can(&tab.agent, "mcp") {
         return None;
     }
@@ -75,7 +75,7 @@ pub fn button(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Option<E
         .control_size(ControlSize::Large)
         .label(LABEL)
         .help(LABEL)
-        .on_press(move |s: &mut Desk| if s.extensions.open.is_some() { s.close_extensions() } else { s.open_extensions(&opened) })
+        .on_press(move |s: &mut Comet| if s.extensions.open.is_some() { s.close_extensions() } else { s.open_extensions(&opened) })
         .build(k);
     let project = s.projects.get(&tab.project);
     let servers = project.and_then(|p| p.mcp.get(&tab.agent));
@@ -89,7 +89,7 @@ pub fn button(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Option<E
         .group_label(s.agent_name(&tab.agent))
         .item(list_row("MCP servers", &ic::MCP, servers.and_then(|x| x.as_ref().map(Vec::len)), List::Mcp, shown))
         .item(list_row("Skills", &ic::GRADUATION_CAP, skills.flatten().map(|x| skills_of(x).count()), List::Skills, shown))
-        .on_close(|s: &mut Desk| s.close_extensions())
+        .on_close(|s: &mut Comet| s.close_extensions())
         .build(k, layer);
     // The list mounts after the menu, since it anchors to one of the menu's rows.
     if let (true, Some(list)) = (open, shown) {
@@ -101,7 +101,7 @@ pub fn button(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Option<E
             .max_height(LIST_HEIGHT)
             .padding(2.0)
             .active(s.extensions.active)
-            .on_active(|s: &mut Desk, i| s.extensions.active = Some(i));
+            .on_active(|s: &mut Comet, i| s.extensions.active = Some(i));
         match list {
             List::Mcp => mcp_list(popup, s, tab, servers, k),
             List::Skills => skill_list(popup, s, tab, skills, k),
@@ -114,7 +114,7 @@ pub fn button(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Option<E
 /// A row of the menu, with how many its list holds once read. It stays lit while its list is open.
 fn list_row(label: &str, mark: &'static rune::Icon, count: Option<usize>, list: List, shown: Option<List>) -> MenuItem {
     // A closed submenu draws the menu's chevron, which says the row leads to a list.
-    let row = MenuItem::new(label).icon(mark).submenu(Vec::new(), false).on_select(move |s: &mut Desk| s.show_extensions_list(list));
+    let row = MenuItem::new(label).icon(mark).submenu(Vec::new(), false).on_select(move |s: &mut Comet| s.show_extensions_list(list));
     let row = if shown == Some(list) { row.state(State::Hover) } else { row };
     match count {
         Some(n) => row.badge(n.to_string()),
@@ -122,8 +122,8 @@ fn list_row(label: &str, mark: &'static rune::Icon, count: Option<usize>, list: 
     }
 }
 
-/// Each server: its dot, its name, why it is not connected, and a switch for a server Desk can turn on or off.
-fn mcp_list(popup: PopupList<Desk>, s: &Desk, tab: &TabInfo, read: Option<&Option<Vec<McpServer>>>, k: &Kit) -> PopupList<Desk> {
+/// Each server: its dot, its name, why it is not connected, and a switch for a server Comet can turn on or off.
+fn mcp_list(popup: PopupList<Comet>, s: &Comet, tab: &TabInfo, read: Option<&Option<Vec<McpServer>>>, k: &Kit) -> PopupList<Comet> {
     match read {
         None => popup.empty_message("Starting the servers…"),
         Some(None) => popup.empty_message(format!("{} could not be asked", s.agent_name(&tab.agent))),
@@ -148,7 +148,7 @@ fn server_item(tab: &TabInfo, server: &McpServer, k: &Kit) -> PopupItem {
         .web()
         .label(format!("Use {}", server.name))
         .hide_label()
-        .on_toggle(move |s: &mut Desk| s.core.send(&ClientMessage::McpToggle { project: project.clone(), agent: agent.clone(), name: name.clone(), enabled: !enabled }))
+        .on_toggle(move |s: &mut Comet| s.core.send(&ClientMessage::McpToggle { project: project.clone(), agent: agent.clone(), name: name.clone(), enabled: !enabled }))
         .build(k);
     item.trailing(switch)
 }
@@ -171,8 +171,8 @@ fn skills_of(list: &[Skill]) -> impl Iterator<Item = &Skill> {
     list.iter().filter(|x| !x.builtin)
 }
 
-/// Each skill: a file's mark and its name. A skill opens its file in the view pane, when Desk knows the file.
-fn skill_list(popup: PopupList<Desk>, s: &Desk, tab: &TabInfo, read: Option<Option<&[Skill]>>, k: &Kit) -> PopupList<Desk> {
+/// Each skill: a file's mark and its name. A skill opens its file in the view pane, when Comet knows the file.
+fn skill_list(popup: PopupList<Comet>, s: &Comet, tab: &TabInfo, read: Option<Option<&[Skill]>>, k: &Kit) -> PopupList<Comet> {
     let list = match read {
         None => return popup.empty_message("Reading skills…"),
         Some(None) => return popup.empty_message(format!("{} could not be asked", s.agent_name(&tab.agent))),
@@ -182,7 +182,7 @@ fn skill_list(popup: PopupList<Desk>, s: &Desk, tab: &TabInfo, read: Option<Opti
     let items: Vec<PopupItem> = skills.iter().map(|skill| PopupItem::new(skill.name.clone(), skill.name.clone()).leading(icon(&ic::FILE_DOCUMENT, 14.0).color(k.c.icon_base))).collect();
     let paths: Vec<(String, String)> = skills.iter().filter_map(|skill| Some((skill.name.clone(), skill.path.clone()?))).collect();
     let tab = tab.id.clone();
-    popup.empty_message("No skills").items(items).on_choose(move |s: &mut Desk, name, _| {
+    popup.empty_message("No skills").items(items).on_choose(move |s: &mut Comet, name, _| {
         if let Some((_, path)) = paths.iter().find(|(n, _)| n == name) {
             s.close_extensions();
             s.open_file(&tab, path, None);
@@ -201,10 +201,10 @@ mod tests {
     use super::List;
     use crate::core::Event;
     use crate::protocol::CoreMessage;
-    use crate::shell::Desk;
+    use crate::shell::Comet;
 
-    fn desk(agent: &str) -> Desk {
-        let mut s = Desk::default();
+    fn comet(agent: &str) -> Comet {
+        let mut s = Comet::default();
         let messages = serde_json::json!([
             { "type": "agents", "agents": [
                 { "id": "claude", "name": "Claude Code", "state": "ready", "features": ["mcp", "slash-commands"], "models": [] },
@@ -221,7 +221,7 @@ mod tests {
 
     #[test]
     fn opening_reads_the_tab_agents_servers_each_time_and_its_skills_once() {
-        let mut s = desk("claude");
+        let mut s = comet("claude");
         let tab = s.workspace.active_tab().unwrap().clone();
         s.open_extensions(&tab);
         let sent = s.core.sent();
@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn a_row_opens_its_list_and_again_closes_it() {
-        let mut s = desk("claude");
+        let mut s = comet("claude");
         let tab = s.workspace.active_tab().unwrap().clone();
         s.open_extensions(&tab);
         s.show_extensions_list(List::Skills);
@@ -250,7 +250,7 @@ mod tests {
 
     #[test]
     fn keeps_each_agents_servers_apart() {
-        let mut s = desk("claude");
+        let mut s = comet("claude");
         let servers = serde_json::json!({ "type": "mcp", "project": "/code/web", "agent": "codex", "servers": [{ "name": "github", "status": "connected", "ownProject": false, "tools": 3, "toggleable": true }] });
         s.receive(Event::Message(serde_json::from_value(servers).unwrap())).unwrap();
         let project = s.projects.get("/code/web").unwrap();
@@ -262,7 +262,7 @@ mod tests {
     fn shows_only_for_an_agent_that_lists_its_servers() {
         let k = crate::theme::kit(true);
         for (agent, shown) in [("claude", true), ("antigravity", false)] {
-            let s = desk(agent);
+            let s = comet(agent);
             let tab = s.workspace.active_tab().unwrap().clone();
             assert_eq!(super::button(&s, &tab, k, &mut Vec::new()).is_some(), shown, "{agent}");
         }

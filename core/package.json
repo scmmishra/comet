@@ -1,5 +1,5 @@
 {
-  "name": "@desk/core",
+  "name": "@comet/core",
   "private": true,
   "type": "module",
   "version": "0.0.1",
@@ -8,10 +8,10 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.325",
-    "@desk/protocol": "workspace:*",
+    "@comet/protocol": "workspace:*",
     "@babel/core": "7.29.13",
     "babel-preset-solid": "1.9.16",
     "solid-js": "1.9.18",
-    "@desk/plugin": "workspace:*"
+    "@comet/plugin": "workspace:*"
   }
 }

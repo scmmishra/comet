@@ -1,4 +1,4 @@
-import { MAX_IMAGE_BYTES } from "@desk/protocol"
+import { MAX_IMAGE_BYTES } from "@comet/protocol"
 import { expect, test } from "bun:test"
 import { checkImages } from "./images"
 

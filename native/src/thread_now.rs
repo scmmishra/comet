@@ -2,11 +2,11 @@
 //! thread, above the composer. A stop that waits counts its seconds, and offers Force stop once the agent
 //! does not answer. A retry of a failed request says which attempt it is and why.
 //!
-//! rune-kit has no notice line, so these are Desk's own rows, drawn as the queue's line is.
+//! rune-kit has no notice line, so these are Comet's own rows, drawn as the queue's line is.
 
 use crate::format;
 use crate::protocol::{ClientMessage, Retry};
-use crate::shell::Desk;
+use crate::shell::Comet;
 use crate::threads::Stopping;
 use rune::{El, icon, row, text};
 use rune_kit::{ButtonVariant, Kit};
@@ -17,7 +17,7 @@ const LEAST_ELAPSED_MS: f64 = 1000.0;
 /// Below this, a retry's delay reads in milliseconds.
 const DELAY_IN_MS_BELOW: f64 = 1000.0;
 
-impl Desk {
+impl Comet {
     /// Ends a turn that did not stop when asked. The button reads "Force stopping…" until the turn ends.
     pub fn force_stop(&mut self, tab: &str) {
         if self.threads.force_stopping(tab) {
@@ -27,7 +27,7 @@ impl Desk {
 }
 
 /// The lines for `tab`'s running turn: its stop, then its retry.
-pub fn lines(s: &Desk, tab: &str, k: &Kit) -> Vec<El> {
+pub fn lines(s: &Comet, tab: &str, k: &Kit) -> Vec<El> {
     let Some(thread) = s.threads.get(tab) else { return Vec::new() };
     let stop = thread.stopping.as_ref().map(|stop| stop_line(s, tab, stop, k));
     let retry = thread.retry.as_ref().map(|retry| retry_line(retry, k));
@@ -35,7 +35,7 @@ pub fn lines(s: &Desk, tab: &str, k: &Kit) -> Vec<El> {
 }
 
 /// "Stopping", or "Agent not responding to Stop" with Force stop, and the seconds since the user asked.
-fn stop_line(s: &Desk, tab: &str, stop: &Stopping, k: &Kit) -> El {
+fn stop_line(s: &Comet, tab: &str, stop: &Stopping, k: &Kit) -> El {
     let (mark, ink) = if stop.unresponsive { (&ic::WARNING, k.c.warning.fg) } else { (&ic::STOP, k.c.text_faint) };
     let (title, description) = if stop.unresponsive { ("Agent not responding to Stop", Some("It may be short on memory. Force stop kills its processes.")) } else { ("Stopping", None) };
     let elapsed = text(format::duration((s.now_ms - stop.since).max(LEAST_ELAPSED_MS))).font(crate::theme::text(12.0)).color(k.c.text_faint);
@@ -44,7 +44,7 @@ fn stop_line(s: &Desk, tab: &str, stop: &Stopping, k: &Kit) -> El {
         crate::theme::small_button(if stop.forcing { "Force stopping…" } else { "Force stop" })
             .variant(ButtonVariant::Ghost)
             .disabled(stop.forcing)
-            .on_press(move |s: &mut Desk| s.force_stop(&tab))
+            .on_press(move |s: &mut Comet| s.force_stop(&tab))
             .build(k)
             .key("force-stop")
     });
@@ -111,7 +111,7 @@ mod tests {
 
     #[test]
     fn force_stop_goes_once_and_only_to_an_unresponsive_agent() {
-        let mut s = Desk::default();
+        let mut s = Comet::default();
         s.force_stop("t");
         s.threads.apply("t", crate::protocol::ThreadEvent::Stopping { since: 1.0, unresponsive: true });
         s.force_stop("t");

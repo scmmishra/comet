@@ -1,6 +1,6 @@
 /**
  * The icons a plugin may name, from the OpenCode catalog the app draws with (`rune_theme_opencode::icons::ALL`).
- * The native tests check that the catalog holds each one. Update this list when Desk moves to a newer catalog.
+ * The native tests check that the catalog holds each one. Update this list when Comet moves to a newer catalog.
  */
 export const ICON_NAMES = [
   "align-right",

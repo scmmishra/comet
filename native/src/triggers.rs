@@ -37,7 +37,7 @@ pub fn complete(text: &str, start: usize, caret: usize, inserted: &str) -> (Stri
 
 /// The commands that match what was typed after `/`, after T3 Code: names that start with it, then names
 /// that hold it, then descriptions that hold it, each in the list's own order. A command whose name an
-/// earlier one already took is left out, so Desk's own /model and /clear win over Claude Code's.
+/// earlier one already took is left out, so Comet's own /model and /clear win over Claude Code's.
 pub fn match_commands<'a, T>(commands: &'a [T], query: &str, name: impl Fn(&T) -> &str, description: impl Fn(&T) -> &str) -> Vec<&'a T> {
     let mut seen = std::collections::HashSet::new();
     let mut found: Vec<(u8, usize, &T)> = commands

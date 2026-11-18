@@ -40,7 +40,7 @@ pub struct Workspace {
     pub settings_page: Option<String>,
     /// Whether the saved tabs are back. Until then, a change to the tabs would overwrite them.
     restored: bool,
-    /// Folders `desk <folder>` asked to open before the saved tabs were back. Each opens in a tab once they are.
+    /// Folders `comet <folder>` asked to open before the saved tabs were back. Each opens in a tab once they are.
     asked: Vec<String>,
 }
 
@@ -73,7 +73,7 @@ impl Workspace {
         Ok(())
     }
 
-    /// Opens `dir` in a new tab at the end, as `desk <folder>` asks. Until the saved tabs are back, it
+    /// Opens `dir` in a new tab at the end, as `comet <folder>` asks. Until the saved tabs are back, it
     /// waits for them, so restoring them does not drop it.
     pub fn open_asked(&mut self, dir: String, account: &Account, core: &Core) {
         if !self.restored {

@@ -1,23 +1,23 @@
-//! The folder `desk <folder>` asks Desk to open. An installed Desk hears it as the link
-//! `desk://open?dir=<folder>`, which the system hands to the running Desk, or to the one it starts. A Desk
-//! run from the repo takes it from `DESK_DIR` at launch.
+//! The folder `comet <folder>` asks Comet to open. An installed Comet hears it as the link
+//! `comet://open?dir=<folder>`, which the system hands to the running Comet, or to the one it starts. A Comet
+//! run from the repo takes it from `COMET_DIR` at launch.
 
 use std::path::Path;
 
-/// The link `bin/desk` opens. Only Desk's own links name a folder.
-const OPEN: &str = "desk://open?";
+/// The link `bin/comet` opens. Only Comet's own links name a folder.
+const OPEN: &str = "comet://open?";
 
-/// The folder a `desk://open?dir=` link names, when it is an existing folder. The link comes from
-/// outside Desk, so anything else is ignored.
+/// The folder a `comet://open?dir=` link names, when it is an existing folder. The link comes from
+/// outside Comet, so anything else is ignored.
 pub fn folder_from_url(url: &str) -> Option<String> {
     let query = url.strip_prefix(OPEN)?;
     let dir = query.split('&').find_map(|pair| pair.strip_prefix("dir="))?;
     folder(&percent_decoded(dir)?)
 }
 
-/// The folder `DESK_DIR` names, when it is an existing folder.
+/// The folder `COMET_DIR` names, when it is an existing folder.
 pub fn folder_from_env() -> Option<String> {
-    let dir = std::env::var("DESK_DIR").ok()?;
+    let dir = std::env::var("COMET_DIR").ok()?;
     let absolute = std::env::current_dir().ok()?.join(dir);
     folder(absolute.to_str()?)
 }
@@ -51,12 +51,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_desk_link_names_an_existing_folder_and_nothing_else() {
-        let dir = std::env::temp_dir().join("desk open test ü");
+    fn a_comet_link_names_an_existing_folder_and_nothing_else() {
+        let dir = std::env::temp_dir().join("comet open test ü");
         std::fs::create_dir_all(&dir).unwrap();
         let escaped: String = dir.to_str().unwrap().bytes().map(|b| if b.is_ascii_alphanumeric() || b"/-_.".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect();
-        assert_eq!(folder_from_url(&format!("desk://open?dir={escaped}")).as_deref(), dir.to_str());
-        for url in ["desk://open?dir=%2Fno%2Fsuch%2Ffolder", "desk://open?dir=relative", "desk://other?dir=%2Ftmp", "https://open?dir=%2Ftmp", "desk://open?dir=%ZZ", "desk://open?name=x"] {
+        assert_eq!(folder_from_url(&format!("comet://open?dir={escaped}")).as_deref(), dir.to_str());
+        for url in ["comet://open?dir=%2Fno%2Fsuch%2Ffolder", "comet://open?dir=relative", "comet://other?dir=%2Ftmp", "https://open?dir=%2Ftmp", "comet://open?dir=%ZZ", "comet://open?name=x"] {
             assert_eq!(folder_from_url(url), None, "{url}");
         }
     }

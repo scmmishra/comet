@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test"
 import type { CanUseTool, Options, Query, SDKMessage } from "@anthropic-ai/claude-agent-sdk"
-import type { RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
+import type { RunSettings, ThreadEvent, ThreadItem } from "@comet/protocol"
 import { until } from "../../test-support"
 import { ClaudeSession } from "./session"
 
 // The session looks for Claude Code before it starts a query. The fake query never runs it.
-process.env.DESK_CLAUDE ||= "/usr/bin/true"
+process.env.COMET_CLAUDE ||= "/usr/bin/true"
 
 const DIR = "/work/app"
 const SETTINGS: RunSettings = { agent: "claude", model: "default", permissionMode: "default" }
@@ -239,7 +239,7 @@ test("reports the folder Claude Code's worktree tools moved the session to, and 
   expect(s.moves).toEqual(["/work/side", "/work/app"])
 })
 
-test("an MCP elicitation Desk cannot show is cancelled, not declined", async () => {
+test("an MCP elicitation Comet cannot show is cancelled, not declined", async () => {
   const s = setup()
   const running = await started(s)
   const elicit = running.options.onElicitation!

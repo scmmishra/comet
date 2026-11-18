@@ -3,7 +3,7 @@
 //! beside it opens a copy of the thread, through that message's turn, in a new tab.
 
 use crate::protocol::{ClientMessage, ImageAttachment};
-use crate::shell::Desk;
+use crate::shell::Comet;
 use rune::{El, col, row, text};
 use rune_kit::{ButtonVariant, Checkbox, Dialog, Kit};
 
@@ -22,7 +22,7 @@ struct Ask {
     restore_files: bool,
 }
 
-impl Desk {
+impl Comet {
     /// Asks before rewinding a tab's thread to before one of its messages.
     pub fn ask_rewind(&mut self, tab: &str, message: &str, text: &str, images: &[ImageAttachment]) {
         self.rewind.asking = Some(Ask { tab: tab.to_owned(), message: message.to_owned(), text: text.to_owned(), images: images.to_vec(), restore_files: false });
@@ -42,7 +42,7 @@ impl Desk {
 }
 
 /// The confirmation, for the tab it was asked in.
-pub fn dialog(s: &Desk, tab: &str, k: &Kit, layer: &mut Vec<El>) {
+pub fn dialog(s: &Comet, tab: &str, k: &Kit, layer: &mut Vec<El>) {
     let Some(ask) = s.rewind.asking.as_ref().filter(|ask| ask.tab == tab) else { return };
     // The dialog's description keeps to one line, so the explanation sits in the body, where it wraps.
     let agent = s.agent_name(s.tab_agent(tab));
@@ -55,7 +55,7 @@ pub fn dialog(s: &Desk, tab: &str, k: &Kit, layer: &mut Vec<El>) {
         .label(format!("Restore files {agent} changed since"))
         // A checkbox's description keeps to one line, so it stays short.
         .description("Changes from commands it ran stay.")
-        .on_toggle(|s: &mut Desk| {
+        .on_toggle(|s: &mut Comet| {
             if let Some(ask) = s.rewind.asking.as_mut() {
                 ask.restore_files = !ask.restore_files;
             }
@@ -65,12 +65,12 @@ pub fn dialog(s: &Desk, tab: &str, k: &Kit, layer: &mut Vec<El>) {
         .w_full()
         .gap(8.0)
         .child(row().grow(1.0))
-        .child(crate::theme::button("Cancel").variant(ButtonVariant::Ghost).on_press(|s: &mut Desk| s.rewind.asking = None).build(k))
-        .child(crate::theme::button("Rewind").variant(ButtonVariant::Submit).on_press(|s: &mut Desk| s.confirm_rewind()).build(k));
+        .child(crate::theme::button("Cancel").variant(ButtonVariant::Ghost).on_press(|s: &mut Comet| s.rewind.asking = None).build(k))
+        .child(crate::theme::button("Rewind").variant(ButtonVariant::Submit).on_press(|s: &mut Comet| s.confirm_rewind()).build(k));
     Dialog::new("rewind-thread", "Rewind to this message?")
         .open(true)
         .fit()
-        .on_close(|s: &mut Desk| s.rewind.asking = None)
+        .on_close(|s: &mut Comet| s.rewind.asking = None)
         .child(col().w_full().gap(16.0).px(16.0).pb(16.0).child(explain).children(restore).child(footer))
         .build(k, layer);
 }
@@ -79,10 +79,10 @@ pub fn dialog(s: &Desk, tab: &str, k: &Kit, layer: &mut Vec<El>) {
 mod tests {
     use crate::core::Event;
     use crate::protocol::{CoreMessage, ImageAttachment};
-    use crate::shell::Desk;
+    use crate::shell::Comet;
 
-    fn desk() -> Desk {
-        let mut s = Desk::default();
+    fn comet() -> Comet {
+        let mut s = Comet::default();
         let tabs = serde_json::json!({ "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "Fix the login form", "project": "/code/web", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] });
         s.receive(Event::Message(serde_json::from_value::<CoreMessage>(tabs).unwrap())).unwrap();
         let _ = s.core.sent();
@@ -91,7 +91,7 @@ mod tests {
 
     #[test]
     fn a_confirmed_rewind_asks_the_core_with_the_users_choice() {
-        let mut s = desk();
+        let mut s = comet();
         let image = ImageAttachment { media_type: "image/png".into(), data: "iVBORw==".into() };
         s.ask_rewind("t", "u2", "Now add a test", &[image]);
         assert!(s.core.sent().is_empty(), "nothing goes before the user confirms");
@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn a_cancelled_rewind_sends_nothing() {
-        let mut s = desk();
+        let mut s = comet();
         s.ask_rewind("t", "u2", "Now add a test", &[]);
         s.rewind.asking = None;
         s.confirm_rewind();
@@ -112,7 +112,7 @@ mod tests {
 
     #[test]
     fn a_fork_from_a_message_names_it() {
-        let s = desk();
+        let s = comet();
         s.fork_from("t", "u1");
         assert!(s.core.sent().iter().any(|m| m["type"] == "thread.fork" && m["messageId"] == "u1"));
     }

@@ -6,7 +6,7 @@ import { BROWSER_COMMAND, signInLink } from "./sign-in-link"
 
 const LINK = "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&response_type=code&state=abc&redirect_uri=http%3A%2F%2F127.0.0.1%3A40123%2F"
 /** The line the browser helper prints on the agent's stderr. */
-const PRINTED = `DESK_ANTIGRAVITY_SIGN_IN ${LINK}`
+const PRINTED = `COMET_ANTIGRAVITY_SIGN_IN ${LINK}`
 const CONNECT = { clientInfo: { name: "fake-client", version: "1.0.0" }, authMethod: "fake-auth" }
 
 test("reads Google's sign-in link back to this Mac, and refuses any other", () => {
@@ -21,11 +21,11 @@ test("reads Google's sign-in link back to this Mac, and refuses any other", () =
     `${LINK}#fragment`,
     LINK.replace("state=abc", "state="),
   ]
-  expect(refused.map((link) => signInLink(`DESK_ANTIGRAVITY_SIGN_IN ${link}`))).toEqual(refused.map(() => undefined))
+  expect(refused.map((link) => signInLink(`COMET_ANTIGRAVITY_SIGN_IN ${link}`))).toEqual(refused.map(() => undefined))
   expect(signInLink("Starting the server")).toBeUndefined()
 })
 
-test("the browser helper prints the link it is given on stderr as a line Desk reads, and opens nothing", () => {
+test("the browser helper prints the link it is given on stderr as a line Comet reads, and opens nothing", () => {
   // BROWSER may list several commands split at colons, so a colon would cut the command.
   expect(BROWSER_COMMAND).not.toContain(":")
   const printed = Bun.spawnSync(["/bin/sh", "-c", BROWSER_COMMAND.replace("%s", LINK)], { stdout: "pipe", stderr: "pipe" })

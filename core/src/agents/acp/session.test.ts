@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { RunSettings, ThreadEvent, ThreadItem } from "@desk/protocol"
+import type { RunSettings, ThreadEvent, ThreadItem } from "@comet/protocol"
 import { tempFolder, until } from "../../test-support"
 import type { SessionOptions } from "../agent"
 import { unfinishedResult } from "../steps"
@@ -53,7 +53,7 @@ test("runs a turn: starts the session in the tab's settings, sends the message a
   const agent = run.agent()
 
   expect(agent.written.map((message) => message.method)).toEqual(["initialize", "authenticate", "session/new", "session/set_mode", "session/set_config_option", "session/set_config_option", "session/prompt"])
-  expect(agent.sent("session/new")[0]).toEqual({ cwd: "/repo", mcpServers: [{ type: "http", name: "desk", url: TOOLS.url, headers: [{ name: "Authorization", value: "Bearer t" }] }] })
+  expect(agent.sent("session/new")[0]).toEqual({ cwd: "/repo", mcpServers: [{ type: "http", name: "comet", url: TOOLS.url, headers: [{ name: "Authorization", value: "Bearer t" }] }] })
   expect(agent.sent("session/set_mode")[0]).toEqual({ sessionId: "s1", modeId: "never-ask" })
   expect(agent.sent("session/set_config_option")).toEqual([
     { sessionId: "s1", configId: "model", value: "claude-sonnet" },
@@ -62,13 +62,13 @@ test("runs a turn: starts the session in the tab's settings, sends the message a
   expect(agent.sent("session/prompt")[0]).toEqual({
     sessionId: "s1",
     prompt: [
-      { type: "text", text: "<desk_instructions>\nHand work to other agents.\n</desk_instructions>\n\n<user_request>\nFix the build\n</user_request>" },
+      { type: "text", text: "<comet_instructions>\nHand work to other agents.\n</comet_instructions>\n\n<user_request>\nFix the build\n</user_request>" },
       { type: "image", data: "aGk=", mimeType: "image/png" },
     ],
   })
   expect(run.ids).toEqual(["s1"])
   expect(run.events).toContainEqual({ kind: "init", model: "Claude Sonnet" })
-  // The flavor learns the new session's settings as the account's default, then each change Desk made.
+  // The flavor learns the new session's settings as the account's default, then each change Comet made.
   expect(run.learned[0]).toEqual({ options: FAKE_OPTIONS, opened: true })
   expect(run.learned.at(-1)?.opened).toBe(false)
   expect(run.learned.at(-1)?.options.map((option) => option.currentValue)).toEqual(["claude-sonnet", "low"])

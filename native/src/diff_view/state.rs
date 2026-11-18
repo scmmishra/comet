@@ -111,7 +111,7 @@ pub const EXPAND_STEP: u32 = 20;
 
 /// Row heights in points. Lines are fixed unless they wrap or carry annotations.
 pub(crate) const LINE_H: f32 = 20.0;
-// Desk's change: 40, a tenth under rune-kit's 44, for a more compact list of files.
+// Comet's change: 40, a tenth under rune-kit's 44, for a more compact list of files.
 pub(crate) const HEADER_H: f32 = 40.0;
 pub(crate) const GAP_H: f32 = 32.0;
 pub(crate) const NOTE_H: f32 = 40.0;

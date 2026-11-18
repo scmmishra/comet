@@ -3,14 +3,14 @@ import { mayStayOpen, threadItems, unfinishedItems } from "./items"
 
 const DIR = "/p"
 
-test("shows a call of Desk's tools in the words every agent's thread uses", () => {
-  const delegate = { type: "mcpToolCall", id: "m1", server: "desk", tool: "delegate", status: "completed", arguments: { agent: "antigravity", task: "Check the build." }, result: { content: [{ type: "text", text: "It builds." }] }, error: null } as const
+test("shows a call of Comet's tools in the words every agent's thread uses", () => {
+  const delegate = { type: "mcpToolCall", id: "m1", server: "comet", tool: "delegate", status: "completed", arguments: { agent: "antigravity", task: "Check the build." }, result: { content: [{ type: "text", text: "It builds." }] }, error: null } as const
   expect(threadItems(DIR, delegate, true)).toEqual([
-    { type: "tool", id: "m1", name: "desk.delegate", summary: "antigravity: Check the build.", result: { output: "It builds.", isError: false }, kind: "other", label: "Handed a task to antigravity: Check the build." },
+    { type: "tool", id: "m1", name: "comet.delegate", summary: "antigravity: Check the build.", result: { output: "It builds.", isError: false }, kind: "other", label: "Handed a task to antigravity: Check the build." },
   ])
   expect(threadItems(DIR, delegate, false)[0]).toMatchObject({ label: "Handing a task to antigravity: Check the build." })
   const listAgents = { ...delegate, id: "m2", tool: "list_agents", arguments: {} }
-  expect(threadItems(DIR, listAgents, true)[0]).toMatchObject({ name: "desk.list_agents", summary: "", label: "Listed the agents" })
+  expect(threadItems(DIR, listAgents, true)[0]).toMatchObject({ name: "comet.list_agents", summary: "", label: "Listed the agents" })
 })
 
 test("shows another MCP server's call by server and tool, with its text result or its error", () => {

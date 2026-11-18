@@ -1,4 +1,4 @@
-import type { CommandSource } from "@desk/protocol"
+import type { CommandSource } from "@comet/protocol"
 import { spawn } from "node:child_process"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"

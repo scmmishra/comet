@@ -1,5 +1,5 @@
-// The parts of Codex's app-server protocol that Desk reads, written by hand from the schema that
-// `codex app-server generate-ts` prints. Each type lists only the fields Desk reads.
+// The parts of Codex's app-server protocol that Comet reads, written by hand from the schema that
+// `codex app-server generate-ts` prints. Each type lists only the fields Comet reads.
 
 export interface CodexTurn {
   readonly id: string
@@ -24,7 +24,7 @@ export interface CodexThread {
   readonly turns: readonly CodexTurn[]
 }
 
-/** What the user sent: text, or an image as a URL, which Desk makes a data URL. */
+/** What the user sent: text, or an image as a URL, which Comet makes a data URL. */
 export type UserInput = { readonly type: "text"; readonly text: string } | { readonly type: "image"; readonly url: string } | { readonly type: "localImage"; readonly path: string }
 
 export type FileChangeKind = { readonly type: "add" } | { readonly type: "delete" } | { readonly type: "update"; readonly move_path: string | null }

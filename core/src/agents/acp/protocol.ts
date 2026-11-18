@@ -1,15 +1,15 @@
 /**
- * The Agent Client Protocol's messages, as Desk reads and sends them. ACP is JSON-RPC 2.0 over an agent's
- * stdio. These types hold only the fields Desk uses. The schema is at agentclientprotocol.com.
+ * The Agent Client Protocol's messages, as Comet reads and sends them. ACP is JSON-RPC 2.0 over an agent's
+ * stdio. These types hold only the fields Comet uses. The schema is at agentclientprotocol.com.
  */
 
-/** The protocol version Desk speaks. An agent answers with the version it chose. */
+/** The protocol version Comet speaks. An agent answers with the version it chose. */
 export const PROTOCOL_VERSION = 1
 
 /** The error an agent answers with when it needs the user to sign in first. */
 export const AUTH_REQUIRED = -32000
 
-/** Part of a prompt or of a message. Desk sends text and images, and reads text. */
+/** Part of a prompt or of a message. Comet sends text and images, and reads text. */
 export type ContentBlock =
   | { readonly type: "text"; readonly text: string }
   | { readonly type: "image"; readonly data: string; readonly mimeType: string }
@@ -21,7 +21,7 @@ export interface ClientInfo {
   readonly version: string
 }
 
-/** An MCP server the agent connects to for a session. Desk offers its tools over HTTP. */
+/** An MCP server the agent connects to for a session. Comet offers its tools over HTTP. */
 export interface McpServer {
   readonly type: "http"
   readonly name: string

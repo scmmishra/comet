@@ -2,17 +2,17 @@ import { afterEach, beforeEach, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { ClientMessage, CoreMessage } from "@desk/protocol"
+import type { ClientMessage, CoreMessage } from "@comet/protocol"
 import { startCore, type CoreServer } from "./server"
 import { tempFolder } from "./test-support"
 
-// Each test starts on an empty ~/.desk of its own, so no test sees tabs another saved.
-beforeEach(() => (process.env.DESK_HOME = mkdtempSync(join(tmpdir(), "desk-home-"))))
+// Each test starts on an empty ~/.comet of its own, so no test sees tabs another saved.
+beforeEach(() => (process.env.COMET_HOME = mkdtempSync(join(tmpdir(), "comet-home-"))))
 
 let core: CoreServer | undefined
 afterEach(() => {
   core?.stop()
-  rmSync(process.env.DESK_HOME!, { recursive: true, force: true })
+  rmSync(process.env.COMET_HOME!, { recursive: true, force: true })
 })
 
 /** A client of a fresh core. `next(type)` waits for the next message of that type. */
@@ -104,7 +104,7 @@ test("serves a project's icon and refuses a path outside it", async () => {
   expect((await fetch(url("logo.svg", "wrong"))).status).toBe(403)
 })
 
-test("refuses a caller of Desk's tools that has no session's token", async () => {
+test("refuses a caller of Comet's tools that has no session's token", async () => {
   await connect()
   const ask = (authorization: string) => fetch(`http://127.0.0.1:${core!.port}/mcp`, { method: "POST", headers: { authorization, "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) })
   expect((await ask("Bearer secret")).status).toBe(401)

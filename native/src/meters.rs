@@ -3,7 +3,7 @@
 
 use crate::format;
 use crate::protocol::{AgentInfo, ClientMessage, ContextReading, PlanUsage, UsageWindow};
-use crate::shell::Desk;
+use crate::shell::Comet;
 use rune::{El, col, el, icon, row, text};
 use rune_kit::{Kit, Placement, Progress, popover};
 use std::time::{Duration, Instant};
@@ -18,9 +18,9 @@ pub struct Meters {
     asked_at: Option<Instant>,
 }
 
-impl Desk {
+impl Comet {
     /// Asks for plan usage, and the active project's Space, as the window comes back: files and usage most
-    /// likely changed outside Desk then.
+    /// likely changed outside Comet then.
     pub fn refresh_outside(&mut self) {
         self.core.send(&ClientMessage::UsageGet);
         self.meters.asked_at = Some(Instant::now());
@@ -45,7 +45,7 @@ impl Desk {
 /// The tab bar's plan usage: the fullest window of the active tab's agent as a small meter, and every
 /// agent's windows in a popover. An agent with no plan limits has none, so the meter then shows the
 /// fullest window of any agent.
-pub fn usage_button(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
+pub fn usage_button(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
     let read: Vec<(&AgentInfo, &PlanUsage)> = s.account.agents.iter().filter_map(|a| Some((a, a.usage.as_ref()?))).collect();
     let active = s.workspace.active_tab().and_then(|t| s.account.usage(&t.agent));
     let shown: Vec<&UsageWindow> = active.map_or_else(|| read.iter().flat_map(|(_, u)| &u.windows).collect(), |u| u.windows.iter().collect());
@@ -62,12 +62,12 @@ pub fn usage_button(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> Option<El> {
         .role("button")
         .label("Plan usage")
         .expanded(s.meters.open)
-        .on_press(|s: &mut Desk| s.meters.open = !s.meters.open)
+        .on_press(|s: &mut Comet| s.meters.open = !s.meters.open)
         .child(icon(&crate::icons::GAUGE, 15.0).color(k.c.text_muted))
         .child(meter(fullest.percent as f32 / 100.0, k))
         .child(text(format!("{}%", fullest.percent.round())).font(crate::theme::text(12.0)).color(k.c.text_muted));
     if s.meters.open {
-        let usage = crate::ui::popover(k, usage_popover(&read, k)).modal(true, |s: &mut Desk| s.meters.open = false);
+        let usage = crate::ui::popover(k, usage_popover(&read, k)).modal(true, |s: &mut Comet| s.meters.open = false);
         layer.push(popover::anchored(k, usage, "usage-button", Placement::BottomEnd, 8.0));
     }
     Some(button)

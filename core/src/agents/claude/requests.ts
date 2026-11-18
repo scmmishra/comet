@@ -1,9 +1,9 @@
-import type { PermissionAnswer, PermissionKind, Question, ThreadItem } from "@desk/protocol"
+import type { PermissionAnswer, PermissionKind, Question, ThreadItem } from "@comet/protocol"
 import type { CanUseTool, PermissionResult, PermissionUpdate } from "@anthropic-ai/claude-agent-sdk"
 import { stripVTControlCharacters } from "node:util"
 
 /**
- * What Desk shows for Claude Code's permission requests, and how the user's answers go back, after
+ * What Comet shows for Claude Code's permission requests, and how the user's answers go back, after
  * T3 Code. A tool call that needs approval becomes a `permission` item. An AskUserQuestion call
  * becomes a `question` item, and its answers go back as the tool's input.
  */

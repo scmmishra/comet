@@ -1,10 +1,10 @@
-import type { CoreReady } from "@desk/protocol"
+import type { CoreReady } from "@comet/protocol"
 import { startCore } from "./server"
 import { takeLoginEnvironment } from "./login-environment"
 
-const token = process.env.DESK_TOKEN
+const token = process.env.COMET_TOKEN
 if (!token) {
-  console.error("DESK_TOKEN must be set. The Desk app starts the core and sets it.")
+  console.error("COMET_TOKEN must be set. The Comet app starts the core and sets it.")
   process.exit(1)
 }
 

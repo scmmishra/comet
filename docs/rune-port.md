@@ -1,16 +1,16 @@
 # Moving the app to Rune
 
-Desk's UI moved from Electron and Solid to Rune, Anomaly's Rust framework. The app lives in `native/`. The Bun core stayed as it was, with the Agent SDK, Git, PTYs, commands and plugins. The protocol stayed JSON over one loopback WebSocket.
+Comet's UI moved from Electron and Solid to Rune, Anomaly's Rust framework. The app lives in `native/`. The Bun core stayed as it was, with the Agent SDK, Git, PTYs, commands and plugins. The protocol stayed JSON over one loopback WebSocket.
 
-The work went in phases, and all of them are done. The Electron app stayed the shipped Desk until the last phase, which removed it. This file records the move and the gaps Rune still leaves.
+The work went in phases, and all of them are done. The Electron app stayed the shipped Comet until the last phase, which removed it. This file records the move and the gaps Rune still leaves.
 
 ## Why
 
 Spikes on this Mac compared a Rune build with the Electron app:
 
-- Scrolling the same long thread missed 0.9% of refreshes at 120 Hz in Rune, against 4.8% in Desk Dev. The worst hitch was 33 ms in Rune and 309 ms in Desk Dev.
-- The whole Rune app used about 101 MB with one long thread. Desk Dev's renderer alone used 361 MB.
-- libghostty-vt parsed plain text 6 to 9 times faster than ghostty-web, the engine Desk's terminal uses today.
+- Scrolling the same long thread missed 0.9% of refreshes at 120 Hz in Rune, against 4.8% in Comet Dev. The worst hitch was 33 ms in Rune and 309 ms in Comet Dev.
+- The whole Rune app used about 101 MB with one long thread. Comet Dev's renderer alone used 361 MB.
+- libghostty-vt parsed plain text 6 to 9 times faster than ghostty-web, the engine Comet's terminal uses today.
 
 ## Phases
 
@@ -19,7 +19,7 @@ Spikes on this Mac compared a Rune build with the Electron app:
 - A `native/` crate, pinned to a Rune rev of `dev`.
 - Rust protocol types for the messages the app reads.
 - A core client: it starts Bun with a token, reads the port from the core's first line and connects over the WebSocket.
-- A theme module that lays Desk's palette over the OpenCode kit, as `index.css` does for `@opencode/ui`.
+- A theme module that lays Comet's palette over the OpenCode kit, as `index.css` does for `@opencode/ui`.
 - A window with Rune's tab strip, ⌘1 to ⌘9 in the View menu, and a single instance.
 - Done: it opens, starts the core and lists the saved tabs.
 
@@ -29,7 +29,7 @@ What changed from the plan:
 - The fonts were first the OpenCode theme's, Inter and IBM Plex Mono, because Geist's npm package ships only woff2, which Rune does not read. The app now carries Geist's variable TTFs from Vercel's repo, in `native/assets/fonts`.
 - The client does not reconnect. The Electron app's client does not either.
 - The theme is a module in the crate, not a crate of its own.
-- The single instance is a file lock in the instance's folder. Rune's `single_instance` covers only Windows, so a second launch exits. `bin/desk` hands a folder to the running Desk through a `desk://open?dir=` link instead, which the bundle declares.
+- The single instance is a file lock in the instance's folder. Rune's `single_instance` covers only Windows, so a second launch exits. `bin/comet` hands a folder to the running Comet through a `comet://open?dir=` link instead, which the bundle declares.
 
 ### Phase 2: Thread
 
@@ -72,7 +72,7 @@ Done so far:
 Still to do:
 
 - Syntax colours in the file view, and Review's per-file "open" button.
-- In the terminal, the mouse reports only the primary button. Box-drawing characters come from a fallback font, so lines may not join. `GridRow::shape` can draw them as vectors, but Rune has no table of their strokes, and Desk would have to write one.
+- In the terminal, the mouse reports only the primary button. Box-drawing characters come from a fallback font, so lines may not join. `GridRow::shape` can draw them as vectors, but Rune has no table of their strokes, and Comet would have to write one.
 - Done when daily coding work needs no Electron.
 
 ### Phase 4: The rest
@@ -94,44 +94,44 @@ Done:
 
 Done:
 
-- `scripts/package.sh` builds the native Desk.app: the release binary, the core and Bun in `Contents/Resources`, the icon from `Desk.icon` through `actool`, and the `desk:` scheme. It is signed ad hoc. `mise run install`, the CI and Release workflows and `bin/desk` use it.
-- A bundled Desk finds its core in its own resources and serves the main instance, `~/.desk`. Run from the repo, it keeps the `native` instance, since the Electron Desk Dev owns `~/.desk/dev` under a lock of its own.
+- `scripts/package.sh` builds the native Comet.app: the release binary, the core and Bun in `Contents/Resources`, the icon from `Comet.icon` through `actool`, and the `comet:` scheme. It is signed ad hoc. `mise run install`, the CI and Release workflows and `bin/comet` use it.
+- A bundled Comet finds its core in its own resources and serves the main instance, `~/.comet`. Run from the repo, it keeps the `native` instance, since the Electron Comet Dev owns `~/.comet/dev` under a lock of its own.
 - `AGENTS.md` describes the native app, its tasks and Rune's headless checks.
 
-- `app/` is gone. Desk's version is `native/Cargo.toml`'s, and its icon is `native/assets/Desk.icon`.
+- `app/` is gone. Comet's version is `native/Cargo.toml`'s, and its icon is `native/assets/Comet.icon`.
 
 Left:
 
-- The dev instance can take the name `dev`, now that no other Desk owns `~/.desk/dev`.
+- The dev instance can take the name `dev`, now that no other Comet owns `~/.comet/dev`.
 
 ## Open decisions
 
-- **The tab bar.** Rune's `TabStrip` draws OpenCode's tabs: 13 px medium text and OpenCode's widths. The Electron app draws its own: 210 px tabs with 12 px regular text and the project mark. Either Desk builds its own tab bar in Rune, or the theme changes `ui_compact`, which other components also read.
+- **The tab bar.** Rune's `TabStrip` draws OpenCode's tabs: 13 px medium text and OpenCode's widths. The Electron app draws its own: 210 px tabs with 12 px regular text and the project mark. Either Comet builds its own tab bar in Rune, or the theme changes `ui_compact`, which other components also read.
 - **The project mark.** `@opencode/ui`'s avatar draws generated art for a project with no colour or icon. The native app draws the initial on a gray tile there.
 
 ## Rune gaps
 
-- No terminal engine. Rune's `grid` draws a terminal's screen and reads it to a screen reader, but Rune parses no output. Desk uses `alacritty_terminal` until Rune adds an engine. libghostty-vt was set aside: its build needs Zig 0.15.2 and an SDK pin. The grid pins a wide character to its column's left edge, where it cannot be centred in its two cells.
+- No terminal engine. Rune's `grid` draws a terminal's screen and reads it to a screen reader, but Rune parses no output. Comet uses `alacritty_terminal` until Rune adds an engine. libghostty-vt was set aside: its build needs Zig 0.15.2 and an SDK pin. The grid pins a wide character to its column's left edge, where it cannot be centred in its two cells.
 - Rune keeps winit's Quit on ⌘Q, so the press-twice quit cannot take that key.
 - Markdown messages are their own selection group, so a drag stops at a message's end. `.selection_group(false)` works around it.
 - `Collapsible` builds its content even when closed.
 - `DiffView` scrolls on its own, so it needs a height inside a thread row.
-- `DiffView` draws its own file headers and fixes its syntax colours and code font. Desk keeps a copy of it in `native/src/diff_view`, with hooks for all three, so Review matches the Electron app. anomalyco/rune#576 asks for the hooks upstream. Once they land, Desk goes back to rune-kit's.
+- `DiffView` draws its own file headers and fixes its syntax colours and code font. Comet keeps a copy of it in `native/src/diff_view`, with hooks for all three, so Review matches the Electron app. anomalyco/rune#576 asks for the hooks upstream. Once they land, Comet goes back to rune-kit's.
 - Markdown block margins are fixed in rune-kit: 12 points where the Electron app sets 10.4.
 - rune-kit's Markdown draws an icon only before a link to a web page, so a file link in a reply has no file icon.
 - A growth stack cannot grow virtual rows open, and holds removed rows 0.15 s before it closes up. Review's files fold at once for this.
 - Text has no unbreakable span, so inline code wraps at its spaces. No-break spaces would keep it whole, but a copied command would then carry them.
 - Rune has no left-start placement, so a subagent's detail centres beside its row.
 - A surface anchored beside its anchor is not fitted to the window, only one above or below it, and a rune-kit `Menu` takes no maximum height. A submenu opens beside its row, so a long one runs off the window. The header's MCP servers and skills open their lists beside the menu in a `PopupList`, which takes a maximum height, not in a submenu.
-- rune-kit's `Dialog` keeps its title and description to one line each, and a long one runs past the panel and pushes the close button out. Desk puts longer text in the dialog's body, where it wraps. A `Checkbox` description keeps to one line too, so Desk keeps it short.
-- A truncated text draws only its first line, but takes the height of all its lines. Text with newlines makes its row tall, so Desk passes one line to `.truncate()`.
-- Rune lights a `.hover()` style on every element under the pointer, including elements under an overlay. Only a modal makes them inert. rune-kit's `scrim` catches presses but not hover, and its `Popover` uses one. Desk makes each of its popovers a modal that closes on an outside press.
+- rune-kit's `Dialog` keeps its title and description to one line each, and a long one runs past the panel and pushes the close button out. Comet puts longer text in the dialog's body, where it wraps. A `Checkbox` description keeps to one line too, so Comet keeps it short.
+- A truncated text draws only its first line, but takes the height of all its lines. Text with newlines makes its row tall, so Comet passes one line to `.truncate()`.
+- Rune lights a `.hover()` style on every element under the pointer, including elements under an overlay. Only a modal makes them inert. rune-kit's `scrim` catches presses but not hover, and its `Popover` uses one. Comet makes each of its popovers a modal that closes on an outside press.
 
-## Desk's design rules
+## Comet's design rules
 
 The native app was matched against the Electron app, which was built from `@opencode/ui`. Its look, icons and type carry over. A few rules that are easy to miss:
 
-- Desk's own text is weight 400 on a 1.5 line. Only `@opencode/ui` components use the kit's 440 and 530.
+- Comet's own text is weight 400 on a 1.5 line. Only `@opencode/ui` components use the kit's 440 and 530.
 - Every `<Icon>` draws at 15 points, whatever size class it is given (`icons::SIZE`).
 - In the design, a border takes room, as in CSS, and an outline drawn as a shadow does not. Rune's borders take no room, so a native element with a design border adds its width to its padding.
-- rem values shrink by Desk's 13 pixel root: `@opencode/ui`'s popover radius is 4.875 points, not 6.
+- rem values shrink by Comet's 13 pixel root: `@opencode/ui`'s popover radius is 4.875 points, not 6.

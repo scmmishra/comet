@@ -1,14 +1,14 @@
-//! How each agent Desk runs looks and reads: its mark, its colour, and the words for where it stands.
+//! How each agent Comet runs looks and reads: its mark, its colour, and the words for where it stands.
 
 use crate::icons;
 use crate::protocol::{AgentAccount, AgentInfo, AgentState, ClientMessage};
-use crate::shell::Desk;
+use crate::shell::Comet;
 use crate::theme;
 use rune::{Color, El, Icon, icon};
 use rune_kit::{ButtonVariant, Kit};
 use rune_theme_opencode::{icons as ic, provider_icons};
 
-impl Desk {
+impl Comet {
     /// An agent's name, such as "Claude Code".
     pub fn agent_name<'a>(&'a self, agent: &'a str) -> &'a str {
         self.account.agent(agent).map_or_else(|| fallback_name(agent), |a| a.name.as_str())
@@ -25,7 +25,7 @@ impl Desk {
     }
 }
 
-/// An agent's mark from the OpenCode catalog, or Desk's own where the catalog has none.
+/// An agent's mark from the OpenCode catalog, or Comet's own where the catalog has none.
 fn glyph(agent: &str) -> &'static Icon {
     match agent {
         "claude" => &icons::CLAUDE,
@@ -106,7 +106,7 @@ pub fn status_line(agent: &AgentInfo) -> String {
     }
 }
 
-/// What to do about an agent that is not ready, or what Desk is doing to get it ready, in a sentence.
+/// What to do about an agent that is not ready, or what Comet is doing to get it ready, in a sentence.
 pub fn setup_hint(agent: &AgentInfo) -> Option<String> {
     match agent.state {
         AgentState::Installing => Some("Downloading and installing. This takes a minute or two.".to_owned()),
@@ -117,12 +117,12 @@ pub fn setup_hint(agent: &AgentInfo) -> Option<String> {
 }
 
 /// The buttons that get an agent ready: its install or its sign-in, and a way to stop either while it
-/// runs. Empty when Desk can do nothing, or nothing is needed. `install` names the install button.
+/// runs. Empty when Comet can do nothing, or nothing is needed. `install` names the install button.
 pub fn setup_actions(agent: &AgentInfo, install: String, k: &Kit) -> Vec<El> {
     let can = |feature: &str| agent.features.iter().any(|f| f == feature);
     let send = |message: fn(String) -> ClientMessage| {
         let id = agent.id.clone();
-        move |s: &mut Desk| s.core.send(&message(id.clone()))
+        move |s: &mut Comet| s.core.send(&message(id.clone()))
     };
     let button = |words: String| theme::small_button(words);
     match agent.state {
@@ -133,9 +133,9 @@ pub fn setup_actions(agent: &AgentInfo, install: String, k: &Kit) -> Vec<El> {
             let reopen = agent.sign_in_link.clone().map(|link| {
                 button("Open the page".into())
                     .variant(ButtonVariant::Contrast)
-                    .on_press_tx(move |s: &mut Desk, tx| {
+                    .on_press_tx(move |s: &mut Comet, tx| {
                         if let Err(error) = tx.open_url(&link) {
-                            s.toasts.error("Desk could not open the sign-in page".into(), Some(error.to_string()));
+                            s.toasts.error("Comet could not open the sign-in page".into(), Some(error.to_string()));
                         }
                     })
                     .build(k)

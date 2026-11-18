@@ -1,4 +1,4 @@
-import type { AgentVersion } from "@desk/protocol"
+import type { AgentVersion } from "@comet/protocol"
 import { readFileSync, realpathSync } from "node:fs"
 import { join } from "node:path"
 import { configDir } from "./config-dir"
@@ -16,7 +16,7 @@ const NATIVE_VERSIONS = "/.local/share/claude/versions/"
 
 /**
  * Claude Code's version and the newest on its update channel. Claude Code updates itself only while it
- * runs, so Desk checks for it, after T3 Code. A version that cannot be read, such as offline, is left out.
+ * runs, so Comet checks for it, after T3 Code. A version that cannot be read, such as offline, is left out.
  */
 export async function claudeCodeVersion(): Promise<AgentVersion> {
   const path = await claudeCodePath().catch(() => undefined)
@@ -30,10 +30,10 @@ export async function claudeCodeVersion(): Promise<AgentVersion> {
   }
 }
 
-/** Updates Claude Code with its own updater. Only the native install has one Desk may run. */
+/** Updates Claude Code with its own updater. Only the native install has one Comet may run. */
 export async function updateClaudeCode() {
   const path = await claudeCodePath()
-  if (!isNativeInstall(path)) throw new Error("Desk updates only Claude Code's native install. Update this one the way you installed it.")
+  if (!isNativeInstall(path)) throw new Error("Comet updates only Claude Code's native install. Update this one the way you installed it.")
   const child = spawn([path, "update"], { stdout: "ignore", stderr: "pipe" })
   const [error, code] = await Promise.all([new Response(child.stderr).text(), child.exited])
   if (code !== 0) throw new Error(`Claude Code could not update: ${error.trim() || `exit code ${code}`}`)

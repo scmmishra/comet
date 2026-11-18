@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { CoreMessage, TabInfo } from "@desk/protocol"
+import type { CoreMessage, TabInfo } from "@comet/protocol"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { fakeAgent, gitRepo, tempFolder, until, useTempHome } from "./test-support"
@@ -12,11 +12,11 @@ import { samePath } from "./worktrees"
 useTempHome()
 
 const tab = (id: string, project: string): TabInfo => ({ id, title: "New session", project, terminals: [], agent: "claude", model: "default", permissionMode: "default" })
-const saved = () => JSON.parse(readFileSync(join(process.env.DESK_HOME!, "window.json"), "utf8"))
+const saved = () => JSON.parse(readFileSync(join(process.env.COMET_HOME!, "window.json"), "utf8"))
 
 /** A window whose saved file holds `state`, the messages it sends, and each thread a tab moved to. */
 function open(state: object) {
-  writeFileSync(join(process.env.DESK_HOME!, "window.json"), JSON.stringify(state))
+  writeFileSync(join(process.env.COMET_HOME!, "window.json"), JSON.stringify(state))
   const sent: CoreMessage[] = []
   const stale: string[] = []
   const shown: [string, string | undefined][] = []
@@ -162,7 +162,7 @@ test("refuses to rename, fork or delete a thread that has not started", async ()
 function openWithAgents(state: object) {
   const claude = fakeAgent("claude", ["steer", "rewind", "restore-files", "fork", "rename", "delete"], [{ id: "c1", title: "Older", updatedAt: 1 }])
   const codex = fakeAgent("codex", [], [{ id: "x1", title: "Newer", updatedAt: 2 }])
-  writeFileSync(join(process.env.DESK_HOME!, "window.json"), JSON.stringify(state))
+  writeFileSync(join(process.env.COMET_HOME!, "window.json"), JSON.stringify(state))
   const sent: CoreMessage[] = []
   const stale: string[] = []
   const ended: [string, string, string][] = []
@@ -455,7 +455,7 @@ test("keeps the checkpoints of a plugin's thread that no tab shows", async () =>
   repo.write("a.txt", "two\n")
   const dropped = (await capture(repo.dir))!
   openWithAgents({ tabs: [codexTab("a", repo.dir)], threads: {}, keyed: { [`${repo.dir}\ninbox.conv-1`]: { key: "inbox.conv-1", turnTo: kept } }, recent: [] })
-  const refs = () => repo.git("for-each-ref", "--format=%(refname:lstrip=-1)", "refs/desk/")
+  const refs = () => repo.git("for-each-ref", "--format=%(refname:lstrip=-1)", "refs/comet/")
   await until(() => !refs().includes(dropped))
   expect(refs()).toBe(kept)
 })
@@ -477,7 +477,7 @@ function openInRepo(threads: { id: string; title: string; updatedAt: number }[] 
   const id = "claude"
   const agent = fakeAgent(id, [], threads, moves)
   const tabIn = (dir: string): TabInfo => ({ ...tab("a", dir), agent: id })
-  writeFileSync(join(process.env.DESK_HOME!, "window.json"), JSON.stringify({ tabs: [tabIn(repo.dir)], threads: {}, recent: [] }))
+  writeFileSync(join(process.env.COMET_HOME!, "window.json"), JSON.stringify({ tabs: [tabIn(repo.dir)], threads: {}, recent: [] }))
   const sent: CoreMessage[] = []
   const agents = new Agents(() => {}, { compactIdle: () => false }, { [id]: agent.make })
   const delegations = new Delegations(agents, () => "http://127.0.0.1:0/mcp")
@@ -506,7 +506,7 @@ test("moves a thread into the worktree its agent entered once its turn ends, and
   expect(agent.sessions[1]!.options.resume).toBe("claude-session")
 })
 
-test("offers Desk's move tool to an agent whose threads can move, and moves its thread after the turn", async () => {
+test("offers Comet's move tool to an agent whose threads can move, and moves its thread after the turn", async () => {
   const { worktree, agent, window, delegations, moved } = openInRepo()
   await window.send("a", "Work in a worktree")
   const tools = delegations.toolsFor(agent.sessions[0]!.options.tools!.authorization)!
@@ -519,7 +519,7 @@ test("offers Desk's move tool to an agent whose threads can move, and moves its 
   expect(moved()!.project).toBe(worktree)
 })
 
-test("gives Desk's move tool only to an agent whose threads can move", async () => {
+test("gives Comet's move tool only to an agent whose threads can move", async () => {
   const { agent, window, delegations } = openInRepo([], false)
   await window.send("a", "Hi")
   expect(delegations.toolsFor(agent.sessions[0]!.options.tools!.authorization)!.tools.map((tool) => tool.name)).not.toContain("move_to_worktree")

@@ -2,10 +2,10 @@ import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { spawn } from "./environment"
 
-/** How long a git command may run before Desk stops it, after T3 Code. */
+/** How long a git command may run before Comet stops it, after T3 Code. */
 const TIMEOUT_MS = 30_000
 
-/** Ways a git command runs. `maxBytes` caps what Desk reads of its output. */
+/** Ways a git command runs. `maxBytes` caps what Comet reads of its output. */
 export interface GitOptions {
   readonly env?: Record<string, string>
   readonly maxBytes?: number
@@ -41,7 +41,7 @@ let found: { readonly path: string | undefined; readonly binary: Promise<string>
 /**
  * The binary `git` on the core's PATH runs, by Git's own record of where it lives. On a Mac, `git` is
  * often Apple's /usr/bin/git, a shim that looks up Xcode's tools on every run: it took 16.8 ms a run here,
- * against 4.8 ms for the binary it finds. Desk runs that binary. The PATH changes once the login shell's
+ * against 4.8 ms for the binary it finds. Comet runs that binary. The PATH changes once the login shell's
  * arrives, so the binary is looked up again for a new PATH. A Git whose record names no binary runs as `git`.
  */
 export function gitBinary(): Promise<string> {
@@ -64,11 +64,11 @@ async function lookUpGit(): Promise<string> {
 }
 
 /**
- * What Desk adds to git's environment. `spawn` adds it to the core's own.
- * - Desk never takes Git's optional locks, which would get in the way of the user's own git.
+ * What Comet adds to git's environment. `spawn` adds it to the core's own.
+ * - Comet never takes Git's optional locks, which would get in the way of the user's own git.
  * - A bare repository inside a project is never used on its own, after T3 Code. Its config could
- *   otherwise run a command, such as `core.fsmonitor`, when Desk reads the project.
- * Git reads config from the environment as GIT_CONFIG_COUNT entries, so Desk adds one after any the user set.
+ *   otherwise run a command, such as `core.fsmonitor`, when Comet reads the project.
+ * Git reads config from the environment as GIT_CONFIG_COUNT entries, so Comet adds one after any the user set.
  */
 function gitEnv(extra: Record<string, string> = {}): Record<string, string> {
   const count = Number(process.env.GIT_CONFIG_COUNT) || 0

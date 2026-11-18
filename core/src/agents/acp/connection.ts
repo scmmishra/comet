@@ -27,7 +27,7 @@ export interface AcpClient {
 /** How the client connects: who it says it is, and how it authenticates. */
 export interface ConnectOptions {
   readonly clientInfo: ClientInfo
-  /** The method to authenticate with right after `initialize`. Without it, Desk relies on the agent's own sign-in. */
+  /** The method to authenticate with right after `initialize`. Without it, Comet relies on the agent's own sign-in. */
   readonly authMethod?: string
 }
 
@@ -38,8 +38,8 @@ interface SessionParams {
 }
 
 /**
- * A connection to one ACP agent process, initialized and authenticated. Desk offers the agent neither
- * its file system nor its terminals, so the agent uses its own. Requests Desk does not handle are refused.
+ * A connection to one ACP agent process, initialized and authenticated. Comet offers the agent neither
+ * its file system nor its terminals, so the agent uses its own. Requests Comet does not handle are refused.
  */
 export class AcpConnection {
   private constructor(private readonly rpc: JsonRpc) {}
@@ -53,7 +53,7 @@ export class AcpConnection {
         notification: (method, params) => method === "session/update" && client.update(params as SessionNotification),
         request: (method, params) => {
           if (method === "session/request_permission") return client.permission(params as PermissionRequest)
-          throw new RpcError(`Desk does not handle ${method}.`, METHOD_NOT_FOUND)
+          throw new RpcError(`Comet does not handle ${method}.`, METHOD_NOT_FOUND)
         },
         closed: client.closed,
       },

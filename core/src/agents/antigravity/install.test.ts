@@ -34,7 +34,7 @@ test("installs the CLI as a program and marks the install finished", async () =>
 })
 
 test("removes the other installs only once the new one is in place, the ACP server's among them", async () => {
-  // What an earlier Desk left: the ACP server's install and the folder it unpacked itself into.
+  // What an earlier Comet left: the ACP server's install and the folder it unpacked itself into.
   mkdirSync(runtimeFolder("1.4.5"), { recursive: true })
   writeFileSync(join(runtimeFolder("1.4.5"), "agy_acp_server.par"), "server")
   markInstalled("1.4.5")
@@ -104,7 +104,7 @@ test("says in plain words that Google could not be reached, and that nothing was
     throw new TypeError("getaddrinfo ENOTFOUND storage.googleapis.com")
   }
   const error = await installRuntime({ release: built.release, download: fetchWith(unreachable) }).catch((caught: Error) => caught.message)
-  expect(error).toBe("Desk could not download Antigravity from Google. Check the network connection and any proxy settings, then try again. Nothing was installed.")
+  expect(error).toBe("Comet could not download Antigravity from Google. Check the network connection and any proxy settings, then try again. Nothing was installed.")
   expect(noDownloadLeft()).toBe(true)
 })
 

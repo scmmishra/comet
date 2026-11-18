@@ -1,4 +1,4 @@
-import { REVIEW_SCOPES, type ClientMessage, type CoreMessage, type ProjectPart, type ProjectParts } from "@desk/protocol"
+import { REVIEW_SCOPES, type ClientMessage, type CoreMessage, type ProjectPart, type ProjectParts } from "@comet/protocol"
 import { Agents } from "./agents/registry"
 import { discoverCommands } from "./command-sources"
 import { Commands } from "./commands"
@@ -19,7 +19,7 @@ import { createWorktree, listWorktrees } from "./worktrees"
 
 type Send = (message: CoreMessage) => void
 
-/** Where agents reach Desk's own tools, over MCP. */
+/** Where agents reach Comet's own tools, over MCP. */
 const MCP_PATH = "/mcp"
 
 export interface CoreServer {
@@ -40,7 +40,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
   let settings = loadSettings()
   const agents = new Agents(broadcast, { compactIdle: () => settings.threads.compactIdle })
   const report = (error: unknown) => broadcast({ type: "error", message: errorMessage(error) })
-  // An agent reaches Desk's tools at the server's own port, which is known once it listens.
+  // An agent reaches Comet's tools at the server's own port, which is known once it listens.
   let toolsUrl = ""
   const delegations = new Delegations(agents, () => toolsUrl)
   const window = new Window({
@@ -71,7 +71,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
 
   const requireFile = (dir: string, path: string) => {
     const file = openableFile(dir, path)
-    if (!file) throw new Error(`Desk can only open a file that exists: ${path}`)
+    if (!file) throw new Error(`Comet can only open a file that exists: ${path}`)
     return file
   }
 
@@ -211,7 +211,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     port: 0,
     fetch(request, server) {
       const url = new URL(request.url)
-      // An agent's session calls Desk's tools here, under the token Desk gave that session. A call runs
+      // An agent's session calls Comet's tools here, under the token Comet gave that session. A call runs
       // another agent's whole task, so it may stay open far longer than Bun lets an idle request.
       if (url.pathname === MCP_PATH) {
         server.timeout(request, 0)

@@ -7,13 +7,13 @@ import type { AppServer } from "./server"
 /** The conversations Codex saved, which it keeps in `~/.codex` and lists by project folder. */
 export function codexThreads(server: AppServer): AgentThreads {
   /**
-   * Lets Codex unload a thread Desk loaded only to change it. A session resumes a thread with Desk's tools
+   * Lets Codex unload a thread Comet loaded only to change it. A session resumes a thread with Comet's tools
    * in its config, and a resume of a thread that is still loaded keeps the config it loaded with.
    */
   const release = (threadId: string) => server.request("thread/unsubscribe", { threadId }).catch(() => undefined)
   const read = async (threadId: string) => (await server.request<{ thread: CodexThread }>("thread/read", { threadId, includeTurns: true })).thread
 
-  /** The turn a user message opened. Codex keeps the id Desk gave the message, so Desk finds its turn by it. */
+  /** The turn a user message opened. Codex keeps the id Comet gave the message, so Comet finds its turn by it. */
   const turnOf = async (threadId: string, message: string) => {
     const turns = (await read(threadId)).turns
     const index = turns.findIndex((turn) => turn.items.some((item) => item.type === "userMessage" && messageId(item) === message))

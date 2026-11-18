@@ -1,9 +1,9 @@
 #!/bin/bash
-# Stages what Desk.app carries to run its core in dist/stage: the core's source, its production packages,
+# Stages what Comet.app carries to run its core in dist/stage: the core's source, its production packages,
 # and the Bun binary that runs it. `package.sh` copies it into the bundle.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-bun="${DESK_BUN:-$(command -v bun)}"
+bun="${COMET_BUN:-$(command -v bun)}"
 stage="$repo/dist/stage"
 cd "$repo"
 
@@ -20,6 +20,6 @@ cp bun.lock "$stage/core/"
 # A production install takes the lockfile as frozen, so the root package.json goes as it is.
 cp package.json "$stage/core/"
 (cd "$stage/core" && "$bun" install --production --linker hoisted)
-# Desk runs the Claude Code installed on the Mac, so the Agent SDK's own copy of it, about 300 MB, stays out.
+# Comet runs the Claude Code installed on the Mac, so the Agent SDK's own copy of it, about 300 MB, stays out.
 rm -rf "$stage/core/node_modules/@anthropic-ai/claude-agent-sdk-darwin-"*
 cp "$(readlink -f "$bun")" "$stage/bun"

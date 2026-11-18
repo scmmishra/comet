@@ -1,4 +1,4 @@
-//! Desk's colour themes under rune-kit's tokens. Components start from the OpenCode theme, which matches `@opencode/ui`, and
+//! Comet's colour themes under rune-kit's tokens. Components start from the OpenCode theme, which matches `@opencode/ui`, and
 //! draw in the colour theme's colours. Those colours stay the source.
 
 use crate::protocol::ColorTheme;
@@ -48,8 +48,8 @@ struct Flavours {
     dark: Colors,
 }
 
-/// Desk's own colours. Review and code take @pierre/diffs' pierre-light and pierre-dark colours.
-const DESK: Flavours = Flavours {
+/// Comet's own colours. Review and code take @pierre/diffs' pierre-light and pierre-dark colours.
+const COMET: Flavours = Flavours {
     dark: Colors {
         ground: "#08090a",
         panel: "#0f1011",
@@ -153,7 +153,7 @@ const VERDIGRIS: Flavours = Flavours {
     },
 };
 
-/// The colour theme the window draws in. Desk has one window, and the shell sets this from the settings
+/// The colour theme the window draws in. Comet has one window, and the shell sets this from the settings
 /// before it draws, so the helpers below that take only `dark` follow it.
 static ACTIVE: AtomicU8 = AtomicU8::new(0);
 
@@ -172,7 +172,7 @@ fn index(theme: ColorTheme) -> usize {
 
 fn flavour(theme: ColorTheme, dark: bool) -> &'static Colors {
     let flavours = match theme {
-        ColorTheme::Desk => &DESK,
+        ColorTheme::Comet => &COMET,
         ColorTheme::Verdigris => &VERDIGRIS,
     };
     if dark { &flavours.dark } else { &flavours.light }
@@ -208,7 +208,7 @@ pub fn kit(dark: bool) -> &'static Kit {
     KITS[index(theme)][dark as usize].get_or_init(|| build(dark, flavour(theme, dark)))
 }
 
-/// The kit Review's DiffView draws with: Desk's kit, with the colours DiffView reads from it set as
+/// The kit Review's DiffView draws with: Comet's kit, with the colours DiffView reads from it set as
 /// @pierre/diffs draws a diff. The theme's added and removed colours tint the changed lines and their
 /// bars, line numbers take code's foreground mixed 65% with the panel, and file headers sit on the panel
 /// under faint lines.
@@ -221,7 +221,7 @@ pub fn review_kit(dark: bool) -> &'static Kit {
         k.c.danger.icon = color(d.removed);
         k.c.text_muted = code_foreground(dark).mix(k.c.bg_base, 0.35);
         k.c.layer_01 = k.c.bg_base;
-        // The lines under file headers and between files, in Desk's faint outline colour.
+        // The lines under file headers and between files, in Comet's faint outline colour.
         k.c.border_weak = outline(dark);
         k
     })
@@ -280,12 +280,12 @@ pub fn quick_exit() -> rune::Transition {
     rune::Transition::opacity().springs(rune::SpringPair::new(EXIT, EXIT))
 }
 
-/// Code blocks' surface, Desk's `--color-code`.
+/// Code blocks' surface, Comet's `--color-code`.
 pub fn code_fill(dark: bool) -> Color {
     color(colors(dark).code)
 }
 
-/// Desk's `--color-tab`, `--color-tab-hover` and `--color-well`.
+/// Comet's `--color-tab`, `--color-tab-hover` and `--color-well`.
 pub fn tab(dark: bool) -> Color {
     color(colors(dark).tab)
 }
@@ -299,23 +299,23 @@ pub fn well(dark: bool) -> Color {
     color(colors(dark).well)
 }
 
-/// Desk's `--color-accent-soft`: the accent, faint, as the terminal's selection.
+/// Comet's `--color-accent-soft`: the accent, faint, as the terminal's selection.
 pub fn accent_soft(dark: bool) -> Color {
     color(colors(dark).accent).alpha(if dark { 0.14 } else { 0.10 })
 }
 
-/// Desk's `--color-outline`.
+/// Comet's `--color-outline`.
 pub fn outline(dark: bool) -> Color {
     let (hex, alpha) = colors(dark).outline;
     color(hex).alpha(alpha)
 }
 
-/// Claude's mark, Desk's `--color-claude`.
+/// Claude's mark, Comet's `--color-claude`.
 pub fn claude() -> Color {
     color("#d97757")
 }
 
-/// Fast mode's bolt, Desk's `--color-fast`.
+/// Fast mode's bolt, Comet's `--color-fast`.
 pub fn fast(dark: bool) -> Color {
     color(if dark { "#f5c542" } else { "#c98a00" })
 }
@@ -334,37 +334,37 @@ pub fn button(label: impl Into<String>) -> Button {
     Button::new(label).size(ButtonSize::Normal)
 }
 
-/// Desk's own text: Geist at weight 400, line height 1.5, no tracking.
+/// Comet's own text: Geist at weight 400, line height 1.5, no tracking.
 /// `@opencode/ui`'s components, such as buttons and tags, keep the kit's styles.
 pub const fn text(size: f32) -> TextStyle {
     TextStyle::new(size, 400.0).lh(size * 1.5)
 }
 
-/// Desk's `font-medium`. `@opencode/ui`'s theme sets the weight to 530.
+/// Comet's `font-medium`. `@opencode/ui`'s theme sets the weight to 530.
 pub const fn medium(size: f32) -> TextStyle {
     TextStyle::new(size, 530.0).lh(size * 1.5)
 }
 
-/// Desk's code text, Geist Mono at weight 400.
+/// Comet's code text, Geist Mono at weight 400.
 pub const fn mono(size: f32) -> TextStyle {
     TextStyle::new(size, 400.0).mono().lh(size * 1.5)
 }
 
-/// The thread's text at `size` points, with Desk's line height.
+/// The thread's text at `size` points, with Comet's line height.
 pub fn thread_text(k: &Kit, size: f32) -> TextStyle {
     TextStyle { size, line_height: (size * THREAD_LINE_HEIGHT).round(), ..k.ty.body }
 }
 
-/// The message box's text and queued messages: the thread's size on Desk's `leading-relaxed`, which is 1.5.
+/// The message box's text and queued messages: the thread's size on Comet's `leading-relaxed`, which is 1.5.
 pub fn composer_text(k: &Kit, size: f32) -> TextStyle {
     TextStyle { size, line_height: size * 1.5, ..k.ty.body }
 }
 
-/// Desk's `leading-[1.625]` for messages and replies.
+/// Comet's `leading-[1.625]` for messages and replies.
 const THREAD_LINE_HEIGHT: f32 = 1.625;
 
 /// Replies in the thread: the thread's text, and code a step darker than the panel.
-/// Desk's prose: list indents, faint markers, headings, inline code and quotes.
+/// Comet's prose: list indents, faint markers, headings, inline code and quotes.
 pub fn markdown(k: &Kit, size: f32) -> MarkdownStyle {
     let d = colors(k.dark);
     let heading = |points: f32| TextStyle::new(points, 600.0).lh((points * 1.3).round());
@@ -382,7 +382,7 @@ pub fn markdown(k: &Kit, size: f32) -> MarkdownStyle {
         .muted(k.c.text_faint)
         .inline_code_font(0.92, 400.0)
         .inline_code_bg(color(d.raised))
-        // rune-kit's 3.5 point pad, short of the 5 points Desk's design asks for: rune-kit pads code with narrow spaces sized
+        // rune-kit's 3.5 point pad, short of the 5 points Comet's design asks for: rune-kit pads code with narrow spaces sized
         // to the pad, and at 5 points they outgrow the text, which makes a line with code taller than the rest.
         .quote(color(d.line), 2.0, 10.0, k.c.text_muted)
         .rule(color(d.line))
@@ -404,7 +404,7 @@ pub fn code_colors(dark: bool) -> SyntaxTheme {
     colors(dark).syntax.into_iter().fold(SyntaxTheme::from_kit(kit(dark)), |theme, (kind, hex)| theme.with(kind, color(hex)))
 }
 
-/// Desk's typefaces, Geist and Geist Mono. Variable fonts, so every
+/// Comet's typefaces, Geist and Geist Mono. Variable fonts, so every
 /// weight the kit asks for draws. From github.com/vercel/geist-font at ef2597c, under the OFL in `assets/fonts`.
 pub const FONTS: &[&[u8]] = &[include_bytes!("../assets/fonts/Geist-Variable.ttf"), include_bytes!("../assets/fonts/GeistMono-Variable.ttf")];
 pub const FAMILIES: (&str, &str) = ("Geist", "Geist Mono");

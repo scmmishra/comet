@@ -92,7 +92,7 @@ mod tests {
     #[test]
     fn names_a_worktree_by_its_main_checkout() {
         let mut projects = Projects::default();
-        projects.read("/w".into(), "space", serde_json::json!({ "name": "w", "root": "/w", "branch": "desk/w", "worktree": { "main": "/a" }, "changes": {} }));
+        projects.read("/w".into(), "space", serde_json::json!({ "name": "w", "root": "/w", "branch": "comet/w", "worktree": { "main": "/a" }, "changes": {} }));
         assert_eq!(projects.home("/w"), "/a");
         assert_eq!(projects.home("/a"), "/a");
     }

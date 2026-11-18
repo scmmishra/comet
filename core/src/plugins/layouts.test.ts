@@ -1,23 +1,23 @@
 import { expect, test } from "bun:test"
-import { panelInstanceId, type TabInfo } from "@desk/protocol"
+import { panelInstanceId, type TabInfo } from "@comet/protocol"
 import { until, useTempHome } from "../test-support"
 import { harness, installPlugin, turnOn } from "./test-plugins"
 
 useTempHome()
 
 const SUPPORT = `
-import { definePlugin, Item, List, Text } from "@desk/plugin"
+import { definePlugin, Item, List, Text } from "@comet/plugin"
 
-export default definePlugin((desk) => {
-  desk.sidebar("inbox", { title: "Inbox", view: (ctx) => <List><Item title="One" onSelect={() => ctx.open("support.conversation", { id: 1 })} /></List> })
-  desk.panel("conversation", { title: (params) => "#" + params.id, params: ["id"], single: true, view: (ctx) => <Text>{String(ctx.params.id)}<Item title="Close" onSelect={() => ctx.close()} /></Text> })
-  desk.panel("notes", { title: "Notes", view: () => <Text>notes</Text> })
-  desk.panel("broken", { title: "Broken", view: () => { throw new Error("no data") } })
-  desk.card("status", { title: "Status", view: () => <Text>ok</Text> })
-  desk.card("empty", { title: "Empty", view: () => null })
-  desk.card("faulty", { title: "Faulty", view: () => { throw new Error("card failed") } })
-  desk.command("open", { title: "Open conversation…", input: "Conversation id", run: (ctx, input) => ctx.open("support.conversation", { id: Number(input) }) })
-  desk.setup("support", { title: "Support", sidebar: "support.inbox", panels: ["support.notes", "elsewhere.panel"], hideCards: ["support.empty", "support.faulty"] })
+export default definePlugin((comet) => {
+  comet.sidebar("inbox", { title: "Inbox", view: (ctx) => <List><Item title="One" onSelect={() => ctx.open("support.conversation", { id: 1 })} /></List> })
+  comet.panel("conversation", { title: (params) => "#" + params.id, params: ["id"], single: true, view: (ctx) => <Text>{String(ctx.params.id)}<Item title="Close" onSelect={() => ctx.close()} /></Text> })
+  comet.panel("notes", { title: "Notes", view: () => <Text>notes</Text> })
+  comet.panel("broken", { title: "Broken", view: () => { throw new Error("no data") } })
+  comet.card("status", { title: "Status", view: () => <Text>ok</Text> })
+  comet.card("empty", { title: "Empty", view: () => null })
+  comet.card("faulty", { title: "Faulty", view: () => { throw new Error("card failed") } })
+  comet.command("open", { title: "Open conversation…", input: "Conversation id", run: (ctx, input) => ctx.open("support.conversation", { id: Number(input) }) })
+  comet.setup("support", { title: "Support", sidebar: "support.inbox", panels: ["support.notes", "elsewhere.panel"], hideCards: ["support.empty", "support.faulty"] })
 })
 `
 
@@ -105,15 +105,15 @@ test("a panel that cannot be drawn is closed, and a card that cannot is left out
 
 /** A sidebar, two panels and a card that each draw whether they are on screen. */
 const WATCHER = `
-import { definePlugin, Text } from "@desk/plugin"
+import { definePlugin, Text } from "@comet/plugin"
 
-export default definePlugin((desk) => {
+export default definePlugin((comet) => {
   const seen = (name, ctx) => <Text>{name} {ctx.visible() ? "on" : "off"}</Text>
-  desk.sidebar("side", { title: "Side", view: (ctx) => seen("side", ctx) })
-  desk.panel("one", { title: "One", view: (ctx) => seen("one", ctx) })
-  desk.panel("two", { title: "Two", view: (ctx) => seen("two", ctx) })
-  desk.card("card", { title: "Card", view: (ctx) => seen("card", ctx) })
-  desk.setup("watch", { title: "Watch", sidebar: "watcher.side", panels: ["watcher.one", "watcher.two"] })
+  comet.sidebar("side", { title: "Side", view: (ctx) => seen("side", ctx) })
+  comet.panel("one", { title: "One", view: (ctx) => seen("one", ctx) })
+  comet.panel("two", { title: "Two", view: (ctx) => seen("two", ctx) })
+  comet.card("card", { title: "Card", view: (ctx) => seen("card", ctx) })
+  comet.setup("watch", { title: "Watch", sidebar: "watcher.side", panels: ["watcher.one", "watcher.two"] })
 })
 `
 
@@ -153,10 +153,10 @@ test("tells views whether they are on screen, as the active tab, its view pane a
 
 /** A card that draws the key of its plugin's thread the tab shows. */
 const FOLLOWER = `
-import { definePlugin, Text } from "@desk/plugin"
+import { definePlugin, Text } from "@comet/plugin"
 
-export default definePlugin((desk) => {
-  desk.card("thread", { title: "Thread", view: (ctx) => <Text>{ctx.thread() ?? "none"}</Text> })
+export default definePlugin((comet) => {
+  comet.card("thread", { title: "Thread", view: (ctx) => <Text>{ctx.thread() ?? "none"}</Text> })
 })
 `
 

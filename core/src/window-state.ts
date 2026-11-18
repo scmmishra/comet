@@ -1,4 +1,4 @@
-import { DEFAULT_AGENT, type AgentId, type ChangedFile, type ContextReading, type PluginLayout, type QueuedMessage, type TabInfo } from "@desk/protocol"
+import { DEFAULT_AGENT, type AgentId, type ChangedFile, type ContextReading, type PluginLayout, type QueuedMessage, type TabInfo } from "@comet/protocol"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { instanceHome, writeJsonFile } from "./data-files"
@@ -7,7 +7,7 @@ import { instanceHome, writeJsonFile } from "./data-files"
 export interface TabThread {
   /** The agent's session to resume. Absent until the tab's first message. */
   readonly sessionId?: string
-  /** The agent the session runs on, set with it. A thread saved before Desk ran more than one agent has none, and runs on its tab's. */
+  /** The agent the session runs on, set with it. A thread saved before Comet ran more than one agent has none, and runs on its tab's. */
   readonly agent?: AgentId
   /**
    * Checkpoint commits, after T3 Code. Each turn runs from the checkpoint the turn before it ended on,
@@ -138,7 +138,7 @@ function keyedFromSessions(saved: { keys?: unknown }): Record<string, TabThread>
   )
 }
 
-/** A tab saved before Desk ran more than one agent names none, and ran Claude Code. */
+/** A tab saved before Comet ran more than one agent names none, and ran Claude Code. */
 const withAgent = (tab: TabInfo): TabInfo => (tab.agent ? tab : { ...tab, agent: DEFAULT_AGENT })
 
 function isTab(value: unknown): value is TabInfo {

@@ -1,4 +1,4 @@
-import { isStep, type CoreMessage, type ItemRow, type Step, type StepGroup, type StepKind, type ThreadItem, type ThreadRow } from "@desk/protocol"
+import { isStep, type CoreMessage, type ItemRow, type Step, type StepGroup, type StepKind, type ThreadItem, type ThreadRow } from "@comet/protocol"
 
 type Tool = Extract<Step, { type: "tool" }>
 

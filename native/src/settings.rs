@@ -1,11 +1,11 @@
-//! Desk's settings, after OpenCode's settings screen: a sidebar of
+//! Comet's settings, after OpenCode's settings screen: a sidebar of
 //! pages, and the chosen page beside it, on a card over the session. Back, or Escape, returns to it.
 
 use crate::agents::{mark, state_label, status_line};
 use crate::format;
 use crate::models::{effort_label, permission, permission_for, permission_modes};
 use crate::protocol::{AgentDefaults, AgentInfo, AgentState, AgentVersion, ClientMessage, ColorTheme, ProjectSettings, ThemeChoice};
-use crate::shell::Desk;
+use crate::shell::Comet;
 use rune::{El, Key, KeyEvent, ScrollSpec, TextEdit, col, el, icon, row, text};
 use rune_kit::{Badge, BadgeVariant, ButtonVariant, Kit, Select, Switch, TextInput};
 use rune_theme_opencode::icons as ic;
@@ -17,9 +17,9 @@ pub const PAGES: [(&str, &str, &rune::Icon); 3] = [
     ("appearance", "Appearance", &ic::APPEARANCE),
     ("projects", "Projects", &ic::FOLDER),
 ];
-/// The thread text sizes Appearance offers, Desk's `FONT_SIZES`.
+/// The thread text sizes Appearance offers, Comet's `FONT_SIZES`.
 const FONT_SIZES: std::ops::RangeInclusive<u32> = 11..=20;
-/// The colours a project's letter can take, Desk's `PROJECT_COLORS`.
+/// The colours a project's letter can take, Comet's `PROJECT_COLORS`.
 const PROJECT_COLORS: [&str; 9] = ["orange", "yellow", "cyan", "green", "red", "pink", "blue", "purple", "gray"];
 
 /// The select that is open, and text settings being typed, by field. The workspace keeps the page on show.
@@ -33,7 +33,7 @@ pub struct SettingsUi {
     fields: std::collections::HashMap<String, TextEdit>,
 }
 
-impl Desk {
+impl Comet {
     /// Shows a settings page over the session, reading what it shows.
     pub fn open_settings(&mut self, page: &str) {
         // Settings opened afresh drop what was typed and never saved.
@@ -42,7 +42,7 @@ impl Desk {
         }
         self.workspace.settings_page = Some(page.to_owned());
         self.settings.open_select = None;
-        // The agents are read again, so one installed or signed in outside Desk shows.
+        // The agents are read again, so one installed or signed in outside Comet shows.
         if page == "providers" {
             self.core.send(&ClientMessage::AgentsGet);
         }
@@ -93,7 +93,7 @@ impl Desk {
 }
 
 /// The settings screen, filling the main card.
-pub fn screen(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
+pub fn screen(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> El {
     let page = s.workspace.settings_page.as_deref().unwrap_or("providers");
     let back = row()
         .key("settings-back")
@@ -105,7 +105,7 @@ pub fn screen(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
         .radius(4.0)
         .hover(k.c.hover)
         .role("button")
-        .on_press(|s: &mut Desk| s.close_settings())
+        .on_press(|s: &mut Comet| s.close_settings())
         .child(icon(&ic::OUTLINE_ARROW_LEFT, 15.0).color(k.c.text_muted))
         .child(text("Back to app").font(crate::theme::text(13.0)).color(k.c.text_muted));
     let nav = PAGES.iter().map(|(id, title, mark)| {
@@ -122,7 +122,7 @@ pub fn screen(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
             .fill(if selected { k.c.layer_03 } else { rune::Color::TRANSPARENT })
             .hover(k.c.hover)
             .role("tab")
-            .on_press_tx(move |s: &mut Desk, tx| {
+            .on_press_tx(move |s: &mut Comet, tx| {
                 s.open_settings(id);
                 // The new page shows whole, with no fade or slide of its parts.
                 tx.instant();
@@ -146,7 +146,7 @@ pub fn screen(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
         .h_full()
         .justify_center()
         .focusable(true)
-        .on_key(|s: &mut Desk, event: &KeyEvent, _| {
+        .on_key(|s: &mut Comet, event: &KeyEvent, _| {
             if event.key == Key::Escape {
                 s.close_settings();
                 return true;
@@ -187,7 +187,7 @@ fn section_with(heading: El, child: El) -> El {
 /// Rows on one raised surface, after OpenCode's SettingsList.
 fn list(k: &Kit, rows: Vec<El>) -> El {
     let count = rows.len();
-    // The list's outline takes no room. A row's bottom border takes half a point in Desk's design, which
+    // The list's outline takes no room. A row's bottom border takes half a point in Comet's design, which
     // Rune's does not, so the row's padding adds it.
     col().w_full().radius(8.0).fill(k.c.layer_01).border(0.5, k.c.border_muted).px(20.0).children(rows.into_iter().enumerate().map(|(i, r)| {
         if i + 1 < count { r.pb(18.5).border_sides([0.0, 0.0, 0.5, 0.0], k.c.border_base) } else { r }
@@ -210,7 +210,7 @@ fn title(k: &Kit, words: &str) -> El {
 }
 
 /// A text setting that saves on Enter, so typing does not save each letter. `key` names its draft.
-fn field(s: &Desk, k: &Kit, key: String, saved: String, placeholder: &str, label: &str, save: impl Fn(&mut Desk, String) + 'static) -> El {
+fn field(s: &Comet, k: &Kit, key: String, saved: String, placeholder: &str, label: &str, save: impl Fn(&mut Comet, String) + 'static) -> El {
     let edit = s.settings.fields.get(&key).cloned().unwrap_or_else(|| TextEdit::new(saved.clone()));
     let draft = key.clone();
     TextInput::new(&edit)
@@ -218,8 +218,8 @@ fn field(s: &Desk, k: &Kit, key: String, saved: String, placeholder: &str, label
         .label(label)
         .width(Some(220.0))
         .spellcheck(false)
-        .on_edit(move |s: &mut Desk| s.settings.fields.entry(draft.clone()).or_insert_with(|| TextEdit::new(saved.clone())))
-        .on_submit(move |s: &mut Desk, _| {
+        .on_edit(move |s: &mut Comet| s.settings.fields.entry(draft.clone()).or_insert_with(|| TextEdit::new(saved.clone())))
+        .on_submit(move |s: &mut Comet, _| {
             let typed = s.settings.fields.get(&key).map(|e| e.text.trim().to_owned()).unwrap_or_default();
             save(s, typed);
         })
@@ -227,7 +227,7 @@ fn field(s: &Desk, k: &Kit, key: String, saved: String, placeholder: &str, label
 }
 
 /// A select of `options`, as `(value, label)`, that saves through `pick`.
-fn select(s: &Desk, k: &Kit, layer: &mut Vec<El>, key: &str, options: &[(String, String)], current: &str, pick: impl Fn(&mut Desk, &str) + Clone + 'static) -> El {
+fn select(s: &Comet, k: &Kit, layer: &mut Vec<El>, key: &str, options: &[(String, String)], current: &str, pick: impl Fn(&mut Comet, &str) + Clone + 'static) -> El {
     let labels: Vec<&str> = options.iter().map(|o| o.1.as_str()).collect();
     let values: Vec<(String, String)> = options.to_vec();
     let current_label = options.iter().find(|o| o.0 == current).map(|o| o.1.as_str());
@@ -236,9 +236,9 @@ fn select(s: &Desk, k: &Kit, layer: &mut Vec<El>, key: &str, options: &[(String,
         .current(current_label)
         .open(s.settings.open_select.as_deref() == Some(key))
         .placement(rune_kit::Placement::BottomEnd)
-        .on_toggle(move |s: &mut Desk| s.toggle_select(&toggle_key))
-        .on_close(|s: &mut Desk| s.settings.open_select = None)
-        .on_choose(move |s: &mut Desk, label: &str, _| {
+        .on_toggle(move |s: &mut Comet| s.toggle_select(&toggle_key))
+        .on_close(|s: &mut Comet| s.settings.open_select = None)
+        .on_choose(move |s: &mut Comet, label: &str, _| {
             s.settings.open_select = None;
             if let Some((value, _)) = values.iter().find(|o| o.1 == label) {
                 pick(s, value);
@@ -247,8 +247,8 @@ fn select(s: &Desk, k: &Kit, layer: &mut Vec<El>, key: &str, options: &[(String,
         .build(k, layer)
 }
 
-/// Providers: what a new tab starts with, then one section per agent Desk runs.
-fn providers(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
+/// Providers: what a new tab starts with, then one section per agent Comet runs.
+fn providers(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> El {
     let mut sections = Vec::new();
     if let Some(settings) = &s.account.settings {
         sections.push(section(k, "New tabs".into(), new_tabs(s, &settings.threads, k, layer)));
@@ -256,17 +256,17 @@ fn providers(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
     if s.account.agents.is_empty() {
         sections.push(text("Reading the agents…").font(crate::theme::text(13.0)).color(k.c.text_faint));
     }
-    // One agent shows at a time, so the page stays short however many agents Desk runs.
+    // One agent shows at a time, so the page stays short however many agents Comet runs.
     if let Some(agent) = s.settings.agent.as_deref().and_then(|id| s.account.agent(id)).or_else(|| s.account.agent(s.account.default_agent())).or(s.account.agents.first()) {
         // An agent that is not ready says so in its first row, beside what gets it ready.
         let heading = (!heading_hidden(agent)).then(|| agent_heading(agent, k));
         sections.push(section_with(agent_tabs(s, &agent.id, k), col().w_full().gap(12.0).children(heading).child(agent_settings(s, agent, k, layer))));
     }
-    col().w_full().child(header(k, "Providers", "The coding agents Desk runs, and what a new tab starts with.")).child(body(sections))
+    col().w_full().child(header(k, "Providers", "The coding agents Comet runs, and what a new tab starts with.")).child(body(sections))
 }
 
 /// What every new tab starts with, whichever agent it runs.
-fn new_tabs(s: &Desk, threads: &crate::protocol::ThreadSettings, k: &Kit, layer: &mut Vec<El>) -> El {
+fn new_tabs(s: &Comet, threads: &crate::protocol::ThreadSettings, k: &Kit, layer: &mut Vec<El>) -> El {
     let agents: Vec<(String, String)> = s.account.agents.iter().map(|a| (a.id.clone(), a.name.clone())).collect();
     let follow = [("steer".to_owned(), "Steer".to_owned()), ("queue".to_owned(), "Queue".to_owned())];
     list(k, vec![
@@ -274,19 +274,19 @@ fn new_tabs(s: &Desk, threads: &crate::protocol::ThreadSettings, k: &Kit, layer:
             k,
             title(k, "Default agent"),
             Some("The agent a new tab starts on. A tab can change it in the model picker until its first message.".into()),
-            Some(select(s, k, layer, "default-agent", &agents, &threads.agent, |s: &mut Desk, value: &str| s.update_settings(json!({ "threads": { "agent": value } })))),
+            Some(select(s, k, layer, "default-agent", &agents, &threads.agent, |s: &mut Comet, value: &str| s.update_settings(json!({ "threads": { "agent": value } })))),
         ),
         setting(
             k,
             title(k, "Follow-ups"),
             Some("What Enter does while the agent works: steer the running turn, or queue the message for when it ends. ⌘Enter does the other, for one message. An agent that cannot be steered always queues.".into()),
-            Some(select(s, k, layer, "follow-ups", &follow, &threads.follow_up, |s: &mut Desk, value: &str| s.update_settings(json!({ "threads": { "followUp": value } })))),
+            Some(select(s, k, layer, "follow-ups", &follow, &threads.follow_up, |s: &mut Comet, value: &str| s.update_settings(json!({ "threads": { "followUp": value } })))),
         ),
     ])
 }
 
 /// The agents as tabs: each one's mark and name, with a dot on one that is not ready.
-fn agent_tabs(s: &Desk, shown: &str, k: &Kit) -> El {
+fn agent_tabs(s: &Comet, shown: &str, k: &Kit) -> El {
     let tabs = s.account.agents.iter().map(|agent| {
         let on = agent.id == shown;
         let id = agent.id.clone();
@@ -303,7 +303,7 @@ fn agent_tabs(s: &Desk, shown: &str, k: &Kit) -> El {
             .role("tab")
             .checked(on)
             .label(format!("{}, {}", agent.name, state_label(agent.state)))
-            .on_press_tx(move |s: &mut Desk, tx| {
+            .on_press_tx(move |s: &mut Comet, tx| {
                 s.show_settings_agent(&id);
                 // The agent's rows show whole, with no morph from the rows of the agent before.
                 tx.instant();
@@ -328,7 +328,7 @@ fn agent_heading(agent: &AgentInfo, k: &Kit) -> El {
 
 /// An agent's rows: its account, its version, what a new tab starts it with, and its plan usage. An agent
 /// that is not ready shows only what stands in the way, with the button that clears it.
-fn agent_settings(s: &Desk, agent: &AgentInfo, k: &Kit, layer: &mut Vec<El>) -> El {
+fn agent_settings(s: &Comet, agent: &AgentInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let mut rows = Vec::new();
     // An agent that is not ready leads with what stands in the way, and the buttons that clear it.
     if heading_hidden(agent) {
@@ -348,7 +348,7 @@ fn agent_settings(s: &Desk, agent: &AgentInfo, k: &Kit, layer: &mut Vec<El>) -> 
             k,
             title(k, "Compact idle threads"),
             Some(format!("When you return to a large thread that sat idle, {} compacts it first, so its next reply reads a summary, not the whole history.", agent.name)),
-            Some(Switch::new(compact).web().label("Compact idle threads").hide_label().on_toggle(move |s: &mut Desk| s.update_settings(json!({ "threads": { "compactIdle": !compact } }))).build(k)),
+            Some(Switch::new(compact).web().label("Compact idle threads").hide_label().on_toggle(move |s: &mut Comet| s.update_settings(json!({ "threads": { "compactIdle": !compact } }))).build(k)),
         ));
     }
     if let Some(usage) = &agent.usage {
@@ -374,16 +374,16 @@ fn update_button(agent: &AgentInfo, version: &AgentVersion, k: &Kit) -> Option<E
     let updating = agent.state == AgentState::Updating;
     let id = agent.id.clone();
     (updating || (version.update_available && version.updatable)).then(|| {
-        crate::theme::small_button(if updating { "Updating…" } else { "Update" }).variant(ButtonVariant::Contrast).disabled(updating).on_press(move |s: &mut Desk| s.core.send(&ClientMessage::AgentUpdate { agent: id.clone() })).build(k)
+        crate::theme::small_button(if updating { "Updating…" } else { "Update" }).variant(ButtonVariant::Contrast).disabled(updating).on_press(move |s: &mut Comet| s.core.send(&ClientMessage::AgentUpdate { agent: id.clone() })).build(k)
     })
 }
 
 /// What a new tab starts an agent with: its model, that model's effort, and its permission mode.
-fn default_rows(s: &Desk, agent: &AgentInfo, defaults: &AgentDefaults, k: &Kit, layer: &mut Vec<El>) -> Vec<El> {
+fn default_rows(s: &Comet, agent: &AgentInfo, defaults: &AgentDefaults, k: &Kit, layer: &mut Vec<El>) -> Vec<El> {
     let model = s.account.model(&agent.id, &defaults.model);
     let save = |id: &str| {
         let id = id.to_owned();
-        move |s: &mut Desk, change: serde_json::Value| s.update_settings(json!({ "agent": { "id": id, "defaults": change } }))
+        move |s: &mut Comet, change: serde_json::Value| s.update_settings(json!({ "agent": { "id": id, "defaults": change } }))
     };
     let models: Vec<(String, String)> = agent.models.iter().map(|m| (m.value.clone(), m.label.clone())).collect();
     let (id, save_model) = (agent.id.clone(), save(&agent.id));
@@ -391,7 +391,7 @@ fn default_rows(s: &Desk, agent: &AgentInfo, defaults: &AgentDefaults, k: &Kit, 
         k,
         title(k, "Default model"),
         Some(format!("The model a new {} tab starts on. A tab can change it in the model picker.", agent.name)),
-        Some(select(s, k, layer, &format!("default-model-{}", agent.id), &models, &defaults.model, move |s: &mut Desk, value: &str| {
+        Some(select(s, k, layer, &format!("default-model-{}", agent.id), &models, &defaults.model, move |s: &mut Comet, value: &str| {
             // The effort stays only if the new model takes it.
             let effort = s.account.model(&id, value).and_then(|m| crate::models::effort_for(m, s.account.defaults(&id)?.effort.as_deref()));
             save_model(s, json!({ "model": value, "effort": effort }));
@@ -405,7 +405,7 @@ fn default_rows(s: &Desk, agent: &AgentInfo, defaults: &AgentDefaults, k: &Kit, 
             k,
             title(k, "Default effort"),
             Some("How long the model thinks before it answers, on the default model.".into()),
-            Some(select(s, k, layer, &format!("default-effort-{}", agent.id), &efforts, defaults.effort.as_deref().unwrap_or("default"), move |s: &mut Desk, value: &str| {
+            Some(select(s, k, layer, &format!("default-effort-{}", agent.id), &efforts, defaults.effort.as_deref().unwrap_or("default"), move |s: &mut Comet, value: &str| {
                 save_effort(s, json!({ "effort": if value == "default" { None } else { Some(value) } }));
             })),
         ));
@@ -416,7 +416,7 @@ fn default_rows(s: &Desk, agent: &AgentInfo, defaults: &AgentDefaults, k: &Kit, 
         k,
         title(k, "Default permissions"),
         Some(format!("How {} handles tool calls in a new tab. A tab can change it in the model picker.", agent.name)),
-        Some(select(s, k, layer, &format!("default-permissions-{}", agent.id), &modes, &permission_for(model, &defaults.permission_mode), move |s: &mut Desk, value: &str| save_mode(s, json!({ "permissionMode": value })))),
+        Some(select(s, k, layer, &format!("default-permissions-{}", agent.id), &modes, &permission_for(model, &defaults.permission_mode), move |s: &mut Comet, value: &str| save_mode(s, json!({ "permissionMode": value })))),
     ));
     rows
 }
@@ -432,7 +432,7 @@ fn usage_windows(usage: &crate::protocol::PlanUsage, k: &Kit) -> El {
     }))
 }
 
-fn appearance(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
+fn appearance(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> El {
     let Some(settings) = &s.account.settings else { return col() };
     let sizes: Vec<(String, String)> = FONT_SIZES.map(|n| (n.to_string(), format!("{n}px"))).collect();
     let rows = vec![
@@ -440,7 +440,7 @@ fn appearance(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
             k,
             title(k, "Font size"),
             Some("The size of thread text. Code blocks and the message box follow it.".into()),
-            Some(select(s, k, layer, "font-size", &sizes, &(settings.appearance.font_size as u32).to_string(), |s: &mut Desk, value: &str| {
+            Some(select(s, k, layer, "font-size", &sizes, &(settings.appearance.font_size as u32).to_string(), |s: &mut Comet, value: &str| {
                 if let Ok(size) = value.parse::<u32>() {
                     s.update_settings(json!({ "appearance": { "fontSize": size } }));
                 }
@@ -461,10 +461,10 @@ fn appearance(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
     ];
     let mode = section_with(heading(k, "Mode", "System follows macOS's light or dark setting."), crate::theme_picker::modes(s, k));
     let themes = section_with(heading(k, "Theme", "Each theme has a light and a dark flavour. Pick a flavour to switch to its mode too."), crate::theme_picker::themes(s, k));
-    col().w_full().child(header(k, "Appearance", "How Desk looks. Changes apply at once.")).child(body(vec![mode, themes, list(k, rows)]))
+    col().w_full().child(header(k, "Appearance", "How Comet looks. Changes apply at once.")).child(body(vec![mode, themes, list(k, rows)]))
 }
 
-fn projects(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
+fn projects(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> El {
     let mut dirs: Vec<String> = Vec::new();
     for tab in &s.workspace.tabs {
         if !dirs.contains(&tab.project) {
@@ -490,7 +490,7 @@ fn projects(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
                 .checked(picked)
                 .label(*color)
                 .help(format!("{}{}", color[..1].to_uppercase(), &color[1..]))
-                .on_press(move |s: &mut Desk| s.save_project(&dir, |p| p.color = Some(color.to_string())))
+                .on_press(move |s: &mut Comet| s.save_project(&dir, |p| p.color = Some(color.to_string())))
                 .child(crate::shell::avatar(&initial, color, 24.0, k));
             if picked { swatch.border(2.0, k.c.text_accent) } else { swatch }
         }));
@@ -515,7 +515,7 @@ fn projects(s: &Desk, k: &Kit, layer: &mut Vec<El>) -> El {
 
 /// The project's logo-like images to choose its icon from. It asks the
 /// core for them each time it opens, so new files show.
-fn icon_picker(s: &Desk, dir: &str, current: Option<&str>, k: &Kit, layer: &mut Vec<El>) -> El {
+fn icon_picker(s: &Comet, dir: &str, current: Option<&str>, k: &Kit, layer: &mut Vec<El>) -> El {
     let key = format!("icon-picker-{dir}");
     let open = s.settings.icon_picker.as_deref() == Some(dir);
     let toggle_dir = dir.to_owned();
@@ -525,7 +525,7 @@ fn icon_picker(s: &Desk, dir: &str, current: Option<&str>, k: &Kit, layer: &mut 
         .variant(ButtonVariant::Outline)
         .label_with(move |font, ink| row().gap(8.0).items_center().child(mark).child(text(words).font(font).color(ink)))
         .expanded(open)
-        .on_press(move |s: &mut Desk| {
+        .on_press(move |s: &mut Comet| {
             let opening = s.settings.icon_picker.as_deref() != Some(toggle_dir.as_str());
             s.settings.icon_picker = opening.then(|| toggle_dir.clone());
             if opening {
@@ -540,7 +540,7 @@ fn icon_picker(s: &Desk, dir: &str, current: Option<&str>, k: &Kit, layer: &mut 
     let faint = |words: &str| text(words.to_owned()).font(crate::theme::text(13.0)).color(k.c.text_faint).wrap().px(4.0).py(8.0);
     let pick = |icon: Option<String>| {
         let dir = dir.to_owned();
-        move |s: &mut Desk| {
+        move |s: &mut Comet| {
             let icon = icon.clone();
             s.save_project(&dir, |p| p.icon = icon);
             s.settings.icon_picker = None;
@@ -581,7 +581,7 @@ fn icon_picker(s: &Desk, dir: &str, current: Option<&str>, k: &Kit, layer: &mut 
     };
     let none = current.map(|_| crate::theme::button("No icon").variant(ButtonVariant::Ghost).on_press(pick(None)).build(k));
     let body = col().w(340.0).padding(12.0).gap(8.0).items_start().child(content).children(none);
-    let picker = crate::ui::popover(k, body).modal(true, |s: &mut Desk| s.settings.icon_picker = None);
+    let picker = crate::ui::popover(k, body).modal(true, |s: &mut Comet| s.settings.icon_picker = None);
     layer.push(rune_kit::popover::anchored(k, picker, &key, rune_kit::Placement::BottomEnd, 6.0));
     trigger
 }
@@ -592,8 +592,8 @@ mod tests {
     use crate::core::Event;
     use crate::protocol::CoreMessage;
 
-    fn desk() -> Desk {
-        let mut s = Desk::default();
+    fn comet() -> Comet {
+        let mut s = Comet::default();
         let messages = serde_json::json!([
             { "type": "settings", "settings": { "appearance": { "theme": "dark", "fontSize": 14 }, "threads": { "agent": "claude", "followUp": "steer" }, "agents": { "claude": { "model": "default", "effort": null, "permissionMode": "auto" } }, "projects": { "/code/web": { "color": "blue", "icon": "web.png" } } } },
             { "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "Fix login", "project": "/code/web", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] }
@@ -607,7 +607,7 @@ mod tests {
 
     #[test]
     fn opening_a_page_reads_what_it_shows_and_showing_a_tab_closes_settings() {
-        let mut s = desk();
+        let mut s = comet();
         s.open_settings("providers");
         assert!(s.core.sent().iter().any(|m| m["type"] == "agents.get"));
         s.workspace.show_tab("t", &s.core);
@@ -616,7 +616,7 @@ mod tests {
 
     #[test]
     fn a_project_shows_its_saved_name_and_fonts_fall_back_to_geist() {
-        let mut s = desk();
+        let mut s = comet();
         assert_eq!(s.account.project_label("/code/web"), "web");
         assert_eq!(s.account.project_color("/code/web"), Some("blue"));
         assert_eq!(s.account.font_families(), ("Geist".to_owned(), "Geist Mono".to_owned()));
@@ -628,9 +628,9 @@ mod tests {
     }
 
     #[test]
-    fn the_colour_theme_starts_as_desk_and_a_flavour_sets_its_theme_and_mode_in_one_change() {
-        let s = desk();
-        assert_eq!(s.account.color_theme(), ColorTheme::Desk);
+    fn the_colour_theme_starts_as_comet_and_a_flavour_sets_its_theme_and_mode_in_one_change() {
+        let s = comet();
+        assert_eq!(s.account.color_theme(), ColorTheme::Comet);
         s.set_look(ColorTheme::Verdigris, ThemeChoice::Light);
         let sent = s.core.sent();
         let changes: Vec<_> = sent.iter().filter(|m| m["type"] == "settings.update").collect();
@@ -640,7 +640,7 @@ mod tests {
 
     #[test]
     fn a_project_change_keeps_the_settings_it_does_not_touch() {
-        let s = desk();
+        let s = comet();
         s.save_project("/code/web", |p| p.name = Some("Web".into()));
         let sent = s.core.sent();
         let change = sent.iter().find(|m| m["type"] == "settings.update").expect("a settings update");

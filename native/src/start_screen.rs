@@ -4,7 +4,7 @@
 use crate::composer;
 use crate::format;
 use crate::protocol::{ClientMessage, TabInfo, ThreadSummary};
-use crate::shell::{self, Desk};
+use crate::shell::{self, Comet};
 use crate::cards::Lane;
 use crate::workspace::Place;
 use rune::{El, ScrollSpec, col, icon, row, text};
@@ -20,7 +20,7 @@ const TOP: f32 = 0.06;
 /// How strongly the wordmark shows over the panel, `color-mix(… 9.6%)`.
 const WORDMARK_ALPHA: f32 = 0.096;
 
-impl Desk {
+impl Comet {
     /// Continues a past thread: in its tab if one has it open, else in the active tab when that tab works
     /// in the project and has not started a thread, else in a new tab.
     pub fn open_thread(&mut self, thread: &ThreadSummary, project: &str, tx: &mut rune::Tx) {
@@ -44,10 +44,10 @@ impl Desk {
 }
 
 /// A new tab, on the thread's lane: the wordmark, the composer, the project and branch it works in, and threads to pick up again.
-pub fn start_screen(s: &Desk, tab: &TabInfo, lane: Option<Lane>, window: Option<[f32; 2]>, k: &Kit, layer: &mut Vec<El>) -> El {
+pub fn start_screen(s: &Comet, tab: &TabInfo, lane: Option<Lane>, window: Option<[f32; 2]>, k: &Kit, layer: &mut Vec<El>) -> El {
     let [width, height] = window.unwrap_or([1280.0, 820.0]);
     let size = (width * 0.2).clamp(WORDMARK_SIZES.0, WORDMARK_SIZES.1);
-    let wordmark = text("desk")
+    let wordmark = text("comet")
         .font(rune::TextStyle { size, weight: 600.0, line_height: size, tracking: -0.06 * size, ..k.ty.body })
         .color(k.c.text_base.alpha(WORDMARK_ALPHA))
         .a11y_hidden()
@@ -65,7 +65,7 @@ pub fn start_screen(s: &Desk, tab: &TabInfo, lane: Option<Lane>, window: Option<
 }
 
 /// Moves this tab to another project. Its thread has not started, so nothing is lost.
-fn project_switcher(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
+fn project_switcher(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let name = shell::project_label(s, &tab.project);
     let home = s.projects.home(&tab.project).to_owned();
     let trigger = row()
@@ -77,15 +77,15 @@ fn project_switcher(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
         .radius(8.0)
         .hover(k.c.hover)
         .role("button")
-        .on_press(|s: &mut Desk| s.start.project_menu = !s.start.project_menu)
+        .on_press(|s: &mut Comet| s.start.project_menu = !s.start.project_menu)
         .child(shell::project_mark(s, &tab.project, k))
         .child(text(name).font(crate::theme::text(13.0)).color(k.c.text_muted))
         .child(icon(&ic::CHEVRON_DOWN, crate::icons::SIZE).color(k.c.text_faint));
-    let mut menu = Menu::new("project-menu").trigger(trigger).open(s.start.project_menu).placement(Placement::BottomStart).gutter(8.0).min_width(280.0).group_label("Projects").on_close(|s: &mut Desk| s.start.project_menu = false);
+    let mut menu = Menu::new("project-menu").trigger(trigger).open(s.start.project_menu).placement(Placement::BottomStart).gutter(8.0).min_width(280.0).group_label("Projects").on_close(|s: &mut Comet| s.start.project_menu = false);
     for project in &s.workspace.recent {
         let (id, dir) = (tab.id.clone(), project.clone());
         // Each project with its mark.
-        menu = menu.item(MenuItem::new(s.account.project_label(project)).lead(shell::project_mark(s, project, k)).checked(*project == home).on_select(move |s: &mut Desk| {
+        menu = menu.item(MenuItem::new(s.account.project_label(project)).lead(shell::project_mark(s, project, k)).checked(*project == home).on_select(move |s: &mut Comet| {
             let dir = dir.clone();
             s.workspace.change_tab(&id, |t| t.project = dir, &s.core);
             s.start.project_menu = false;
@@ -94,10 +94,10 @@ fn project_switcher(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
     }
     let id = tab.id.clone();
     menu.separator()
-        .item(MenuItem::new("Open folder…").on_select_tx(move |s: &mut Desk, tx| {
+        .item(MenuItem::new("Open folder…").on_select_tx(move |s: &mut Comet, tx| {
             s.start.project_menu = false;
             let id = id.clone();
-            tx.open_folder(rune::FileDialogOptions { title: "Open Folder".into(), ..Default::default() }, move |s: &mut Desk, result, _| {
+            tx.open_folder(rune::FileDialogOptions { title: "Open Folder".into(), ..Default::default() }, move |s: &mut Comet, result, _| {
                 if let Ok(Some(dir)) = result {
                     let dir = dir.to_string_lossy().into_owned();
                     s.workspace.change_tab(&id, |t| t.project = dir, &s.core);
@@ -109,7 +109,7 @@ fn project_switcher(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El
 }
 
 /// Threads in this tab's repo that no tab has open. Picking one continues it in the checkout it runs in.
-fn recent_threads(s: &Desk, tab: &TabInfo, k: &Kit) -> Option<El> {
+fn recent_threads(s: &Comet, tab: &TabInfo, k: &Kit) -> Option<El> {
     let project = s.projects.get(&tab.project)?;
     let closed: Vec<&ThreadSummary> = project.threads.as_ref()?.iter().filter(|t| t.tab_id.is_none()).take(RECENT_THREADS).collect();
     if closed.is_empty() {
@@ -138,7 +138,7 @@ fn recent_threads(s: &Desk, tab: &TabInfo, k: &Kit) -> Option<El> {
             .hover(k.c.hover)
             .hover_group()
             .role("button")
-            .on_press_tx(move |s: &mut Desk, tx| s.open_thread(&summary, &dir, tx))
+            .on_press_tx(move |s: &mut Comet, tx| s.open_thread(&summary, &dir, tx))
             // The agent the thread ran on, which the tab that continues it runs.
             .child(crate::agents::mark(&thread.agent, 14.0, k))
             .child(text(thread.title.clone()).font(crate::theme::text(13.0)).color(k.c.text_muted).group_color(k.c.text_base).truncate().grow(1.0))
@@ -158,7 +158,7 @@ pub struct Start {
     read_for: Option<String>,
 }
 
-impl Desk {
+impl Comet {
     /// Reads the active tab's project for the start screen whenever another tab comes to the front.
     pub fn sync_start(&mut self) {
         let Some(tab) = self.workspace.active_tab() else { return };

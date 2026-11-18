@@ -1,12 +1,12 @@
 import type { SDKControlGetUsageResponse, SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
-import type { PlanUsage, UsageWindow } from "@desk/protocol"
+import type { PlanUsage, UsageWindow } from "@comet/protocol"
 import { homedir } from "node:os"
 import { probe } from "./probe"
 
 /** Plan usage is probed at most this often. Sessions' rate-limit events keep it current in between. */
 const PROBE_INTERVAL_MS = 60_000
 
-/** The windows Desk shows, in the order it shows them. */
+/** The windows Comet shows, in the order it shows them. */
 const WINDOWS = [
   { id: "five_hour", label: "Session" },
   { id: "seven_day", label: "This week" },

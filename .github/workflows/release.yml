@@ -1,7 +1,7 @@
 name: Release
 
-# Builds Desk.app and publishes it as the GitHub release v<version>, with the version's CHANGELOG.md
-# section as its notes. It runs only when started by hand. Desk installs from source with
+# Builds Comet.app and publishes it as the GitHub release v<version>, with the version's CHANGELOG.md
+# section as its notes. It runs only when started by hand. Comet installs from source with
 # `mise run install` until releases are wanted.
 on:
   workflow_dispatch:
@@ -57,13 +57,13 @@ jobs:
       - name: Zip the app and write its checksum
         run: |
           cd dist/mac-arm64
-          ditto -c -k --keepParent Desk.app Desk-arm64.zip
-          shasum -a 256 Desk-arm64.zip > Desk-arm64.zip.sha256
-          cat Desk-arm64.zip.sha256
+          ditto -c -k --keepParent Comet.app Comet-arm64.zip
+          shasum -a 256 Comet-arm64.zip > Comet-arm64.zip.sha256
+          cat Comet-arm64.zip.sha256
 
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$TAG" dist/mac-arm64/Desk-arm64.zip dist/mac-arm64/Desk-arm64.zip.sha256 \
-            --target "$GITHUB_SHA" --title "Desk $TAG" --notes-file "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" dist/mac-arm64/Comet-arm64.zip dist/mac-arm64/Comet-arm64.zip.sha256 \
+            --target "$GITHUB_SHA" --title "Comet $TAG" --notes-file "$RUNNER_TEMP/notes.md"

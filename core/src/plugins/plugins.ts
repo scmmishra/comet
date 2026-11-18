@@ -1,10 +1,10 @@
-import type { TurnOutcome } from "@desk/plugin"
-import type { FromPlugin, Offers, ToPlugin, ViewRequest, ViewResult } from "@desk/plugin/host"
-import { contributionId, splitContributionId, type CoreMessage, type PanelParams, type PluginContributions, type ProjectSetup, type UiValue } from "@desk/protocol"
+import type { TurnOutcome } from "@comet/plugin"
+import type { FromPlugin, Offers, ToPlugin, ViewRequest, ViewResult } from "@comet/plugin/host"
+import { contributionId, splitContributionId, type CoreMessage, type PanelParams, type PluginContributions, type ProjectSetup, type UiValue } from "@comet/protocol"
 import { isProjectFolder } from "../project-path"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
-import { deskHome } from "../data-files"
+import { cometHome } from "../data-files"
 import { bundlePlugin } from "./bundle"
 import { pluginProjects, pluginsOn } from "./config"
 
@@ -42,7 +42,7 @@ interface Running {
 /** What the plugins on in a project offer, by kind, each under its full id, `<plugin>.<name>`. */
 type ProjectOffers = { readonly [K in keyof Offers]: readonly (Omit<Offers[K][number], "name"> & { readonly id: string })[] }
 
-const pluginsFolder = () => join(deskHome(), "plugins")
+const pluginsFolder = () => join(cometHome(), "plugins")
 
 /** A full thread key as `plugin` named it, without its prefix, or undefined for no key or another plugin's. */
 const ownKey = (plugin: string, threadKey: string | undefined) => {
@@ -52,7 +52,7 @@ const ownKey = (plugin: string, threadKey: string | undefined) => {
 }
 
 /**
- * The plugins in `~/.desk/plugins`, each in a worker of its own, so a slow plugin never stalls a session
+ * The plugins in `~/.comet/plugins`, each in a worker of its own, so a slow plugin never stalls a session
  * or a terminal. A plugin starts the first time a project it is on is read, and stays up after. One
  * worker serves every tab. A plugin that fails to start or stops is reported once and stays off until
  * the plugins reload, which is also when an edited plugin takes effect.
@@ -255,7 +255,7 @@ export class Plugins {
   private async launch(plugin: string): Promise<Running> {
     const folder = join(pluginsFolder(), plugin)
     const entry = ENTRIES.map((file) => join(folder, file)).find(existsSync)
-    if (!entry) throw new Error(`Desk found no plugin at ${folder}. A plugin starts from index.tsx or index.ts.`)
+    if (!entry) throw new Error(`Comet found no plugin at ${folder}. A plugin starts from index.tsx or index.ts.`)
     // A Bun Worker starts with the environment the process started with, not what the core set since,
     // so it would lack the login shell's PATH. It gets a copy, so a plugin finds the user's tools, such as
     // a CLI in ~/.local/bin. A copy, not a shared one, keeps a plugin's changes out of the agents' sessions.

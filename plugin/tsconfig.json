@@ -7,7 +7,7 @@
       "bun"
     ],
     "paths": {
-      "@desk/plugin": [
+      "@comet/plugin": [
         "./src/index.ts"
       ],
       "solid-js": [

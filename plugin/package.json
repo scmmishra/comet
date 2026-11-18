@@ -1,5 +1,5 @@
 {
-  "name": "@desk/plugin",
+  "name": "@comet/plugin",
   "private": true,
   "type": "module",
   "exports": {
@@ -8,7 +8,7 @@
     "./host": "./src/host.ts"
   },
   "dependencies": {
-    "@desk/protocol": "workspace:*",
+    "@comet/protocol": "workspace:*",
     "solid-js": "1.9.18"
   }
 }

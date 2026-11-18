@@ -4,7 +4,7 @@ import { tempFolder } from "../../test-support"
 import { FAKE_OPTIONS } from "../acp/test-agent"
 import { ModelCache } from "./models"
 
-/** The modes the CLI has, as Desk names them. */
+/** The modes the CLI has, as Comet names them. */
 const MODES = ["default", "acceptEdits", "auto"] as const
 
 test("lists the account's default first, then each model, and learns thinking levels as models are selected", () => {

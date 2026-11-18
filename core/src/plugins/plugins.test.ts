@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { panelInstanceId } from "@desk/protocol"
+import { panelInstanceId } from "@comet/protocol"
 import { join } from "node:path"
 import { tempFolder, until, useTempHome } from "../test-support"
 import { harness, installPlugin, turnOn } from "./test-plugins"
@@ -8,12 +8,12 @@ useTempHome()
 
 /** A panel with a counter and a button that bumps it and opens a thread. */
 const COUNTER = `
-import { definePlugin, Button, Stack, Text } from "@desk/plugin"
+import { definePlugin, Button, Stack, Text } from "@comet/plugin"
 import { createSignal } from "solid-js"
 
-export default definePlugin((desk) => {
+export default definePlugin((comet) => {
   const [count, setCount] = createSignal(0)
-  desk.panel("main", {
+  comet.panel("main", {
     title: "Counter",
     view: (ctx) => (
       <Stack>
@@ -27,10 +27,10 @@ export default definePlugin((desk) => {
 
 /** A sidebar that marks the open item and opens it, a panel per item, a card, a setup and a command. */
 const INBOX = `
-import { definePlugin, Item, List, Text } from "@desk/plugin"
+import { definePlugin, Item, List, Text } from "@comet/plugin"
 
-export default definePlugin((desk) => {
-  desk.sidebar("list", {
+export default definePlugin((comet) => {
+  comet.sidebar("list", {
     title: "Inbox",
     view: (ctx) => (
       <List>
@@ -38,10 +38,10 @@ export default definePlugin((desk) => {
       </List>
     ),
   })
-  desk.panel("item", { title: (params) => "Item " + params.id, params: ["id"], view: (ctx) => <Text>Item {String(ctx.params.id)}</Text> })
-  desk.card("count", { title: "Count", view: () => <Text>1 open</Text> })
-  desk.setup("triage", { title: "Triage", sidebar: "inbox.list", hideCards: ["other.card"] })
-  desk.command("refresh", { title: "Refresh", input: "Query", run: (ctx, input) => ctx.toast("refreshed " + input) })
+  comet.panel("item", { title: (params) => "Item " + params.id, params: ["id"], view: (ctx) => <Text>Item {String(ctx.params.id)}</Text> })
+  comet.card("count", { title: "Count", view: () => <Text>1 open</Text> })
+  comet.setup("triage", { title: "Triage", sidebar: "inbox.list", hideCards: ["other.card"] })
+  comet.command("refresh", { title: "Refresh", input: "Query", run: (ctx, input) => ctx.toast("refreshed " + input) })
 })
 `
 
@@ -112,14 +112,14 @@ test("opens a panel instance per set of parameters, and tells views which ones a
 
 /** A plugin that shows the open item's id and status in one text, switched by a button, as the support sample does. */
 const LABEL = `
-import { definePlugin, Button, Text } from "@desk/plugin"
+import { definePlugin, Button, Text } from "@comet/plugin"
 import { createSignal, Show } from "solid-js"
 
 const ITEMS = [{ id: 1001, status: "open" }, { id: 1002, status: "pending" }]
 
-export default definePlugin((desk) => {
+export default definePlugin((comet) => {
   const [open, setOpen] = createSignal(ITEMS[0])
-  desk.panel("main", {
+  comet.panel("main", {
     title: "Label",
     view: () => (
       <Show when={open()}>
@@ -159,14 +159,14 @@ test("a plugin that is on but not installed is left out, reported once, and name
 
 test("refuses a plugin that registers late, or registers one name twice", async () => {
   installPlugin("late", `
-import { definePlugin } from "@desk/plugin"
-export default definePlugin((desk) => { setTimeout(() => desk.panel("main", { title: "Late", view: () => null })) })
+import { definePlugin } from "@comet/plugin"
+export default definePlugin((comet) => { setTimeout(() => comet.panel("main", { title: "Late", view: () => null })) })
 `)
   installPlugin("twice", `
-import { definePlugin, Text } from "@desk/plugin"
-export default definePlugin((desk) => {
-  desk.sidebar("inbox", { title: "Inbox", view: () => <Text>a</Text> })
-  desk.card("inbox", { title: "Inbox", view: () => <Text>b</Text> })
+import { definePlugin, Text } from "@comet/plugin"
+export default definePlugin((comet) => {
+  comet.sidebar("inbox", { title: "Inbox", view: () => <Text>a</Text> })
+  comet.card("inbox", { title: "Inbox", view: () => <Text>b</Text> })
 })
 `)
   turnOn({ everywhere: ["late", "twice"] })
@@ -180,9 +180,9 @@ export default definePlugin((desk) => {
 
 test("a plugin that stops loses its views in every tab, is reported once, and stays off", async () => {
   installPlugin("crash", `
-import { definePlugin, Button } from "@desk/plugin"
-export default definePlugin((desk) => {
-  desk.card("status", { title: "Status", view: () => <Button label="Break" onClick={() => setTimeout(() => { throw new Error("boom") })} /> })
+import { definePlugin, Button } from "@comet/plugin"
+export default definePlugin((comet) => {
+  comet.card("status", { title: "Status", view: () => <Button label="Break" onClick={() => setTimeout(() => { throw new Error("boom") })} /> })
 })
 `)
   turnOn({ everywhere: ["crash"] })
@@ -203,16 +203,16 @@ export default definePlugin((desk) => {
 
 test("lists setups across projects, the active project's first, and a setup on everywhere once", async () => {
   installPlugin("inbox", INBOX)
-  installPlugin("desk", `
-import { definePlugin } from "@desk/plugin"
-export default definePlugin((desk) => { desk.setup("focus", { title: "Focus" }) })
+  installPlugin("comet", `
+import { definePlugin } from "@comet/plugin"
+export default definePlugin((comet) => { comet.setup("focus", { title: "Focus" }) })
 `)
   const here = tempFolder("here")
   const there = tempFolder("there")
-  turnOn({ everywhere: ["desk"], projects: { [here]: ["inbox"], [join(there, "missing")]: ["inbox"] } })
+  turnOn({ everywhere: ["comet"], projects: { [here]: ["inbox"], [join(there, "missing")]: ["inbox"] } })
   const { plugins } = harness()
   expect(await plugins.setups(there)).toEqual([
-    { project: there, id: "desk.focus", title: "Focus" },
+    { project: there, id: "comet.focus", title: "Focus" },
     { project: here, id: "inbox.triage", title: "Triage" },
   ])
   plugins.stop()
@@ -220,12 +220,12 @@ export default definePlugin((desk) => { desk.setup("focus", { title: "Focus" }) 
 
 /** A plugin that toasts each turn end it hears of, and one whose handler throws. */
 const LISTENER = `
-import { definePlugin } from "@desk/plugin"
+import { definePlugin } from "@comet/plugin"
 
-export default definePlugin((desk) => {
-  desk.onTurnEnd((turn) => desk.toast(turn.tabId + " " + turn.key + " " + turn.outcome))
-  desk.onTurnEnd(() => { throw new Error("handler failed") })
-  desk.command("late", { title: "Late", run: () => desk.onTurnEnd(() => {}) })
+export default definePlugin((comet) => {
+  comet.onTurnEnd((turn) => comet.toast(turn.tabId + " " + turn.key + " " + turn.outcome))
+  comet.onTurnEnd(() => { throw new Error("handler failed") })
+  comet.command("late", { title: "Late", run: () => comet.onTurnEnd(() => {}) })
 })
 `
 
@@ -252,16 +252,16 @@ test("tells a plugin when a turn ends in a thread it opened, under its own key, 
 
 /** A card that draws a variable from its environment. */
 const ENVIRONMENT = `
-import { definePlugin, Text } from "@desk/plugin"
+import { definePlugin, Text } from "@comet/plugin"
 
-export default definePlugin((desk) => {
-  desk.card("env", { title: "Env", view: () => <Text>{process.env.DESK_TEST_TOOL ?? "missing"}</Text> })
+export default definePlugin((comet) => {
+  comet.card("env", { title: "Env", view: () => <Text>{process.env.COMET_TEST_TOOL ?? "missing"}</Text> })
 })
 `
 
 test("starts a plugin with the environment the core set, such as the login shell's PATH", async () => {
   // The core sets the login shell's variables after it starts, as this test does.
-  process.env.DESK_TEST_TOOL = "found"
+  process.env.COMET_TEST_TOOL = "found"
   installPlugin("environment", ENVIRONMENT)
   turnOn({ everywhere: ["environment"] })
   const { plugins, layouts, layout, textOf } = harness()
@@ -272,15 +272,15 @@ test("starts a plugin with the environment the core set, such as the login shell
   }
   await until(() => shown() !== "")
   expect(shown()).toBe("found")
-  delete process.env.DESK_TEST_TOOL
+  delete process.env.COMET_TEST_TOOL
   plugins.stop()
 }, 20_000)
 
 test("a reload starts each plugin again from its files, and gives one that failed another try", async () => {
   const card = (words: string) => `
-import { definePlugin, Text } from "@desk/plugin"
-export default definePlugin((desk) => {
-  desk.card("status", { title: "Status", view: () => <Text>${words}</Text> })
+import { definePlugin, Text } from "@comet/plugin"
+export default definePlugin((comet) => {
+  comet.card("status", { title: "Status", view: () => <Text>${words}</Text> })
 })
 `
   installPlugin("edited", card("Before"))
@@ -303,10 +303,10 @@ export default definePlugin((desk) => {
 
 test("a setup that names a view without its plugin stops the plugin, and says why", async () => {
   installPlugin("loose", `
-import { definePlugin, Text } from "@desk/plugin"
-export default definePlugin((desk) => {
-  desk.sidebar("notes", { title: "Notes", view: () => <Text>Notes</Text> })
-  desk.setup("desk", { title: "Desk", sidebar: "notes" })
+import { definePlugin, Text } from "@comet/plugin"
+export default definePlugin((comet) => {
+  comet.sidebar("notes", { title: "Notes", view: () => <Text>Notes</Text> })
+  comet.setup("comet", { title: "Comet", sidebar: "notes" })
 })
 `)
   turnOn({ everywhere: ["loose"] })

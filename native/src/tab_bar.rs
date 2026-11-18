@@ -1,9 +1,9 @@
 //! The window's tabs: 210 point tabs with the
 //! project's mark, the title in 12 point text and a spinner while the agent works, and a close button
 //! on the active tab and the one under the pointer. Rune's TabStrip sets its titles in the kit's
-//! medium weight and shrinks its tabs to fit, so Desk draws its own.
+//! medium weight and shrinks its tabs to fit, so Comet draws its own.
 
-use crate::shell::{Desk, project_mark};
+use crate::shell::{Comet, project_mark};
 use crate::workspace::Place;
 use rune::{Anim, Color, Drag, El, Phase, Tx, el, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit, Spinner};
@@ -18,7 +18,7 @@ const GAP: f32 = 4.0;
 const DRAG_THRESHOLD: f32 = 4.0;
 /// The distance from one tab's start to the next.
 const PITCH: f32 = TAB_WIDTH + GAP;
-/// The title fades out over its last fifth when it runs long, as `.desk-fade-end` masks it.
+/// The title fades out over its last fifth when it runs long, as `.comet-fade-end` masks it.
 const TITLE_FADE: f32 = 30.0;
 
 /// The tab being dragged, and the tab the strip last scrolled to.
@@ -59,7 +59,7 @@ impl TabDrag {
 }
 
 /// Keeps the active tab in sight: a tab opened, reopened or chosen past the strip's edge scrolls in.
-pub fn follow_active(s: &mut Desk, tx: &mut Tx) {
+pub fn follow_active(s: &mut Comet, tx: &mut Tx) {
     if s.workspace.active != s.tab_bar.shown {
         s.tab_bar.shown = s.workspace.active.clone();
         if let Some(id) = &s.tab_bar.shown {
@@ -69,7 +69,7 @@ pub fn follow_active(s: &mut Desk, tx: &mut Tx) {
 }
 
 /// The strip of tabs and the new tab button, for the window's title bar.
-pub fn tab_bar(s: &Desk, k: &Kit) -> El {
+pub fn tab_bar(s: &Comet, k: &Kit) -> El {
     let w = &s.workspace;
     // Settings show in place of the active tab, so while they are open no tab is marked active.
     let shown = w.active.as_deref().filter(|_| w.settings_page.is_none());
@@ -83,7 +83,7 @@ pub fn tab_bar(s: &Desk, k: &Kit) -> El {
             .variant(IconButtonVariant::GhostMuted)
             .control_size(ControlSize::Small)
             .label("Close tab")
-            .on_press_tx(move |s: &mut Desk, tx: &mut Tx| s.close_tab(&close_id, tx))
+            .on_press_tx(move |s: &mut Comet, tx: &mut Tx| s.close_tab(&close_id, tx))
             .build(k);
         let close = row().absolute(TAB_WIDTH - 20.0 - 6.0, (TAB_HEIGHT - 20.0) / 2.0).child(close);
         let close = if active { close } else { close.group_opacity(0.0, 1.0) };
@@ -120,9 +120,9 @@ pub fn tab_bar(s: &Desk, k: &Kit) -> El {
             // close or move otherwise, reflow.
             .motion(if dragging.is_some() { rune::tok::motion::SNAP } else { rune::tok::motion::REFLOW })
             .offset(dragging.map_or(0.0, |d| d.shift(index)), 0.0)
-            .on_drag(move |s: &mut Desk, d: &mut Drag, _: &mut Tx| drag(s, &id, index, d))
+            .on_drag(move |s: &mut Comet, d: &mut Drag, _: &mut Tx| drag(s, &id, index, d))
             // A middle click closes the tab, as the close button does.
-            .on_middle_press(move |s: &mut Desk, tx: &mut Tx| s.close_tab(&middle_id, tx))
+            .on_middle_press(move |s: &mut Comet, tx: &mut Tx| s.close_tab(&middle_id, tx))
             .child(body)
             .child(close);
         if lifted {
@@ -141,7 +141,7 @@ pub fn tab_bar(s: &Desk, k: &Kit) -> El {
         .variant(IconButtonVariant::GhostMuted)
         .label("New tab")
         .help("New tab. ⌘-click opens it next to this one.")
-        .on_press_tx(|s: &mut Desk, tx: &mut Tx| s.new_tab(if s.cmd_held() { Place::Next } else { Place::End }, None, tx))
+        .on_press_tx(|s: &mut Comet, tx: &mut Tx| s.new_tab(if s.cmd_held() { Place::Next } else { Place::End }, None, tx))
         .build(k)
         .key("new-tab")
         .no_window_drag();
@@ -161,7 +161,7 @@ pub fn tab_bar(s: &Desk, k: &Kit) -> El {
 
 /// A press that moves past the threshold drags the tab along the strip. A drop moves it to the place
 /// it was over. A press that does not move selects the tab.
-fn drag(s: &mut Desk, id: &str, index: usize, d: &mut Drag) {
+fn drag(s: &mut Comet, id: &str, index: usize, d: &mut Drag) {
     match d.phase {
         Phase::Down => {}
         Phase::Move => {

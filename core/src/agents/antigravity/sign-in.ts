@@ -27,7 +27,7 @@ export interface SignInOptions {
 
 /**
  * Signs the user in to Antigravity with their Google account, on a process started for it. The agent
- * announces Google's link once it authenticates, and Desk opens the link after it checks it. The sign-in
+ * announces Google's link once it authenticates, and Comet opens the link after it checks it. The sign-in
  * is done once the agent opens a session, which also reads the account's models. It stops when the user
  * stops it or after a timeout. The process ends either way.
  */

@@ -4,7 +4,7 @@
 
 use crate::format;
 use crate::protocol::{ClientMessage, ThemeChoice, ThreadSummary};
-use crate::shell::{self, Desk};
+use crate::shell::{self, Comet};
 use crate::workspace::Place;
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, icon, row, text, text_input};
 use rune_kit::{Keybind, Kit};
@@ -18,7 +18,7 @@ const WIDTH: f32 = 576.0;
 const TOP: f32 = 0.14;
 const LIST_MAX: f32 = 302.0;
 const RADIUS: f32 = 12.0;
-/// SearchList's rows: 36 points tall, rounded to 0.5rem of Desk's 13 pixel root.
+/// SearchList's rows: 36 points tall, rounded to 0.5rem of Comet's 13 pixel root.
 const ROW_HEIGHT: f32 = 36.0;
 const ROW_RADIUS: f32 = 8.125;
 
@@ -61,7 +61,7 @@ impl Page {
 
 #[derive(Clone)]
 enum Action {
-    Run(fn(&mut Desk, &mut Tx)),
+    Run(fn(&mut Comet, &mut Tx)),
     Open(Page),
     Tab(String),
     Thread(String, ThreadSummary),
@@ -121,7 +121,7 @@ impl Palette {
     }
 }
 
-impl Desk {
+impl Comet {
     /// Opens the palette on `pages`. The shortcut that opened it closes it, and another one switches to its list.
     pub fn toggle_palette(&mut self, pages: Vec<Page>, tx: &mut Tx) {
         if self.palette.open && self.palette.pages[..self.palette.start] == pages[..] {
@@ -465,7 +465,7 @@ fn level_key(pages: &[Page]) -> String {
 }
 
 /// `window_height` places the palette 14% of the way down the window.
-pub fn palette(s: &Desk, window_height: f32, k: &Kit, layer: &mut Vec<El>) {
+pub fn palette(s: &Comet, window_height: f32, k: &Kit, layer: &mut Vec<El>) {
     if !s.palette.open {
         return;
     }
@@ -477,8 +477,8 @@ pub fn palette(s: &Desk, window_height: f32, k: &Kit, layer: &mut Vec<El>) {
         .color(k.c.text_base)
         .placeholder(placeholder, k.c.text_faint)
         .caret(k.c.text_base, k.selection())
-        .on_edit(|s: &mut Desk| &mut s.palette.query)
-        .on_input_key(|s: &mut Desk, event: &KeyEvent, tx| s.palette_key(event, tx));
+        .on_edit(|s: &mut Comet| &mut s.palette.query)
+        .on_input_key(|s: &mut Comet, event: &KeyEvent, tx| s.palette_key(event, tx));
     // A 40 point field, 6 and 8 points in, over a border that takes a point of room in CSS and none in Rune.
     let field = row()
         .w_full()
@@ -535,7 +535,7 @@ pub fn palette(s: &Desk, window_height: f32, k: &Kit, layer: &mut Vec<El>) {
     // The window dims behind the palette, as behind `@opencode/ui`'s dialogs. The palette is a modal, so the rows
     // under it take no hover, and a press outside it closes it.
     layer.push(rune::el().key("palette-dim").absolute(0.0, 0.0).w_full().h_full().fill(k.c.scrim));
-    let body = body.modal(true, |s: &mut Desk| s.palette = Palette::default());
+    let body = body.modal(true, |s: &mut Comet| s.palette = Palette::default());
     let surface = k.elevate(body.radius(RADIUS).clip_rounded(RADIUS).fill(k.c.layer_01).border(1.0, crate::theme::outline(k.dark)), &k.elevation.overlay);
     // On a whole point: Rune snaps a filled row to the pixel grid and leaves a clear one where it is, so on a
     // fraction the highlighted row's text sat a pixel off the others' and jumped as the arrows moved it.
@@ -548,7 +548,7 @@ fn shortcut(keys: &[&str], k: &Kit) -> El {
     text(keys.concat()).font(rune::TextStyle::new(11.0, 530.0).lh(14.0).tracking(0.05)).color(k.c.text_faint).px(1.0)
 }
 
-fn entry_row(s: &Desk, entry: &Entry, index: usize, active: bool, k: &Kit) -> El {
+fn entry_row(s: &Comet, entry: &Entry, index: usize, active: bool, k: &Kit) -> El {
     let lead = match (&entry.project, entry.file_icon, entry.icon) {
         (Some(project), ..) => Some(shell::project_mark(s, project, k)),
         (None, Some(file), _) => Some(icon(file, crate::icons::SIZE)),
@@ -564,19 +564,19 @@ fn entry_row(s: &Desk, entry: &Entry, index: usize, active: bool, k: &Kit) -> El
         .items_center()
         .px(12.0)
         .radius(ROW_RADIUS)
-        // The active row: white at 10% on dark, Desk's hover colour on light.
+        // The active row: white at 10% on dark, Comet's hover colour on light.
         .fill(if !active { rune::Color::TRANSPARENT } else if k.dark { rune::Color::WHITE.alpha(0.1) } else { k.c.hover })
         .role("option")
         // The pointer moves the highlight, as in T3 Code's palette. Only a move does: a pointer resting where
         // the palette opens leaves the top row highlighted. A move within the highlighted row builds nothing.
-        .on_pointer_move_local(move |s: &mut Desk, _, tx| {
+        .on_pointer_move_local(move |s: &mut Comet, _, tx| {
             if s.palette.active == index {
                 tx.live_only();
             } else {
                 s.palette.active = index;
             }
         })
-        .on_press_tx(move |s: &mut Desk, tx| s.select(picked.clone(), tx))
+        .on_press_tx(move |s: &mut Comet, tx| s.select(picked.clone(), tx))
         .children(lead)
         .child(text(entry.title.clone()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate())
         .children(entry.detail.clone().map(|d| text(d).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate()))
@@ -592,8 +592,8 @@ mod tests {
     use crate::core::Event;
     use crate::protocol::CoreMessage;
 
-    fn desk() -> Desk {
-        let mut s = Desk::default();
+    fn comet() -> Comet {
+        let mut s = Comet::default();
         let messages = serde_json::json!([
             { "type": "recent", "projects": ["/code/web", "/code/api"] },
             { "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "Fix login", "project": "/code/web", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] },
@@ -606,13 +606,13 @@ mod tests {
         s
     }
 
-    fn titles(s: &Desk) -> Vec<String> {
+    fn titles(s: &Comet) -> Vec<String> {
         s.matches().into_iter().map(|e| e.title).collect()
     }
 
     #[test]
     fn the_root_lists_actions_tabs_and_recent_threads_and_every_word_must_match() {
-        let mut s = desk();
+        let mut s = comet();
         s.show_palette(Vec::new());
         let all = titles(&s);
         assert!(all.contains(&"New session".to_owned()) && all.contains(&"Fix login".to_owned()) && all.contains(&"Speed up the build".to_owned()));
@@ -624,7 +624,7 @@ mod tests {
 
     #[test]
     fn a_search_ignores_accents_and_full_width_letters() {
-        let mut s = desk();
+        let mut s = comet();
         s.show_palette(Vec::new());
         s.plugins.setups = vec![crate::protocol::ProjectSetup { project: "/code/web".into(), id: "cafe".into(), title: "Café menu".into() }];
         s.palette.query = TextEdit::new("cafe");
@@ -635,7 +635,7 @@ mod tests {
 
     #[test]
     fn a_search_from_the_root_finds_setups_which_the_palette_reads_as_it_opens() {
-        let mut s = desk();
+        let mut s = comet();
         s.show_palette(Vec::new());
         assert!(s.core.sent().iter().any(|m| m["type"] == "setups.get"), "setups are read with the palette, not only with their list");
         let setup = |project: &str, title: &str| crate::protocol::ProjectSetup { project: project.into(), id: title.to_lowercase(), title: title.into() };
@@ -647,7 +647,7 @@ mod tests {
 
     #[test]
     fn the_files_list_asks_the_core_and_shows_its_answer() {
-        let mut s = desk();
+        let mut s = comet();
         s.show_palette(vec![Page::Files("/code/web".into())]);
         s.palette.query = TextEdit::new("log");
         s.sync_palette();
@@ -658,7 +658,7 @@ mod tests {
 
     #[test]
     fn the_files_list_keeps_its_last_answer_until_the_next_arrives() {
-        let mut s = desk();
+        let mut s = comet();
         s.show_palette(vec![Page::Files("/code/web".into())]);
         s.palette.query = TextEdit::new("log");
         s.sync_palette();
@@ -671,7 +671,7 @@ mod tests {
         assert!(titles(&s).is_empty());
     }
 
-    fn runtime(s: Desk) -> rune::Runtime<Desk> {
+    fn runtime(s: Comet) -> rune::Runtime<Comet> {
         let mut rt = rune::Runtime::new(s, shell::view, (1280.0, 820.0), rune::Env { system_dark: true, scale: 2.0 });
         rt.frame(0.0);
         rt
@@ -685,13 +685,13 @@ mod tests {
         Event::Message(CoreMessage::FilesFound { project: "/code/web".into(), query: query.into(), paths: paths.iter().map(|p| p.to_string()).collect() })
     }
 
-    fn open_files(s: &Desk) -> Vec<String> {
+    fn open_files(s: &Comet) -> Vec<String> {
         s.workspace.active_tab().map(|t| t.files.iter().map(|f| f.path.clone()).collect()).unwrap_or_default()
     }
 
     #[test]
     fn enter_on_the_last_query_s_files_picks_from_the_answer_to_this_one() {
-        let mut rt = runtime(desk());
+        let mut rt = runtime(comet());
         rt.update(|s, tx| {
             s.show_palette(vec![Page::Files("/code/web".into())]);
             s.palette.query = TextEdit::new("log");
@@ -710,7 +710,7 @@ mod tests {
 
     #[test]
     fn a_key_typed_after_enter_cancels_the_waiting_pick() {
-        let mut rt = runtime(desk());
+        let mut rt = runtime(comet());
         rt.update(|s, tx| {
             s.show_palette(vec![Page::Files("/code/web".into())]);
             s.palette.query = TextEdit::new("rea");
@@ -725,7 +725,7 @@ mod tests {
 
     #[test]
     fn another_list_s_shortcut_switches_the_open_palette_to_it_and_its_own_closes_it() {
-        let mut rt = runtime(desk());
+        let mut rt = runtime(comet());
         rt.update(|s, tx| s.toggle_palette(Vec::new(), tx));
         rt.update(|s, tx| s.toggle_palette(vec![Page::Files("/code/web".into())], tx));
         assert!(rt.state.palette.is_open());

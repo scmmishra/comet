@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL, PERMISSION_MODES, type ModelOption, type RunSettings } from "@desk/protocol"
+import { DEFAULT_MODEL, PERMISSION_MODES, type ModelOption, type RunSettings } from "@comet/protocol"
 import type { CodexModel } from "./protocol"
 import type { AppServer } from "./server"
 
@@ -41,7 +41,7 @@ async function listModels(server: AppServer): Promise<CodexModel[]> {
   return models
 }
 
-/** The models as Desk lists them: Codex's default first, then each model Codex shows in its own picker. */
+/** The models as Comet lists them: Codex's default first, then each model Codex shows in its own picker. */
 export function modelOptions(models: readonly CodexModel[]): ModelOption[] {
   const fallback = models.find((model) => model.isDefault)
   const shown = models.filter((model) => !model.hidden).map((model) => option(model))
@@ -72,7 +72,7 @@ export interface TurnModel {
 /**
  * What a turn runs with. Codex keeps a turn's model, effort and tier for the turns after it, so each
  * turn names all three. Otherwise a tab set back to Default would keep the model it had before. Default
- * names the model Codex marks as its default, which is the one Desk shows Default runs. An effort the
+ * names the model Codex marks as its default, which is the one Comet shows Default runs. An effort the
  * tab leaves unset is the model's default effort.
  */
 export function turnModel(models: readonly CodexModel[], settings: RunSettings): TurnModel {
@@ -82,5 +82,5 @@ export function turnModel(models: readonly CodexModel[], settings: RunSettings):
   return { ...(model ? { model } : {}), ...(effort ? { effort } : {}), serviceTier: settings.fast ? FAST_TIER : null }
 }
 
-/** A model's name as Desk shows it, such as "GPT-6-Sol". An unknown id passes through. */
+/** A model's name as Comet shows it, such as "GPT-6-Sol". An unknown id passes through. */
 export const modelName = (models: readonly CodexModel[], id: string) => models.find((model) => model.id === id)?.displayName ?? id

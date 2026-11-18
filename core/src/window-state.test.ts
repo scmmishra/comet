@@ -11,39 +11,39 @@ test("an empty window when nothing is saved", () => {
 })
 
 test("saves and loads the window's tabs across projects, with each tab's thread", () => {
-  const desk = { id: "t1", title: "Fix tabs", project: "/work/desk", terminals: [{ id: "x1", title: "Terminal" }], panelActive: "x1", agent: "codex" as const, model: "opus", effort: "high" as const, fast: true, permissionMode: "acceptEdits" as const }
+  const comet = { id: "t1", title: "Fix tabs", project: "/work/comet", terminals: [{ id: "x1", title: "Terminal" }], panelActive: "x1", agent: "codex" as const, model: "opus", effort: "high" as const, fast: true, permissionMode: "acceptEdits" as const }
   const chatwoot = { id: "t2", title: "Inbox", project: "/work/chatwoot", terminals: [], agent: "claude" as const, model: "default", permissionMode: "default" as const }
-  const state = { tabs: [desk, chatwoot], active: "t2", threads: { t1: { sessionId: "s1", threadStart: "abc", turnFrom: "def", turnTo: "123" } }, recent: ["/work/chatwoot", "/work/desk"], keyed: { "/work/desk\nconv-1": { key: "conv-1", sessionId: "s1" } }, layouts: { t2: { sidebar: "support.inbox", panels: [{ panel: "support.conversation", params: { id: 1 } }], hiddenCards: [] } }, closed: [], moved: {} }
+  const state = { tabs: [comet, chatwoot], active: "t2", threads: { t1: { sessionId: "s1", threadStart: "abc", turnFrom: "def", turnTo: "123" } }, recent: ["/work/chatwoot", "/work/comet"], keyed: { "/work/comet\nconv-1": { key: "conv-1", sessionId: "s1" } }, layouts: { t2: { sidebar: "support.inbox", panels: [{ panel: "support.conversation", params: { id: 1 } }], hiddenCards: [] } }, closed: [], moved: {} }
   saveWindowState(state)
   expect(loadWindowState()).toEqual(state)
 })
 
 test("drops the bare snapshots a thread saved before checkpoints were commits, and keeps the rest of it", () => {
   const old = { t1: { sessionId: "s1", baseline: "abc", turnBaseline: "def", turnHead: "123" }, t2: { sessionId: "s2", threadStart: { tree: "abc", at: 1 }, turnStart: { tree: "def", at: 1 } } }
-  writeFileSync(join(process.env.DESK_HOME!, "window.json"), JSON.stringify({ tabs: [], threads: old, recent: [], keyed: {} }))
+  writeFileSync(join(process.env.COMET_HOME!, "window.json"), JSON.stringify({ tabs: [], threads: old, recent: [], keyed: {} }))
   expect(loadWindowState().threads).toEqual({ t1: { sessionId: "s1" }, t2: { sessionId: "s2" } })
 })
 
 test("drops a saved tab that is not whole", () => {
-  writeFileSync(join(process.env.DESK_HOME!, "window.json"), JSON.stringify({ tabs: [{ id: "t1", title: "No project" }], threads: {}, recent: [], keyed: {} }))
+  writeFileSync(join(process.env.COMET_HOME!, "window.json"), JSON.stringify({ tabs: [{ id: "t1", title: "No project" }], threads: {}, recent: [], keyed: {} }))
   expect(loadWindowState().tabs).toEqual([])
 })
 
-test("a dev Desk keeps its window apart from the installed Desk's", () => {
-  const home = process.env.DESK_HOME!
+test("a dev Comet keeps its window apart from the installed Comet's", () => {
+  const home = process.env.COMET_HOME!
   saveWindowState({ tabs: [], threads: {}, recent: ["/work/installed"], keyed: {}, layouts: {}, closed: [], moved: {} })
-  process.env.DESK_INSTANCE = "dev"
+  process.env.COMET_INSTANCE = "dev"
   try {
     saveWindowState({ tabs: [], threads: {}, recent: ["/work/dev"], keyed: {}, layouts: {}, closed: [], moved: {} })
     expect(existsSync(join(home, "dev", "window.json"))).toBe(true)
     expect(loadWindowState().recent).toEqual(["/work/dev"])
   } finally {
-    delete process.env.DESK_INSTANCE
+    delete process.env.COMET_INSTANCE
   }
   expect(loadWindowState().recent).toEqual(["/work/installed"])
 })
 
 test("reads a window saved when keys kept only their session, as threads that resume it", () => {
-  writeFileSync(join(process.env.DESK_HOME!, "window.json"), JSON.stringify({ tabs: [], threads: {}, recent: [], keys: { "/work/desk\nconv-1": "s1" } }))
-  expect(loadWindowState().keyed).toEqual({ "/work/desk\nconv-1": { key: "conv-1", sessionId: "s1" } })
+  writeFileSync(join(process.env.COMET_HOME!, "window.json"), JSON.stringify({ tabs: [], threads: {}, recent: [], keys: { "/work/comet\nconv-1": "s1" } }))
+  expect(loadWindowState().keyed).toEqual({ "/work/comet\nconv-1": { key: "conv-1", sessionId: "s1" } })
 })

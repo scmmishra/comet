@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL, type ImageAttachment, type PermissionAnswer, type RunSettings } from "@desk/protocol"
+import { DEFAULT_MODEL, type ImageAttachment, type PermissionAnswer, type RunSettings } from "@comet/protocol"
 import { SERVER_NAME } from "../../delegate/tools"
 import type { AgentSession, Emit, SessionOptions, ToolServer } from "../agent"
 import { RpcError } from "../json-rpc"
@@ -263,7 +263,7 @@ export class AcpSession implements AgentSession {
   /**
    * Ends the turn after an error, which shows in the thread. A sign-in the agent needs signs the account out.
    * Tool calls left open end as unfinished. An agent that answered with an error is still alive, so only the
-   * calls it never started end. Any other error means its process is gone, or Desk closed it.
+   * calls it never started end. Any other error means its process is gone, or Comet closed it.
    */
   private fail(turn: NonNullable<AcpSession["turn"]>, error: unknown) {
     if (this.turn !== turn) return
@@ -288,7 +288,7 @@ export class AcpSession implements AgentSession {
   }
 }
 
-/** Desk's tools as an MCP server the agent connects to over HTTP. */
+/** Comet's tools as an MCP server the agent connects to over HTTP. */
 const toolServers = (tools: ToolServer | undefined): McpServer[] =>
   tools ? [{ type: "http", name: SERVER_NAME, url: tools.url, headers: [{ name: "Authorization", value: tools.authorization }] }] : []
 

@@ -18,7 +18,7 @@ test("refuses a caller it does not know", async () => {
 })
 
 test("starts a session on the version the client speaks, and lists the caller's tools", async () => {
-  expect((await result({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } })).result).toMatchObject({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "desk" } })
+  expect((await result({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } })).result).toMatchObject({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "comet" } })
   expect((await post({ jsonrpc: "2.0", method: "notifications/initialized" })).status).toBe(202)
   expect((await result({ jsonrpc: "2.0", id: 2, method: "tools/list" })).result).toEqual({ tools: tools.tools })
 })
@@ -29,7 +29,7 @@ test("runs a tool and answers with its text", async () => {
 
 test("a tool that fails tells the model why, and an unknown method is a protocol error", async () => {
   expect((await result({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "missing" } })).result).toEqual({ content: [{ type: "text", text: "No tool called missing." }], isError: true })
-  expect((await result({ jsonrpc: "2.0", id: 5, method: "resources/list" })).error?.message).toBe("Desk's MCP server has no method resources/list.")
+  expect((await result({ jsonrpc: "2.0", id: 5, method: "resources/list" })).error?.message).toBe("Comet's MCP server has no method resources/list.")
   expect(((await (await post("not json")).json()) as { error: { message: string } }).error.message).toBe("The request is not JSON.")
 })
 

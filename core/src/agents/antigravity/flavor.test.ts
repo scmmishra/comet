@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { PermissionMode } from "@desk/protocol"
+import type { PermissionMode } from "@comet/protocol"
 import { useTempHome } from "../../test-support"
 import type { PermissionRequest } from "../acp/protocol"
 import { antigravityFlavor } from "./flavor"
@@ -10,8 +10,8 @@ useTempHome()
 
 const flavor = antigravityFlavor({ publish: () => {}, compactIdle: () => false }, new ModelCache(modelsPath))
 
-test("names itself Desk, and runs each of Desk's modes the CLI has, asking in the one it lacks", () => {
-  expect(flavor.connect).toEqual({ clientInfo: { name: "desk", version: expect.any(String) }, authMethod: "oauth-personal" })
+test("names itself Comet, and runs each of Comet's modes the CLI has, asking in the one it lacks", () => {
+  expect(flavor.connect).toEqual({ clientInfo: { name: "comet", version: expect.any(String) }, authMethod: "oauth-personal" })
   const modes: PermissionMode[] = ["default", "acceptEdits", "auto", "bypassPermissions"]
   expect(modes.map((mode) => flavor.modeId(mode))).toEqual(["default", "accept-edits", "auto", "default"])
 })

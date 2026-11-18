@@ -21,12 +21,12 @@ const model = (id: string, displayName: string, extra: Partial<CodexModel> = {})
 export const MODELS = [model("gpt-6.1-sol", "GPT-6.1-Sol", { isDefault: true }), model("gpt-6-luna", "GPT-6-Luna", { serviceTiers: [], defaultReasoningEffort: "high" }), model("codex-auto-review", "Auto review", { hidden: true })]
 
 /** The user agent Codex 0.167 answers `initialize` with. */
-const USER_AGENT = "desk/0.167.0 (Mac OS 26.6.2; arm64) unknown (desk; 0.0.1)"
+const USER_AGENT = "comet/0.167.0 (Mac OS 26.6.2; arm64) unknown (comet; 0.0.1)"
 
 /**
  * A Codex app-server a test plays, over an in-memory transport. It answers each request whose method
- * has an answer, and records every message Desk sent. Each launch is a new process, so a test can end
- * one and see Desk start the next.
+ * has an answer, and records every message Comet sent. Each launch is a new process, so a test can end
+ * one and see Comet start the next.
  */
 export function fakeAppServer() {
   const written: Message[] = []
@@ -52,7 +52,7 @@ export function fakeAppServer() {
     return transport
   }
 
-  /** Every reply Desk wrote to the request Codex sent with `id`. */
+  /** Every reply Comet wrote to the request Codex sent with `id`. */
   const replies = (id: number | string) => written.filter((message) => message.method === undefined && message.id === id)
 
   return {
@@ -64,13 +64,13 @@ export function fakeAppServer() {
     answer(method: string, answer: unknown) {
       answers.set(method, typeof answer === "function" ? (answer as Answer) : () => answer)
     },
-    /** The params of each request and notification Desk sent with `method`. */
+    /** The params of each request and notification Comet sent with `method`. */
     sent: (method: string) => written.filter((message) => message.method === method).map((message) => message.params),
-    /** Desk's first reply to the request Codex sent with `id`, once it has written one. */
+    /** Comet's first reply to the request Codex sent with `id`, once it has written one. */
     reply: (id: number | string) => replies(id)[0],
     replies,
     notify: (method: string, params: object) => current!.say({ method, params }),
-    /** Codex asks Desk something, such as an approval. */
+    /** Codex asks Comet something, such as an approval. */
     ask: (id: number | string, method: string, params: object) => current!.say({ id, method, params }),
     /** The app-server's process ends. */
     hangUp: () => current!.hangUp(),

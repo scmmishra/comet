@@ -1,9 +1,9 @@
-import type { PermissionAnswer, PermissionKind, Question, ThreadItem } from "@desk/protocol"
+import type { PermissionAnswer, PermissionKind, Question, ThreadItem } from "@comet/protocol"
 import { SERVER_NAME } from "../../delegate/tools"
 import type { RequestId } from "../json-rpc"
 import { scriptOfWords, shellScript } from "./shell"
 
-// What Desk shows for Codex's requests, and how the user's answers go back, after T3 Code. An approval
+// What Comet shows for Codex's requests, and how the user's answers go back, after T3 Code. An approval
 // becomes a `permission` item, and a question for the user a `question` item.
 
 /** Codex's decision for each answer, in the approvals of its current protocol. */
@@ -27,7 +27,7 @@ export type CodexRequest =
   | { readonly item: PermissionItem; readonly reply: (answer: PermissionAnswer) => unknown; readonly dismissed: unknown }
   | { readonly item: QuestionItem; readonly reply: (answers: Answers) => unknown; readonly dismissed: unknown }
 
-/** A request Desk answers itself, without asking the user. */
+/** A request Comet answers itself, without asking the user. */
 interface AnsweredRequest {
   readonly answer: unknown
 }
@@ -41,8 +41,8 @@ const review = (answer: PermissionAnswer) => ({ decision: REVIEW_DECISIONS[answe
 type Params = Record<string, unknown> & { readonly itemId?: string; readonly reason?: string | null }
 
 /**
- * The request Codex asks with `method`: one for the user, one Desk answers itself, or undefined for one
- * Desk does not handle. `rpcId` is the id Codex gave the request. `files` gives the paths of a file
+ * The request Codex asks with `method`: one for the user, one Comet answers itself, or undefined for one
+ * Comet does not handle. `rpcId` is the id Codex gave the request. `files` gives the paths of a file
  * change Codex has already reported, by its item id. `acceptMcp` accepts every MCP prompt without asking.
  */
 export function readRequest(
@@ -119,7 +119,7 @@ interface CodexQuestion {
 }
 
 /**
- * Codex's questions. Desk answers by question text, and Codex by question id, so the reply maps one to
+ * Codex's questions. Comet answers by question text, and Codex by question id, so the reply maps one to
  * the other. A dismissal answers every question with nothing.
  */
 function questionRequest(requestId: string, asked: readonly CodexQuestion[]): CodexRequest {
@@ -133,7 +133,7 @@ function questionRequest(requestId: string, asked: readonly CodexQuestion[]): Co
   return { item: { type: "question", id: `question:${requestId}`, requestId, questions }, reply, dismissed: reply(undefined) }
 }
 
-/** An MCP server's question, as Codex passes it on. `url` mode sends the user to a page, which Desk does not do. */
+/** An MCP server's question, as Codex passes it on. `url` mode sends the user to a page, which Comet does not do. */
 interface Elicitation {
   readonly serverName: string
   readonly mode: string
@@ -142,10 +142,10 @@ interface Elicitation {
 }
 
 /**
- * An MCP server's question. Codex asks before it calls an MCP tool. Desk approves a call of its own tools
+ * An MCP server's question. Codex asks before it calls an MCP tool. Comet approves a call of its own tools
  * itself: the user chose the thread's permission mode, and work handed to another agent runs no broader
  * than it. With `acceptMcp`, it approves every question. A question that sends the user to a page is
- * cancelled, since Desk opens none. An MCP server's question has no item of its own, so the request's own id names it.
+ * cancelled, since Comet opens none. An MCP server's question has no item of its own, so the request's own id names it.
  */
 function elicitationRequest(asked: Elicitation, rpcId: RequestId, acceptMcp: boolean): CodexRequest | AnsweredRequest {
   if (asked.mode === "url") return { answer: elicitationReply(asked, "cancel") }
@@ -157,7 +157,7 @@ function elicitationRequest(asked: Elicitation, rpcId: RequestId, acceptMcp: boo
 /**
  * Codex's reply for an answer. Accepting fills each field of the form with its default, which is how a
  * plain approval answers, and allowing for the session asks Codex to keep the approval. A form with a
- * required field that has no default is cancelled, after T3 Code: Desk cannot fill it, and a decline
+ * required field that has no default is cancelled, after T3 Code: Comet cannot fill it, and a decline
  * reads as the user's refusal, which Codex may keep.
  */
 function elicitationReply(asked: Elicitation, answer: PermissionAnswer) {

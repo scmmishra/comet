@@ -12,7 +12,7 @@ const NOTHING_INSTALLED = "Nothing was installed."
 const DOWNLOAD_IDLE_MS = 60_000
 /** How long the new CLI has to print its version. It answers in well under a second. */
 const VERSION_TIMEOUT_MS = 30_000
-const UNREACHABLE = `Desk could not download Antigravity from Google. Check the network connection and any proxy settings, then try again. ${NOTHING_INSTALLED}`
+const UNREACHABLE = `Comet could not download Antigravity from Google. Check the network connection and any proxy settings, then try again. ${NOTHING_INSTALLED}`
 const STALLED = `The Antigravity download stopped: no data came from Google for ${DOWNLOAD_IDLE_MS / 1000} seconds. Check the network connection, then try again. ${NOTHING_INSTALLED}`
 
 /** Saves what `url` serves at `path`. */
@@ -27,15 +27,15 @@ interface InstallOptions {
 }
 
 /**
- * Installs the newest release of Google's `agy` CLI for Desk, after T3 Code: it downloads the archive,
+ * Installs the newest release of Google's `agy` CLI for Comet, after T3 Code: it downloads the archive,
  * checks its SHA-512, checks that it holds only the CLI's program, extracts it, and checks that the
  * program runs and is the release Google named. The marker that makes the install usable is written last,
  * so a half-finished install is never run. Only then does it remove the other installs, such as an
- * earlier version or the ACP server an earlier Desk installed. Once `signal` aborts it stops before it
+ * earlier version or the ACP server an earlier Comet installed. Once `signal` aborts it stops before it
  * touches an install there was, and leaves that one as it was.
  */
 export async function installRuntime({ signal = new AbortController().signal, release, download = fetchTo }: InstallOptions = {}) {
-  if (`${process.platform}-${process.arch}` !== RELEASE_PLATFORM) throw new Error("Desk installs Antigravity only on a Mac with Apple silicon.")
+  if (`${process.platform}-${process.arch}` !== RELEASE_PLATFORM) throw new Error("Comet installs Antigravity only on a Mac with Apple silicon.")
   const chosen = release ?? (await latestRelease({ signal }))
   mkdirSync(antigravityHome(), { recursive: true })
   const archive = join(antigravityHome(), `download-${crypto.randomUUID()}.tar.gz`)
@@ -120,7 +120,7 @@ async function sha512(path: string) {
 async function tar(args: string[]) {
   const child = spawn([TAR, ...args], { stdout: "pipe", stderr: "pipe" })
   const [output, errors, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
-  if (code !== 0) throw new Error(`Desk could not extract the Antigravity download. ${errors.trim() || NOTHING_INSTALLED}`)
+  if (code !== 0) throw new Error(`Comet could not extract the Antigravity download. ${errors.trim() || NOTHING_INSTALLED}`)
   return output
 }
 

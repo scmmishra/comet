@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { AgentInfo, CoreMessage } from "@desk/protocol"
+import type { AgentInfo, CoreMessage } from "@comet/protocol"
 import { fakeAgent, until } from "../test-support"
 import { requireFeature } from "./agent"
 import { Agents } from "./registry"
@@ -117,7 +117,7 @@ test("runs what an agent can do to itself, reads it again, and refuses what it c
   expect(codex.calls).toEqual(["signIn"])
   const states = sent.flatMap((message) => (message.type === "agents" ? [row(message.agents, "codex").state] : []))
   expect(states).toEqual(["signing-in", "ready"])
-  await expect(agents.run("codex", "update")).rejects.toThrow("Fake codex has no updater Desk can run.")
-  expect(() => agents.get("antigravity")).toThrow("Desk does not run an agent called antigravity.")
+  await expect(agents.run("codex", "update")).rejects.toThrow("Fake codex has no updater Comet can run.")
+  expect(() => agents.get("antigravity")).toThrow("Comet does not run an agent called antigravity.")
   expect(() => requireFeature(agents.get("codex"), "fork", "fork a thread")).toThrow("Fake codex cannot fork a thread.")
 })

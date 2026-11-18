@@ -11,7 +11,7 @@ pub fn diff_changes(k: &Kit, added: u32, removed: u32) -> El {
 }
 
 /// `@opencode/ui`'s ProgressCircle: a 2 point ring, its arc in the muted text colour on a `layer-04`
-/// track. rune-kit's draws both in its muted icon colour, so Desk draws its own.
+/// track. rune-kit's draws both in its muted icon colour, so Comet draws its own.
 pub fn progress_circle(k: &Kit, value: f32, size: f32, label: &str) -> El {
     el().role("progressbar")
         .label(label.to_owned())
@@ -20,7 +20,7 @@ pub fn progress_circle(k: &Kit, value: f32, size: f32, label: &str) -> El {
         .child(icon(arc(value), size).absolute(0.0, 0.0).color(k.c.text_muted))
 }
 
-static RING: Icon = Icon { name: "desk-progress-ring", view: 16.0, body: r#"<circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="2" fill="none"/>"# };
+static RING: Icon = Icon { name: "comet-progress-ring", view: 16.0, body: r#"<circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="2" fill="none"/>"# };
 
 /// The arc for `value`, in steps of 2%. Icons are static, so each step is made once and kept.
 fn arc(value: f32) -> &'static Icon {
@@ -38,7 +38,7 @@ fn arc(value: f32) -> &'static Icon {
         50 => RING.body.to_owned(),
         _ => format!(r#"<path d="M8 2A6 6 0 {} 1 {x:.3} {y:.3}" stroke="currentColor" stroke-width="2" fill="none"/>"#, u8::from(step > 25)),
     };
-    let name: &'static str = Box::leak(format!("desk-progress-arc-{step}").into_boxed_str());
+    let name: &'static str = Box::leak(format!("comet-progress-arc-{step}").into_boxed_str());
     let arc: &'static Icon = Box::leak(Box::new(Icon { name, view: 16.0, body: Box::leak(body.into_boxed_str()) }));
     arcs[step] = Some(arc);
     arc
@@ -58,7 +58,7 @@ pub fn tinted_badge(label: impl Into<String>, fill: Color, ink: Color) -> El {
 }
 
 /// `@opencode/ui`'s Popover surface: the raised fill, a 1 point border in
-/// the outline colour and the medium shadow. Its radius is 0.375rem, which Desk's 13 pixel root makes
+/// the outline colour and the medium shadow. Its radius is 0.375rem, which Comet's 13 pixel root makes
 /// 4.875 points. rune-kit's raised surface takes a brighter border and its own radius.
 pub fn popover(k: &Kit, content: El) -> El {
     const RADIUS: f32 = 4.875;
@@ -75,7 +75,7 @@ pub struct Segment {
 }
 
 /// `@opencode/ui`'s SegmentedControl with icons in its items, for Review's diff view and the model
-/// picker's Fast speed. rune-kit's SegmentedControl takes words only, so Desk draws
+/// picker's Fast speed. rune-kit's SegmentedControl takes words only, so Comet draws
 /// this one with its measures: 28 points tall, 12 points in, radius 6, the chosen item raised.
 pub fn segmented<S: 'static>(k: &Kit, name: &str, segments: &[Segment], selected: usize, pick: impl Fn(&mut S, usize) + Clone + 'static) -> El {
     let c = &k.c;

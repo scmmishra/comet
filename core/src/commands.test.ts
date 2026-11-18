@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { CommandInfo } from "@desk/protocol"
+import type { CommandInfo } from "@comet/protocol"
 import { existsSync, mkdtempSync } from "node:fs"
 import { join } from "node:path"
 import { Commands } from "./commands"
@@ -73,7 +73,7 @@ test("runs in the project's folder and stops the processes a command starts", as
   const { dir, commands, run, ids } = project()
   const marker = join(dir, "child-alive")
   // The command starts a child that writes a file after a pause. Stop must end the child too.
-  commands.save("Server", [{ name: "", command: `pwd > "$DESK_SPACE_ROOT/where"; (sleep 0.3; touch "${marker}") & wait` }], [])
+  commands.save("Server", [{ name: "", command: `pwd > "$COMET_SPACE_ROOT/where"; (sleep 0.3; touch "${marker}") & wait` }], [])
   commands.run(ids())
   await until(() => existsSync(join(dir, "where")))
   expect(await Bun.file(join(dir, "where")).text()).toContain(dir.split("/").pop()!)

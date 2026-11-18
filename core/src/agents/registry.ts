@@ -1,4 +1,4 @@
-import { AGENTS, type AgentId, type AgentInfo, type CoreMessage, type Skill } from "@desk/protocol"
+import { AGENTS, type AgentId, type AgentInfo, type CoreMessage, type Skill } from "@comet/protocol"
 import { errorMessage } from "../errors"
 import { requireFeature, type Agent, type AgentHost, type AgentMcp, type AgentReading } from "./agent"
 import { antigravityAgent } from "./antigravity"
@@ -7,7 +7,7 @@ import { codexAgent } from "./codex"
 
 type Send = (message: CoreMessage) => void
 
-/** How to make each agent Desk runs. AGENTS.md lists the steps to add one. */
+/** How to make each agent Comet runs. AGENTS.md lists the steps to add one. */
 const MAKERS: Record<AgentId, (host: AgentHost) => Agent> = {
   claude: claudeAgent,
   codex: codexAgent,
@@ -31,7 +31,7 @@ const ACTIONS: Record<AgentAction, { readonly name: string; readonly state: Agen
 export type AgentSettings = Omit<AgentHost, "publish">
 
 /**
- * The agents Desk runs, and what Desk knows about each: whether it is installed and signed in, its
+ * The agents Comet runs, and what Comet knows about each: whether it is installed and signed in, its
  * models and its plan usage. Each agent reports what it learns, and every client gets the whole list
  * again. Agents rarely change, so they are read once, on the first ask.
  */
@@ -54,16 +54,16 @@ export class Agents {
 
   get(id: AgentId): Agent {
     const agent = this.agents.get(id)
-    if (!agent) throw new Error(`Desk does not run an agent called ${id}.`)
+    if (!agent) throw new Error(`Comet does not run an agent called ${id}.`)
     return agent
   }
 
-  /** Every agent, in Desk's order. */
+  /** Every agent, in Comet's order. */
   all(): readonly Agent[] {
     return [...this.agents.values()]
   }
 
-  /** What Desk knows about an agent now. */
+  /** What Comet knows about an agent now. */
   info(id: AgentId): AgentInfo | undefined {
     return this.known.get(id)
   }
@@ -103,7 +103,7 @@ export class Agents {
   async run(id: AgentId, action: AgentAction) {
     const agent = this.get(id)
     const { name, state, run } = ACTIONS[action]
-    if (!agent[action]) throw new Error(`${agent.name} has no ${name} Desk can run.`)
+    if (!agent[action]) throw new Error(`${agent.name} has no ${name} Comet can run.`)
     if (this.running.has(id)) return
     const abort = new AbortController()
     this.running.set(id, { action, abort })

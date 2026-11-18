@@ -3,7 +3,7 @@
 
 use crate::format;
 use crate::protocol::{ClientMessage, FileChange, FileTabInfo, FileView, TabInfo};
-use crate::shell::Desk;
+use crate::shell::Comet;
 use rune::{El, ScrollSpec, Tx, col, el, icon, row, text};
 use crate::diff_view::{DiffMode, DiffState, DiffView, FileStatus, parse};
 use rune_kit::{ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Select};
@@ -102,7 +102,7 @@ pub struct Panel {
     scope_open: bool,
 }
 
-impl Desk {
+impl Comet {
     /// The scope Review shows in `tab`: its own choice, else the thread's changes.
     fn scope(tab: &TabInfo) -> &str {
         tab.review_scope.as_deref().unwrap_or("thread")
@@ -111,7 +111,7 @@ impl Desk {
     pub fn take_review(&mut self, tab: String, scope: String, files: Vec<FileChange>) {
         let Some(info) = self.workspace.tabs.iter().find(|t| t.id == tab) else { return };
         // An answer for a scope the tab has since left is stale.
-        if Desk::scope(info) != scope {
+        if Comet::scope(info) != scope {
             return;
         }
         let diffs = files.iter().flat_map(|f| parse(&f.patch)).collect::<Vec<_>>();
@@ -160,7 +160,7 @@ impl Desk {
             }
             None => {
                 self.panel.file_shown = None;
-                let wanted = (tab.id.clone(), Desk::scope(&tab).to_owned());
+                let wanted = (tab.id.clone(), Comet::scope(&tab).to_owned());
                 if self.panel.asked.as_ref() != Some(&wanted) {
                     self.core.send(&ClientMessage::ReviewGet { tab_id: wanted.0.clone(), scope: wanted.1.clone() });
                     self.panel.asked = Some(wanted);
@@ -193,7 +193,7 @@ impl Desk {
         self.sync_panel();
     }
 
-    /// Shows a file Desk knows is there, such as a changed file, in the tab's panel. A relative path is in the project.
+    /// Shows a file Comet knows is there, such as a changed file, in the tab's panel. A relative path is in the project.
     pub fn open_file(&mut self, tab: &str, path: &str, line: Option<u32>) {
         let Some(project) = self.workspace.tabs.iter().find(|t| t.id == tab).map(|t| t.project.clone()) else { return };
         let absolute = if path.starts_with('/') { path.to_owned() } else { format!("{}/{}", project.trim_end_matches('/'), path.trim_start_matches("./")) };
@@ -240,13 +240,13 @@ pub fn toggle(open: bool, k: &Kit) -> El {
         .control_size(ControlSize::Large)
         .label("Toggle panel")
         .help("Panel ⌘\\\\")
-        .on_press(|s: &mut Desk| s.toggle_panel())
+        .on_press(|s: &mut Comet| s.toggle_panel())
         .build(k)
         .expanded(open)
         .key("panel-toggle")
 }
 
-pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
+pub fn panel(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let shown = tab.files.iter().find(|f| Some(&f.id) == tab.panel_active.as_ref());
     let terminal = tab.terminals.iter().find(|t| Some(&t.id) == tab.panel_active.as_ref());
     let plugin_panels: &[crate::protocol::DrawnView] = s.plugins.layouts.get(&tab.id).map_or(&[], |l| l.panels.as_slice());
@@ -273,7 +273,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
         el(),
     )
     .role("tab")
-    .on_press_tx(move |s: &mut Desk, tx| s.show_panel_tab(&review_id, None, tx));
+    .on_press_tx(move |s: &mut Comet, tx| s.show_panel_tab(&review_id, None, tx));
     let files = tab.files.iter().map(|file| {
         let active = shown.is_some_and(|f| f.id == file.id);
         let name = file.path.rsplit('/').next().unwrap_or(&file.path).to_owned();
@@ -282,7 +282,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .variant(IconButtonVariant::GhostMuted)
             .control_size(ControlSize::Small)
             .label(format!("Close {name}"))
-            .on_press_tx(move |s: &mut Desk, tx| {
+            .on_press_tx(move |s: &mut Comet, tx| {
                 s.workspace.close_file_tab(&close_tab, &close_id, &s.core);
                 s.panel.markdown_source.remove(&close_id);
                 s.sync_panel();
@@ -296,7 +296,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             close,
         )
         .role("tab")
-        .on_press_tx(move |s: &mut Desk, tx| s.show_panel_tab(&show_tab, Some(show_id.clone()), tx))
+        .on_press_tx(move |s: &mut Comet, tx| s.show_panel_tab(&show_tab, Some(show_id.clone()), tx))
     });
     let terminals = tab.terminals.iter().map(|t| {
         let active = terminal.is_some_and(|x| x.id == t.id);
@@ -305,7 +305,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .variant(IconButtonVariant::GhostMuted)
             .control_size(ControlSize::Small)
             .label("Close terminal")
-            .on_press_tx(move |s: &mut Desk, tx| {
+            .on_press_tx(move |s: &mut Comet, tx| {
                 s.workspace.close_terminal(&close_tab, &close_id, &s.core);
                 s.sync_panel();
                 tx.instant();
@@ -318,7 +318,7 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             close,
         )
         .role("tab")
-        .on_press_tx(move |s: &mut Desk, tx| s.show_panel_tab(&show_tab, Some(show_id.clone()), tx))
+        .on_press_tx(move |s: &mut Comet, tx| s.show_panel_tab(&show_tab, Some(show_id.clone()), tx))
     });
     // Plugin panels sit at the front, in the order they opened.
     let plugin_tabs = plugin_panels.iter().map(|p| {
@@ -328,13 +328,13 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .variant(IconButtonVariant::GhostMuted)
             .control_size(ControlSize::Small)
             .label("Close panel")
-            .on_press(move |s: &mut Desk| s.core.send(&ClientMessage::PanelClose { tab_id: close_tab.clone(), id: close_id.clone() }))
+            .on_press(move |s: &mut Comet| s.core.send(&ClientMessage::PanelClose { tab_id: close_tab.clone(), id: close_id.clone() }))
             .build(k);
         tab_button(format!("panel-{}", p.id), text(p.title.clone()).font(crate::theme::medium(13.0)).color(if active { k.c.text_base } else { k.c.text_muted }), active, close)
             .role("tab")
-            .on_press_tx(move |s: &mut Desk, tx| s.show_panel_tab(&show_tab, Some(show_id.clone()), tx))
+            .on_press_tx(move |s: &mut Comet, tx| s.show_panel_tab(&show_tab, Some(show_id.clone()), tx))
     });
-    let new_terminal = IconButton::new(&ic::PLUS).variant(IconButtonVariant::GhostMuted).control_size(ControlSize::Large).label("New terminal").help("New terminal").on_press(|s: &mut Desk| s.new_terminal()).build(k);
+    let new_terminal = IconButton::new(&ic::PLUS).variant(IconButtonVariant::GhostMuted).control_size(ControlSize::Large).label("New terminal").help("New terminal").on_press(|s: &mut Comet| s.new_terminal()).build(k);
     let header = row()
         .key("panel-header")
         .w_full()
@@ -365,17 +365,17 @@ pub fn panel(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     col().key("panel").w_full().h_full().min_h(0.0).child(header).child(body)
 }
 
-fn review_view(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
-    let scope = Desk::scope(tab);
+fn review_view(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
+    let scope = Comet::scope(tab);
     let review = s.panel.reviews.get(&tab.id).filter(|r| r.scope == scope);
     let labels: Vec<&str> = SCOPES.iter().map(|s| s.1).collect();
     let id = tab.id.clone();
     let select = Select::new("review-scope", &labels)
         .current(Some(scope_words(scope).0))
         .open(s.panel.scope_open)
-        .on_toggle(|s: &mut Desk| s.panel.scope_open = !s.panel.scope_open)
-        .on_close(|s: &mut Desk| s.panel.scope_open = false)
-        .on_choose(move |s: &mut Desk, label: &str, _| {
+        .on_toggle(|s: &mut Comet| s.panel.scope_open = !s.panel.scope_open)
+        .on_close(|s: &mut Comet| s.panel.scope_open = false)
+        .on_choose(move |s: &mut Comet, label: &str, _| {
             s.panel.scope_open = false;
             if let Some((value, ..)) = SCOPES.iter().find(|x| x.1 == label) {
                 s.workspace.set_review_scope(&id, value, &s.core);
@@ -399,7 +399,7 @@ fn review_view(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             crate::ui::Segment { icon: Some(&ic::SPLIT), words: None, name: "Split diff" },
         ],
         usize::from(s.panel.split),
-        |s: &mut Desk, i| s.set_split(i == 1),
+        |s: &mut Comet, i| s.set_split(i == 1),
     );
     // Folds every file, or opens them all again once they are all folded.
     let fold_all = review.filter(|r| !r.files.is_empty()).map(|r| {
@@ -409,7 +409,7 @@ fn review_view(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .variant(IconButtonVariant::GhostMuted)
             .label(if all_open { "Collapse all" } else { "Expand all" })
             .help(if all_open { "Collapse all" } else { "Expand all" })
-            .on_press_tx(move |s: &mut Desk, tx| {
+            .on_press_tx(move |s: &mut Comet, tx| {
                 if let Some(review) = s.panel.reviews.get_mut(&id) {
                     for f in 0..review.diff.files().len() {
                         review.diff.set_collapsed(f, all_open);
@@ -427,7 +427,7 @@ fn review_view(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
         Some(r) if r.files.is_empty() => centred(k, scope_words(scope).1),
         Some(_) => {
             let (get, get_mut) = (tab.id.clone(), tab.id.clone());
-            DiffView::new(move |s: &Desk| &s.panel.reviews[&get].diff, move |s: &mut Desk| &mut s.panel.reviews.get_mut(&get_mut).expect("a review that showed").diff)
+            DiffView::new(move |s: &Comet| &s.panel.reviews[&get].diff, move |s: &mut Comet| &mut s.panel.reviews.get_mut(&get_mut).expect("a review that showed").diff)
                 .key(format!("review-{}", tab.id))
                 .file_header(file_header(tab.id.clone(), k.dark))
                 .syntax_theme(crate::theme::code_colors(k.dark))
@@ -443,8 +443,8 @@ fn review_view(s: &Desk, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
 /// A file's header in Review: the chevron, the file's icon, its folder
 /// muted and its name, a quiet status, its line counts and a button to open it. The whole header folds
 /// the file.
-fn file_header(tab: String, dark: bool) -> impl Fn(&Desk, usize, bool) -> El + 'static {
-    move |s: &Desk, f: usize, collapsed: bool| {
+fn file_header(tab: String, dark: bool) -> impl Fn(&Comet, usize, bool) -> El + 'static {
+    move |s: &Comet, f: usize, collapsed: bool| {
         let k = crate::theme::kit(dark);
         let Some(file) = s.panel.reviews.get(&tab).and_then(|r| r.diff.files().get(f)) else { return el() };
         let path = file.path().to_owned();
@@ -461,7 +461,7 @@ fn file_header(tab: String, dark: bool) -> impl Fn(&Desk, usize, bool) -> El + '
             .variant(IconButtonVariant::GhostMuted)
             .control_size(ControlSize::Small)
             .label(format!("Open {name}"))
-            .on_press(move |s: &mut Desk| s.open_file(&open_tab, &open_path, None))
+            .on_press(move |s: &mut Comet| s.open_file(&open_tab, &open_path, None))
             .build(k);
         row()
             .key("review-file-header")
@@ -474,7 +474,7 @@ fn file_header(tab: String, dark: bool) -> impl Fn(&Desk, usize, bool) -> El + '
             .role("button")
             .expanded(!collapsed)
             .label(format!("{} {path}", if collapsed { "Expand" } else { "Collapse" }))
-            .on_press_tx(move |s: &mut Desk, tx| {
+            .on_press_tx(move |s: &mut Comet, tx| {
                 if let Some(review) = s.panel.reviews.get_mut(&toggle_tab) {
                     review.diff.set_collapsed(f, !collapsed);
                 }
@@ -507,14 +507,14 @@ fn is_markdown(path: &str) -> bool {
 
 /// Whether a Markdown file tab shows its source. Until someone chooses, it shows its preview, or its
 /// source when it opened at a line, so the line shows marked.
-fn shows_source(s: &Desk, file: &FileTabInfo) -> bool {
+fn shows_source(s: &Comet, file: &FileTabInfo) -> bool {
     s.panel.markdown_source.get(&file.id).copied().unwrap_or(file.line.is_some())
 }
 
 /// A file open in the panel, after OpenCode: its path, a button to open it in the editor, then its lines.
 /// A Markdown file has a switch between its preview and its source.
 /// A missing file says so, with nothing to open.
-fn file_view(s: &Desk, tab: &TabInfo, file: &FileTabInfo, k: &Kit) -> El {
+fn file_view(s: &Comet, tab: &TabInfo, file: &FileTabInfo, k: &Kit) -> El {
     let (path, line) = (file.path.as_str(), file.line);
     let (project, open_path) = (tab.project.clone(), path.to_owned());
     let shown = s.panel.files.get(&(tab.project.clone(), path.to_owned()));
@@ -529,7 +529,7 @@ fn file_view(s: &Desk, tab: &TabInfo, file: &FileTabInfo, k: &Kit) -> El {
             "Markdown view",
             &[crate::ui::Segment { icon: None, words: Some("Preview"), name: "Preview" }, crate::ui::Segment { icon: None, words: Some("Source"), name: "Source" }],
             usize::from(source),
-            move |s: &mut Desk, i| {
+            move |s: &mut Comet, i| {
                 s.panel.markdown_source.insert(id.clone(), i == 1);
             },
         )
@@ -546,7 +546,7 @@ fn file_view(s: &Desk, tab: &TabInfo, file: &FileTabInfo, k: &Kit) -> El {
         .children((!missing).then(|| {
             crate::theme::small_button("Open in editor")
                 .variant(ButtonVariant::Ghost)
-                .on_press(move |s: &mut Desk| s.core.send(&ClientMessage::FileOpen { project: project.clone(), path: open_path.clone(), line }))
+                .on_press(move |s: &mut Comet| s.core.send(&ClientMessage::FileOpen { project: project.clone(), path: open_path.clone(), line }))
                 .build(k)
         }));
     let body = match shown {
@@ -564,7 +564,7 @@ fn file_view(s: &Desk, tab: &TabInfo, file: &FileTabInfo, k: &Kit) -> El {
 
 /// A Markdown file as a document, with working links and code blocks, as a reply draws them. It takes
 /// the file's text as written: a single newline joins lines, as Markdown means it to.
-fn preview(s: &Desk, tab: &TabInfo, path: &str, shown: &ShownFile, k: &Kit) -> El {
+fn preview(s: &Comet, tab: &TabInfo, path: &str, shown: &ShownFile, k: &Kit) -> El {
     let id = format!("preview-{}-{path}", tab.id);
     let copied = s.copied.as_ref().map(|(key, _)| key.as_str());
     let document = rune_kit::Markdown::new(shown.file.text.as_deref().unwrap_or("")).scroll_wide(true);
@@ -572,7 +572,7 @@ fn preview(s: &Desk, tab: &TabInfo, path: &str, shown: &ShownFile, k: &Kit) -> E
     col().key(id).w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).child(col().w_full().px(12.0).pb(16.0).child(document))
 }
 
-/// A file's text, one numbered line per row, with `line` marked, in Desk's code colours.
+/// A file's text, one numbered line per row, with `line` marked, in Comet's code colours.
 /// Rows mount only while on screen.
 fn code(tab: &TabInfo, path: &str, shown: &ShownFile, line: Option<u32>, k: &Kit) -> El {
     let count = shown.lines.len();
@@ -581,7 +581,7 @@ fn code(tab: &TabInfo, path: &str, shown: &ShownFile, line: Option<u32>, k: &Kit
     let width = 2.0 * CH + (count.max(1).to_string().len().max(2) as f32) * CH + CH;
     let key = (tab.project.clone(), path.to_owned());
     let dark = k.dark;
-    // The line a file opened at, Desk's `--color-accent-soft`.
+    // The line a file opened at, Comet's `--color-accent-soft`.
     let mark = k.c.text_accent.alpha(0.14);
     // Pierre's colours: code in its foreground, numbers in that mixed 65% with the panel.
     let ink = crate::theme::code_foreground(dark);
@@ -591,8 +591,8 @@ fn code(tab: &TabInfo, path: &str, shown: &ShownFile, line: Option<u32>, k: &Kit
     let rows = col().w_full().growth(rune::GrowthSpec::default()).virtual_rows(
         count,
         LINE_HEIGHT,
-        |_: &Desk, i| std::borrow::Cow::Owned(i.to_string()),
-        move |s: &Desk, i| {
+        |_: &Comet, i| std::borrow::Cow::Owned(i.to_string()),
+        move |s: &Comet, i| {
             let Some(shown) = s.panel.files.get(&key) else { return rune::el() };
             let words = shown.file.text.as_deref().map_or("", |t| &t[shown.lines[i].clone()]).to_owned();
             let spans = shown.line_spans(i, &crate::theme::code_colors(dark));
@@ -615,8 +615,8 @@ mod tests {
     use crate::core::Event;
     use crate::protocol::CoreMessage;
 
-    fn desk() -> Desk {
-        let mut s = Desk::default();
+    fn comet() -> Comet {
+        let mut s = Comet::default();
         let tabs = serde_json::json!({ "type": "tabs", "active": "t", "tabs": [{ "id": "t", "title": "Fix login", "project": "/code/web", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] });
         s.receive(Event::Message(serde_json::from_value(tabs).unwrap())).unwrap();
         let _ = s.core.sent();
@@ -627,13 +627,13 @@ mod tests {
         Event::Message(CoreMessage::FileFound { project: "/code/web".into(), path: path.into(), file: file.into() })
     }
 
-    fn open_files(s: &Desk) -> Vec<(String, Option<u32>)> {
+    fn open_files(s: &Comet) -> Vec<(String, Option<u32>)> {
         s.workspace.active_tab().map(|t| t.files.iter().map(|f| (f.path.clone(), f.line)).collect()).unwrap_or_default()
     }
 
     #[test]
     fn a_file_link_opens_the_file_the_core_finds_and_only_the_last_link_pressed_opens() {
-        let mut s = desk();
+        let mut s = comet();
         s.open_named_file("t", "login.ts", Some(4));
         s.open_named_file("t", "models/user.rb", None);
         let sent = serde_json::to_value(s.core.sent()).unwrap();

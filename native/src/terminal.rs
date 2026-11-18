@@ -254,7 +254,7 @@ impl Screen {
     }
 }
 
-/// The theme's foreground, which plain text takes. The view draws it in Desk's own colour.
+/// The theme's foreground, which plain text takes. The view draws it in Comet's own colour.
 pub const FOREGROUND: Rgb = Rgb { r: 0xe3, g: 0xe4, b: 0xe8 };
 
 /// A cell's colour: the program's own, else the 256-colour palette. None is the default, which the

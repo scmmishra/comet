@@ -1,8 +1,8 @@
-import type { Subagent, ThreadEvent } from "@desk/protocol"
+import type { Subagent, ThreadEvent } from "@comet/protocol"
 import { expect, test } from "bun:test"
 import { Subagents } from "./subagents"
 
-const DIR = "/work/desk"
+const DIR = "/work/comet"
 
 test("tracks a subagent from its start, through its forwarded steps and progress, to its end", () => {
   const events: ThreadEvent[] = []

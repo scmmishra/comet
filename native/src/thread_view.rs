@@ -4,7 +4,7 @@
 use crate::diff::{LineKind, line_diff};
 use crate::format;
 use crate::protocol::{StepKind, ThreadItem, ThreadRow};
-use crate::shell::Desk;
+use crate::shell::Comet;
 use crate::theme;
 use crate::cards::Lane;
 use crate::threads::Thread;
@@ -14,15 +14,15 @@ use rune_theme_opencode::icons as ic;
 use std::borrow::Cow;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-/// The thread's column, Desk's `--container-column`.
+/// The thread's column, Comet's `--container-column`.
 pub const COLUMN: f32 = 720.0;
-/// The lane keeps this far from the session's sides, Desk's `--lane-edge`.
+/// The lane keeps this far from the session's sides, Comet's `--lane-edge`.
 pub const LANE_EDGE: f32 = 16.0;
-/// The lane's padding on each side, Desk's `px-6`.
+/// The lane's padding on each side, Comet's `px-6`.
 const LANE_PADDING: f32 = 24.0;
-/// The space between rows, Desk's `gap-3.5`.
+/// The space between rows, Comet's `gap-3.5`.
 const ROW_GAP: f32 = 14.0;
-/// Above the first row, Desk's `pt-2.5`.
+/// Above the first row, Comet's `pt-2.5`.
 const LANE_TOP: f32 = 10.0;
 /// A first guess at a row's height, before it is measured.
 const ROW_ESTIMATE: f32 = 64.0;
@@ -32,7 +32,7 @@ const BUBBLE_SHARE: f32 = 0.8;
 const BUBBLE_PAD_X: f32 = 14.0;
 /// Rows of steps: `h-6`.
 const STEP_HEIGHT: f32 = 24.0;
-/// Icons beside steps, which ask for `size-[14px]` and draw at Desk's 15 points.
+/// Icons beside steps, which ask for `size-[14px]` and draw at Comet's 15 points.
 const STEP_ICON: f32 = crate::icons::SIZE;
 /// The working head's spinner, `size-[14px]`. It is a Spinner, not an `<Icon>`, so its size class holds.
 const SPINNER: f32 = 14.0;
@@ -71,7 +71,7 @@ fn kind_icon(kind: StepKind) -> &'static Icon {
 
 /// What a row draws from: the window's state, the tab's thread and the theme.
 struct Ctx<'a> {
-    s: &'a Desk,
+    s: &'a Comet,
     tab: &'a str,
     thread: &'a Thread,
     k: &'a Kit,
@@ -87,9 +87,9 @@ impl Ctx<'_> {
         self.thread.open.contains(id)
     }
 
-    fn toggle(&self, id: &str) -> impl Fn(&mut Desk, &mut rune::Tx) + 'static {
+    fn toggle(&self, id: &str) -> impl Fn(&mut Comet, &mut rune::Tx) + 'static {
         let (tab, id) = (self.tab.to_owned(), id.to_owned());
-        move |s: &mut Desk, _| s.threads.toggle(&tab, &id)
+        move |s: &mut Comet, _| s.threads.toggle(&tab, &id)
     }
 
     fn small(&self, words: impl Into<String>) -> El {
@@ -98,7 +98,7 @@ impl Ctx<'_> {
 }
 
 /// The thread of `tab`, scrolling, and staying at the end while it grows unless the user scrolled up.
-pub fn thread(s: &Desk, tab: &str, dark: bool, lane: Option<Lane>) -> El {
+pub fn thread(s: &Comet, tab: &str, dark: bool, lane: Option<Lane>) -> El {
     let Some(thread) = s.threads.get(tab) else { return el().grow(1.0) };
     let list = col()
         .key("rows")
@@ -109,26 +109,26 @@ pub fn thread(s: &Desk, tab: &str, dark: bool, lane: Option<Lane>) -> El {
         .virtual_rows(
             thread.rows.len(),
             ROW_ESTIMATE,
-            |s: &Desk, i| Cow::Owned(active_thread(s).map_or_else(String::new, |t| t.rows[i].id().to_owned())),
-            move |s: &Desk, i| lane_row(s, i, dark, lane),
+            |s: &Comet, i| Cow::Owned(active_thread(s).map_or_else(String::new, |t| t.rows[i].id().to_owned())),
+            move |s: &Comet, i| lane_row(s, i, dark, lane),
         )
         .virtual_rows_version(thread.rows_version)
         // The minimap darkens the marks of the turns on screen.
-        .on_visible_rows(|s: &mut Desk, rows| {
+        .on_visible_rows(|s: &mut Comet, rows| {
             let changed = s.minimap.visible != rows;
             s.minimap.visible = rows;
             changed
         });
     let key = format!("thread-{tab}");
     let at_tab = tab.to_owned();
-    let scroll = col().key(key.clone()).w_full().h_full().scroll(ScrollSpec { stick_bottom: true }).on_at_bottom(move |s: &mut Desk, at| s.threads.get_mut(&at_tab).away_from_end = !at).child(list);
+    let scroll = col().key(key.clone()).w_full().h_full().scroll(ScrollSpec { stick_bottom: true }).on_at_bottom(move |s: &mut Comet, at| s.threads.get_mut(&at_tab).away_from_end = !at).child(list);
     let k = theme::kit(dark);
     col().w_full().grow(1.0).min_h(0.0).child(scroll).children(thread.away_from_end.then(|| scroll_to_end(&key, k)))
 }
 
 /// A message the user sends brings the active thread to its end, even from far
 /// up, and the thread follows the end again. True when it scrolled.
-pub fn poll(s: &mut Desk, tx: &mut Tx) -> bool {
+pub fn poll(s: &mut Comet, tx: &mut Tx) -> bool {
     let Some(tab) = s.workspace.active.clone() else { return false };
     let sent = s.threads.get(&tab).is_some() && s.threads.get_mut(&tab).take_sent();
     if sent {
@@ -150,7 +150,7 @@ fn scroll_to_end(thread_key: &str, k: &Kit) -> El {
         .fill(k.c.layer_01.alpha(0.9))
         .border(1.0, k.c.border_base)
         .role("button")
-        .on_press_tx(move |_: &mut Desk, tx| tx.scroll_to_bottom(key.clone()))
+        .on_press_tx(move |_: &mut Comet, tx| tx.scroll_to_bottom(key.clone()))
         .child(icon(&ic::CHEVRON_DOWN, crate::icons::SIZE).color(k.c.text_muted))
         .child(text("Scroll to end").font(crate::theme::text(12.0)).color(k.c.text_muted));
     row().pin(Some(0.0), None, Some(0.0), Some(8.0)).justify_center().child(k.elevate(pill, &k.elevation.md))
@@ -164,12 +164,12 @@ pub fn in_lane(content: El, lane: Option<Lane>) -> El {
     }
 }
 
-fn active_thread(s: &Desk) -> Option<&Thread> {
+fn active_thread(s: &Comet) -> Option<&Thread> {
     s.workspace.active.as_deref().and_then(|tab| s.threads.get(tab))
 }
 
 /// One row in the lane, rebuilt only when what it shows changes.
-fn lane_row(s: &Desk, i: usize, dark: bool, lane: Option<Lane>) -> El {
+fn lane_row(s: &Comet, i: usize, dark: bool, lane: Option<Lane>) -> El {
     let (Some(tab), Some(thread)) = (s.workspace.active.as_deref(), active_thread(s)) else { return el() };
     let k = theme::kit(dark);
     let row_width = lane.map_or(COLUMN, |l| l.width.min(COLUMN)) - 2.0 * LANE_PADDING;
@@ -318,7 +318,7 @@ fn message_meta(c: &Ctx, id: &str, words: &str, at: Option<f64>, actions: impl I
         .variant(IconButtonVariant::GhostMuted)
         .label("Copy message")
         .help(if copied { "Copied" } else { "Copy" })
-        .on_press_tx(move |s: &mut Desk, tx| {
+        .on_press_tx(move |s: &mut Comet, tx| {
             tx.copy(words.clone());
             s.copied = Some((id.clone(), std::time::Instant::now()));
         })
@@ -339,13 +339,13 @@ fn message_actions(c: &Ctx, id: &str, words: &str, images: &[crate::protocol::Im
         .label("Rewind to this message")
         .help(if c.thread.busy { format!("Stop {} to rewind", c.s.agent_name(c.s.tab_agent(c.tab))) } else { "Rewind and edit".to_owned() })
         .disabled(c.thread.busy)
-        .on_press(move |s: &mut Desk| s.ask_rewind(&rewind_tab, &rewind_message, &rewind_words, &rewind_images))
+        .on_press(move |s: &mut Comet| s.ask_rewind(&rewind_tab, &rewind_message, &rewind_words, &rewind_images))
         .build(k);
     let fork = IconButton::new(&ic::FORK)
         .variant(IconButtonVariant::GhostMuted)
         .label("Fork from this message")
         .help("Fork from here")
-        .on_press(move |s: &mut Desk| s.fork_from(&tab, &message))
+        .on_press(move |s: &mut Comet| s.fork_from(&tab, &message))
         .build(k);
     let can = |feature: &str| c.s.tab_can(c.tab, feature);
     Some([can("rewind").then_some(rewind), can("fork").then_some(fork)].into_iter().flatten().collect())
@@ -584,7 +584,7 @@ fn changes_view(c: &Ctx, id: &str, files: &[crate::protocol::ChangedFile]) -> El
         .child(crate::ui::diff_changes(k, added, removed))
         .children((c.thread.latest_changes() == Some(id)).then(|| {
             let tab = c.tab.to_owned();
-            row().grow(1.0).justify_end().child(crate::theme::small_button("Open diff").variant(ButtonVariant::GhostMuted).icon(&ic::REVIEW).on_press(move |s: &mut Desk| s.open_review(&tab, "turn")).build(k))
+            row().grow(1.0).justify_end().child(crate::theme::small_button("Open diff").variant(ButtonVariant::GhostMuted).icon(&ic::REVIEW).on_press(move |s: &mut Comet| s.open_review(&tab, "turn")).build(k))
         }));
     // A long list scrolls inside the box.
     let list = col().w_full().max_h(240.0).scroll(ScrollSpec { stick_bottom: false }).px(6.0).pb(6.0).children(files.iter().map(|f| {
@@ -600,7 +600,7 @@ fn changes_view(c: &Ctx, id: &str, files: &[crate::protocol::ChangedFile]) -> El
             .radius(7.0)
             .hover(k.c.hover)
             .role("button")
-            .on_press(move |s: &mut Desk| s.open_file(&tab, &path, None))
+            .on_press(move |s: &mut Comet| s.open_file(&tab, &path, None))
             .child(icon(crate::icons::file_icon(&f.path), 13.0))
             .child(
                 row()
@@ -623,7 +623,7 @@ fn approval_menu_key(request_id: &str) -> String {
 }
 
 /// The open More menu of an approval request in `tab`: always allowing the tool this session, if it can, or stopping the turn.
-pub fn approval_menu(s: &Desk, tab: &str, k: &Kit, layer: &mut Vec<El>) {
+pub fn approval_menu(s: &Comet, tab: &str, k: &Kit, layer: &mut Vec<El>) {
     let Some((menu_tab, request)) = &s.threads.approval_menu else { return };
     let Some(thread) = s.threads.get(tab).filter(|_| menu_tab == tab) else { return };
     let Some(allow_session) = thread.items.iter().find_map(|item| match item {
@@ -634,12 +634,12 @@ pub fn approval_menu(s: &Desk, tab: &str, k: &Kit, layer: &mut Vec<El>) {
     };
     let answer = |label: &str, value: &'static str| {
         let (tab, request) = (tab.to_owned(), request.clone());
-        MenuItem::new(label).on_select(move |s: &mut Desk| {
+        MenuItem::new(label).on_select(move |s: &mut Comet| {
             s.threads.approval_menu = None;
             s.answer_permission(&tab, &request, value);
         })
     };
-    let mut menu = Menu::new(approval_menu_key(request)).open(true).placement(Placement::BottomStart).gutter(2.0).min_width(176.0).on_close(|s: &mut Desk| s.threads.approval_menu = None);
+    let mut menu = Menu::new(approval_menu_key(request)).open(true).placement(Placement::BottomStart).gutter(2.0).min_width(176.0).on_close(|s: &mut Comet| s.threads.approval_menu = None);
     if allow_session {
         menu = menu.item(answer("Always allow this session", "allow-session"));
     }
@@ -657,7 +657,7 @@ fn permission_view(c: &Ctx, request_id: &str, kind: &str, detail: &str, reason: 
     };
     let answer = |label: &str, value: &'static str, variant: ButtonVariant| {
         let (tab, request) = (c.tab.to_owned(), request_id.to_owned());
-        crate::theme::small_button(label).variant(variant).on_press(move |s: &mut Desk| s.answer_permission(&tab, &request, value)).build(k).key(value)
+        crate::theme::small_button(label).variant(variant).on_press(move |s: &mut Comet| s.answer_permission(&tab, &request, value)).build(k).key(value)
     };
     // The rarer answers sit in a menu, which the session draws over the thread: rows built in `memo` have no overlay layer.
     let open = c.s.threads.approval_menu.as_ref().is_some_and(|(_, r)| r == request_id);
@@ -665,7 +665,7 @@ fn permission_view(c: &Ctx, request_id: &str, kind: &str, detail: &str, reason: 
     let more = crate::theme::small_button("More")
         .variant(ButtonVariant::GhostMuted)
         .expanded(open)
-        .on_press(move |s: &mut Desk| s.threads.approval_menu = if open { None } else { Some((tab.clone(), request.clone())) })
+        .on_press(move |s: &mut Comet| s.threads.approval_menu = if open { None } else { Some((tab.clone(), request.clone())) })
         .build(k)
         .label("More approval options");
     let waiting = row().gap(4.0).items_center().child(icon(&ic::LOCK, crate::icons::SIZE).color(k.c.warning.fg)).child(text("Waiting for approval").font(crate::theme::text(12.0)).color(k.c.warning.fg));

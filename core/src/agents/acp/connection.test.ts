@@ -7,7 +7,7 @@ import { fakeAcpAgent } from "./test-agent"
 const client: AcpClient = { update: () => {}, permission: async () => ({ outcome: { outcome: "cancelled" } }), closed: () => {} }
 const CLIENT_INFO = { name: "fake-client", version: "1.0.0" }
 
-test("initializes without offering Desk's files or terminals, then authenticates", async () => {
+test("initializes without offering Comet's files or terminals, then authenticates", async () => {
   const agent = fakeAcpAgent()
   await AcpConnection.open(agent.process, client, { clientInfo: CLIENT_INFO, authMethod: "fake-auth" })
   expect(agent.written.map((message) => message.method)).toEqual(["initialize", "authenticate"])
@@ -25,10 +25,10 @@ test("closes the process when authentication fails", async () => {
   await agent.process.exited
 })
 
-test("refuses the agent's requests for files Desk does not offer", async () => {
+test("refuses the agent's requests for files Comet does not offer", async () => {
   const agent = fakeAcpAgent()
   await AcpConnection.open(agent.process, client, { clientInfo: CLIENT_INFO })
   agent.print(JSON.stringify({ jsonrpc: "2.0", id: 9, method: "fs/read_text_file", params: { path: "/etc/hosts" } }))
   await until(() => agent.written.some((message) => message.id === 9))
-  expect(agent.written.find((message) => message.id === 9)?.error).toEqual({ code: -32601, message: "Desk does not handle fs/read_text_file." })
+  expect(agent.written.find((message) => message.id === 9)?.error).toEqual({ code: -32601, message: "Comet does not handle fs/read_text_file." })
 })

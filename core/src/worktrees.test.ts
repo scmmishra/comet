@@ -42,12 +42,12 @@ test("lists the repo's checkouts, the main one first, each at the project's fold
   expect(await listWorktrees(tempFolder("plain"))).toEqual([])
 })
 
-test("makes a worktree under Desk's folder on a branch named from the words, and a second one beside it", async () => {
+test("makes a worktree under Comet's folder on a branch named from the words, and a second one beside it", async () => {
   const repo = gitRepo({ "app/a.ts": "one\n" })
   const made = await createWorktree(join(repo.dir, "app"), "Fix the login form!")
-  expect(made).toBe(join(process.env.DESK_HOME!, "worktrees", basename(repo.dir), "fix-the-login-form", "app"))
+  expect(made).toBe(join(process.env.COMET_HOME!, "worktrees", basename(repo.dir), "fix-the-login-form", "app"))
   expect(existsSync(join(made, "a.ts"))).toBe(true)
-  expect(repo.git("branch", "--list", "desk/*")).toContain("desk/fix-the-login-form")
+  expect(repo.git("branch", "--list", "comet/*")).toContain("comet/fix-the-login-form")
   const again = await createWorktree(repo.dir, "Fix the login form")
   expect(basename(again)).toBe("fix-the-login-form-2")
 })
@@ -58,7 +58,7 @@ test("removes a worktree and keeps its branch, but never the main checkout", asy
   await Bun.write(join(made, "draft.txt"), "uncommitted\n")
   await removeWorktree(made)
   expect(existsSync(made)).toBe(false)
-  expect(repo.git("branch", "--list", "desk/try-it")).toContain("desk/try-it")
+  expect(repo.git("branch", "--list", "comet/try-it")).toContain("comet/try-it")
   expect(removeWorktree(repo.dir)).rejects.toThrow("main checkout")
 })
 
