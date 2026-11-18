@@ -53,6 +53,12 @@ test("keeps a visual out of the fold, above the answer", () => {
   expect(laidOut(items, false)).toEqual(["user", "fold", "visual", "text"])
 })
 
+test("keeps an answer in view when a visual follows it", () => {
+  const visual: ThreadItem = { type: "visual", id: "v", parts: [{ type: "actions", options: ["Go on"] }] }
+  expect(laidOut([user("u1"), tool("a"), text("answer"), visual, { type: "result", id: "r", durationMs: 1, isError: false }], false)).toEqual(["user", "fold", "text", "visual"])
+  expect(laidOut([user("u1"), text("answer"), visual, text("more")], false)).toEqual(["user", "text", "visual", "text"])
+})
+
 test("a turn of text alone has nothing to fold", () => {
   expect(laidOut([user("u1"), text("hi")], false)).toEqual(["user", "text"])
 })

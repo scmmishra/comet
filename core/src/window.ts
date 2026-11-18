@@ -669,6 +669,7 @@ export class Window {
       emit: (event) => current() && this.hooks.broadcast({ type: "session.event", tabId: tab.id, event }),
       // A plugin's thread stays in the folder its key belongs to.
       ...(agent.movesThreads && !key ? { moveTo: (dir: string) => this.askMove(tab.id, dir) } : {}),
+      drawsVisuals: !!agent.drawsVisuals,
     })
     const saveSession = (change: Partial<TabThread>) => {
       if (current()) return this.updateThread(tab.id, change)

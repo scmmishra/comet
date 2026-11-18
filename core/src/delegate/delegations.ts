@@ -18,6 +18,8 @@ export interface DelegationHost {
    * threads can move. Returns the folder it moves to. A session without it is not offered `move_to_worktree`.
    */
   moveTo?(dir: string): string
+  /** Whether the session's thread draws a `show` call as its visual. A session whose thread does not is not offered `show`. */
+  readonly drawsVisuals: boolean
 }
 
 /** What one session's agent may hand off: Comet's tools for it, and the tasks that run for it. */
@@ -73,7 +75,7 @@ export class Delegations {
       return !!child
     }
     return {
-      tools: { url: this.endpoint(), authorization: `Bearer ${token}`, instructions: [INSTRUCTIONS, ...(host.moveTo ? [MOVE_INSTRUCTIONS] : []), SHOW_INSTRUCTIONS].join("\n") },
+      tools: { url: this.endpoint(), authorization: `Bearer ${token}`, instructions: [INSTRUCTIONS, ...(host.moveTo ? [MOVE_INSTRUCTIONS] : []), ...(host.drawsVisuals ? [SHOW_INSTRUCTIONS] : [])].join("\n") },
       answerPermission: (requestId, reply) => answer(requestId, (session) => session.answerPermission(requestId, reply)),
       answerQuestion: (requestId, answers) => answer(requestId, (session) => session.answerQuestion(requestId, answers)),
       pending: () => [...caller.children].flatMap((child) => [...child.requests.values()]),
@@ -92,14 +94,14 @@ export class Delegations {
   toolsFor(authorization: string): ToolSet | undefined {
     const caller = this.callers.get(authorization.replace(/^Bearer /, ""))
     if (!caller) return undefined
-    const { moveTo } = caller.host
+    const { moveTo, drawsVisuals } = caller.host
     return {
-      tools: [LIST_AGENTS, DELEGATE, ...(moveTo ? [MOVE_TO_WORKTREE] : []), SHOW],
+      tools: [LIST_AGENTS, DELEGATE, ...(moveTo ? [MOVE_TO_WORKTREE] : []), ...(drawsVisuals ? [SHOW] : [])],
       call: async (name, input, signal) => {
         if (name === LIST_AGENTS.name) return { text: JSON.stringify({ agents: this.agents.all().flatMap((agent) => listed(this.agents.info(agent.id))) }, null, 2) }
         if (name === DELEGATE.name) return this.delegate(caller, input, signal)
         if (name === MOVE_TO_WORKTREE.name && moveTo) return { text: `Comet moves this thread to ${moveTo(String(input.path ?? ""))} when this turn ends.` }
-        if (name === SHOW.name) return show(input)
+        if (name === SHOW.name && drawsVisuals) return show(input)
         throw new Error(`Comet has no tool called ${name}.`)
       },
     }

@@ -24,7 +24,7 @@ test("draws a chart as a Mermaid XY chart, with labels that cannot end their lis
 })
 
 test("fences a diagram past the backticks in its source, and passes actions through", () => {
-  const { parts } = shownVisual({ parts: [{ type: "diagram", mermaid: "flowchart TD\n  A[```x```] --> B" }, { type: "actions", options: [" Fix it ", "Show last week"] }] })
+  const { parts } = shownVisual({ parts: [{ type: "diagram", mermaid: "flowchart TD\n  A[```x```] --> B" }, { type: "actions", options: [" Fix it ", "Show\nlast  week"] }] })
   expect(parts[0]).toEqual({ type: "markdown", text: "````mermaid\nflowchart TD\n  A[```x```] --> B\n````" })
   expect(parts[1]).toEqual({ type: "actions", options: ["Fix it", "Show last week"] })
 })
@@ -49,6 +49,7 @@ test("tells the model what is wrong with input it cannot draw", () => {
   const labels = Array.from({ length: 201 }, (_, index) => `d${index}`)
   expect(wrong([{ type: "chart", form: "bar", labels, series: [{ name: "Calls", values: labels.map(() => 1) }] }])).toStartWith("A chart holds at most 400 labels and values together.")
   expect(wrong([{ type: "actions", options: [] }])).toBe("Actions need at least one option.")
+  expect(wrong([{ type: "actions", options: ["x".repeat(81)] }])).toBe("Option 1 has 81 characters. An option fits a button: at most 80, in a few words.")
 })
 
 test("answers a call at once, and makes a thread item only of a show call it can draw", () => {

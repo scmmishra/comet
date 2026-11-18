@@ -303,7 +303,7 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
             row().w_full().gap(6.0).items_start().child(icon(mark, crate::icons::SIZE).color(color).mt(2.0)).child(c.small(words.clone()).color(color).wrap().shrink().min_w(0.0).selectable(true))
         }
         ThreadItem::Changes { id, files } => changes_view(c, id, files),
-        ThreadItem::Visual { title, parts, .. } => visual_view(c, title.as_deref(), parts),
+        ThreadItem::Visual { id, title, parts } => visual_view(c, id, title.as_deref(), parts),
         ThreadItem::Permission { request_id, kind, detail, reason, .. } => permission_view(c, request_id, kind, detail, reason.as_deref()),
         ThreadItem::Thinking { .. } | ThreadItem::Tool { .. } => step_view(c, item),
         // Results end turns and questions show in the composer. Neither draws in the thread.
@@ -575,14 +575,15 @@ fn edit_view(c: &Ctx, file: &str, edits: &[crate::protocol::TextEdit]) -> El {
 
 /// The files a turn changed, under its answer: one quiet box with a count, the line totals and the files.
 /// What the agent showed with Comet's `show` tool: its title, then its parts in order. A table, a chart
-/// and a diagram arrive as Markdown, so they draw as a reply's do. An action is a button, and a press
-/// sends its option as the user's next message.
-fn visual_view(c: &Ctx, title: Option<&str>, parts: &[VisualPart]) -> El {
+/// and a diagram arrive as Markdown, so they draw as a reply's do, with links that open. An action is a
+/// button, and a press sends its option as the user's next message.
+fn visual_view(c: &Ctx, id: &str, title: Option<&str>, parts: &[VisualPart]) -> El {
     let k = c.k;
     let title = title.map(|words| text(words.to_owned()).font(crate::theme::medium(c.size)).color(k.c.text_base).wrap());
-    col().w_full().gap(VISUAL_GAP).children(title).children(parts.iter().map(|part| match part {
-        VisualPart::Markdown { text: words } => crate::reply::document(words).style(theme::markdown(k, c.size)).selectable(true).build(k).selection_group(false),
-        VisualPart::Actions { options } => row().w_full().gap(6.0).wrap().children(options.iter().map(|option| {
+    let copied = c.s.copied.as_ref().map(|(key, _)| key.as_str());
+    col().w_full().gap(VISUAL_GAP).children(title).children(parts.iter().enumerate().map(|(index, part)| match part {
+        VisualPart::Markdown { text: words } => crate::reply::interactive(crate::reply::document(words), c.tab, &format!("{id}#{index}"), copied, k).style(theme::markdown(k, c.size)).selectable(true).build(k).selection_group(false),
+        VisualPart::Actions { options } => row().w_full().gap(6.0).flex_wrap().children(options.iter().map(|option| {
             let (tab, words) = (c.tab.to_owned(), option.clone());
             crate::theme::small_button(option.clone()).on_press(move |s: &mut Comet| s.send_message(&tab, words.clone(), Vec::new(), false)).build(k)
         })),

@@ -28,6 +28,7 @@ export function codexAgent(host: AgentHost, launch: Launch = launchCodex): Agent
     features: ["steer", "rewind", "fork", "rename", "delete", "mcp"],
     // Codex resumes a thread in whatever folder it is given.
     movesThreads: true,
+    drawsVisuals: true,
     threads: codexThreads(server),
     commands: (dir) => readSkills(server, dir),
     mcp: codexMcp(server),

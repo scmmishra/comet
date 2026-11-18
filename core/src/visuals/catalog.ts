@@ -25,6 +25,12 @@ const CHART_FORMS = ["bar", "line"] as const
  */
 const MAX_CHART_ITEMS = 400
 
+/**
+ * The longest option an action takes. A press sends the option as the user's message, so its button
+ * shows all of it, on one line that fits the thread's column.
+ */
+const MAX_OPTION_LENGTH = 80
+
 const table: Component = {
   description: "Rows of data under named columns. Every row has one cell for each column. A column of numbers lines up on the right. A text cell takes inline Markdown, such as `code` or a link.",
   props: {
@@ -94,11 +100,15 @@ const diagram: Component = {
 }
 
 const actions: Component = {
-  description: "Buttons for what the user may want next. A press sends the option's text to you as the user's next message, so write each option as the user would say it, in a few words.",
+  description: `Buttons for what the user may want next. A press sends the option's text to you as the user's next message, so write each option as the user would say it, in a few words. At most ${MAX_OPTION_LENGTH} characters each.`,
   props: { options: { type: "array", minItems: 1, items: { type: "string" } } },
   required: ["options"],
   draw(props) {
-    const options = list(props.options, "The actions' `options`").map((option, index) => text(option, `Option ${index + 1}`))
+    const options = list(props.options, "The actions' `options`").map((option, index) => {
+      const words = text(option, `Option ${index + 1}`).replace(/\s+/g, " ")
+      if (words.length > MAX_OPTION_LENGTH) throw new Error(`Option ${index + 1} has ${words.length} characters. An option fits a button: at most ${MAX_OPTION_LENGTH}, in a few words.`)
+      return words
+    })
     if (!options.length) throw new Error("Actions need at least one option.")
     return { type: "actions", options }
   },

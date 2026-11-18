@@ -25,7 +25,7 @@ async function delegations(mode: PermissionMode = "acceptEdits", codexReading: P
   await Bun.sleep(0)
   const events: ThreadEvent[] = []
   const service = new Delegations(agents, () => "http://127.0.0.1:4000/mcp")
-  const host = { project: "/work/app", settings: () => ({ agent: "claude" as const, model: "default", permissionMode: mode }), emit: (event: ThreadEvent) => void events.push(event) }
+  const host = { project: "/work/app", settings: () => ({ agent: "claude" as const, model: "default", permissionMode: mode }), emit: (event: ThreadEvent) => void events.push(event), drawsVisuals: true }
   const handoffs = service.open(host)
   const server = handoffs.tools
   const tools = service.toolsFor(server.authorization)!
@@ -42,12 +42,18 @@ test("gives each session a server under its own token, and knows no other caller
   expect(service.toolsFor(server.authorization)!.tools.map((tool) => tool.name)).toEqual(["list_agents", "delegate", "show"])
 })
 
-test("offers every session the show tool, tells it when to use it, and answers a call at once", async () => {
-  const { server, tools } = await delegations()
+test("offers the show tool to a session whose thread draws it, tells it when to use it, and answers a call at once", async () => {
+  const { service, host, server, tools } = await delegations()
   expect(server.instructions).toContain("Call `show` with the data.")
   const signal = new AbortController().signal
   expect(await tools.call("show", { parts: [{ type: "actions", options: ["Go on"] }] }, signal)).toEqual({ text: "Shown to the user, above your reply." })
   expect(tools.call("show", { parts: [{ type: "html" }] }, signal)).rejects.toThrow("Part 1's `type` is one of: table, chart, diagram, actions.")
+
+  // A thread that would show the call as a step never hears of the tool, so its agent writes the data out.
+  const plain = service.open({ ...host, drawsVisuals: false }).tools
+  expect(plain.instructions).not.toContain("show")
+  expect(service.toolsFor(plain.authorization)!.tools.map((tool) => tool.name)).toEqual(["list_agents", "delegate"])
+  expect(service.toolsFor(plain.authorization)!.call("show", { parts: [] }, signal)).rejects.toThrow("Comet has no tool called show.")
 })
 
 test("lists the agents with their models, and why one is not ready", async () => {

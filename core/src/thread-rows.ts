@@ -37,8 +37,9 @@ function grouped(items: readonly ThreadItem[], live: boolean): (ItemRow | StepGr
 
 /**
  * The thread as rows, after T3 Code. A running turn opens with a "Working for" head, and shows its work
- * as groups, with the last one live. A finished turn folds everything before its closing text into one
- * row. Errors and open permission requests stay out of the fold. A turn is finished once another message follows
+ * as groups, with the last one live. A finished turn folds everything before its answer into one row.
+ * Its answer is the text and the visuals it ends with. Errors, visuals and open permission requests stay
+ * out of the fold. A turn is finished once another message follows
  * it, or once the tab stops working, so restored threads, which carry no live events, fold the same way.
  */
 export function threadRows(items: readonly ThreadItem[], busy: boolean): ThreadRow[] {
@@ -63,8 +64,9 @@ export function threadRows(items: readonly ThreadItem[], busy: boolean): ThreadR
       out.push({ type: "working", id: `working:${id}`, ...(opener?.at ? { since: opener.at } : {}) }, ...grouped(body, true), ...summary)
       return
     }
+    // The answer may end with a visual, or with text after one. All of it stays in view.
     let end = body.length
-    while (end > 0 && body[end - 1]!.type === "text") end--
+    while (end > 0 && (body[end - 1]!.type === "text" || body[end - 1]!.type === "visual")) end--
     const work = body.slice(0, end).filter((item) => !staysOut(item))
     if (work.length) out.push({ type: "fold", id: `fold:${id}`, rows: grouped(work, false), ...(result ? { durationMs: result.durationMs } : {}), stopped: !!result?.stopped })
     out.push(...body.slice(0, end).filter(staysOut).map(itemRow), ...body.slice(end).map(itemRow), ...summary)

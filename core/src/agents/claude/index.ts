@@ -25,6 +25,7 @@ export function claudeAgent(host: AgentHost): Agent {
     features: ["steer", "rewind", "restore-files", "fork", "rename", "delete", "compact-idle", "mcp", "slash-commands"],
     // Claude Code finds a thread's transcript from any worktree of its repo. Its EnterWorktree tool also moves a thread.
     movesThreads: true,
+    drawsVisuals: true,
     threads: claudeThreads,
     commands: readSkills,
     mcp: claudeMcp,

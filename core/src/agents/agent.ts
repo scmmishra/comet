@@ -20,6 +20,12 @@ export interface Agent {
    */
   readonly movesThreads?: boolean
   /**
+   * Whether the agent's threads draw a call of Comet's `show` tool as its visual. They can when the
+   * agent's tool calls name their MCP server and tool. Any other agent is not offered `show`, since its
+   * thread would show the call as a step and the user would never see the data.
+   */
+  readonly drawsVisuals?: boolean
+  /**
    * Reads whether the agent is installed and signed in, its version and its models, and reports each
    * through the host as it learns it. What it throws shows as the agent's problem.
    */

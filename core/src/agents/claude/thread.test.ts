@@ -149,6 +149,19 @@ test("rebuilds a thread from a stored transcript, timing each turn and hiding Cl
   ])
 })
 
+test("rebuilds a visual from the show call in a stored transcript", () => {
+  const input = { title: "Next", parts: [{ type: "actions", options: ["Go on"] }] }
+  const items = new ThreadMapper(DIR).history([
+    { type: "user", uuid: "u1", session_id: "s", parent_tool_use_id: null, timestamp: "2026-11-09T10:00:00.000Z", message: { role: "user", content: "What next?" } },
+    { type: "assistant", uuid: "a1", session_id: "s", parent_tool_use_id: null, timestamp: "2026-11-09T10:00:02.000Z", message: { content: [{ type: "tool_use", id: "t1", name: "mcp__comet__show", input }] } },
+    { type: "user", uuid: "u2", session_id: "s", parent_tool_use_id: null, message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "Shown to the user, above your reply." }] } },
+  ] as never)
+  expect(items.slice(1)).toEqual([
+    { type: "visual", id: "t1", title: "Next", parts: [{ type: "actions", options: ["Go on"] }] },
+    { type: "result", id: "result:u1", durationMs: 2000, isError: false },
+  ])
+})
+
 test("rebuilds a message's images from the transcript, with its text", () => {
   const items = new ThreadMapper(DIR).history([
     {

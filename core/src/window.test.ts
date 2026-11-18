@@ -519,10 +519,10 @@ test("offers Comet's move tool to an agent whose threads can move, and moves its
   expect(moved()!.project).toBe(worktree)
 })
 
-test("gives Comet's move tool only to an agent whose threads can move", async () => {
+test("gives Comet's move tool only to an agent whose threads can move, and its show tool only to one whose threads draw it", async () => {
   const { agent, window, delegations } = openInRepo([], false)
   await window.send("a", "Hi")
-  expect(delegations.toolsFor(agent.sessions[0]!.options.tools!.authorization)!.tools.map((tool) => tool.name)).not.toContain("move_to_worktree")
+  expect(delegations.toolsFor(agent.sessions[0]!.options.tools!.authorization)!.tools.map((tool) => tool.name)).toEqual(["list_agents", "delegate"])
 })
 
 test("lists a repo's threads from every checkout, each in the folder it runs in now", async () => {
