@@ -12,7 +12,7 @@ Comet is early. Today it runs Claude Code, Codex and Antigravity, on Apple silic
 
 Comet needs at least one agent, installed and logged in. It finds [Claude Code](https://code.claude.com) as `claude` and Codex as `codex` on your shell's `PATH`. Antigravity installs from Settings › Providers, where you sign in with your Google account.
 
-Download `Comet-arm64.zip` from the [latest release](https://github.com/scmmishra/desk/releases), unzip it and move `Comet.app` to `/Applications`. Comet is not notarized. If macOS refuses to open it, allow it in System Settings › Privacy & Security.
+Download `Comet-arm64.zip` from the [latest release](https://github.com/scmmishra/comet/releases), unzip it and move `Comet.app` to `/Applications`. Comet is not notarized. If macOS refuses to open it, allow it in System Settings › Privacy & Security.
 
 To open a folder from a terminal, link `bin/comet` onto your `PATH` and run `comet .`.
 
