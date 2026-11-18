@@ -1,7 +1,5 @@
 # Comet
 
-Give your agents a comet, not a terminal.
-
 Comet is a desktop app for working with coding agents. It runs the agent installed on your machine and draws each session as a thread: messages, tool calls and diffs show as UI, not as terminal output.
 
 Each tab is one session in one project, and tabs from several projects share the window. Beside the thread, a stack of cards shows the project's branch, its changes and its commands. A view pane holds Review, terminals and open files. Plugins can add sidebars, panels, cards and commands, so you can shape the window around each job.
