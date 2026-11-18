@@ -25,11 +25,13 @@ test("refuses folders and missing files", () => {
   expect(openableFile(dir, "src/missing.ts")).toBeUndefined()
 })
 
-test("reads a file for the panel: text whole, binary as binary, and a long file to its last full line", () => {
+test("reads a file for the panel: text whole, an image as an image, binary as binary, and a long file to its last full line", () => {
   writeFileSync(join(dir, "café.txt"), "héllo\nworld\n")
   expect(readForView(dir, "café.txt")).toEqual({ path: join(dir, "café.txt"), text: "héllo\nworld\n" })
-  writeFileSync(join(dir, "image.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]))
-  expect(readForView(dir, "image.png")).toEqual({ path: join(dir, "image.png"), binary: true })
+  writeFileSync(join(dir, "shot.PNG"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]))
+  expect(readForView(dir, "shot.PNG")).toEqual({ path: join(dir, "shot.PNG"), image: true })
+  writeFileSync(join(dir, "data.bin"), Buffer.from([0x01, 0x00, 0x02]))
+  expect(readForView(dir, "data.bin")).toEqual({ path: join(dir, "data.bin"), binary: true })
   // Lines of 100 bytes, past the megabyte the panel shows.
   writeFileSync(join(dir, "long.log"), `${"x".repeat(99)}\n`.repeat(10_050))
   const long = readForView(dir, "long.log")

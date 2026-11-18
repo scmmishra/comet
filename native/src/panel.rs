@@ -39,11 +39,13 @@ pub struct Review {
 
 /// What the panel has read and how it draws.
 /// A file the panel shows: what the core read, its lines' byte ranges, and its highlights in order,
-/// worked out once when it arrives so each line on screen only looks its own up.
+/// worked out once when it arrives so each line on screen only looks its own up. An image holds its
+/// picture from the first time it draws, and the picture frees when the file leaves the panel.
 struct ShownFile {
     file: FileView,
     lines: Vec<std::ops::Range<usize>>,
     highlights: std::rc::Rc<[rune_kit::syntax::Highlight]>,
+    picture: std::cell::OnceCell<rune::Image>,
 }
 
 impl ShownFile {
@@ -59,7 +61,7 @@ impl ShownFile {
         // The extension names the language, as a fence's info word would.
         let lang = path.rsplit_once('.').map(|(_, ext)| ext);
         let highlights = rune_kit::syntax::highlight(lang, text);
-        ShownFile { file, lines, highlights }
+        ShownFile { file, lines, highlights, picture: std::cell::OnceCell::new() }
     }
 
     /// The spans that colour line `i`, measured from its start.
@@ -97,6 +99,10 @@ pub struct Panel {
     finding: Option<Finding>,
     /// Whether a Markdown file tab shows its source, once someone chose, by file tab id.
     markdown_source: HashMap<String, bool>,
+    /// The zoom and pan of the image in front. It starts fitted each time a file comes to the front.
+    stage: rune_kit::StageZoom,
+    /// The size of the area the image in front draws in, which the stage fits the image to.
+    stage_size: [f32; 2],
     /// How diffs draw, in every tab.
     split: bool,
     scope_open: bool,
@@ -155,6 +161,7 @@ impl Comet {
             Some(file) => {
                 if self.panel.file_shown.as_ref() != Some(&file.id) {
                     self.panel.file_shown = Some(file.id.clone());
+                    self.panel.stage = rune_kit::StageZoom::default();
                     self.core.send(&ClientMessage::FileRead { project: tab.project.clone(), path: file.path.clone() });
                 }
             }
@@ -553,6 +560,7 @@ fn file_view(s: &Comet, tab: &TabInfo, file: &FileTabInfo, k: &Kit) -> El {
         None => centred(k, "Reading the file…"),
         Some(_) if missing => centred(k, "No file is at this path."),
         Some(shown) if shown.file.binary => centred(k, "This is a binary file. Open it in the editor to see it."),
+        Some(shown) if shown.file.image => image_view(s, path, shown, k),
         Some(shown) => {
             let truncated = shown.file.truncated.then(|| text("The file is long, so only its first megabyte shows.").font(crate::theme::text(12.0)).color(k.c.text_faint).px(12.0).pb(8.0));
             let content = if source { code(tab, path, shown, line, k) } else { preview(s, tab, path, shown, k) };
@@ -560,6 +568,30 @@ fn file_view(s: &Comet, tab: &TabInfo, file: &FileTabInfo, k: &Kit) -> El {
         }
     };
     col().w_full().grow(1.0).min_h(0.0).child(head).child(body)
+}
+
+/// An image fitted to the panel, never grown past its pixels. A pinch or ⌘ and the wheel zoom it, and
+/// the wheel or a drag pans it.
+fn image_view(s: &Comet, path: &str, shown: &ShownFile, k: &Kit) -> El {
+    let picture = match shown.picture.get() {
+        Some(picture) => picture,
+        None => match s.images.picture(std::path::Path::new(&shown.file.path)) {
+            Some(picture) => shown.picture.get_or_init(|| picture),
+            None => return centred(k, "Reading the file…"),
+        },
+    };
+    if picture.error().is_some() {
+        return centred(k, "This image could not be shown. Open it in the editor to see it.");
+    }
+    // A decoding image draws nothing until its worker wakes the app.
+    let stage = picture.size().map(|[w, h]| {
+        let name = path.rsplit('/').next().unwrap_or(path).to_owned();
+        let image = el().role("image").label(name).pixels(picture.pixels());
+        rune_kit::Stage::new(|s: &mut Comet| &mut s.panel.stage, [w as f32, h as f32], image)
+            .icons(&ic::OUTLINE_MAGNIFIER_PLUS, &ic::OUTLINE_MAGNIFIER_MINUS, &ic::OUTLINE_EXPAND)
+            .build(&s.panel.stage, k, s.panel.stage_size)
+    });
+    col().w_full().grow(1.0).min_h(0.0).on_layout(|s: &mut Comet, r| s.panel.stage_size = [r[2], r[3]]).children(stage)
 }
 
 /// A Markdown file as a document, with working links and code blocks, as a reply draws them. It takes
@@ -654,7 +686,7 @@ mod tests {
     #[test]
     fn each_line_takes_the_highlights_inside_it_measured_from_its_start() {
         let text = "let a = 1;\n// two\nlet b = \"x\";\n";
-        let shown = ShownFile::new("main.rs", FileView { path: "main.rs".into(), text: Some(text.into()), binary: false, truncated: false, missing: false });
+        let shown = ShownFile::new("main.rs", FileView { path: "main.rs".into(), text: Some(text.into()), binary: false, image: false, truncated: false, missing: false });
         assert_eq!(shown.lines, vec![0..10, 11..17, 18..30]);
         let theme = crate::theme::code_colors(true);
         // The comment covers the whole second line, from its own start.

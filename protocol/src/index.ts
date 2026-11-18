@@ -734,12 +734,17 @@ export interface FileTabInfo {
   readonly line?: number
 }
 
-/** A file as the panel shows it. A binary file has no text, and a large one shows only its start. */
+/**
+ * A file as the panel shows it. A binary file has no text, and a large one shows only its start. An
+ * image has no text either: the app draws it from its path.
+ */
 export interface FileView {
   /** The absolute path. */
   readonly path: string
   readonly text?: string
   readonly binary?: boolean
+  /** Set for an image the app can draw. */
+  readonly image?: boolean
   /** Set when no file is at the path, such as when it was deleted or a reply named it wrongly. */
   readonly missing?: boolean
   /** Set when the text stops before the end of the file. */

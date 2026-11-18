@@ -183,6 +183,7 @@ export const CORE_MESSAGES = [
   },
   { type: "file", project: "/Users/me/code/web", path: "src/login.ts", file: { path: "/Users/me/code/web/src/login.ts", text: "export {}\n" } },
   { type: "file", project: "/Users/me/code/web", path: "src/gone.ts", file: { path: "/Users/me/code/web/src/gone.ts", missing: true } },
+  { type: "file", project: "/Users/me/code/web", path: "logo.png", file: { path: "/Users/me/code/web/logo.png", image: true } },
   { type: "file.found", project: "/Users/me/code/web", path: "login.ts", file: "/Users/me/code/web/src/login.ts" },
   { type: "terminal.output", id: "term-1", data: "\u001b[32mok\u001b[0m\r\n" },
   { type: "terminal.exit", id: "term-1", code: 0 },

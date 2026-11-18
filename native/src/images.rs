@@ -1,5 +1,6 @@
-//! Images the app shows: those attached in the composer and those in the thread's messages. Each is
-//! decoded once, off the main thread, by Rune's image cache.
+//! Images the app shows: those attached in the composer, those in the thread's messages, and image files
+//! such as projects' icons and the images the panel opens. Each is decoded once, off the main thread, by
+//! Rune's image cache.
 
 use crate::base64;
 use crate::protocol::ImageAttachment;
@@ -48,6 +49,14 @@ impl Images {
     pub fn file(&self, path: &std::path::Path) -> Option<Image> {
         let cache = self.cache.as_ref()?;
         Some(self.files.borrow_mut().entry(path.to_owned()).or_insert_with(|| cache.file(path, FILE_POINTS, FILE_SCALE)).clone())
+    }
+
+    /// An image file at its own size, such as one open in the panel, decoding off the main thread. It is
+    /// not kept here: the caller's handle keeps it, so it frees when the caller lets it go. None before the
+    /// cache is set up.
+    pub fn picture(&self, path: &std::path::Path) -> Option<Image> {
+        // A raster image ignores the size, which only an SVG uses.
+        Some(self.cache.as_ref()?.file(path, FILE_POINTS, FILE_SCALE))
     }
 
     pub fn get(&self, image: &ImageAttachment) -> Option<&Image> {

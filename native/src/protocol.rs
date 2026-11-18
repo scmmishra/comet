@@ -574,13 +574,17 @@ pub struct FileChange {
     pub patch: String,
 }
 
-/// A file as the panel shows it. A binary file has no text, and a large one shows only its start.
+/// A file as the panel shows it. A binary file has no text, and a large one shows only its start. An
+/// image has no text either: the app draws it from its path.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct FileView {
     pub path: String,
     pub text: Option<String>,
     #[serde(default)]
     pub binary: bool,
+    /// An image the app can draw.
+    #[serde(default)]
+    pub image: bool,
     #[serde(default)]
     pub truncated: bool,
     /// No file is at the path.

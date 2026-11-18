@@ -1,7 +1,7 @@
 import type { FileView } from "@comet/protocol"
 import { closeSync, openSync, readSync, statSync } from "node:fs"
 import { homedir } from "node:os"
-import { join, resolve, sep } from "node:path"
+import { extname, join, resolve, sep } from "node:path"
 import { spawn } from "./environment"
 import { projectFiles } from "./project-files"
 
@@ -9,6 +9,8 @@ import { projectFiles } from "./project-files"
 const MAX_VIEW_BYTES = 1_000_000
 /** How much of a file is looked at to tell text from binary. Git looks at the same amount. */
 const SNIFF_BYTES = 8000
+/** The images the app draws in the panel, by extension. Rune decodes these. */
+const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico"])
 
 /** The editor command, which takes `path:line`. Zed's CLI does. COMET_EDITOR names another. */
 const editor = () => process.env.COMET_EDITOR ?? "zed"
@@ -71,13 +73,14 @@ function withoutProjectFolders(dir: string, path: string): string | undefined {
 }
 
 /**
- * Reads a file for the panel. A path with no file, or with a folder, is missing. A file with a NUL byte
- * near its start is binary and shows no text, as Git decides. A large file shows its first megabyte, cut
- * on a line.
+ * Reads a file for the panel. A path with no file, or with a folder, is missing. An image is not read,
+ * because the app draws it from its path. A file with a NUL byte near its start is binary and shows no
+ * text, as Git decides. A large file shows its first megabyte, cut on a line.
  */
 export function readForView(dir: string, path: string): FileView {
   const file = openableFile(dir, path)
   if (!file) return { path: namedPath(dir, path), missing: true }
+  if (IMAGE_EXTENSIONS.has(extname(file).toLowerCase())) return { path: file, image: true }
   const size = statSync(file).size
   const bytes = Buffer.alloc(Math.min(size, MAX_VIEW_BYTES))
   const handle = openSync(file, "r")

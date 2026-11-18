@@ -8,6 +8,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 - A plugin's messages draw their Markdown, and their links open in the browser.
 - An agent can show a visual in the thread: a table, a bar or line chart, a Mermaid diagram and buttons for what to ask next. It sends the data and Comet draws it. A press of a button sends its text as your next message. Claude and Codex have it. Antigravity does not, because its tool calls do not say which tool they call.
 - A Mermaid block in a reply draws as a diagram.
+- An image file opens as a picture in the view pane, fitted to the pane. A pinch or ⌘ and the wheel zoom it, and the wheel or a drag pans it. PNG, JPEG, GIF, WebP, BMP and ICO files open this way.
 
 ## 0.1.0
 
