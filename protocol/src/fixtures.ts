@@ -236,7 +236,7 @@ export const CORE_MESSAGES = [
     type: "plugins",
     plugins: [
       { name: "reviews", kind: "installed", source: "github:someone/comet-plugin-reviews", title: "PR Reviews", version: "1.2.0", description: "Pull requests that wait for your review", everywhere: false, projects: ["/Users/me/code/web"] },
-      { name: "support", kind: "local", everywhere: true, projects: [], error: "support needs Comet's plugin API ^2.0.0, and this Comet has 0.1.0. Update Comet or the plugin." },
+      { name: "support", kind: "local", everywhere: true, projects: [], error: "support needs Comet's plugin API ^2.0.0, and this Comet has 0.2.0. Update Comet or the plugin." },
     ],
   },
 ] satisfies CoreMessage[]

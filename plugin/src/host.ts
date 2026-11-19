@@ -1,4 +1,4 @@
-import { panelInstanceId, splitContributionId, type PanelParams, type PluginLayout, type UiOp, type UiValue } from "@comet/protocol"
+import { panelInstanceId, splitContributionId, type PanelParams, type PluginLayout, type PluginSettingValue, type UiOp, type UiValue } from "@comet/protocol"
 import { basename } from "node:path"
 import { createRoot as solidRoot, createSignal, type Accessor, type JSX, type Setter } from "solid-js"
 import type { Comet, PanelContext, PanelOptions, PluginDefinition, SetupOptions, TabContext, TurnEnd, TurnOutcome, ViewContext } from "./index"
@@ -34,6 +34,10 @@ export type ViewResult = { readonly key: string; readonly root: number; readonly
 
 /** Messages from the core to a plugin's worker. */
 export type ToPlugin =
+  /** The first message: the plugin's settings. Setup runs once it arrives, so setup can read them. */
+  | { readonly type: "init"; readonly settings: Readonly<Record<string, PluginSettingValue>> }
+  /** The user changed the plugin's settings. These are all of them, as they are now. */
+  | { readonly type: "settings"; readonly settings: Readonly<Record<string, PluginSettingValue>> }
   /**
    * Every view of this plugin a tab shows, the panel instances open there for `isOpen`, and the key of
    * the plugin's thread the tab shows for `thread`. The worker draws what it lacks and disposes the rest.
@@ -88,7 +92,15 @@ interface Tab {
  * the app can draw it again at any time.
  */
 export function startHost(plugin: PluginDefinition) {
+  self.onmessage = (event: MessageEvent<ToPlugin>) => {
+    if (event.data.type === "init") run(plugin, event.data.settings)
+  }
+}
+
+/** Runs setup with the plugin's settings, reports what it registered, then answers the core. */
+function run(plugin: PluginDefinition, initial: Readonly<Record<string, PluginSettingValue>>) {
   const post = (message: FromPlugin) => self.postMessage(message)
+  const [settings, setSettings] = solidRoot(() => createSignal(initial))
   onOps((ops) => post({ type: "ops", ops }))
 
   const sidebars = new Map<string, { title: string; view: View }>()
@@ -110,6 +122,7 @@ export function startHost(plugin: PluginDefinition) {
     }
   const comet: Comet = {
     env: process.env,
+    settings: { get: (key) => settings()[key] },
     sidebar: register("sidebar", sidebars),
     panel: register("panel", panels) as Comet["panel"],
     card: register("card", cards),
@@ -250,6 +263,7 @@ export function startHost(plugin: PluginDefinition) {
       // A tab the plugin has drawn nothing for hears its thread with its first `show`.
       else if (message.type === "threadShown") tabs.get(message.tabId)?.setThread(message.key)
       else if (message.type === "visible") setOnScreen({ ...(message.tabId ? { tabId: message.tabId } : {}), keys: new Set(message.keys) })
+      else if (message.type === "settings") setSettings(message.settings)
       else if (message.type === "turnEnd") {
         const turn: TurnEnd = { key: message.key, tabId: message.tabId, outcome: message.outcome }
         // One failing handler does not keep the others from running.

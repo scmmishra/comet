@@ -6,7 +6,8 @@ import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { cometHome } from "../data-files"
 import { bundlePlugin } from "./bundle"
-import { checkPlugin } from "./manifest"
+import { checkPlugin, readManifest } from "./manifest"
+import { pluginSettingValues } from "./settings"
 import { pluginProjects, pluginsOn } from "./config"
 
 type Send = (message: CoreMessage) => void
@@ -231,6 +232,14 @@ export class Plugins {
     }
   }
 
+  /** The user changed a plugin's settings. A running plugin hears them all, as they are now. */
+  async settingsChanged(plugin: string) {
+    const running = await this.running.get(plugin)?.catch(() => undefined)
+    if (!running) return
+    const settings = readManifest(join(pluginsFolder(), plugin))?.settings ?? []
+    this.post(running, { type: "settings", settings: pluginSettingValues(plugin, settings) })
+  }
+
   private start(plugin: string): Promise<Running> {
     const failure = this.failed.get(plugin)
     if (failure) return Promise.reject(failure)
@@ -257,13 +266,15 @@ export class Plugins {
     const folder = join(pluginsFolder(), plugin)
     const entry = ENTRIES.map((file) => join(folder, file)).find(existsSync)
     if (!entry) throw new Error(`Comet found no plugin at ${folder}. A plugin starts from index.tsx or index.ts.`)
-    checkPlugin(folder, plugin)
+    const settings = checkPlugin(folder, plugin)?.settings ?? []
     // A Bun Worker starts with the environment the process started with, not what the core set since,
     // so it would lack the login shell's PATH. It gets a copy, so a plugin finds the user's tools, such as
     // a CLI in ~/.local/bin. A copy, not a shared one, keeps a plugin's changes out of the agents' sessions.
     const env = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined))
     const generation = this.generation
     const worker = new Worker(await bundlePlugin(plugin, entry), { env })
+    // Setup waits for this, so it can read the plugin's settings.
+    worker.postMessage({ type: "init", settings: pluginSettingValues(plugin, settings) } satisfies ToPlugin)
     const stale = () => generation !== this.generation
     return new Promise<Running>((resolve, reject) => {
       let running: Running | undefined

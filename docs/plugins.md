@@ -47,7 +47,7 @@ A plugin to share has a `package.json` with a `comet` field. A plugin folder mad
   "name": "comet-plugin-reviews",
   "version": "1.0.0",
   "description": "Pull requests that wait for your review",
-  "comet": { "name": "reviews", "title": "PR Reviews", "api": "^0.1.0" }
+  "comet": { "name": "reviews", "title": "PR Reviews", "api": "^0.2.0" }
 }
 ```
 
@@ -55,6 +55,28 @@ A plugin to share has a `package.json` with a `comet` field. A plugin folder mad
 - `title` is what Settings and the CLI call it.
 - `api` is the range of Comet's plugin API the plugin works with. The API's version is `@comet/plugin`'s. It is not a peer dependency, because `@comet/plugin` is not on npm.
 - A plugin whose manifest names another plugin, or needs an API this Comet lacks, does not start. The user is told why.
+
+### Settings
+
+A manifest can list what the user sets for the plugin, such as a repository:
+
+```json
+"comet": {
+  "name": "reviews",
+  "api": "^0.2.0",
+  "settings": [
+    { "key": "repo", "title": "Repository", "type": "string", "required": true, "description": "owner/name on GitHub." },
+    { "key": "base", "title": "Base branch", "type": "string", "default": "develop" },
+    { "key": "drafts", "title": "Show drafts", "type": "boolean", "default": false },
+    { "key": "sort", "title": "Sort", "type": "select", "options": ["updated", "created"] }
+  ]
+}
+```
+
+- `type` is `string` (one line), `text` (several lines), `boolean` or `select`, which takes `options`.
+- `required` marks a setting the plugin cannot work without. Settings and `comet plugin list` say the plugin needs setup until it has a value. The plugin still starts.
+- Values live in `~/.comet/plugin-settings/<plugin>.json`, apart from the plugin, so an update, a removal or a reinstall keeps them. The core checks each value against the manifest as it is saved. A value the manifest no longer allows falls back to the default.
+- Settings are for everyday values. A secret, such as an API key, does not belong in them yet: they are saved as plain text.
 
 ## Installing
 
@@ -122,6 +144,7 @@ export default definePlugin((comet) => {
   comet.setup(name, { title, sidebar?, panels?, hideCards? })
   comet.command(name, { title, input?, run })
   comet.onTurnEnd(({ key, tabId, outcome }) => { … })
+  comet.settings.get(key)
 })
 ```
 
@@ -134,7 +157,8 @@ export default definePlugin((comet) => {
 - A command with `input` asks for text in the palette, and `run` gets it.
 - `comet.onTurnEnd` runs a handler each time a turn ends in a thread the plugin opened with `ctx.openThread`. `key` is the key the plugin passed. `outcome` is `done`, `error` or `interrupted`. A plugin can register more than one handler, during setup only. Turns in other threads, such as a tab's own thread, never reach the plugin.
 - A turn can end while a background task it started still runs. The handler runs when the turn ends, not when the task ends.
-- `comet.env` holds the core's environment, such as an API key. `comet.toast` shows a short message.
+- `comet.env` holds the core's environment. `comet.toast` shows a short message.
+- `comet.settings.get(key)` reads a setting the manifest lists, as the user set it or else its default. It works while setup runs. It is reactive, so a view or an effect that reads it runs again when the user changes it, without a reload.
 
 ### View context
 

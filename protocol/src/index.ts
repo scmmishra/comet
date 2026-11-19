@@ -1024,6 +1024,19 @@ export type ClientMessage =
   /** Turns a plugin on or off in a project, or everywhere without one. The core answers every client with `plugins`. */
   | { readonly type: "plugin.toggle"; readonly name: string; readonly on: boolean; readonly project?: string }
 
+/** The kinds of setting a plugin can ask for: one line of text, several lines, a switch, or one of a list. */
+export const PLUGIN_SETTING_TYPES = ["string", "text", "boolean", "select"] as const
+
+/** A setting a plugin's manifest asks for. `required` marks one the plugin cannot work without. */
+export type PluginSetting = { readonly key: string; readonly title: string; readonly description?: string; readonly required?: boolean } & (
+  | { readonly type: "string" | "text"; readonly default?: string }
+  | { readonly type: "boolean"; readonly default?: boolean }
+  | { readonly type: "select"; readonly options: readonly string[]; readonly default?: string }
+)
+
+/** A setting's value: text for text and a choice, true or false for a switch. */
+export type PluginSettingValue = string | boolean
+
 /** A plugin in `~/.comet/plugins`, as Settings lists it. */
 export interface PluginListing {
   readonly name: string

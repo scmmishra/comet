@@ -14,7 +14,7 @@ function comet(cwd: string, ...args: string[]) {
 test("installs a plugin, turns it on in the project it runs in, lists it and removes it", () => {
   const source = join(tempFolder("source"), "demo")
   mkdirSync(source)
-  writeFileSync(join(source, "package.json"), JSON.stringify({ name: "comet-plugin-demo", version: "1.0.0", comet: { name: "demo", title: "Demo", api: "^0.1.0" } }))
+  writeFileSync(join(source, "package.json"), JSON.stringify({ name: "comet-plugin-demo", version: "1.0.0", comet: { name: "demo", title: "Demo", api: "^0.2.0" } }))
   writeFileSync(join(source, "index.tsx"), "export default 1\n")
   const project = tempFolder("project")
 

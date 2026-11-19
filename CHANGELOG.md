@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- A plugin can list settings in its manifest and read them with `comet.settings.get`. A change reaches the running plugin without a reload. The plugin API is now 0.2.0, so a plugin built for 0.1.0 must allow 0.2.0.
 - A plugin's Markdown draws images from local files. Before, every image drew as a broken image and its alt text.
 - `comet` with no folder opens the folder it runs in. `comet "<prompt>"` opens a new tab there and sends the prompt on the default agent and model.
 - Settings has a Plugins page. It installs, updates and removes plugins, and turns each on everywhere or per project. A `comet://plugin/install?source=…` link opens it with the source filled in, and installs nothing until you press Install.

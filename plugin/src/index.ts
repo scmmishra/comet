@@ -1,8 +1,8 @@
-import type { IconName, MessageData, PanelParams, Tint, UiPrimitive, UiPrimitives } from "@comet/protocol"
+import type { IconName, MessageData, PanelParams, PluginSettingValue, Tint, UiPrimitive, UiPrimitives } from "@comet/protocol"
 import type { JSX } from "solid-js"
 import { createElement, spread } from "./renderer"
 
-export type { IconName, MessageData, PanelParams, Tint }
+export type { IconName, MessageData, PanelParams, PluginSettingValue, Tint }
 
 /**
  * Comet's plugin API. A plugin is a TSX module in `~/.comet/plugins/<name>/index.tsx` whose default
@@ -82,6 +82,11 @@ export interface SetupOptions {
 export interface Comet {
   /** The core's environment, such as an API key. */
   readonly env: Readonly<Record<string, string | undefined>>
+  /**
+   * The settings the plugin's manifest lists, as the user set them in Settings or with `comet plugin set`,
+   * else their defaults. `get` is reactive: a view or an effect that reads it runs again when it changes.
+   */
+  readonly settings: { get(key: string): PluginSettingValue | undefined }
   /** A view for the column beside the thread, such as an inbox. */
   sidebar(name: string, options: { readonly title: string; readonly view: (ctx: ViewContext) => JSX.Element }): void
   panel<P extends PanelParams = PanelParams>(name: string, options: PanelOptions<P>): void

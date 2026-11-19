@@ -166,7 +166,7 @@ test("refuses a plugin whose manifest names another plugin or needs another plug
   const manifest = (name: string, api: string) => JSON.stringify({ name: `comet-plugin-${name}`, comet: { name, api } })
   writeFileSync(join(process.env.COMET_HOME!, "plugins", "renamed", "package.json"), manifest("other", "*"))
   writeFileSync(join(process.env.COMET_HOME!, "plugins", "future", "package.json"), manifest("future", "^99.0.0"))
-  writeFileSync(join(process.env.COMET_HOME!, "plugins", "fits", "package.json"), manifest("fits", "^0.1.0"))
+  writeFileSync(join(process.env.COMET_HOME!, "plugins", "fits", "package.json"), manifest("fits", "^0.2.0"))
   turnOn({ everywhere: ["renamed", "future", "fits"] })
   const { plugins, project, errors } = harness()
   expect((await plugins.offers(project)).panels.map((panel) => panel.id)).toEqual(["fits.main"])

@@ -13,7 +13,7 @@ beforeEach(() => useTempHome())
 const home = () => process.env.COMET_HOME!
 
 /** A plugin package in a folder of its own, with a panel that says hello. */
-function pluginPackage(name: string, version: string, comet: Record<string, unknown> = { name, title: name.toUpperCase(), api: "^0.1.0" }) {
+function pluginPackage(name: string, version: string, comet: Record<string, unknown> = { name, title: name.toUpperCase(), api: "^0.2.0" }) {
   const folder = join(tempFolder("source"), name)
   mkdirSync(folder)
   writeFileSync(join(folder, "package.json"), JSON.stringify({ name: `comet-plugin-${name}`, version, comet }))
