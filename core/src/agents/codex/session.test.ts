@@ -658,3 +658,40 @@ test("asks for the reasoning summary Codex's config sets for the project, else a
   await until(() => unread.codex.sent("turn/start").length > 0)
   expect(unread.codex.sent("turn/start")[0]).toMatchObject({ summary: "auto" })
 })
+
+/** A `hook/completed` notice for the running turn. */
+const hookRun = (eventName: string, status: string, entries: readonly { kind: string; text: string }[]) => ({ threadId: THREAD, turnId: TURN, run: { eventName, status, entries } })
+
+test("shows why a hook stopped a turn that had no answer as an error", async () => {
+  const s = setup()
+  await started(s)
+  s.codex.notify("hook/completed", hookRun("userPromptSubmit", "completed", [{ kind: "context", text: "Read the docs." }]))
+  s.codex.notify("hook/completed", { ...hookRun("userPromptSubmit", "stopped", [{ kind: "stop", text: "Prompts on main are blocked." }]), turnId: "another-turn" })
+  s.codex.notify("hook/completed", hookRun("userPromptSubmit", "stopped", [{ kind: "feedback", text: "Ignored." }, { kind: "stop", text: " Prompts on main are blocked. " }]))
+  s.codex.notify("turn/completed", { threadId: THREAD, turn: turn("completed") })
+  await until(() => !s.session.busy)
+  const ended = s.items().slice(-2)
+  expect(ended[0]).toEqual({ type: "error", id: `hook-stop:${TURN}`, message: "The userPromptSubmit hook stopped the turn.\nPrompts on main are blocked." })
+  expect(ended[1]).toMatchObject({ type: "result", isError: false })
+})
+
+test("shows why a hook stopped a turn that answered as a warning, so the answer stands", async () => {
+  const s = setup()
+  await started(s)
+  s.codex.notify(...item("item/completed", { type: "agentMessage", id: "msg_1", text: "Hi!", phase: "final_answer" }))
+  s.codex.notify("hook/completed", hookRun("stop", "stopped", [{ kind: "stop", text: "Stop here." }]))
+  s.codex.notify("turn/completed", { threadId: THREAD, turn: turn("completed") })
+  await until(() => !s.session.busy)
+  expect(s.items().some((found) => found.type === "error")).toBe(false)
+  expect(s.last("notice")).toEqual({ type: "notice", id: `hook-stop:${TURN}`, text: "The stop hook stopped the turn.\nStop here.", warning: true })
+})
+
+test("a hook that stops a turn after only commentary shows as an error", async () => {
+  const s = setup()
+  await started(s)
+  s.codex.notify(...item("item/completed", { type: "agentMessage", id: "msg_1", text: "Running tests.", phase: "commentary" }))
+  s.codex.notify("hook/completed", hookRun("preToolUse", "stopped", [{ kind: "stop", text: "No tests on Fridays." }]))
+  s.codex.notify("turn/completed", { threadId: THREAD, turn: turn("completed") })
+  await until(() => !s.session.busy)
+  expect(s.last("error")).toEqual({ type: "error", id: `hook-stop:${TURN}`, message: "The preToolUse hook stopped the turn.\nNo tests on Fridays." })
+})

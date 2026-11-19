@@ -1,4 +1,4 @@
-import type { ImageAttachment, PermissionAnswer, RunSettings } from "@comet/protocol"
+import type { ImageAttachment, PermissionAnswer, RunSettings, ThreadItem } from "@comet/protocol"
 import { SERVER_NAME } from "../../delegate/tools"
 import type { AgentSession, Emit, SessionOptions, ToolServer } from "../agent"
 import type { RequestId } from "../json-rpc"
@@ -10,7 +10,7 @@ import { userInput } from "./input"
 import { changedPaths, mayStayOpen, threadItems, unfinishedItems } from "./items"
 import { modelName, turnModel, type ModelCatalog } from "./models"
 import { acceptsMcpPrompts, runPolicy, threadPolicy } from "./permissions"
-import type { CodexConfigRead, CodexItem, CodexModel, CodexTurn, McpStartup, ReasoningSummary, TokenUsage } from "./protocol"
+import type { CodexConfigRead, CodexItem, CodexModel, CodexTurn, HookCompleted, McpStartup, ReasoningSummary, TokenUsage } from "./protocol"
 import { asksApproval, readRequest, type CodexRequest } from "./requests"
 import type { AppServer, ThreadOwner, ThreadParams } from "./server"
 
@@ -38,6 +38,10 @@ class Turn {
   model?: string
   /** The turn's last retry of a failed request. */
   attempt = 0
+  /** Whether the turn has given an answer, not only commentary before a tool call. */
+  answered = false
+  /** Why a hook stopped the turn, once one has. */
+  hookStop?: string
   /** The items the turn started and has not completed, which may stay open for good, by id. */
   readonly open = new Map<string, CodexItem>()
   readonly started: Promise<string | undefined>
@@ -206,6 +210,8 @@ export class CodexSession implements AgentSession, ThreadOwner {
         return this.settled(params.requestId as RequestId)
       case "mcpServer/startupStatus/updated":
         return this.serverStatus(params as ThreadParams & McpStartup)
+      case "hook/completed":
+        return this.hookCompleted(params as ThreadParams & HookCompleted)
       case "turn/completed":
         return this.complete(params.turn as CodexTurn)
     }
@@ -329,6 +335,7 @@ export class CodexSession implements AgentSession, ThreadOwner {
       if (done) this.turn?.open.delete(item.id)
       else this.turn?.open.set(item.id, item)
     }
+    if (done && this.turn && answers(item)) this.turn.answered = true
     for (const found of threadItems(this.dir, item, done, done ? Date.now() : undefined)) this.emit({ kind: "item", item: found })
   }
 
@@ -391,6 +398,7 @@ export class CodexSession implements AgentSession, ThreadOwner {
     if (!turn || (turn.id !== undefined && turn.id !== ended.id)) return
     this.dismissRequests()
     this.settleOpen(ended.status)
+    if (turn.hookStop) this.emit({ kind: "item", item: hookStopItem(ended.id, turn.hookStop, turn.answered) })
     if (ended.status === "failed") this.emit({ kind: "item", item: turnError(ended) })
     this.emit({ kind: "item", item: turnResult(ended, turn.message, this.stop.pending) })
     this.endTurn()
@@ -406,6 +414,18 @@ export class CodexSession implements AgentSession, ThreadOwner {
     this.failedServers.add(name)
     const text = error?.trim() ? `MCP server ${name} did not start.\n${error.trim()}` : `MCP server ${name} did not start.`
     this.emit({ kind: "item", item: { type: "notice", id: `mcp-failed:${crypto.randomUUID()}`, text, warning: true } })
+  }
+
+  /**
+   * A hook that stops the turn leaves its reason, after T3 Code. Codex then reports the turn as completed,
+   * so the reason shows when the turn ends. Codex keeps no trace of it in the thread's history.
+   */
+  private hookCompleted({ turnId, run }: HookCompleted) {
+    const turn = this.turn
+    if (!turn || turnId === null || turn.id !== turnId || run.status !== "stopped") return
+    const reason = run.entries.flatMap((entry) => (entry.kind === "stop" && entry.text.trim() ? [entry.text.trim()] : [])).join("\n")
+    const text = reason ? `The ${run.eventName} hook stopped the turn.\n${reason}` : `The ${run.eventName} hook stopped the turn.`
+    turn.hookStop = turn.hookStop ? `${turn.hookStop}\n${text}` : text
   }
 
   private endTurn() {
@@ -431,6 +451,18 @@ export class CodexSession implements AgentSession, ThreadOwner {
   private dismissRequests() {
     this.requests.settleAll((request) => request.dismissed)
   }
+}
+
+/** Whether an item answers the user. Codex marks the messages it writes before a tool call as commentary. */
+const answers = (item: CodexItem) => item.type === "agentMessage" && item.phase !== "commentary" && item.text.trim() !== ""
+
+/**
+ * Why a hook stopped the turn. A turn with no answer shows it as an error, so a task handed to Codex reads
+ * as failed with the hook's reason. A turn that answered first shows it as a warning, and keeps its answer.
+ */
+function hookStopItem(turnId: string, reason: string, answered: boolean): ThreadItem {
+  const id = `hook-stop:${turnId}`
+  return answered ? { type: "notice", id, text: reason, warning: true } : { type: "error", id, message: reason }
 }
 
 /** Comet's tools as an MCP server Codex connects to over HTTP, with what to tell the model about them. */

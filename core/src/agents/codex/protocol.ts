@@ -39,7 +39,7 @@ export interface FileUpdate {
 /** One item of a turn. The lifecycle times come from history, when Codex recorded them. */
 export type CodexItem = { readonly startedAtMs?: number | null; readonly completedAtMs?: number | null } & (
   | { readonly type: "userMessage"; readonly id: string; readonly clientId: string | null; readonly content: readonly UserInput[] }
-  | { readonly type: "agentMessage"; readonly id: string; readonly text: string }
+  | { readonly type: "agentMessage"; readonly id: string; readonly text: string; readonly phase?: "commentary" | "partial_answer" | "final_answer" | null }
   | { readonly type: "reasoning"; readonly id: string; readonly summary: readonly string[]; readonly content: readonly string[] }
   | {
       readonly type: "commandExecution"
@@ -170,4 +170,14 @@ export interface McpStartup {
   readonly name: string
   readonly status: "starting" | "ready" | "failed" | "cancelled"
   readonly error: string | null
+}
+
+/** A hook run that ended, as `hook/completed` gives it. A hook that ends the turn has status `stopped`, and its reason in `stop` entries. */
+export interface HookCompleted {
+  readonly turnId: string | null
+  readonly run: {
+    readonly eventName: string
+    readonly status: "running" | "completed" | "failed" | "blocked" | "stopped"
+    readonly entries: readonly { readonly kind: "warning" | "stop" | "feedback" | "context" | "error"; readonly text: string }[]
+  }
 }
