@@ -47,6 +47,11 @@ export class ThreadRecord {
     if (!UNSAVED.has(item.type)) this.items.set(item.id, item)
   }
 
+  /** Forgets items the session took back. */
+  remove(ids: readonly string[]) {
+    for (const id of ids) this.items.delete(id)
+  }
+
   /** Names the session, once the agent has. Nothing is saved before. */
   name(threadId: string) {
     this.threadId = threadId

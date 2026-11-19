@@ -5,13 +5,14 @@ import type { Process } from "../process"
 import type { ModelCache } from "./models"
 import { modeId } from "./modes"
 import { antigravityTools } from "./normalize"
+import { watchPrompt } from "./prompt-outcome"
 import { launch, resolveRuntime } from "./runtime"
 import { signInLink } from "./sign-in-link"
 
 /** What to do when Antigravity is not installed, as the app shows it after its own "Antigravity is not installed". */
 export const INSTALL_PROBLEM = "Install it to use the models of your Google account."
-/** What to do when only the ACP server an earlier Comet installed is there. Its sign-in carries over to the CLI. */
-export const SERVER_PROBLEM = "Comet now runs Google's Antigravity CLI, not the server it installed before. Install the CLI to go on. You stay signed in."
+/** What to do when only the ACP server an earlier Comet installed is there. */
+export const SERVER_PROBLEM = "Comet now runs Google's Antigravity CLI, not the server it installed before. Install the CLI to go on."
 /** What to do when Antigravity is not signed in, as the app shows it after its own "Antigravity is not signed in". */
 export const SIGN_IN_PROBLEM = "Sign in with your Google account to use its models."
 /** What a turn says when Antigravity needs a sign-in. */
@@ -42,6 +43,7 @@ export function antigravityFlavor(host: AgentHost, models: ModelCache): AcpFlavo
     tools: antigravityTools,
     isQuestion: (request) => request.toolCall.toolCallId.startsWith(QUESTION_PREFIX),
     needsSignIn: (line) => signInLink(line) !== undefined,
+    watchPrompt,
     signedOut() {
       host.publish({ state: "signed-out", problem: SIGN_IN_PROBLEM })
       return SIGN_IN_TO_SEND

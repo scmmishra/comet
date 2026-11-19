@@ -55,7 +55,7 @@ function executable(path: string) {
   }
 }
 
-/** Starts the CLI's ACP server in a folder, signed in through Comet's own Gemini folder. If it ends, the error says how and what it printed on stderr. */
+/** Starts the CLI's ACP server in a folder, on Comet's own Gemini folder. If it ends, the error says how and what it printed on stderr. */
 export function launch(runtime: Runtime, dir: string): Process {
   mkdirSync(geminiHome(), { recursive: true, mode: 0o700 })
   return explainEnd(run([runtime.command, "acp", "--gemini-dir", geminiHome(), "--app-data-dir", APP_DATA], { cwd: dir, env: environment() }), "Antigravity")

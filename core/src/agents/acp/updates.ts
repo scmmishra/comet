@@ -41,6 +41,14 @@ export class UpdateMapper {
     return this.endText(at)
   }
 
+  /** Takes back the text being written when `matches` says it is not the agent's reply. */
+  dropText(matches: (text: string) => boolean): ThreadEvent[] {
+    const text = this.text
+    if (!text || !matches(text.text)) return []
+    this.text = undefined
+    return [{ kind: "items.remove", ids: [text.id] }]
+  }
+
   /**
    * Ends each tool call still open as one that did not finish, in the error look, after T3 Code. With
    * `pendingOnly`, it ends only the calls the agent never started, since an agent that is still alive may

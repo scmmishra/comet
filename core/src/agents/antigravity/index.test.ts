@@ -1,11 +1,11 @@
 import { afterAll, expect, test } from "bun:test"
 import type { AgentVersion } from "@comet/protocol"
 import { mkdirSync, writeFileSync } from "node:fs"
-import { dirname, join } from "node:path"
+import { join } from "node:path"
 import { until, useTempHome } from "../../test-support"
 import type { AgentReading } from "../agent"
 import { FAKE_OPTIONS } from "../acp/test-agent"
-import { EXECUTABLE, markInstalled, modelsPath, runtimeFolder, tokenPath } from "./home"
+import { EXECUTABLE, markInstalled, modelsPath, runtimeFolder } from "./home"
 import { antigravityAgent } from "."
 import { ModelCache } from "./models"
 
@@ -22,17 +22,18 @@ function install(version: string) {
   markInstalled(version)
 }
 
-test("reads where Antigravity stands from its files, then offers the update Google names", async () => {
+test("reads where Antigravity stands from its files and the keychain, then offers the update Google names", async () => {
   const readings: AgentReading[] = []
   const checked: AgentVersion = { installed: "1.5.8", latest: "1.5.9", updateAvailable: true, updatable: true }
-  const agent = antigravityAgent({ publish: (reading) => void readings.push(reading), compactIdle: () => false }, { checkForUpdate: async () => checked })
+  let signedIn = false
+  const agent = antigravityAgent({ publish: (reading) => void readings.push(reading), compactIdle: () => false }, { checkForUpdate: async () => checked, hasSignIn: async () => signedIn })
   await agent.inspect()
   expect(readings.at(-1)).toEqual({ state: "missing", problem: "Install it to use the models of your Google account." })
 
-  // The ACP server an earlier Comet installed no longer runs, and its sign-in carries over to the CLI.
+  // The ACP server an earlier Comet installed no longer runs.
   install("1.4.5")
   await agent.inspect()
-  expect(readings.at(-1)).toEqual({ state: "missing", problem: "Comet now runs Google's Antigravity CLI, not the server it installed before. Install the CLI to go on. You stay signed in." })
+  expect(readings.at(-1)).toEqual({ state: "missing", problem: "Comet now runs Google's Antigravity CLI, not the server it installed before. Install the CLI to go on." })
 
   install("1.5.8")
   await agent.inspect()
@@ -41,8 +42,7 @@ test("reads where Antigravity stands from its files, then offers the update Goog
   await until(() => readings.at(-1)?.version === checked)
   expect(readings.at(-1)).toEqual({ version: checked })
 
-  mkdirSync(dirname(tokenPath()), { recursive: true })
-  writeFileSync(tokenPath(), "{}")
+  signedIn = true
   const models = new ModelCache(modelsPath).learn(FAKE_OPTIONS, true)
   await agent.inspect()
   expect(readings).toContainEqual({ state: "ready", problem: undefined, version, models })

@@ -10,7 +10,7 @@ const VERSION = /^\d+\.\d+\.\d+$/
 /** The `agy` CLI's program, as Google's archive names it. */
 export const EXECUTABLE = "antigravity"
 
-/** Where Comet keeps Antigravity's files: its installs, its sign-in, its threads and its models. */
+/** Where Comet keeps Antigravity's files: its installs, its Gemini folder, its threads and its models. */
 export const antigravityHome = () => join(cometHome(), "agents", "antigravity")
 
 /** The folder a version is installed in. */
@@ -38,19 +38,20 @@ export const installedVersions = () =>
     .sort((a, b) => (isNewer(a, b) ? -1 : isNewer(b, a) ? 1 : 0))
 
 /**
- * Antigravity's own folder for this Comet, which the CLI takes as `--gemini-dir`. It holds the Google
- * sign-in, so the agent never reads the account, settings or MCP servers of an Antigravity the user runs elsewhere.
+ * Antigravity's own folder for this Comet, which the CLI takes as `--gemini-dir`. It holds the agent's
+ * settings, MCP servers and conversations, so the agent never reads those of an Antigravity the user runs
+ * elsewhere. The Google sign-in is not in it: the CLI keeps that in the Mac's keychain.
  */
 export const geminiHome = () => join(antigravityHome(), "home")
 
 /**
  * The CLI's folder, as `--app-data-dir`, which the CLI joins beneath `geminiHome`. Google's ACP server
- * kept its sign-in and conversations there, so those of an install Comet made before the CLI carry over.
+ * kept its conversations there, so those of an install Comet made before the CLI carry over.
  */
 export const APP_DATA = "antigravity-acp"
 
-/** The token the agent writes once the user has signed in. */
-export const tokenPath = () => join(geminiHome(), APP_DATA, "acp_token.json")
+/** The CLI's log of one session's steps, a SQLite database. */
+export const sessionLog = (sessionId: string) => join(geminiHome(), APP_DATA, "conversations", `${sessionId}.db`)
 
 export const threadsFolder = () => join(antigravityHome(), "threads")
 

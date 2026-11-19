@@ -4,6 +4,8 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- An Antigravity turn that an API error stopped now shows as failed, with the error's message. Before, the error line showed as Antigravity's reply. A thread whose saved thinking the model rejects says it can no longer go on, so you start a new one.
+- Settings reads the Antigravity sign-in from the Mac's keychain, where the `agy` CLI keeps it. Before, it looked for a file the CLI never writes, so a new sign-in could still show as signed out.
 - A task handed to Claude waits for the subagents Claude runs in the background, and answers with what Claude says once they finish. Before, it returned Claude's "still running" message. A task that is stopped between turns now reads as stopped, with its last report.
 - When a Codex hook stops a turn, the thread shows the hook's reason. A delegated Codex task that a hook stops reads as failed, with that reason.
 - A Claude subagent that is resumed keeps the steps and summary of its earlier run.

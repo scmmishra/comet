@@ -4,7 +4,7 @@ import { tempFolder, until } from "../../test-support"
 import type { SessionOptions } from "../agent"
 import { unfinishedResult } from "../steps"
 import { FAKE_OPTIONS, fakeAcpAgent } from "./test-agent"
-import type { AcpFlavor } from "./flavor"
+import type { AcpFlavor, PromptCheck } from "./flavor"
 import type { ConfigOption } from "./protocol"
 import { AcpSession } from "./session"
 import { AcpThreadStore } from "./thread-record"
@@ -16,7 +16,7 @@ const SIGN_IN_LINE = "SIGN IN https://example.com/sign-in"
 const SIGN_IN_TO_SEND = "Sign in, then send again."
 
 /** A session on a fake agent, with what it emitted, the session ids it reported and what its flavor heard. */
-function start(options: Partial<SessionOptions> = {}, handlers: Parameters<typeof fakeAcpAgent>[0] = {}) {
+function start(options: Partial<SessionOptions> = {}, handlers: Parameters<typeof fakeAcpAgent>[0] = {}, check?: PromptCheck) {
   const agents = [fakeAcpAgent(handlers)]
   const events: ThreadEvent[] = []
   const ids: string[] = []
@@ -37,6 +37,7 @@ function start(options: Partial<SessionOptions> = {}, handlers: Parameters<typeo
       return SIGN_IN_TO_SEND
     },
     learn: (found, opened) => void learned.push({ options: found, opened }),
+    ...(check ? { watchPrompt: () => check } : {}),
   }
   const session = new AcpSession("/repo", (event) => void events.push(event), { settings: SETTINGS, onSessionId: (id) => void ids.push(id), ...options }, flavor, threads)
   const items = () => events.flatMap((event) => (event.kind === "item" ? [event.item] : []))
@@ -245,4 +246,42 @@ test("ends only the tool calls the agent never started when its prompt fails wit
   expect(tool("t1")).not.toHaveProperty("result")
   expect(tool("t2")).toMatchObject({ result: unfinishedResult("failed") })
   expect(run.last("error")?.message).toBe("Internal error")
+})
+
+test("fails a turn the flavor's check finds failed, in place of the reply that only repeats the error", async () => {
+  const run = start({}, {}, () => ({ message: "The model rejected the thread.", repeats: (text) => text.trim() === "! rejected" }))
+  run.session.send("Hello")
+  await until(() => run.agent().sent("session/prompt").length === 1)
+  run.agent().update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "\n! rejected\n" } })
+  await until(() => run.items().some((item) => item.type === "text"))
+  const reply = run.last("text")!
+  run.agent().endTurn()
+  await until(() => !run.session.busy)
+  expect(run.events).toContainEqual({ kind: "items.remove", ids: [reply.id] })
+  expect(run.last("error")?.message).toBe("The model rejected the thread.")
+  expect(run.last("result")).toMatchObject({ isError: true })
+  expect((await run.threads.history("/repo", "s1")).map((item) => item.type)).toEqual(["user", "error", "result"])
+})
+
+test("keeps a reply that says more than the error, and does not check a stopped turn", async () => {
+  let checked = 0
+  const run = start({}, {}, () => {
+    checked++
+    return { message: "Failed.", repeats: () => false }
+  })
+  run.session.send("Hello")
+  await until(() => run.agent().sent("session/prompt").length === 1)
+  run.agent().update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Partly done." } })
+  run.agent().endTurn()
+  await until(() => !run.session.busy)
+  expect(run.last("text")).toMatchObject({ text: "Partly done.", done: true })
+  expect(run.last("error")?.message).toBe("Failed.")
+
+  run.session.send("Again")
+  await until(() => run.agent().sent("session/prompt").length === 2)
+  await run.session.interrupt()
+  run.agent().endTurn("cancelled")
+  await until(() => !run.session.busy)
+  expect(checked).toBe(1)
+  expect(run.last("result")).toMatchObject({ isError: false, stopped: true })
 })

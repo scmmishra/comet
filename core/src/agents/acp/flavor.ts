@@ -23,6 +23,12 @@ export interface AcpFlavor {
   isQuestion?(request: PermissionRequest): boolean
   /** Whether a line the agent printed outside the protocol says it waits for a sign-in. */
   needsSignIn?(line: string): boolean
+  /**
+   * Reads, before a prompt, what is needed to check the prompt once it ends. An agent that reports some
+   * failures as a normal end gives this, and the check finds them. It runs unless the turn was stopped.
+   * Neither the read nor the check may throw.
+   */
+  watchPrompt?(sessionId: string): PromptCheck | undefined
   /** The agent asked for a sign-in, so the account is signed out. Answers what the turn says to the user. */
   signedOut(): string
   /**
@@ -30,4 +36,15 @@ export interface AcpFlavor {
    * session's first report, before Comet changed anything, so its model is the account's default.
    */
   learn(options: readonly ConfigOption[], opened: boolean): void
+}
+
+/** Checks a prompt once it ended. Undefined means the turn ends as its stop reason says. */
+export type PromptCheck = () => PromptFailure | undefined
+
+/** Why a prompt failed although its stop reason did not say so. */
+export interface PromptFailure {
+  /** What the turn says to the user. */
+  readonly message: string
+  /** Whether the text the agent is writing only repeats the error. The error item then takes its place. */
+  readonly repeats?: (text: string) => boolean
 }

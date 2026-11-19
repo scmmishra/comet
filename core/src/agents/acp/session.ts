@@ -8,7 +8,7 @@ import { Stop } from "../stopping"
 import { errorItem, resultId, userItem } from "../turn-items"
 import { choices, currentName, modelOption, thoughtOption } from "./config-options"
 import { AcpConnection } from "./connection"
-import type { AcpFlavor } from "./flavor"
+import type { AcpFlavor, PromptCheck } from "./flavor"
 import { CANCELLED, permissionItem, permissionResponse, questionItem, questionResponse } from "./permissions"
 import { promptContent, takesInstructions } from "./prompt"
 import { AUTH_REQUIRED, type ConfigOption, type McpServer, type PermissionRequest, type PermissionResponse, type SessionNotification, type StopReason } from "./protocol"
@@ -72,6 +72,7 @@ export class AcpSession implements AgentSession {
     // Every item the tab sees is kept, so the thread can be read back later.
     this.emit = (event) => {
       if (event.kind === "item") this.record?.add(event.item)
+      if (event.kind === "items.remove") this.record?.remove(event.ids)
       emit(event)
     }
     this.mapper = new UpdateMapper(dir, flavor.tools)
@@ -139,7 +140,8 @@ export class AcpSession implements AgentSession {
       const live = await this.connect()
       // A stop asked while the agent started cancels the turn before its prompt.
       if (this.stop.pending) return this.finish(turn, "cancelled")
-      this.finish(turn, await live.connection.prompt(live.sessionId, this.prompt(text, images)))
+      const check = this.flavor.watchPrompt?.(live.sessionId)
+      this.finish(turn, await live.connection.prompt(live.sessionId, this.prompt(text, images)), check)
     } catch (error) {
       this.fail(turn, error)
     }
@@ -253,11 +255,15 @@ export class AcpSession implements AgentSession {
     this.requests.settleAll(() => CANCELLED)
   }
 
-  private finish(turn: NonNullable<AcpSession["turn"]>, stopReason: StopReason) {
+  /** Ends a turn whose prompt answered. The flavor's check may find that it failed. A stopped turn is not checked. */
+  private finish(turn: NonNullable<AcpSession["turn"]>, stopReason: StopReason, check?: PromptCheck) {
     if (this.turn !== turn) return
-    const unfinished = UNFINISHED_STOPS[stopReason]
-    if (unfinished) this.emit({ kind: "item", item: errorItem(unfinished) })
-    this.endTurn(turn, { isError: unfinished !== undefined, stopped: stopReason === "cancelled" || this.stop.pending })
+    const stopped = stopReason === "cancelled" || this.stop.pending
+    const failure = stopped ? undefined : check?.()
+    if (failure?.repeats) for (const event of this.mapper.dropText(failure.repeats)) this.emit(event)
+    const problem = failure?.message ?? UNFINISHED_STOPS[stopReason]
+    if (problem) this.emit({ kind: "item", item: errorItem(problem) })
+    this.endTurn(turn, { isError: problem !== undefined, stopped })
   }
 
   /**

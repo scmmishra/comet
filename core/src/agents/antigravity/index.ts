@@ -1,13 +1,14 @@
 import type { AgentVersion } from "@comet/protocol"
-import { existsSync, mkdirSync } from "node:fs"
+import { mkdirSync } from "node:fs"
 import { spawn } from "../../environment"
 import type { Agent, AgentHost } from "../agent"
 import { AcpSession } from "../acp/session"
 import { AcpThreadStore } from "../acp/thread-record"
 import type { Process } from "../process"
 import { antigravityFlavor, INSTALL_PROBLEM, launchAntigravity, SERVER_PROBLEM, SIGN_IN_PROBLEM } from "./flavor"
-import { modelsPath, signInFolder, threadsFolder, tokenPath } from "./home"
+import { modelsPath, signInFolder, threadsFolder } from "./home"
 import { installRuntime } from "./install"
+import { hasSignIn } from "./keychain"
 import { ModelCache } from "./models"
 import { checkForUpdate } from "./release"
 import { onlyServerInstalled, resolveRuntime } from "./runtime"
@@ -16,6 +17,8 @@ import { signInWithGoogle } from "./sign-in"
 interface AntigravityOptions {
   /** A test's, in place of Google's release channel. */
   readonly checkForUpdate?: (installed: string) => Promise<AgentVersion>
+  /** A test's, in place of the keychain. */
+  readonly hasSignIn?: () => Promise<boolean>
 }
 
 /**
@@ -27,6 +30,7 @@ export function antigravityAgent(host: AgentHost, options: AntigravityOptions = 
   const flavor = antigravityFlavor(host, models)
   const threads = new AcpThreadStore(threadsFolder)
   const check = options.checkForUpdate ?? ((installed: string) => checkForUpdate(installed))
+  const signedIn = options.hasSignIn ?? hasSignIn
   /** The process of a sign-in that runs, which closing Comet ends. */
   let signingIn: Process | undefined
   return {
@@ -35,14 +39,14 @@ export function antigravityAgent(host: AgentHost, options: AntigravityOptions = 
     features: ["delete", "install", "sign-in"],
     threads,
 
-    /** Reads the install and the token the agent writes once signed in, then asks Google for a newer release of Comet's install. */
+    /** Reads the install and whether the keychain holds the agent's sign-in, then asks Google for a newer release of Comet's install. */
     async inspect() {
       const runtime = resolveRuntime()
       if (!runtime) return host.publish({ state: "missing", problem: onlyServerInstalled() ? SERVER_PROBLEM : INSTALL_PROBLEM })
       // Only Comet's install has a version Comet knows and can update.
       const installed = runtime.version
       const version = { ...(installed ? { installed } : {}), updateAvailable: false, updatable: !!installed }
-      if (!existsSync(tokenPath())) host.publish({ state: "signed-out", problem: SIGN_IN_PROBLEM, version })
+      if (!(await signedIn())) host.publish({ state: "signed-out", problem: SIGN_IN_PROBLEM, version })
       else host.publish({ state: "ready", problem: undefined, version, models: models.options() })
       if (installed) void check(installed).then((checked) => host.publish({ version: checked }))
     },
