@@ -214,6 +214,8 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         return manager.update(message.names)
       case "plugin.toggle":
         return manager.toggle(message.name, message.on, message.project)
+      case "plugin.setting":
+        return manager.setting(message.name, message.key, message.value)
       case "terminal.open":
         return window.openTerminal(message.id, message.cols, message.rows)
       case "terminal.input":

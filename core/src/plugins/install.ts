@@ -41,9 +41,18 @@ const dependencies = (): Record<string, string> => (existsSync(packageFile()) ? 
 async function bun(args: readonly string[]) {
   makePackagesFolder()
   // The core runs on Bun, so its own binary installs packages.
-  const run = spawn([process.execPath, ...args], { cwd: packagesFolder(), stdout: "pipe", stderr: "pipe" })
+  // Bun saves a folder source as a path relative to the folder it runs in, and reads it back on every later
+  // install. Through a link, such as a home under /var or a source in /tmp, it reads it back wrong, so Bun
+  // runs from the real path and gets folder sources by theirs.
+  const run = spawn([process.execPath, ...args], { cwd: realpathSync(packagesFolder()), stdout: "pipe", stderr: "pipe" })
   const [stderr, code] = await Promise.all([new Response(run.stderr).text(), run.exited])
-  if (code !== 0) throw new Error(stderr.trim().split("\n").filter((line) => line.startsWith("error:")).join("\n") || stderr.trim() || `bun ${args[0]} failed.`)
+  if (code === 0) return
+  // Every install installs each package again, so a folder a plugin was installed from, and that is gone
+  // since, fails them all. Bun names the package, so the user is told which plugin and what to do.
+  const gone = stderr.match(/Could not find folder "[^"]*" for dependency "([^"]+)"/)?.[1]
+  const plugin = gone && listPlugins().find((found) => packageOf(found.name) === gone)
+  if (plugin) throw new Error(`The folder ${plugin.name} was installed from is gone, so Bun cannot install anything. Remove ${plugin.name} with \`comet plugin remove ${plugin.name}\`, then install it again from where it is now.`)
+  throw new Error(stderr.trim().split("\n").filter((line) => line.startsWith("error:")).join("\n") || stderr.trim() || `bun ${args[0]} failed.`)
 }
 
 function makePackagesFolder() {
@@ -118,8 +127,7 @@ async function withRollback<T>(change: () => Promise<T>): Promise<T> {
 export async function addPlugin(source: string): Promise<PluginInfo> {
   // The source reaches Bun as an argument, so one that starts with - would read as a flag.
   if (!source.trim() || source.trim().startsWith("-")) throw new Error(`${JSON.stringify(source)} is not a plugin source.`)
-  // Bun saves a folder relative to the packages folder's resolved path. A folder reached through a link,
-  // such as /tmp, would then resolve wrong on the next install, which installs every package again.
+  // A folder goes by its real path, as Bun's own folder does (see `bun`).
   const resolved = existsSync(source) ? realpathSync(source) : source
   return withRollback(async () => {
     const before = dependencies()

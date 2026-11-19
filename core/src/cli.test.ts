@@ -1,9 +1,10 @@
-import { expect, test } from "bun:test"
+import { beforeEach, expect, test } from "bun:test"
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tempFolder, useTempHome } from "./test-support"
 
-useTempHome()
+// Each test gets a home of its own, so one that fails leaves nothing installed for the next.
+beforeEach(() => useTempHome())
 
 /** Runs `comet plugin …` in `cwd`, as `bin/comet` does, and answers its output and exit code. */
 function comet(cwd: string, ...args: string[]) {

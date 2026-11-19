@@ -1,11 +1,16 @@
 import type { CoreMessage, PluginListing } from "@comet/protocol"
 import { requireProjectFolder } from "../project-path"
 import { setPluginOn, whereOn } from "./config"
+import type { PluginSettingValue } from "@comet/protocol"
 import { addPlugin, listPlugins, removePlugin, updatePlugins } from "./install"
+import { missingSettings, pluginSettingValues, savePluginSetting } from "./settings"
 
 /** Every plugin in `~/.comet/plugins`, with where each is on, as Settings lists them. */
 export function pluginListings(): PluginListing[] {
-  return listPlugins().map(({ name, kind, source, manifest, error }) => ({
+  return listPlugins().map(({ name, kind, source, manifest, error }) => {
+    const settings = manifest?.settings ?? []
+    const values = pluginSettingValues(name, settings)
+    return {
     name,
     kind,
     ...(source ? { source } : {}),
@@ -14,7 +19,11 @@ export function pluginListings(): PluginListing[] {
     ...(manifest?.description ? { description: manifest.description } : {}),
     ...(error ? { error } : {}),
     ...whereOn(name),
-  }))
+    settings,
+    values,
+    missing: missingSettings(settings, values).map((setting) => setting.key),
+    }
+  })
 }
 
 /**
@@ -24,10 +33,12 @@ export function pluginListings(): PluginListing[] {
  */
 export function pluginManager(broadcast: (message: CoreMessage) => void) {
   let queue = Promise.resolve()
-  const run = (failure: string, change: () => Promise<string> | string) => {
+  /** Runs `change`, then says what it did. A change with nothing to say, such as a saved setting, says nothing. */
+  const run = (failure: string, change: () => Promise<string | undefined> | string | undefined) => {
     queue = queue.then(async () => {
       try {
-        broadcast({ type: "notice", message: await change() })
+        const done = await change()
+        if (done) broadcast({ type: "notice", message: done })
       } catch (error) {
         broadcast({ type: "error", message: failure, detail: error instanceof Error ? error.message : String(error) })
       }
@@ -47,6 +58,14 @@ export function pluginManager(broadcast: (message: CoreMessage) => void) {
         const updated = await updatePlugins(names)
         const changed = updated.filter(({ from, to }) => from !== to)
         return changed.length ? `Updated ${changed.map(({ name, to }) => `${name} to ${to}`).join(", ")}.` : "The plugins are up to date."
+      }),
+    // A running plugin hears the saved setting from the settings watcher, as it would from `comet plugin set`.
+    setting: (name: string, key: string, value: PluginSettingValue) =>
+      run(`Comet could not save ${key} for ${name}`, () => {
+        const plugin = listPlugins().find((found) => found.name === name)
+        if (!plugin) throw new Error(`No plugin named ${name} is installed.`)
+        savePluginSetting(name, plugin.manifest?.settings ?? [], key, value)
+        return undefined
       }),
     toggle: (name: string, on: boolean, project?: string) =>
       run(`Comet could not turn ${name} ${on ? "on" : "off"}`, () => {

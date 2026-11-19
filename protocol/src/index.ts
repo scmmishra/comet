@@ -1023,6 +1023,8 @@ export type ClientMessage =
   | { readonly type: "plugins.update"; readonly names?: readonly string[] }
   /** Turns a plugin on or off in a project, or everywhere without one. The core answers every client with `plugins`. */
   | { readonly type: "plugin.toggle"; readonly name: string; readonly on: boolean; readonly project?: string }
+  /** Saves one of a plugin's settings. An empty value clears it. The core answers every client with `plugins`. */
+  | { readonly type: "plugin.setting"; readonly name: string; readonly key: string; readonly value: PluginSettingValue }
 
 /** The kinds of setting a plugin can ask for: one line of text, several lines, a switch, or one of a list. */
 export const PLUGIN_SETTING_TYPES = ["string", "text", "boolean", "select"] as const
@@ -1052,6 +1054,11 @@ export interface PluginListing {
   readonly everywhere: boolean
   /** The project folders it is on in. */
   readonly projects: readonly string[]
+  /** The settings its manifest lists, and their values: as the user set them, else their defaults. */
+  readonly settings: readonly PluginSetting[]
+  readonly values: Readonly<Record<string, PluginSettingValue>>
+  /** The keys of required settings that have no value yet. */
+  readonly missing: readonly string[]
 }
 
 export type CoreMessage =

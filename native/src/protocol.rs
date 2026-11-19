@@ -243,6 +243,27 @@ pub struct PluginListing {
     pub everywhere: bool,
     /// The project folders it is on in.
     pub projects: Vec<String>,
+    /// The settings its manifest lists, and their values: as the user set them, else their defaults.
+    pub settings: Vec<PluginSetting>,
+    pub values: serde_json::Map<String, Value>,
+    /// The keys of required settings that have no value yet.
+    pub missing: Vec<String>,
+}
+
+/// A setting a plugin's manifest asks for.
+#[derive(Clone, Debug, Deserialize)]
+pub struct PluginSetting {
+    pub key: String,
+    pub title: String,
+    pub description: Option<String>,
+    #[serde(default)]
+    pub required: bool,
+    /// `string`, `text`, `boolean` or `select`.
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// What a `select` offers.
+    #[serde(default)]
+    pub options: Vec<String>,
 }
 
 /// An agent as the core knows it now: whether it is installed and signed in, its models and its plan usage.
@@ -1097,6 +1118,9 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         names: Option<Vec<String>>,
     },
+    /// Saves one of a plugin's settings. An empty value clears it.
+    #[serde(rename = "plugin.setting")]
+    PluginSetting { name: String, key: String, value: Value },
     /// Turns a plugin on or off in a project, or everywhere without one.
     #[serde(rename = "plugin.toggle")]
     PluginToggle {
@@ -1335,6 +1359,7 @@ mod tests {
             ClientMessage::PluginRemove { name: "reviews".into() },
             ClientMessage::PluginsUpdate { names: Some(vec!["reviews".into()]) },
             ClientMessage::PluginToggle { name: "reviews".into(), on: true, project: Some("/Users/me/code/web".into()) },
+            ClientMessage::PluginSetting { name: "reviews".into(), key: "repo".into(), value: "chatwoot/chatwoot".into() },
         ];
         let encoded: Vec<Value> = ours.iter().map(|m| serde_json::to_value(m).unwrap()).collect();
         assert_eq!(encoded, fixtures("CLIENT_MESSAGES"));

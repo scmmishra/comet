@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from "bun:test"
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs"
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tempFolder, until, useTempHome } from "../test-support"
 import { pluginsOn, setPluginOn, whereOn } from "./config"
@@ -14,7 +14,7 @@ const home = () => process.env.COMET_HOME!
 
 /** A plugin package in a folder of its own, with a panel that says hello. */
 function pluginPackage(name: string, version: string, comet: Record<string, unknown> = { name, title: name.toUpperCase(), api: "^0.2.0" }) {
-  const folder = join(realpathSync(tempFolder("source")), name)
+  const folder = join(tempFolder("source"), name)
   mkdirSync(folder)
   writeFileSync(join(folder, "package.json"), JSON.stringify({ name: `comet-plugin-${name}`, version, comet }))
   writeFileSync(join(folder, "index.tsx"), `import { definePlugin, Text } from "@comet/plugin"\nexport default definePlugin((comet) => comet.panel("main", { title: "Main", view: () => <Text>hello</Text> }))\n`)
@@ -62,7 +62,7 @@ const setVersion = (folder: string, version: string, comet?: Record<string, unkn
 test("installs a plugin from a folder, runs it with its own dependency, updates it and removes it", async () => {
   const source = withGreeting(pluginPackage("hello", "1.0.0"))
   const added = await addPlugin(source)
-  expect(added).toMatchObject({ name: "hello", kind: "installed", source, manifest: { title: "HELLO", version: "1.0.0" } })
+  expect(added).toMatchObject({ name: "hello", kind: "installed", source: realpathSync(source), manifest: { title: "HELLO", version: "1.0.0" } })
   expect(lstatSync(join(home(), "plugins", "hello")).isSymbolicLink()).toBe(true)
   // Installing does not turn it on.
   expect(whereOn("hello")).toEqual({ everywhere: false, projects: [] })
@@ -97,7 +97,7 @@ test("installs from a git repo and updates to its newest commit", async () => {
 }, 60_000)
 
 test("keeps nothing of a package that is not a plugin, needs another API, or takes a name in use", async () => {
-  const plain = realpathSync(tempFolder("plain"))
+  const plain = tempFolder("plain")
   writeFileSync(join(plain, "package.json"), JSON.stringify({ name: "not-a-plugin", version: "1.0.0" }))
   await expect(addPlugin(plain)).rejects.toThrow("has no comet field")
   await expect(addPlugin(pluginPackage("unranged", "1.0.0", { name: "unranged" }))).rejects.toThrow("has no api range")
@@ -163,4 +163,13 @@ test("tells a running Comet when a plugin is installed, updated, turned on, link
   linkPlugin(pluginPackage("linked", "1.0.0"))
   await settled(5)
   stop()
+}, 60_000)
+
+test("names the plugin whose source folder is gone, which stops every install", async () => {
+  const gone = pluginPackage("gone", "1.0.0")
+  await addPlugin(gone)
+  rmSync(gone, { recursive: true })
+  await expect(addPlugin(pluginPackage("next", "1.0.0"))).rejects.toThrow("The folder gone was installed from is gone")
+  await removePlugin("gone")
+  expect(await addPlugin(pluginPackage("next", "1.0.0"))).toMatchObject({ name: "next" })
 }, 60_000)

@@ -235,8 +235,26 @@ export const CORE_MESSAGES = [
   {
     type: "plugins",
     plugins: [
-      { name: "reviews", kind: "installed", source: "github:someone/comet-plugin-reviews", title: "PR Reviews", version: "1.2.0", description: "Pull requests that wait for your review", everywhere: false, projects: ["/Users/me/code/web"] },
-      { name: "support", kind: "local", everywhere: true, projects: [], error: "support needs Comet's plugin API ^2.0.0, and this Comet has 0.2.0. Update Comet or the plugin." },
+      {
+        name: "reviews",
+        kind: "installed",
+        source: "github:someone/comet-plugin-reviews",
+        title: "PR Reviews",
+        version: "1.2.0",
+        description: "Pull requests that wait for your review",
+        everywhere: false,
+        projects: ["/Users/me/code/web"],
+        settings: [
+          { key: "repo", title: "Repository", type: "string", required: true, description: "owner/name on GitHub." },
+          { key: "base", title: "Base branch", type: "string", default: "develop" },
+          { key: "notes", title: "Notes", type: "text" },
+          { key: "drafts", title: "Show drafts", type: "boolean", default: false },
+          { key: "sort", title: "Sort", type: "select", options: ["updated", "created"], default: "updated" },
+        ],
+        values: { base: "develop", drafts: false, sort: "updated" },
+        missing: ["repo"],
+      },
+      { name: "support", kind: "local", everywhere: true, projects: [], settings: [], values: {}, missing: [], error: "support needs Comet's plugin API ^2.0.0, and this Comet has 0.2.0. Update Comet or the plugin." },
     ],
   },
 ] satisfies CoreMessage[]
@@ -311,4 +329,5 @@ export const CLIENT_MESSAGES = [
   { type: "plugin.remove", name: "reviews" },
   { type: "plugins.update", names: ["reviews"] },
   { type: "plugin.toggle", name: "reviews", on: true, project: "/Users/me/code/web" },
+  { type: "plugin.setting", name: "reviews", key: "repo", value: "chatwoot/chatwoot" },
 ] satisfies ClientMessage[]

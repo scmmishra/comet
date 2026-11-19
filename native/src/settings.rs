@@ -178,7 +178,7 @@ pub fn screen(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> El {
     let content = match page {
         "appearance" => appearance(s, k, layer),
         "projects" => projects(s, k, layer),
-        "plugins" => plugins(s, k),
+        "plugins" => plugins(s, k, layer),
         _ => providers(s, k, layer),
     };
     // `.settings-panel` keeps 4 points each side for the lists' shadows. Each page is its own element:
@@ -559,7 +559,7 @@ fn projects(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> El {
 
 /// Plugins: a field to install one, then a section per plugin with where it is on, and buttons to update
 /// or remove it. It lists the projects open in tabs, and any other the plugin is on in.
-fn plugins(s: &Comet, k: &Kit) -> El {
+fn plugins(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> El {
     let busy = s.settings.plugin_busy.is_some();
     let install = crate::theme::small_button("Install").variant(ButtonVariant::Contrast).disabled(busy).on_press(|s: &mut Comet| s.install_plugin()).build(k);
     let source = field(s, k, PLUGIN_SOURCE.into(), String::new(), "github:owner/repo", "Plugin source", |s, _| s.install_plugin());
@@ -579,7 +579,7 @@ fn plugins(s: &Comet, k: &Kit) -> El {
     match &s.settings.plugins {
         None => sections.push(text("Reading the plugins…").font(crate::theme::text(13.0)).color(k.c.text_faint)),
         Some(listed) if listed.is_empty() => sections.push(text("No plugins yet.").font(crate::theme::text(13.0)).color(k.c.text_faint)),
-        Some(listed) => sections.extend(listed.iter().map(|plugin| plugin_section(s, plugin, busy, k))),
+        Some(listed) => sections.extend(listed.iter().map(|plugin| plugin_section(s, plugin, busy, k, layer))),
     }
     col()
         .w_full()
@@ -587,8 +587,9 @@ fn plugins(s: &Comet, k: &Kit) -> El {
         .child(body(sections))
 }
 
-/// One plugin: its title, version and source, then a switch for everywhere and for each project, then its buttons.
-fn plugin_section(s: &Comet, plugin: &PluginListing, busy: bool, k: &Kit) -> El {
+/// One plugin: its title, version and source, then its settings, a switch for everywhere and for each project,
+/// then its buttons.
+fn plugin_section(s: &Comet, plugin: &PluginListing, busy: bool, k: &Kit, layer: &mut Vec<El>) -> El {
     let name = plugin.name.clone();
     let switch = |label: String, on: bool, project: Option<String>| {
         let name = name.clone();
@@ -607,6 +608,7 @@ fn plugin_section(s: &Comet, plugin: &PluginListing, busy: bool, k: &Kit) -> El 
     if let Some(error) = &plugin.error {
         rows.push(setting(k, title(k, "Cannot run"), Some(error.clone()), None));
     }
+    rows.extend(plugin.settings.iter().map(|wanted| plugin_setting(s, plugin, wanted, busy, k, layer)));
     rows.push(setting(k, title(k, "Everywhere"), Some("On in every project.".into()), Some(switch(format!("{} everywhere", plugin.name), plugin.everywhere, None))));
     let mut dirs: Vec<String> = Vec::new();
     for dir in s.workspace.tabs.iter().map(|t| &t.project).chain(&plugin.projects) {
@@ -656,12 +658,68 @@ fn plugin_section(s: &Comet, plugin: &PluginListing, busy: bool, k: &Kit) -> El 
                 .grow(1.0)
                 .min_w(0.0)
                 .gap(4.0)
-                .child(text(named.trim().to_owned()).font(crate::theme::medium(13.0)).color(k.c.text_base))
+                .child(
+                    row()
+                        .gap(8.0)
+                        .items_center()
+                        .child(text(named.trim().to_owned()).font(crate::theme::medium(13.0)).color(k.c.text_base))
+                        .children((!plugin.missing.is_empty()).then(|| Badge::new("Needs setup").variant(BadgeVariant::Accent).build(k))),
+                )
                 .children(plugin.description.clone().map(|d| text(d).font(crate::theme::text(13.0)).color(k.c.text_muted).wrap()))
                 .child(text(from).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate().min_w(0.0)),
         )
         .children(actions);
     section_with(heading, list(k, rows))
+}
+
+/// One of a plugin's settings, with the control its type takes: a field for text, which Enter saves, or ⌘Enter
+/// for several lines, a switch, or a select. Each saves as it changes.
+fn plugin_setting(s: &Comet, plugin: &PluginListing, wanted: &crate::protocol::PluginSetting, busy: bool, k: &Kit, layer: &mut Vec<El>) -> El {
+    let (name, key) = (plugin.name.clone(), wanted.key.clone());
+    let value = plugin.values.get(&wanted.key);
+    let save = move |s: &mut Comet, value: serde_json::Value| {
+        let message = ClientMessage::PluginSetting { name: name.clone(), key: key.clone(), value };
+        s.manage_plugins("Saving…", message);
+    };
+    let label = if wanted.required { format!("{} (required)", wanted.title) } else { wanted.title.clone() };
+    let missing = plugin.missing.contains(&wanted.key);
+    let heading = text(label.clone()).font(crate::theme::medium(13.0)).color(if missing { k.c.text_accent } else { k.c.text_base });
+    let draft = format!("plugin-setting:{}:{}", plugin.name, wanted.key);
+    let shown = value.and_then(|v| v.as_str()).unwrap_or_default().to_owned();
+    match wanted.kind.as_str() {
+        "boolean" => {
+            let on = value.and_then(|v| v.as_bool()).unwrap_or(false);
+            let control = Switch::new(on).web().label(label).hide_label().disabled(busy).on_toggle(move |s: &mut Comet| save(s, (!on).into())).build(k);
+            setting(k, heading, wanted.description.clone(), Some(control))
+        }
+        "select" => {
+            let options: Vec<(String, String)> = wanted.options.iter().map(|o| (o.clone(), o.clone())).collect();
+            let control = select(s, k, layer, &draft, &options, &shown, move |s: &mut Comet, picked: &str| save(s, picked.into()));
+            setting(k, heading, wanted.description.clone(), Some(control))
+        }
+        "text" => {
+            let edit = s.settings.fields.get(&draft).cloned().unwrap_or_else(|| TextEdit::new(shown.clone()));
+            let (edit_key, submit_key) = (draft.clone(), draft.clone());
+            let area = rune_kit::TextArea::new(&edit)
+                .label(label)
+                .width(None)
+                .auto_grow(3, 10)
+                .disabled(busy)
+                .on_edit(move |s: &mut Comet| s.settings.fields.entry(edit_key.clone()).or_insert_with(|| TextEdit::new(shown.clone())))
+                .on_submit(move |s: &mut Comet, _| {
+                    let typed = s.settings.fields.get(&submit_key).map(|e| e.text.trim().to_owned()).unwrap_or_default();
+                    save(s, typed.into());
+                })
+                .build(k);
+            let description = [wanted.description.as_deref(), Some("⌘Enter saves.")].into_iter().flatten().collect::<Vec<_>>().join(" ");
+            col().w_full().gap(10.0).py(18.0).child(setting(k, heading, Some(description), None).py(0.0)).child(area)
+        }
+        _ => {
+            let control = field(s, k, draft, shown, "", &label, move |s, typed| save(s, typed.into()));
+            let description = [wanted.description.as_deref(), Some("Enter saves.")].into_iter().flatten().collect::<Vec<_>>().join(" ");
+            setting(k, heading, Some(description), Some(control))
+        }
+    }
 }
 
 /// The project's logo-like images to choose its icon from. It asks the

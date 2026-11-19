@@ -4,6 +4,8 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- Settings → Plugins shows each plugin's settings and saves them, and marks a plugin that needs setup.
+- When a plugin's source folder is gone, the error names the plugin and says to remove it. Before, every install failed with Bun's error about a missing folder.
 - `comet plugin add` asks for a plugin's settings in a terminal, and `comet plugin set` lists and sets them.
 - Installing a plugin from a folder reached through a link, such as one in /tmp, no longer breaks the next install.
 - A plugin can list settings in its manifest and read them with `comet.settings.get`. A change reaches the running plugin without a reload. The plugin API is now 0.2.0, so a plugin built for 0.1.0 must allow 0.2.0.
