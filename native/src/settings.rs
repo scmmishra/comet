@@ -508,13 +508,24 @@ fn appearance(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> El {
     col().w_full().child(header(k, "Appearance", "How Comet looks. Changes apply at once.")).child(body(vec![mode, themes, list(k, rows)]))
 }
 
-fn projects(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> El {
+/// The projects the Projects page lists: those open in tabs, then the recent ones, then any other with saved
+/// settings, so a project given a name, colour or icon stays on the page. A worktree's tab lists its repo's
+/// main checkout, which is where its settings are kept.
+fn listed_projects(s: &Comet) -> Vec<String> {
+    let mut saved: Vec<&String> = s.account.settings.as_ref().map(|settings| settings.projects.keys().collect()).unwrap_or_default();
+    saved.sort();
+    let open = s.workspace.tabs.iter().map(|tab| s.projects.home(&tab.project));
     let mut dirs: Vec<String> = Vec::new();
-    for tab in &s.workspace.tabs {
-        if !dirs.contains(&tab.project) {
-            dirs.push(tab.project.clone());
+    for dir in open.chain(s.workspace.recent.iter().map(String::as_str)).chain(saved.into_iter().map(String::as_str)) {
+        if !dirs.iter().any(|d| d == dir) {
+            dirs.push(dir.to_owned());
         }
     }
+    dirs
+}
+
+fn projects(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> El {
+    let dirs = listed_projects(s);
     let sections = dirs.iter().map(|dir| {
         let settings = s.project_settings(dir);
         let save_dir = dir.clone();
@@ -554,7 +565,7 @@ fn projects(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> El {
             ]),
         )
     });
-    col().w_full().child(header(k, "Projects", "How each project open in a tab shows in tabs and menus.")).child(body(sections.collect()))
+    col().w_full().child(header(k, "Projects", "How each project shows in tabs and menus.")).child(body(sections.collect()))
 }
 
 /// Plugins: a field to install one, then a section per plugin with where it is on, and buttons to update

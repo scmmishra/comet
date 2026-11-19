@@ -52,9 +52,10 @@ fn settings(s: &mut Comet) {
     s.open_settings("providers");
 }
 
-/// Settings on Projects.
+/// Settings on Projects, with a recent project that no tab has open.
 fn settings_projects(s: &mut Comet) {
     settings(s);
+    s.receive(Event::Message(serde_json::from_value(serde_json::json!({ "type": "recent", "projects": ["/Users/me/code/web", "/Users/me/code/api"] })).expect("the recent folders decode"))).expect("recent folders need no tab");
     s.open_settings("projects");
 }
 

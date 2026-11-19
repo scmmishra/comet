@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- Settings → Projects lists recent projects and any project with a saved name, colour or icon, as well as those open in tabs. A worktree's tab lists its repo. Before, it listed only the projects open in tabs.
 - Settings → Plugins shows Update only when a plugin has a newer version or commit to take, and names it. A plugin from npm shows its package as its source. Before, it showed its version range.
 - Settings → Plugins sets where a plugin runs with one choice, Everywhere or Some projects, and lists projects one line each, with their mark. Before, each project took a tall row of its own beside an Everywhere switch.
 - `comet plugin` takes a plugin's package name as well as its name, and says which plugins there are when a name matches none. It says when a source is installed already, and when a package is not on npm. It refuses an option a command does not take.
