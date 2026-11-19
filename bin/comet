@@ -1,7 +1,10 @@
 #!/bin/bash
-# Opens a folder in the installed Comet: `comet .` or `comet ~/code/repo`. It opens the link
-# comet://open?dir=<folder>, which the system hands to the running Comet, or to the one it starts.
-# `comet plugin …` manages plugins instead, with the core's CLI, and does not start Comet.
+# Opens Comet in a new tab:
+#   comet                  this folder, on the new session page
+#   comet ~/code/repo      that folder, when the one argument is a folder
+#   comet "What's up"      this folder, and sends the prompt on the default agent and model
+# It opens the link comet://open?dir=<folder>, which the system hands to the running Comet, or to the
+# one it starts. `comet plugin …` manages plugins instead, with the core's CLI, and does not start Comet.
 # `mise run install` installs Comet.
 set -euo pipefail
 app="/Applications/Comet.app"
@@ -13,8 +16,24 @@ if [ "${1:-}" = "plugin" ]; then
   # The app carries the core's source and the Bun that runs it, as `scripts/package.sh` lays them out.
   exec "$app/Contents/Resources/bun" "$app/Contents/Resources/core/core/src/cli.ts" "$@"
 fi
-folder="$(cd "${1:-.}" && pwd)"
+if [ $# -eq 1 ] && [ -d "$1" ]; then
+  folder="$(cd "$1" && pwd)"
+  prompt=""
+else
+  folder="$(pwd)"
+  prompt="$*"
+fi
 # Every byte but unreserved ones and slashes is escaped, so any folder name survives the link.
 escaped="$(printf '%s' "$folder" | perl -pe 's/([^A-Za-z0-9\/._~-])/sprintf("%%%02X", ord($1))/ge')"
+link="comet://open?dir=$escaped"
+if [ -n "$prompt" ]; then
+  # Any web page can open a Comet link, so the prompt goes in a file only this user can write, and the
+  # link names the file. Comet sends only a prompt it finds there (native/src/opening.rs).
+  launch="$HOME/.comet/launch"
+  mkdir -p "$launch"
+  id="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+  (umask 077 && printf '%s' "$prompt" > "$launch/$id.txt")
+  link="$link&prompt=$id"
+fi
 # -a names the installed app, so another Comet.app on the Mac, such as a build in dist, never takes the link.
-exec open -a "$app" "comet://open?dir=$escaped"
+exec open -a "$app" "$link"

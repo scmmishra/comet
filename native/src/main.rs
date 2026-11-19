@@ -126,7 +126,7 @@ fn main() {
         let mut comet = Comet::new(state.clone());
         // A Comet run from the repo opens the folder `COMET_DIR` names, as `COMET_DIR=<folder> mise run dev` does.
         if let Some(dir) = opening::folder_from_env() {
-            comet.workspace.open_asked(dir, &comet.account, &comet.core);
+            comet.workspace.open_asked(dir, None, &comet.account, &comet.core);
         }
         comet
     })

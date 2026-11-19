@@ -13,7 +13,7 @@ fn user_home() -> PathBuf {
 }
 
 /// Comet's folder, as the core finds it (`cometHome` in `core/src/data-files.ts`).
-fn comet_home() -> PathBuf {
+pub fn comet_home() -> PathBuf {
     match std::env::var_os("COMET_HOME") {
         Some(home) => home.into(),
         None => user_home().join(".comet"),

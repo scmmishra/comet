@@ -225,17 +225,28 @@ impl Comet {
         if text.is_empty() && images.is_empty() {
             return;
         }
-        if !text.is_empty() && self.workspace.active_tab().is_some_and(crate::workspace::is_untitled) {
-            self.workspace.name_tab(&tab, &text, &self.core);
+        self.send_typed(&tab, text, images, alternate);
+        self.drafts.edit(&tab).clear();
+    }
+
+    /// Sends what was typed for a tab, as Enter does: a tab with no name takes it from the message, and a
+    /// tab that starts in a new worktree sends once the core has made it.
+    fn send_typed(&mut self, tab: &str, text: String, images: Vec<crate::protocol::ImageAttachment>, alternate: bool) {
+        if !text.is_empty() && self.workspace.tabs.iter().any(|t| t.id == tab && crate::workspace::is_untitled(t)) {
+            self.workspace.name_tab(tab, &text, &self.core);
         }
-        // A tab that starts in a new worktree sends its first message once the core has made it.
-        if self.makes_worktree(&tab) {
-            self.create_worktree(&tab, text, images);
-            self.drafts.edit(&tab).clear();
+        if self.makes_worktree(tab) {
+            self.create_worktree(tab, text, images);
             return;
         }
-        self.send_message(&tab, text, images, alternate);
-        self.drafts.edit(&tab).clear();
+        self.send_message(tab, text, images, alternate);
+    }
+
+    /// Sends the prompts `comet "<prompt>"` asked for, each in the tab opened for it.
+    pub fn send_asked_prompts(&mut self) {
+        for (tab, prompt) in self.workspace.take_asked_prompts() {
+            self.send_typed(&tab, prompt, Vec::new(), false);
+        }
     }
 
     /// Sends a message in a tab's thread, as the composer does and as a press of a visual's action does.
@@ -909,6 +920,19 @@ mod tests {
 
     fn type_text(s: &mut Comet, words: &str) {
         s.drafts.edit("t").text = words.into();
+    }
+
+    #[test]
+    fn a_prompt_asked_for_before_the_tabs_are_back_starts_its_own_thread_once_they_are() {
+        let mut s = Comet::default();
+        s.workspace.open_asked("/code/chatwoot".into(), Some("What's up".into()), &s.account, &s.core);
+        let tab = TabInfo { id: "t".into(), title: "Saved".into(), project: "/code/x".into(), terminals: vec![], agent: "claude".into(), model: "default".into(), effort: None, fast: None, permission_mode: "auto".into(), files: vec![], panel_active: None, review_scope: None, panel_open: None, rest: Map::new() };
+        s.receive(Event::Message(CoreMessage::Tabs { tabs: vec![tab], active: Some("t".into()) })).unwrap();
+        let opened = s.workspace.active_tab().unwrap();
+        assert_eq!((opened.project.as_str(), opened.title.as_str()), ("/code/chatwoot", "What's up"));
+        let sends: Vec<_> = s.core.sent().into_iter().filter(|m| m["type"] == "session.send").collect();
+        assert_eq!(sends.len(), 1);
+        assert_eq!((sends[0]["tabId"].as_str(), sends[0]["text"].as_str()), (Some(opened.id.as_str()), Some("What's up")));
     }
 
     #[test]

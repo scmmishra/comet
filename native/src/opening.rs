@@ -2,6 +2,10 @@
 //! link `comet://open?dir=<folder>`, which the system hands to the running Comet, or to the one it starts. A
 //! Comet run from the repo takes it from `COMET_DIR` at launch. `comet://plugin/install?source=<source>`
 //! asks Comet to install a plugin, which waits for the user to agree.
+//!
+//! `comet "<prompt>"` also opens `comet://open?dir=<folder>&prompt=<id>`. Any web page can open a Comet link,
+//! so the link does not carry the prompt: `bin/comet` writes it to `~/.comet/launch/<id>.txt`, which a web
+//! page cannot, and Comet sends only a prompt it finds there.
 
 use std::path::Path;
 
@@ -16,6 +20,25 @@ pub fn folder_from_url(url: &str) -> Option<String> {
     let query = url.strip_prefix(OPEN)?;
     let dir = query.split('&').find_map(|pair| pair.strip_prefix("dir="))?;
     folder(&percent_decoded(dir)?)
+}
+
+/// The prompt `bin/comet` left for a `comet://open?dir=<folder>&prompt=<id>` link, read once: the file
+/// goes as it is read. None when the link names no prompt, or a file that is not there.
+pub fn prompt_from_url(url: &str) -> Option<String> {
+    let id = url.strip_prefix(OPEN)?.split('&').find_map(|pair| pair.strip_prefix("prompt="))?;
+    prompt_in(&crate::instance::comet_home().join("launch"), id)
+}
+
+fn prompt_in(folder: &Path, id: &str) -> Option<String> {
+    // The id names a file in the launch folder and nothing else.
+    if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return None;
+    }
+    let file = folder.join(format!("{id}.txt"));
+    let prompt = std::fs::read_to_string(&file).ok()?;
+    let _ = std::fs::remove_file(&file);
+    let prompt = prompt.trim();
+    (!prompt.is_empty()).then(|| prompt.to_owned())
 }
 
 /// The plugin source a `comet://plugin/install?source=` link names: one line of text. The link comes from
@@ -80,5 +103,19 @@ mod tests {
         for url in ["comet://plugin/install?source=", "comet://plugin/install?source=a%0Ab", "comet://plugin/install?name=x", "comet://open?source=x", "https://plugin/install?source=x"] {
             assert_eq!(plugin_source_from_url(url), None, "{url}");
         }
+    }
+
+    #[test]
+    fn a_prompt_comes_once_from_the_launch_folder_and_only_by_a_plain_id() {
+        let folder = std::env::temp_dir().join(format!("comet-launch-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join("abc-123.txt"), "What's up\n").unwrap();
+        std::fs::write(folder.join("secret.txt"), "nope").unwrap();
+        assert_eq!(prompt_in(&folder, "abc-123").as_deref(), Some("What's up"));
+        assert_eq!(prompt_in(&folder, "abc-123"), None, "a prompt is read once");
+        for id in ["", "../launch/secret", "secret.txt", "a/b"] {
+            assert_eq!(prompt_in(&folder, id), None, "{id}");
+        }
+        std::fs::remove_dir_all(&folder).unwrap();
     }
 }

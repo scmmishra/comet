@@ -128,6 +128,7 @@ impl Comet {
             CoreMessage::Tabs { tabs, active } => {
                 result = w.restore(tabs, active, account, core);
                 self.reload_layouts();
+                self.send_asked_prompts();
             }
             CoreMessage::TabReopened { tab, index } => w.reopened(tab, index, core),
             CoreMessage::TabTitle { tab_id, title } => w.name_tab(&tab_id, &title, core),
@@ -387,15 +388,18 @@ fn copied_poll(s: &mut Comet, tx: &mut Tx) -> bool {
     false
 }
 
-/// A Comet link. `comet://open?dir=`, as `bin/comet` opens it, opens the folder in a new tab.
-/// `comet://plugin/install?source=` opens Plugins with the source filled in.
+/// A Comet link. `comet://open?dir=`, as `bin/comet` opens it, opens the folder in a new tab, and sends
+/// the prompt `bin/comet` left for it, if any. `comet://plugin/install?source=` opens Plugins with the
+/// source filled in.
 pub fn open_url(s: &mut Comet, url: &str, _: &mut Tx) {
     if let Some(source) = crate::opening::plugin_source_from_url(url) {
         s.ask_install(source);
         return;
     }
     let Some(dir) = crate::opening::folder_from_url(url) else { return };
-    s.workspace.open_asked(dir, &s.account, &s.core);
+    let prompt = crate::opening::prompt_from_url(url);
+    s.workspace.open_asked(dir, prompt, &s.account, &s.core);
+    s.send_asked_prompts();
     s.sync_start();
 }
 
