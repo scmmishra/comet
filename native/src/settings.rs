@@ -508,9 +508,9 @@ fn appearance(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> El {
     col().w_full().child(header(k, "Appearance", "How Comet looks. Changes apply at once.")).child(body(vec![mode, themes, list(k, rows)]))
 }
 
-/// The projects the Projects page lists: those open in tabs, then the recent ones, then any other with saved
-/// settings, so a project given a name, colour or icon stays on the page. A worktree's tab lists its repo's
-/// main checkout, which is where its settings are kept.
+/// The projects Settings lists: those open in tabs, then the recent ones, then any other with saved settings,
+/// so a project given a name, colour or icon stays listed. A worktree's tab lists its repo's main checkout,
+/// since a project's settings and plugins are set for the repo, not for one worktree.
 fn listed_projects(s: &Comet) -> Vec<String> {
     let mut saved: Vec<&String> = s.account.settings.as_ref().map(|settings| settings.projects.keys().collect()).unwrap_or_default();
     saved.sort();
@@ -569,7 +569,7 @@ fn projects(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> El {
 }
 
 /// Plugins: a field to install one, then a section per plugin with where it is on, and buttons to update
-/// or remove it. It lists the projects open in tabs, and any other the plugin is on in.
+/// or remove it. It lists the projects Settings lists, and any other the plugin is on in.
 fn plugins(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> El {
     let busy = s.settings.plugin_busy.is_some();
     let install = crate::theme::small_button("Install").variant(ButtonVariant::Contrast).disabled(busy).on_press(|s: &mut Comet| s.install_plugin()).build(k);
@@ -660,8 +660,8 @@ fn plugin_section(s: &Comet, plugin: &PluginListing, busy: bool, k: &Kit, layer:
 }
 
 /// Where a plugin runs: everywhere, or in the projects switched on. One choice picks between them. Projects show
-/// only for the second, one line each, since everywhere makes them moot. They are the projects open in tabs, and any
-/// other the plugin is on in.
+/// only for the second, one line each, since everywhere makes them moot. They are the projects Settings lists, and any
+/// other the plugin is on in, so it can be switched off there.
 fn runs_in(s: &Comet, plugin: &PluginListing, busy: bool, k: &Kit) -> El {
     let toggle = |name: String, on: bool, project: Option<String>| {
         move |s: &mut Comet| {
@@ -688,13 +688,13 @@ fn runs_in(s: &Comet, plugin: &PluginListing, busy: bool, k: &Kit) -> El {
     if everywhere {
         return head;
     }
-    let mut dirs: Vec<&String> = Vec::new();
-    for dir in s.workspace.tabs.iter().map(|t| &t.project).chain(&plugin.projects) {
-        if !dirs.contains(&dir) {
-            dirs.push(dir);
+    let mut dirs = listed_projects(s);
+    for dir in &plugin.projects {
+        if !dirs.contains(dir) {
+            dirs.push(dir.clone());
         }
     }
-    let lines = dirs.into_iter().map(|dir| {
+    let lines = dirs.iter().map(|dir| {
         let (on, label) = (plugin.projects.contains(dir), s.account.project_label(dir));
         let switch = Switch::new(on).web().label(format!("{} in {label}", plugin.name)).hide_label().disabled(busy).on_toggle(toggle(plugin.name.clone(), !on, Some(dir.clone()))).build(k);
         row()
@@ -710,7 +710,7 @@ fn runs_in(s: &Comet, plugin: &PluginListing, busy: bool, k: &Kit) -> El {
             .child(switch)
     });
     let lines: Vec<El> = lines.collect();
-    let empty = lines.is_empty().then(|| text("Open a project in a tab to turn the plugin on there.").font(crate::theme::text(13.0)).color(k.c.text_faint));
+    let empty = lines.is_empty().then(|| text("Open a project to turn the plugin on there.").font(crate::theme::text(13.0)).color(k.c.text_faint));
     col().w_full().pb(14.0).child(head.pb(8.0)).children(lines).children(empty)
 }
 
