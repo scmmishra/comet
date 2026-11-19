@@ -56,6 +56,20 @@ A plugin to share has a `package.json` with a `comet` field. A plugin folder mad
 - `api` is the range of Comet's plugin API the plugin works with. The API's version is `@comet/plugin`'s. It is not a peer dependency, because `@comet/plugin` is not on npm.
 - A plugin whose manifest names another plugin, or needs an API this Comet lacks, does not start. The user is told why.
 
+## Installing
+
+Comet installs a shared plugin with Bun, so a source can be an npm name, `github:owner/repo`, a git URL, a tarball or a folder.
+
+- Installed packages live in `~/.comet/packages`, with its own `package.json` and lockfile. Each installed plugin's folder in `~/.comet/plugins` links to its package, so Comet finds every plugin the same way.
+- A linked plugin's folder links to a folder elsewhere, such as one its author works in. Edits there apply on the next reload.
+- Any other folder in `~/.comet/plugins` was made by hand. Comet never changes or removes it.
+- Installing runs no package scripts. It does not turn the plugin on anywhere. The user does that.
+- A package with no manifest, no `api` range, an API this Comet lacks, or a name already taken is not kept.
+- An update takes the newest version the source allows: within the saved range for an npm package, the newest commit for a git source, and the folder as it is now for a folder. If an updated plugin changed its name or needs an API this Comet lacks, every package goes back to what it was. A folder has no earlier version, so that one stays as it is.
+- Removing a plugin turns it off everywhere. A linked folder stays where it is.
+- A running Comet reloads its plugins when an entry in `~/.comet/plugins` comes or goes, or the packages' lockfile changes.
+- Bun may install a folder's files as hard links. Use a link, not an install, for a plugin you are editing.
+
 ## What shows
 
 | Contribution | Shows when |

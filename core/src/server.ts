@@ -9,6 +9,7 @@ import { errorMessage } from "./errors"
 import { findNamedFile, openableFile, openInEditor, readForView } from "./files"
 import { checkImages } from "./images"
 import { startPlugins } from "./plugins"
+import { watchInstalls } from "./plugins/watch"
 import { searchFiles } from "./project-files"
 import { findIconFiles, iconFile } from "./project-icons"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
@@ -58,6 +59,8 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
   })
   const ui = startPlugins({ broadcast, openThread: (tabId, thread) => void window.openKey(tabId, thread).catch(report), store: window, report })
   const { plugins, layouts } = ui
+  // A plugin installed or removed while Comet runs, such as with `comet plugin`, takes effect at once.
+  const stopWatching = watchInstalls(() => void ui.reload().catch(report))
   // Each project's commands, made the first time the project is named. They run as long as the core.
   const commands = new Map<string, Commands>()
   const commandsOf = (dir: string) => {
@@ -258,6 +261,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     stop() {
       window.stop()
       agents.close()
+      stopWatching()
       plugins.stop()
       for (const found of commands.values()) found.stopAll()
       server.stop(true)
