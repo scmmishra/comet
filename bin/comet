@@ -1,14 +1,19 @@
 #!/bin/bash
 # Opens a folder in the installed Comet: `comet .` or `comet ~/code/repo`. It opens the link
 # comet://open?dir=<folder>, which the system hands to the running Comet, or to the one it starts.
+# `comet plugin …` manages plugins instead, with the core's CLI, and does not start Comet.
 # `mise run install` installs Comet.
 set -euo pipefail
-folder="$(cd "${1:-.}" && pwd)"
 app="/Applications/Comet.app"
 if [ ! -d "$app" ]; then
   echo "Comet is not installed. Run \`mise run install\` in the Comet repo." >&2
   exit 1
 fi
+if [ "${1:-}" = "plugin" ]; then
+  # The app carries the core's source and the Bun that runs it, as `scripts/package.sh` lays them out.
+  exec "$app/Contents/Resources/bun" "$app/Contents/Resources/core/core/src/cli.ts" "$@"
+fi
+folder="$(cd "${1:-.}" && pwd)"
 # Every byte but unreserved ones and slashes is escaped, so any folder name survives the link.
 escaped="$(printf '%s' "$folder" | perl -pe 's/([^A-Za-z0-9\/._~-])/sprintf("%%%02X", ord($1))/ge')"
 # -a names the installed app, so another Comet.app on the Mac, such as a build in dist, never takes the link.

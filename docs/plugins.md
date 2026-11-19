@@ -70,6 +70,23 @@ Comet installs a shared plugin with Bun, so a source can be an npm name, `github
 - A running Comet reloads its plugins when an entry in `~/.comet/plugins` comes or goes, or the packages' lockfile changes.
 - Bun may install a folder's files as hard links. Use a link, not an install, for a plugin you are editing.
 
+### From the terminal
+
+`comet plugin` manages plugins. It works on the files in `~/.comet` and never starts Comet. A running Comet sees the change and reloads its plugins.
+
+```sh
+comet plugin add github:someone/comet-plugin-reviews   # or an npm name, a git URL, a tarball or a folder
+comet plugin on reviews                                 # in this folder's project
+comet plugin on reviews --everywhere
+comet plugin off reviews --project ~/code/web
+comet plugin update                                     # every installed plugin, or those named
+comet plugin list
+comet plugin link .                                     # a plugin you work on
+comet plugin remove reviews
+```
+
+`on` and `off` name the folder the command runs in, as `comet .` opens it.
+
 ## What shows
 
 | Contribution | Shows when |
