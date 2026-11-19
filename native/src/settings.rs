@@ -601,8 +601,9 @@ fn plugin_section(s: &Comet, plugin: &PluginListing, busy: bool, k: &Kit, layer:
         kind => Some(
             row()
                 .gap(8.0)
-                .children((kind == PluginKind::Installed).then(|| {
-                    crate::theme::small_button("Update")
+                // Update shows only when there is something newer to take.
+                .children(plugin.update.as_ref().filter(|_| kind == PluginKind::Installed).map(|newer| {
+                    crate::theme::small_button(&format!("Update to {newer}"))
                         .variant(ButtonVariant::Ghost)
                         .disabled(busy)
                         .on_press(move |s: &mut Comet| s.manage_plugins(&format!("Updating {update}…"), ClientMessage::PluginsUpdate { names: Some(vec![update.clone()]) }))

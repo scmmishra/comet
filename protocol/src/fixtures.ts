@@ -241,6 +241,7 @@ export const CORE_MESSAGES = [
         source: "github:someone/comet-plugin-reviews",
         title: "PR Reviews",
         version: "1.2.0",
+        update: "1.3.0",
         description: "Pull requests that wait for your review",
         everywhere: false,
         projects: ["/Users/me/code/web"],

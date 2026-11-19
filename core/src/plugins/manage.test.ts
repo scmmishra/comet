@@ -2,7 +2,7 @@ import { beforeEach, expect, test } from "bun:test"
 import type { CoreMessage } from "@comet/protocol"
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { tempFolder, useTempHome } from "../test-support"
+import { tempFolder, until, useTempHome } from "../test-support"
 import { pluginManager } from "./manage"
 
 // Each test gets a home of its own, so one that fails leaves nothing installed for the next.
@@ -52,4 +52,27 @@ test("saves a setting quietly, and lists it with the plugin, or says why it coul
   expect(listed()).toMatchObject({ values: { repo: "chatwoot/chatwoot" }, missing: [] })
   await manager.setting("prs", "repo", "a\nb")
   expect(sent.at(-2)).toEqual({ type: "error", message: "Comet could not save repo for prs", detail: "Repository must be a value that is one line." })
+}, 60_000)
+
+test("answers a list at once, then sends it again when a check finds an update", async () => {
+  const folder = join(tempFolder("source"), "gitty")
+  mkdirSync(folder)
+  writeFileSync(join(folder, "package.json"), JSON.stringify({ name: "comet-plugin-gitty", version: "1.0.0", comet: { name: "gitty", api: "^0.2.0" } }))
+  writeFileSync(join(folder, "index.tsx"), "export default 1\n")
+  const git = (...args: string[]) => Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: folder, stdout: "ignore", stderr: "ignore" })
+  git("init", "-q", "-b", "main")
+  git("add", "-A")
+  git("commit", "-qm", "one")
+  const broadcast: CoreMessage[] = []
+  const manager = pluginManager((message) => broadcast.push(message))
+  await manager.add(`git+file://${folder}`)
+  writeFileSync(join(folder, "index.tsx"), "export default 2\n")
+  git("commit", "-qam", "two")
+
+  const replied: CoreMessage[] = []
+  broadcast.length = 0
+  manager.list((message) => replied.push(message))
+  expect((replied[0] as Extract<CoreMessage, { type: "plugins" }>).plugins[0]!.update).toBeUndefined()
+  await until(() => broadcast.length > 0)
+  expect((broadcast[0] as Extract<CoreMessage, { type: "plugins" }>).plugins[0]!.update).toMatch(/^[0-9a-f]{7}$/)
 }, 60_000)

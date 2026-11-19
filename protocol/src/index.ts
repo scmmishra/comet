@@ -1051,6 +1051,8 @@ export interface PluginListing {
   readonly description?: string
   /** Why it cannot run, such as an API this Comet lacks. */
   readonly error?: string
+  /** What Update would take, when it is newer: a version, or a commit for a git source. */
+  readonly update?: string
   readonly everywhere: boolean
   /** The project folders it is on in. */
   readonly projects: readonly string[]

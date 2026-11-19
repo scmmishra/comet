@@ -94,7 +94,7 @@ Comet installs a shared plugin with Bun, so a source can be an npm name, `github
 
 ### From Settings
 
-Settings → Plugins lists every plugin in `~/.comet/plugins`: its title, version and source, and why it cannot run if it cannot. It installs from a source the user types. Each plugin shows its settings, a switch for everywhere and one for each project open in a tab, and an installed or linked plugin has Update and Remove. A plugin missing a required setting says it needs setup. Text saves on Enter, several lines on ⌘Enter, and a switch or a select as it changes.
+Settings → Plugins lists every plugin in `~/.comet/plugins`: its title, version and source, and why it cannot run if it cannot. It installs from a source the user types. Each plugin shows its settings, a switch for everywhere and one for each project open in a tab, and an installed or linked plugin has Update and Remove. A plugin missing a required setting says it needs setup. Update shows only when there is something newer to take, and names it. The page shows the plugins at once, then checks each installed plugin and shows any update when the check is done: the newest version within its saved range for a package on a registry, the newest commit for a git source, the folder's version for a folder. A check holds for 10 minutes. Text saves on Enter, several lines on ⌘Enter, and a switch or a select as it changes.
 
 A page can offer a link to install its plugin:
 

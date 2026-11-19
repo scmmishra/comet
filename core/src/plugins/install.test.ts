@@ -3,7 +3,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSyn
 import { join } from "node:path"
 import { tempFolder, until, useTempHome } from "../test-support"
 import { pluginsOn, setPluginOn, whereOn } from "./config"
-import { addPlugin, linkPlugin, listPlugins, packagesFolder, removePlugin, updatePlugins } from "./install"
+import { addPlugin, availableUpdate, linkPlugin, listPlugins, packagesFolder, removePlugin, updatePlugins } from "./install"
 import { harness, installPlugin, turnOn } from "./test-plugins"
 import { watchInstalls } from "./watch"
 
@@ -176,4 +176,24 @@ test("names the plugin whose source folder is gone, which stops every install", 
 
 test("says a package npm does not know is not on npm", async () => {
   await expect(addPlugin("@comet-test-nobody/no-such-plugin-" + Date.now())).rejects.toThrow("is not on npm. Check its name")
+}, 60_000)
+
+test("finds the newer commit a git source has, and nothing once it is taken", async () => {
+  const repo = gitPackage("fresh")
+  const plugin = await addPlugin(repo.source)
+  expect(await availableUpdate(plugin)).toBeUndefined()
+  repo.commit("1.1.0")
+  const newer = await availableUpdate(listPlugins().find((found) => found.name === "fresh")!)
+  expect(newer).toMatch(/^[0-9a-f]{7}$/)
+  await updatePlugins(["fresh"])
+  expect(await availableUpdate(listPlugins().find((found) => found.name === "fresh")!)).toBeUndefined()
+}, 60_000)
+
+test("offers a folder's version when it differs from the installed one", async () => {
+  const source = pluginPackage("local", "1.0.0")
+  await addPlugin(source)
+  const installed = () => listPlugins().find((found) => found.name === "local")!
+  expect(await availableUpdate(installed())).toBeUndefined()
+  setVersion(source, "1.2.0")
+  expect(await availableUpdate(installed())).toBe("1.2.0")
 }, 60_000)

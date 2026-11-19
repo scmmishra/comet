@@ -80,7 +80,9 @@ function info(name: string): PluginInfo {
   const linked = lstatSync(folder).isSymbolicLink()
   const pkg = packageOf(name)
   const kind: PluginKind = pkg ? "installed" : linked ? "linked" : "local"
-  const source = pkg ? dependencies()[pkg] : linked ? resolve(pluginsFolder(), readlinkSync(folder)) : undefined
+  // A package from a registry is saved under its version range, such as ^0.2.0, so its name says where it came from.
+  const spec = pkg ? dependencies()[pkg] : undefined
+  const source = pkg ? (spec && isRange(spec) ? pkg : spec) : linked ? resolve(pluginsFolder(), readlinkSync(folder)) : undefined
   const found = { name, kind, ...(pkg ? { package: pkg } : {}), ...(source ? { source } : {}) }
   if (!existsSync(folder)) return { ...found, error: `${name} links to ${source}, which is gone.` }
   try {
@@ -197,6 +199,45 @@ export async function removePlugin(name: string, { purge = false } = {}) {
   if (pkg) await bun(["remove", pkg])
   forgetPlugin(name)
   if (purge) forgetPluginSettings(name)
+}
+
+/** Whether a saved source is a version range for a package on a registry, rather than a git URL, tarball or folder. */
+const isRange = (spec: string) => /^(?:[\^~]|[<>]=?|=)?\s*\d|^\*$|^latest$/.test(spec.trim())
+
+/**
+ * What Update would take for an installed plugin that is newer than what it has: a version for a package on a
+ * registry, the newest within its saved range, or a commit for a git source. A folder offers its version when it
+ * differs. Undefined when there is nothing newer, or when it cannot tell, such as offline.
+ */
+export async function availableUpdate(plugin: PluginInfo): Promise<string | undefined> {
+  const pkg = plugin.package
+  const spec = pkg && dependencies()[pkg]
+  const installed = plugin.manifest?.version
+  if (!pkg || !spec) return undefined
+  if (isRange(spec)) {
+    const run = spawn([process.execPath, "info", pkg, "versions", "--json"], { cwd: realpathSync(packagesFolder()), stdout: "pipe", stderr: "ignore" })
+    const [output, code] = await Promise.all([new Response(run.stdout).text(), run.exited])
+    if (code !== 0) return undefined
+    const fitting = (JSON.parse(output) as string[]).filter((version) => Bun.semver.satisfies(version, spec)).sort(Bun.semver.order)
+    const newest = fitting.at(-1)
+    return newest && installed && Bun.semver.order(newest, installed) > 0 ? newest : undefined
+  }
+  if (spec.startsWith("github:") || spec.startsWith("git+")) {
+    // The lockfile pins a git source to a commit, which `<package>@<source>#<commit>` names.
+    const lock = existsSync(join(packagesFolder(), "bun.lock")) ? readFileSync(join(packagesFolder(), "bun.lock"), "utf8") : ""
+    const pinned = lock.match(new RegExp(`"${pkg.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}@[^"#]*#([0-9a-f]+)"`))?.[1]
+    const [where, ref] = spec.split("#")
+    const url = where!.startsWith("github:") ? `https://github.com/${where!.slice("github:".length)}.git` : where!.slice("git+".length)
+    const run = spawn(["git", "ls-remote", url, ref ?? "HEAD"], { stdout: "pipe", stderr: "ignore" })
+    const [output, code] = await Promise.all([new Response(run.stdout).text(), run.exited])
+    const newest = code === 0 ? output.split(/\s/)[0] : undefined
+    return pinned && newest && !newest.startsWith(pinned) ? newest.slice(0, 7) : undefined
+  }
+  if (spec.startsWith("/")) {
+    const now = readManifest(spec)?.version
+    return now && now !== installed ? now : undefined
+  }
+  return undefined
 }
 
 /** One plugin's version before and after an update. */

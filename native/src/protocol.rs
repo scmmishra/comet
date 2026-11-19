@@ -240,6 +240,8 @@ pub struct PluginListing {
     pub description: Option<String>,
     /// Why it cannot run, such as an API this Comet lacks.
     pub error: Option<String>,
+    /// What Update would take, when it is newer: a version, or a commit for a git source.
+    pub update: Option<String>,
     pub everywhere: bool,
     /// The project folders it is on in.
     pub projects: Vec<String>,

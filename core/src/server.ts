@@ -10,7 +10,7 @@ import { findNamedFile, openableFile, openInEditor, readForView } from "./files"
 import { checkImages } from "./images"
 import { startPlugins } from "./plugins"
 import { watchInstalls, watchSettings } from "./plugins/watch"
-import { pluginListings, pluginManager } from "./plugins/manage"
+import { pluginManager } from "./plugins/manage"
 import { searchFiles } from "./project-files"
 import { findIconFiles, iconFile } from "./project-icons"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
@@ -205,7 +205,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       case "plugins.reload":
         return ui.reload()
       case "plugins.get":
-        return reply({ type: "plugins", plugins: pluginListings() })
+        return manager.list(reply)
       case "plugin.add":
         return manager.add(message.source)
       case "plugin.remove":

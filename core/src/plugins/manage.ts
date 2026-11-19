@@ -1,13 +1,19 @@
-import type { CoreMessage, PluginListing } from "@comet/protocol"
+import type { CoreMessage, PluginListing, PluginSettingValue } from "@comet/protocol"
 import { requireProjectFolder } from "../project-path"
 import { setPluginOn, whereOn } from "./config"
-import type { PluginSettingValue } from "@comet/protocol"
-import { addPlugin, listPlugins, removePlugin, updatePlugins } from "./install"
+import { addPlugin, availableUpdate, listPlugins, removePlugin, updatePlugins } from "./install"
 import { missingSettings, pluginSettingValues, savePluginSetting } from "./settings"
 
-/** Every plugin in `~/.comet/plugins`, with where each is on, as Settings lists them. */
-export function pluginListings(): PluginListing[] {
+/** How long a check for a plugin's update holds, so opening Settings again does not ask the registry each time. */
+const UPDATE_CHECK_MS = 10 * 60 * 1000
+
+/**
+ * Every plugin in `~/.comet/plugins`, with where each is on, as Settings lists them. `updates` holds what each
+ * plugin's last check found newer, by name.
+ */
+export function pluginListings(updates: ReadonlyMap<string, string | undefined> = new Map()): PluginListing[] {
   return listPlugins().map(({ name, kind, source, manifest, error }) => {
+    const update = updates.get(name)
     const settings = manifest?.settings ?? []
     const values = pluginSettingValues(name, settings)
     return {
@@ -18,6 +24,7 @@ export function pluginListings(): PluginListing[] {
     ...(manifest?.version ? { version: manifest.version } : {}),
     ...(manifest?.description ? { description: manifest.description } : {}),
     ...(error ? { error } : {}),
+    ...(update ? { update } : {}),
     ...whereOn(name),
     settings,
     values,
@@ -33,6 +40,22 @@ export function pluginListings(): PluginListing[] {
  */
 export function pluginManager(broadcast: (message: CoreMessage) => void) {
   let queue = Promise.resolve()
+  /** What each plugin's last update check found, and when it ran. A change to the plugin drops it. */
+  const checked = new Map<string, { update?: string; at: number }>()
+  const updates = () => new Map([...checked].map(([name, found]) => [name, found.update]))
+  const listing = (): CoreMessage => ({ type: "plugins", plugins: pluginListings(updates()) })
+  let checking: Promise<void> | undefined
+  /** Checks installed plugins whose last check is stale, and sends the plugins again if one found something new. */
+  const checkUpdates = () => {
+    checking ??= (async () => {
+      const stale = listPlugins().filter((plugin) => plugin.kind === "installed" && Date.now() - (checked.get(plugin.name)?.at ?? 0) > UPDATE_CHECK_MS)
+      const found = await Promise.all(stale.map(async (plugin) => [plugin.name, await availableUpdate(plugin).catch(() => undefined)] as const))
+      const changed = found.some(([name, update]) => checked.get(name)?.update !== update)
+      for (const [name, update] of found) checked.set(name, { ...(update ? { update } : {}), at: Date.now() })
+      if (changed) broadcast(listing())
+    })().finally(() => (checking = undefined))
+    return checking
+  }
   /** Runs `change`, then says what it did. A change with nothing to say, such as a saved setting, says nothing. */
   const run = (failure: string, change: () => Promise<string | undefined> | string | undefined) => {
     queue = queue.then(async () => {
@@ -42,20 +65,28 @@ export function pluginManager(broadcast: (message: CoreMessage) => void) {
       } catch (error) {
         broadcast({ type: "error", message: failure, detail: error instanceof Error ? error.message : String(error) })
       }
-      broadcast({ type: "plugins", plugins: pluginListings() })
+      broadcast(listing())
     })
     return queue
   }
   return {
+    /** Answers with the plugins at once, then checks for updates, which sends them again if one is new. */
+    list: (reply: (message: CoreMessage) => void) => {
+      reply(listing())
+      void checkUpdates()
+    },
     add: (source: string) => run(`Comet could not install ${source}`, async () => `Installed ${(await addPlugin(source)).name}.`),
     remove: (name: string) =>
       run(`Comet could not remove ${name}`, async () => {
         await removePlugin(name)
+        checked.delete(name)
         return `Removed ${name}.`
       }),
     update: (names?: readonly string[]) =>
       run("Comet could not update the plugins", async () => {
         const updated = await updatePlugins(names)
+        // What an update took is no longer newer, so those plugins are checked again on the next list.
+        for (const { name } of updated) checked.delete(name)
         const changed = updated.filter(({ from, to }) => from !== to)
         return changed.length ? `Updated ${changed.map(({ name, to }) => `${name} to ${to}`).join(", ")}.` : "The plugins are up to date."
       }),
