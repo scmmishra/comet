@@ -38,6 +38,24 @@ Plugins live only in `~/.comet/plugins`. A repo never holds plugins, so opening 
 - A plugin on in a project offers all its contributions there. A contribution has no scope of its own.
 - The file is read each time a project's plugins are read. A missing file turns every plugin off. A broken file turns every plugin off and is reported.
 
+## Manifest
+
+A plugin to share has a `package.json` with a `comet` field. A plugin folder made by hand needs none.
+
+```json
+{
+  "name": "comet-plugin-reviews",
+  "version": "1.0.0",
+  "description": "Pull requests that wait for your review",
+  "comet": { "name": "reviews", "title": "PR Reviews", "api": "^0.1.0" }
+}
+```
+
+- `name` is the plugin's name. It names the plugin's folder and starts its contributions' ids, so it must not change between versions.
+- `title` is what Settings and the CLI call it.
+- `api` is the range of Comet's plugin API the plugin works with. The API's version is `@comet/plugin`'s. It is not a peer dependency, because `@comet/plugin` is not on npm.
+- A plugin whose manifest names another plugin, or needs an API this Comet lacks, does not start. The user is told why.
+
 ## What shows
 
 | Contribution | Shows when |

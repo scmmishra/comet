@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { panelInstanceId } from "@comet/protocol"
+import { writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tempFolder, until, useTempHome } from "../test-support"
 import { harness, installPlugin, turnOn } from "./test-plugins"
@@ -156,6 +157,23 @@ test("a plugin that is on but not installed is left out, reported once, and name
   await expect(plugins.find(project, "panels", "missing.main")).rejects.toThrow("found no plugin")
   plugins.stop()
 })
+
+test("refuses a plugin whose manifest names another plugin or needs another plugin API", async () => {
+  const source = `import { definePlugin } from "@comet/plugin"\nexport default definePlugin((comet) => comet.panel("main", { title: "Main", view: () => null }))\n`
+  installPlugin("renamed", source)
+  installPlugin("future", source)
+  installPlugin("fits", source)
+  const manifest = (name: string, api: string) => JSON.stringify({ name: `comet-plugin-${name}`, comet: { name, api } })
+  writeFileSync(join(process.env.COMET_HOME!, "plugins", "renamed", "package.json"), manifest("other", "*"))
+  writeFileSync(join(process.env.COMET_HOME!, "plugins", "future", "package.json"), manifest("future", "^99.0.0"))
+  writeFileSync(join(process.env.COMET_HOME!, "plugins", "fits", "package.json"), manifest("fits", "^0.1.0"))
+  turnOn({ everywhere: ["renamed", "future", "fits"] })
+  const { plugins, project, errors } = harness()
+  expect((await plugins.offers(project)).panels.map((panel) => panel.id)).toEqual(["fits.main"])
+  expect(errors().some((error) => error.includes("is named other, not renamed"))).toBe(true)
+  expect(errors().some((error) => error.includes("needs Comet's plugin API ^99.0.0"))).toBe(true)
+  plugins.stop()
+}, 20_000)
 
 test("refuses a plugin that registers late, or registers one name twice", async () => {
   installPlugin("late", `

@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- A plugin can carry a manifest, the `comet` field of its `package.json`, with its name, title and the plugin API versions it works with. Comet does not start a plugin that needs an API it lacks.
 - Plugins can draw a diff with `Diff`, which takes a patch and draws it with the diff view Review uses.
 - A long file name in Review's file header shortens with an ellipsis. Before, it ran over the status and the line counts.
 - A task list's checkbox in Markdown has a gap before its text. Before, the box touched the text.
