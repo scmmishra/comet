@@ -6,8 +6,8 @@ import { isSubagentTask } from "./subagents"
  * The commands a session runs in the background. Claude Code sends the whole set of live tasks each
  * time it changes, so the set is replaced, never patched. Housekeeping tasks it marks ambient stay out,
  * as it asks. Subagents have their own card, so they stay out too. Each task keeps the time Comet first
- * saw it, so its timer does not restart. A command's description is the whole command, so the label
- * keeps its first line: the card draws one line per task.
+ * saw it, so its timer does not restart. A command's description is the one the Bash tool call gave,
+ * not the command. The label keeps its first line, since the card draws one line per task.
  */
 export class BackgroundTasks {
   private tasks: BackgroundTask[] = []

@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- A Claude subagent that is resumed keeps the steps and summary of its earlier run.
 - Comet runs on a newer Rune. Long threads lay out their Markdown faster. A scroll area inside the thread no longer traps the mouse wheel. Icons follow OpenCode's current catalog, so a command step shows a boxed console mark and Changes shows a plain ±.
 - A plugin's messages draw their Markdown, and their links open in the browser.
 - An agent can show a visual in the thread: a table, a bar or line chart, a Mermaid diagram and buttons for what to ask next. It sends the data and Comet draws it. A press of a button sends its text as your next message. Claude and Codex have it. Antigravity does not, because its tool calls do not say which tool they call.
