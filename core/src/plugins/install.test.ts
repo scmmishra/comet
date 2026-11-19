@@ -173,3 +173,7 @@ test("names the plugin whose source folder is gone, which stops every install", 
   await removePlugin("gone")
   expect(await addPlugin(pluginPackage("next", "1.0.0"))).toMatchObject({ name: "next" })
 }, 60_000)
+
+test("says a package npm does not know is not on npm", async () => {
+  await expect(addPlugin("@comet-test-nobody/no-such-plugin-" + Date.now())).rejects.toThrow("is not on npm. Check its name")
+}, 60_000)

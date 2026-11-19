@@ -1,5 +1,5 @@
 import type { PluginSetting, PluginSettingValue } from "@comet/protocol"
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { cometHome, writeJsonFile } from "../data-files"
 import { settingFault } from "./manifest"
@@ -11,12 +11,13 @@ import { settingFault } from "./manifest"
  */
 
 export const pluginSettingsFolder = () => join(cometHome(), "plugin-settings")
-const settingsFile = (plugin: string) => join(pluginSettingsFolder(), `${plugin}.json`)
+/** The file that holds what the user saved for `plugin`. */
+export const pluginSettingsFile = (plugin: string) => join(pluginSettingsFolder(), `${plugin}.json`)
 
 /** What the user saved for `plugin`, as the file holds it. A broken file holds nothing. */
 function saved(plugin: string): Record<string, unknown> {
   try {
-    const found = JSON.parse(readFileSync(settingsFile(plugin), "utf8"))
+    const found = JSON.parse(readFileSync(pluginSettingsFile(plugin), "utf8"))
     return typeof found === "object" && found !== null && !Array.isArray(found) ? found : {}
   } catch {
     return {}
@@ -28,7 +29,7 @@ function saved(plugin: string): Record<string, unknown> {
  * allows, such as an option a new version dropped, falls back to the default. One without either is absent.
  */
 export function pluginSettingValues(plugin: string, settings: readonly PluginSetting[]): Record<string, PluginSettingValue> {
-  const found = existsSync(settingsFile(plugin)) ? saved(plugin) : {}
+  const found = existsSync(pluginSettingsFile(plugin)) ? saved(plugin) : {}
   const values: Record<string, PluginSettingValue> = {}
   for (const setting of settings) {
     const value = found[setting.key]
@@ -52,5 +53,14 @@ export function savePluginSetting(plugin: string, settings: readonly PluginSetti
   const next = saved(plugin)
   if (value === "") delete next[key]
   else next[key] = value
-  writeJsonFile(settingsFile(plugin), next)
+  writeJsonFile(pluginSettingsFile(plugin), next)
 }
+
+/** Whether the user saved anything for `plugin`, which outlives the plugin until it is removed with `--purge`. */
+export const hasPluginSettings = (plugin: string) => existsSync(pluginSettingsFile(plugin))
+
+/** Drops what the user saved for `plugin`, as `comet plugin remove --purge` does. */
+export function forgetPluginSettings(plugin: string) {
+  rmSync(pluginSettingsFile(plugin), { force: true })
+}
+

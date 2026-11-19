@@ -4,6 +4,7 @@ import { PLUGIN_NAME } from "@comet/protocol"
 import { cometHome, writeJsonFile } from "../data-files"
 import { spawn } from "../environment"
 import { forgetPlugin } from "./config"
+import { forgetPluginSettings } from "./settings"
 import { checkPlugin, readManifest, type Manifest } from "./manifest"
 
 /**
@@ -23,6 +24,8 @@ export type PluginKind = "installed" | "linked" | "local"
 export interface PluginInfo {
   readonly name: string
   readonly kind: PluginKind
+  /** The package Comet installed it as, such as `@scmmishra/chatwoot-support`. */
+  readonly package?: string
   readonly source?: string
   readonly manifest?: Manifest
   /** Why the plugin cannot run, such as a broken manifest. */
@@ -52,6 +55,9 @@ async function bun(args: readonly string[]) {
   const gone = stderr.match(/Could not find folder "[^"]*" for dependency "([^"]+)"/)?.[1]
   const plugin = gone && listPlugins().find((found) => packageOf(found.name) === gone)
   if (plugin) throw new Error(`The folder ${plugin.name} was installed from is gone, so Bun cannot install anything. Remove ${plugin.name} with \`comet plugin remove ${plugin.name}\`, then install it again from where it is now.`)
+  // npm answers an unknown package with a bare 404.
+  const missing = stderr.match(/GET https:\/\/registry\.npmjs\.org\/(\S+) - 404/)?.[1]
+  if (missing) throw new Error(`${decodeURIComponent(missing)} is not on npm. Check its name, or install it from github:owner/repo, a git URL or a folder.`)
   throw new Error(stderr.trim().split("\n").filter((line) => line.startsWith("error:")).join("\n") || stderr.trim() || `bun ${args[0]} failed.`)
 }
 
@@ -75,13 +81,26 @@ function info(name: string): PluginInfo {
   const pkg = packageOf(name)
   const kind: PluginKind = pkg ? "installed" : linked ? "linked" : "local"
   const source = pkg ? dependencies()[pkg] : linked ? resolve(pluginsFolder(), readlinkSync(folder)) : undefined
-  if (!existsSync(folder)) return { name, kind, ...(source ? { source } : {}), error: `${name} links to ${source}, which is gone.` }
+  const found = { name, kind, ...(pkg ? { package: pkg } : {}), ...(source ? { source } : {}) }
+  if (!existsSync(folder)) return { ...found, error: `${name} links to ${source}, which is gone.` }
   try {
     const manifest = checkPlugin(folder, name)
-    return { name, kind, ...(source ? { source } : {}), ...(manifest ? { manifest } : {}) }
+    return { ...found, ...(manifest ? { manifest } : {}) }
   } catch (error) {
-    return { name, kind, ...(source ? { source } : {}), error: (error as Error).message }
+    return { ...found, error: (error as Error).message }
   }
+}
+
+/**
+ * The plugin a command names: by its name, such as `chatwoot`, or by the package it was installed as, such as
+ * `@scmmishra/chatwoot-support`. A name that matches none says which plugins there are.
+ */
+export function findPlugin(named: string): PluginInfo {
+  const plugins = listPlugins()
+  const found = plugins.find((plugin) => plugin.name === named) ?? plugins.find((plugin) => plugin.package === named)
+  if (found) return found
+  const known = plugins.map((plugin) => (plugin.package ? `${plugin.name} (${plugin.package})` : plugin.name))
+  throw new Error(`No plugin named ${named} is installed. ${known.length ? `There are: ${known.join(", ")}.` : "There are none."}`)
 }
 
 /** Every plugin in `~/.comet/plugins`, by name. */
@@ -134,7 +153,12 @@ export async function addPlugin(source: string): Promise<PluginInfo> {
     await bun(["add", "--ignore-scripts", resolved])
     const after = dependencies()
     const pkg = Object.keys(after).find((name) => before[name] !== after[name])
-    if (!pkg) throw new Error(`Installing ${source} changed nothing. If it is installed already, run update for a newer version.`)
+    if (!pkg) {
+      // Installing a source again changes nothing. Its package, or the source it was saved under, names the plugin.
+      const npmName = source.replace(/(.)@[^/]*$/, "$1")
+      const installed = listPlugins().find((plugin) => plugin.package === npmName || (plugin.source !== undefined && [source, resolved].includes(plugin.source)))
+      throw new Error(installed ? `${installed.name} is installed from ${source} already. Run \`comet plugin update ${installed.name}\` for a newer version.` : `Installing ${source} changed nothing.`)
+    }
     const folder = join(modulesFolder(), pkg)
     const manifest = readManifest(folder)
     if (!manifest) throw new Error(`${pkg} is not a Comet plugin: its package.json has no comet field.`)
@@ -163,7 +187,7 @@ export function linkPlugin(folder: string): PluginInfo {
  * Removes a plugin Comet installed or linked, and turns it off everywhere. A linked folder stays where it
  * is. A folder made by hand is refused, since Comet did not make it.
  */
-export async function removePlugin(name: string) {
+export async function removePlugin(name: string, { purge = false } = {}) {
   const link = join(pluginsFolder(), name)
   const stat = lstatSync(link, { throwIfNoEntry: false })
   if (!stat) throw new Error(`No plugin named ${name} is in ${pluginsFolder()}.`)
@@ -172,6 +196,7 @@ export async function removePlugin(name: string) {
   unlinkSync(link)
   if (pkg) await bun(["remove", pkg])
   forgetPlugin(name)
+  if (purge) forgetPluginSettings(name)
 }
 
 /** One plugin's version before and after an update. */
@@ -190,9 +215,11 @@ export interface Updated {
  */
 export async function updatePlugins(names?: readonly string[]): Promise<Updated[]> {
   const installed = listPlugins().filter((plugin) => plugin.kind === "installed")
-  const unknown = names?.filter((name) => !installed.some((plugin) => plugin.name === name)) ?? []
-  if (unknown.length) throw new Error(`Comet did not install ${unknown.join(", ")}, so it cannot update ${unknown.length === 1 ? "it" : "them"}.`)
-  const chosen = names ? installed.filter((plugin) => names.includes(plugin.name)) : installed
+  // A name may be a plugin's or its package's. One Comet did not install, such as a linked plugin, has no newer version to take.
+  const named = names?.map(findPlugin) ?? []
+  const local = named.filter((plugin) => plugin.kind !== "installed").map((plugin) => plugin.name)
+  if (local.length) throw new Error(`Comet did not install ${local.join(", ")}, so it cannot update ${local.length === 1 ? "it" : "them"}.`)
+  const chosen = names ? installed.filter((plugin) => named.some((found) => found.name === plugin.name)) : installed
   if (chosen.length === 0) return []
   await withRollback(async () => {
     await bun(["update", "--ignore-scripts", ...chosen.map((plugin) => packageOf(plugin.name)!)])

@@ -1,8 +1,8 @@
 import { resolve } from "node:path"
 import { setPluginOn, whereOn } from "./plugins/config"
 import type { PluginSetting, PluginSettingValue } from "@comet/protocol"
-import { addPlugin, linkPlugin, listPlugins, removePlugin, updatePlugins, type PluginInfo } from "./plugins/install"
-import { missingSettings, pluginSettingValues, savePluginSetting } from "./plugins/settings"
+import { addPlugin, findPlugin, linkPlugin, listPlugins, removePlugin, updatePlugins, type PluginInfo } from "./plugins/install"
+import { hasPluginSettings, missingSettings, pluginSettingsFile, pluginSettingValues, savePluginSetting } from "./plugins/settings"
 
 /**
  * `comet plugin …`: installs and manages plugins from the terminal. `bin/comet` runs it with the Bun in
@@ -14,7 +14,8 @@ const USAGE = `Usage: comet plugin <command>
 
   add <source> [--no-input]          Install a plugin: an npm name, github:owner/repo, a git URL, a tarball or a folder.
                                      In a terminal, it asks for the plugin's settings. --no-input skips that.
-  remove <name>                      Remove a plugin Comet installed or linked, and turn it off everywhere.
+  remove <name> [--purge]            Remove a plugin Comet installed or linked, and turn it off everywhere.
+                                     Its settings stay for a reinstall. --purge removes them too.
   update [name…]                     Update installed plugins, all or those named.
   list                               List plugins, with their versions and where each is on.
   on <name> [--everywhere]           Turn a plugin on in this folder's project, or everywhere.
@@ -22,7 +23,11 @@ const USAGE = `Usage: comet plugin <command>
   link [folder]                      Run the plugin in a folder you work in, this folder by default.
   set <name> [<key> <value>]         List a plugin's settings, or set one. An empty value clears it.
 
-  on and off take --project <folder> to name another project.`
+  on and off take --project <folder> to name another project. A plugin goes by its name, such as chatwoot,
+  or by the package it was installed as, such as @scmmishra/chatwoot-support.`
+
+/** The options each command takes. Any other is refused, so a mistyped one does not do something else. */
+const OPTIONS: Record<string, readonly string[]> = { add: ["--no-input"], remove: ["--purge"], on: ["--everywhere", "--project"], off: ["--everywhere", "--project"] }
 
 /** One plugin as a line of `list`: its name, title and version, how it got there, and where it is on. */
 function describe(plugin: PluginInfo): string {
@@ -51,23 +56,45 @@ function typedValue(setting: PluginSetting, typed: string): PluginSettingValue {
 /** A setting's value as `set` lists it. */
 const shownValue = (value: PluginSettingValue | undefined) => (value === undefined ? "not set" : typeof value === "boolean" ? (value ? "yes" : "no") : JSON.stringify(value))
 
-/** Asks for each of a plugin's settings in the terminal. Enter keeps what it has. A wrong answer asks again. */
+/**
+ * Asks for each of a plugin's settings in the terminal. Enter keeps what it has. A wrong answer asks again.
+ * Ctrl-C stops the questions, not the command: the plugin is installed by then, and the user is told how to
+ * set the rest.
+ */
 function askSettings(name: string, settings: readonly PluginSetting[]) {
   if (settings.length === 0) return
-  console.log(`${name} has settings. Press Enter to keep what is shown.`)
-  for (const setting of settings) {
-    const now = pluginSettingValues(name, settings)[setting.key]
-    const hint = [setting.description, setting.type === "select" ? `One of ${setting.options.join(", ")}.` : undefined, setting.type === "boolean" ? "Yes or no." : undefined].filter(Boolean).join(" ")
-    if (hint) console.log(`  ${hint}`)
-    for (;;) {
-      const typed = prompt(`${setting.title}${setting.required ? " (required)" : ""} [${shownValue(now)}]:`)?.trim()
-      if (!typed) break
-      try {
-        savePluginSetting(name, settings, setting.key, typedValue(setting, typed))
-        break
-      } catch (error) {
-        console.log(`  ${(error as Error).message}`)
+  console.log(`${name} has settings. Press Enter to keep what is shown, or Ctrl-C to skip the rest.`)
+  // Bun's prompt answers null on Ctrl-C, then the signal arrives. Without a handler, it would end the process.
+  const ignore = () => {}
+  process.on("SIGINT", ignore)
+  try {
+    for (const setting of settings) {
+      if (!askSetting(name, settings, setting)) {
+        console.log(`\nSkipped the rest. ${name} is installed. Set its settings with \`comet plugin set ${name}\`.`)
+        return
       }
+    }
+  } finally {
+    // The signal comes after prompt returns, so it is let go of on the next turn.
+    setTimeout(() => process.off("SIGINT", ignore), 0)
+  }
+}
+
+/** Asks for one setting until it has an answer. False when the user stopped the questions. */
+function askSetting(name: string, settings: readonly PluginSetting[], setting: PluginSetting): boolean {
+  const now = pluginSettingValues(name, settings)[setting.key]
+  const hint = [setting.description, setting.type === "select" ? `One of ${setting.options.join(", ")}.` : undefined, setting.type === "boolean" ? "Yes or no." : undefined].filter(Boolean).join(" ")
+  if (hint) console.log(`  ${hint}`)
+  for (;;) {
+    const answer = prompt(`${setting.title}${setting.required ? " (required)" : ""} [${shownValue(now)}]:`)
+    if (answer === null) return false
+    const typed = answer.trim()
+    if (!typed) return true
+    try {
+      savePluginSetting(name, settings, setting.key, typedValue(setting, typed))
+      return true
+    } catch (error) {
+      console.log(`  ${(error as Error).message}`)
     }
   }
 }
@@ -86,6 +113,8 @@ function projectOf(args: string[]): string | undefined {
 const here = () => process.env.PWD ?? process.cwd()
 
 async function plugin([command, ...args]: string[]): Promise<string> {
+  const unknown = args.filter((arg) => arg.startsWith("--") && !(OPTIONS[command ?? ""] ?? []).includes(arg))
+  if (unknown.length) throw new Error(`${command} takes no ${unknown.join(" or ")}.\n\n${USAGE}`)
   // The words that are not flags, and not the folder after --project.
   const names = args.filter((arg, i) => !arg.startsWith("--") && args[i - 1] !== "--project")
   const one = (what: string) => {
@@ -103,9 +132,8 @@ async function plugin([command, ...args]: string[]): Promise<string> {
       return `Turn it on with \`comet plugin on ${added.name}\`.`
     }
     case "set": {
-      const name = one("the plugin whose settings to show or set")
-      const found = listPlugins().find((plugin) => plugin.name === name)
-      if (!found) throw new Error(`No plugin named ${name} is installed.`)
+      const found = findPlugin(one("the plugin whose settings to show or set"))
+      const name = found.name
       const settings = found.manifest?.settings ?? []
       const [, key, ...words] = names
       if (!key) {
@@ -120,9 +148,11 @@ async function plugin([command, ...args]: string[]): Promise<string> {
       return `Saved ${setting?.title ?? key} for ${name}.`
     }
     case "remove": {
-      const name = one("the plugin to remove")
-      await removePlugin(name)
-      return `Removed ${name}.`
+      const { name } = findPlugin(one("the plugin to remove"))
+      const purge = args.includes("--purge")
+      await removePlugin(name, { purge })
+      if (purge || !hasPluginSettings(name)) return `Removed ${name}.`
+      return `Removed ${name}. Its settings stay in ${pluginSettingsFile(name)}, for a reinstall. Remove them too with \`comet plugin remove ${name} --purge\`.`
     }
     case "update": {
       const updated = await updatePlugins(names.length ? names : undefined)
@@ -135,8 +165,7 @@ async function plugin([command, ...args]: string[]): Promise<string> {
     }
     case "on":
     case "off": {
-      const name = one(`the plugin to turn ${command}`)
-      if (!listPlugins().some((found) => found.name === name)) throw new Error(`No plugin named ${name} is installed.`)
+      const { name } = findPlugin(one(`the plugin to turn ${command}`))
       const project = projectOf(args)
       setPluginOn(name, command === "on", project)
       return `${name} is ${command} ${project ? `in ${project}` : "everywhere"}.`

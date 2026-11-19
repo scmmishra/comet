@@ -4,6 +4,9 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- `comet plugin` takes a plugin's package name as well as its name, and says which plugins there are when a name matches none. It says when a source is installed already, and when a package is not on npm. It refuses an option a command does not take.
+- `comet plugin remove --purge` removes a plugin's settings too. Without it, `remove` says where the settings stay.
+- Ctrl-C during `comet plugin add`'s questions skips the rest and says the plugin is installed. Before, it ended the command with no word.
 - Comet installs the `comet` command into `~/.local/bin` when it starts, so a Comet from a release has it too. Comet.app carries it, so it updates with the app. A `comet` that is already there stays.
 - Settings → Plugins shows each plugin's settings and saves them, and marks a plugin that needs setup.
 - When a plugin's source folder is gone, the error names the plugin and says to remove it. Before, every install failed with Bun's error about a missing folder.

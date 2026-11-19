@@ -118,10 +118,12 @@ comet plugin list
 comet plugin link .                                     # a plugin you work on
 comet plugin set reviews                                # list its settings
 comet plugin set reviews repo chatwoot/chatwoot         # set one, or clear it with no value
-comet plugin remove reviews
+comet plugin remove reviews                             # keeps its settings; --purge removes them too
 ```
 
-In a terminal, `add` asks for each of the plugin's settings, and Enter keeps what it shows. `--no-input` skips the questions, and a script or a pipe gets none. `list` names the required settings a plugin still lacks.
+In a terminal, `add` asks for each of the plugin's settings, and Enter keeps what it shows. Ctrl-C skips the rest of the questions: the plugin is installed by then. `--no-input` skips them all, and a script or a pipe gets none. `list` names the required settings a plugin still lacks.
+
+A command names a plugin by its name, such as `reviews`, or by the package it was installed as. A name that matches none lists the plugins there are. An option a command does not take is refused.
 
 `on` and `off` name the folder the command runs in, as `comet .` opens it.
 

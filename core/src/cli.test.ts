@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from "bun:test"
-import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tempFolder, useTempHome } from "./test-support"
 
@@ -49,4 +49,30 @@ test("asks for nothing without a terminal, and lists and sets a plugin's setting
   expect(comet(project, "plugin", "list").out).not.toContain("needs setup")
   comet(project, "plugin", "set", "prs", "drafts")
   expect(comet(project, "plugin", "set", "prs").out).toEndWith("Show drafts: no")
+}, 60_000)
+
+test("names plugins by package too, explains what went wrong, and keeps settings unless told to purge", () => {
+  const source = join(tempFolder("source"), "prs")
+  mkdirSync(source)
+  const settings = [{ key: "repo", title: "Repository", type: "string" }]
+  writeFileSync(join(source, "package.json"), JSON.stringify({ name: "comet-plugin-prs", version: "1.0.0", comet: { name: "prs", api: "^0.2.0", settings } }))
+  writeFileSync(join(source, "index.tsx"), "export default 1\n")
+  const project = tempFolder("project")
+
+  comet(project, "plugin", "add", source)
+  expect(comet(project, "plugin", "add", source)).toEqual({ out: `prs is installed from ${source} already. Run \`comet plugin update prs\` for a newer version.`, code: 1 })
+  expect(comet(project, "plugin", "update", "comet-plugin-prs").out).toBe("prs is up to date at 1.0.0.")
+  expect(comet(project, "plugin", "on", "comet-plugin-prs").out).toBe(`prs is on in ${project}.`)
+  expect(comet(project, "plugin", "update", "nope").out).toBe("No plugin named nope is installed. There are: prs (comet-plugin-prs).")
+  const forced = comet(project, "plugin", "remove", "prs", "--force")
+  expect([forced.out.split("\n")[0], forced.code]).toEqual(["remove takes no --force.", 1])
+
+  comet(project, "plugin", "set", "prs", "repo", "chatwoot/chatwoot")
+  const settingsFile = join(process.env.COMET_HOME!, "plugin-settings", "prs.json")
+  expect(comet(project, "plugin", "remove", "prs").out).toBe(`Removed prs. Its settings stay in ${settingsFile}, for a reinstall. Remove them too with \`comet plugin remove prs --purge\`.`)
+  expect(existsSync(settingsFile)).toBe(true)
+  comet(project, "plugin", "add", source)
+  expect(comet(project, "plugin", "set", "prs").out).toContain('"chatwoot/chatwoot"')
+  expect(comet(project, "plugin", "remove", "comet-plugin-prs", "--purge").out).toBe("Removed prs.")
+  expect(existsSync(settingsFile)).toBe(false)
 }, 60_000)
