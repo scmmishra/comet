@@ -43,11 +43,11 @@ export function missingSettings(settings: readonly PluginSetting[], values: Read
   return settings.filter((setting) => setting.required && (values[setting.key] === undefined || values[setting.key] === ""))
 }
 
-/** Saves one setting, checked against the manifest. Empty text clears it, so its default applies again. */
+/** Saves one setting, checked against the manifest. An empty value clears it, so its default applies again. */
 export function savePluginSetting(plugin: string, settings: readonly PluginSetting[], key: string, value: PluginSettingValue) {
   const setting = settings.find((found) => found.key === key)
   if (!setting) throw new Error(`${plugin} has no setting named ${key}. It has ${settings.map((found) => found.key).join(", ") || "none"}.`)
-  const fault = settingFault(setting, value)
+  const fault = value === "" ? undefined : settingFault(setting, value)
   if (fault) throw new Error(`${setting.title} must be a value that ${fault}.`)
   const next = saved(plugin)
   if (value === "") delete next[key]

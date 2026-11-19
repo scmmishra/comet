@@ -116,8 +116,12 @@ comet plugin off reviews --project ~/code/web
 comet plugin update                                     # every installed plugin, or those named
 comet plugin list
 comet plugin link .                                     # a plugin you work on
+comet plugin set reviews                                # list its settings
+comet plugin set reviews repo chatwoot/chatwoot         # set one, or clear it with no value
 comet plugin remove reviews
 ```
+
+In a terminal, `add` asks for each of the plugin's settings, and Enter keeps what it shows. `--no-input` skips the questions, and a script or a pipe gets none. `list` names the required settings a plugin still lacks.
 
 `on` and `off` name the folder the command runs in, as `comet .` opens it.
 

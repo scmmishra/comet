@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import type { CoreMessage } from "@comet/protocol"
-import { mkdirSync, writeFileSync } from "node:fs"
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tempFolder, useTempHome } from "../test-support"
 import { pluginManager } from "./manage"
@@ -8,7 +8,7 @@ import { pluginManager } from "./manage"
 useTempHome()
 
 test("tells every client what changed, or why it failed, and then sends the plugins whole", async () => {
-  const source = join(tempFolder("source"), "demo")
+  const source = join(realpathSync(tempFolder("source")), "demo")
   mkdirSync(source)
   writeFileSync(join(source, "package.json"), JSON.stringify({ name: "comet-plugin-demo", version: "1.0.0", comet: { name: "demo", title: "Demo", api: "^0.2.0" } }))
   writeFileSync(join(source, "index.tsx"), "export default 1\n")

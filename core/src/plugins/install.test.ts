@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from "bun:test"
-import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tempFolder, until, useTempHome } from "../test-support"
 import { pluginsOn, setPluginOn, whereOn } from "./config"
@@ -14,7 +14,7 @@ const home = () => process.env.COMET_HOME!
 
 /** A plugin package in a folder of its own, with a panel that says hello. */
 function pluginPackage(name: string, version: string, comet: Record<string, unknown> = { name, title: name.toUpperCase(), api: "^0.2.0" }) {
-  const folder = join(tempFolder("source"), name)
+  const folder = join(realpathSync(tempFolder("source")), name)
   mkdirSync(folder)
   writeFileSync(join(folder, "package.json"), JSON.stringify({ name: `comet-plugin-${name}`, version, comet }))
   writeFileSync(join(folder, "index.tsx"), `import { definePlugin, Text } from "@comet/plugin"\nexport default definePlugin((comet) => comet.panel("main", { title: "Main", view: () => <Text>hello</Text> }))\n`)
@@ -97,7 +97,7 @@ test("installs from a git repo and updates to its newest commit", async () => {
 }, 60_000)
 
 test("keeps nothing of a package that is not a plugin, needs another API, or takes a name in use", async () => {
-  const plain = tempFolder("plain")
+  const plain = realpathSync(tempFolder("plain"))
   writeFileSync(join(plain, "package.json"), JSON.stringify({ name: "not-a-plugin", version: "1.0.0" }))
   await expect(addPlugin(plain)).rejects.toThrow("has no comet field")
   await expect(addPlugin(pluginPackage("unranged", "1.0.0", { name: "unranged" }))).rejects.toThrow("has no api range")

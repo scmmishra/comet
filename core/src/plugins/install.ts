@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs"
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs"
 import { basename, join, relative, resolve } from "node:path"
 import { PLUGIN_NAME } from "@comet/protocol"
 import { cometHome, writeJsonFile } from "../data-files"
@@ -118,9 +118,12 @@ async function withRollback<T>(change: () => Promise<T>): Promise<T> {
 export async function addPlugin(source: string): Promise<PluginInfo> {
   // The source reaches Bun as an argument, so one that starts with - would read as a flag.
   if (!source.trim() || source.trim().startsWith("-")) throw new Error(`${JSON.stringify(source)} is not a plugin source.`)
+  // Bun saves a folder relative to the packages folder's resolved path. A folder reached through a link,
+  // such as /tmp, would then resolve wrong on the next install, which installs every package again.
+  const resolved = existsSync(source) ? realpathSync(source) : source
   return withRollback(async () => {
     const before = dependencies()
-    await bun(["add", "--ignore-scripts", source])
+    await bun(["add", "--ignore-scripts", resolved])
     const after = dependencies()
     const pkg = Object.keys(after).find((name) => before[name] !== after[name])
     if (!pkg) throw new Error(`Installing ${source} changed nothing. If it is installed already, run update for a newer version.`)
