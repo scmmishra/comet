@@ -116,6 +116,8 @@ async function withRollback<T>(change: () => Promise<T>): Promise<T> {
  * no manifest, no API range, an API this Comet lacks or a name already taken is not kept.
  */
 export async function addPlugin(source: string): Promise<PluginInfo> {
+  // The source reaches Bun as an argument, so one that starts with - would read as a flag.
+  if (!source.trim() || source.trim().startsWith("-")) throw new Error(`${JSON.stringify(source)} is not a plugin source.`)
   return withRollback(async () => {
     const before = dependencies()
     await bun(["add", "--ignore-scripts", source])

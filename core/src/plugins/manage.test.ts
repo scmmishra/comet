@@ -18,12 +18,18 @@ test("tells every client what changed, or why it failed, and then sends the plug
   await manager.add(source)
   await manager.toggle("demo", true)
   await manager.remove("nothing")
+  await manager.toggle("demo", true, "/no/such/folder")
+  await manager.add("--global")
   expect(sent).toEqual([
     { type: "notice", message: "Installed demo." },
     { type: "plugins", plugins: [{ name: "demo", kind: "installed", source, title: "Demo", version: "1.0.0", everywhere: false, projects: [] }] },
     { type: "notice", message: "demo is on everywhere." },
     { type: "plugins", plugins: [{ name: "demo", kind: "installed", source, title: "Demo", version: "1.0.0", everywhere: true, projects: [] }] },
     { type: "error", message: "Comet could not remove nothing", detail: expect.stringContaining("No plugin named nothing") },
+    { type: "plugins", plugins: [expect.objectContaining({ name: "demo" })] },
+    { type: "error", message: "Comet could not turn demo on", detail: expect.any(String) },
+    { type: "plugins", plugins: [expect.objectContaining({ name: "demo", projects: [] })] },
+    { type: "error", message: "Comet could not install --global", detail: '"--global" is not a plugin source.' },
     { type: "plugins", plugins: [expect.objectContaining({ name: "demo" })] },
   ])
 }, 60_000)

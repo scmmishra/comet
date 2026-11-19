@@ -1,4 +1,5 @@
 import type { CoreMessage, PluginListing } from "@comet/protocol"
+import { requireProjectFolder } from "../project-path"
 import { setPluginOn, whereOn } from "./config"
 import { addPlugin, listPlugins, removePlugin, updatePlugins } from "./install"
 
@@ -49,6 +50,8 @@ export function pluginManager(broadcast: (message: CoreMessage) => void) {
       }),
     toggle: (name: string, on: boolean, project?: string) =>
       run(`Comet could not turn ${name} ${on ? "on" : "off"}`, () => {
+        // A project that is gone can still be turned off.
+        if (on && project !== undefined) requireProjectFolder(project)
         setPluginOn(name, on, project)
         return `${name} is ${on ? "on" : "off"} ${project ? `in ${project}` : "everywhere"}.`
       }),

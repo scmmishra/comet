@@ -96,8 +96,9 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
   /** Runs one message. A failure, sync or async, reaches the client as an error. */
   const handle = async (message: ClientMessage, reply: Send) => {
     // Every message about a project's data names its folder. It is checked here, once. Turning a plugin
-    // on or off everywhere names none.
-    if ("project" in message && message.project !== undefined) requireProjectFolder(message.project)
+    // on or off names a project only when it is not everywhere, and the plugin manager checks it, so a
+    // failure still sends Settings the plugins.
+    if ("project" in message && message.type !== "plugin.toggle") requireProjectFolder(message.project)
     switch (message.type) {
       case "settings.update":
         settings = updateSettings(settings, message.change)

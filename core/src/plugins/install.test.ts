@@ -73,8 +73,15 @@ test("installs a plugin from a folder, runs it with its own dependency, updates 
   await until(() => textOf("hello", layout("tab-1")!.panels[0]!.root) === "hello from greeting")
   plugins.stop()
 
+  // The new version says something new, and Comet runs it, not the bundle it built before.
   setVersion(source, "1.1.0")
+  writeFileSync(join(source, "index.tsx.new"), readFileSync(join(source, "index.tsx"), "utf8").replace("{greeting}", "{greeting} again"))
+  renameSync(join(source, "index.tsx.new"), join(source, "index.tsx"))
   expect(await updatePlugins()).toEqual([{ name: "hello", from: "1.0.0", to: "1.1.0" }])
+  const after = harness()
+  await after.layouts.openPanel("tab-1", "hello.main")
+  await until(() => after.textOf("hello", after.layout("tab-1")!.panels[0]!.root) === "hello from greeting again")
+  after.plugins.stop()
 
   await removePlugin("hello")
   expect(existsSync(join(home(), "plugins", "hello"))).toBe(false)
@@ -134,12 +141,26 @@ test("turns a plugin on and off everywhere and per project, keeping a project's 
   expect(JSON.parse(readFileSync(join(home(), "plugins.json"), "utf8")).projects).toEqual({ "~/code/web": ["a", "b"] })
 })
 
-test("tells a running Comet when a plugin is linked or removed", async () => {
+test("tells a running Comet when a plugin is installed, updated, turned on, linked or removed", async () => {
   let changes = 0
   const stop = watchInstalls(() => changes++)
-  linkPlugin(pluginPackage("watched", "1.0.0"))
-  await until(() => changes === 1)
+  const settled = async (count: number) => {
+    await until(() => changes >= count)
+    // Changes settle into one call, so the next step starts from a quiet watcher.
+    await Bun.sleep(400)
+    expect(changes).toBe(count)
+  }
+  const repo = gitPackage("watched")
+  await addPlugin(repo.source)
+  await settled(1)
+  repo.commit("2.0.0")
+  await updatePlugins()
+  await settled(2)
+  setPluginOn("watched", true)
+  await settled(3)
   await removePlugin("watched")
-  await until(() => changes === 2)
+  await settled(4)
+  linkPlugin(pluginPackage("linked", "1.0.0"))
+  await settled(5)
   stop()
-})
+}, 60_000)

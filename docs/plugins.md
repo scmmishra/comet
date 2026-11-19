@@ -204,6 +204,10 @@ A panel's context also has `ctx.params` and `ctx.close()`. A command's context h
 | `plugin.command` | Runs a command for a tab. |
 | `plugin.event` | Runs a handler a plugin's node holds. |
 | `window.focus` | Says Comet's window gained or lost focus. With `tabs.save`, it decides which views are on screen. |
+| `plugins.get` | Reads the plugins in `~/.comet/plugins`, for Settings. |
+| `plugin.add`, `plugin.remove` | Installs a plugin from a source, or removes one Comet installed or linked. |
+| `plugins.update` | Updates installed plugins, those named or else all. |
+| `plugin.toggle` | Turns a plugin on or off in a project, or everywhere. |
 
 | From the core | Carries |
 |---|---|
@@ -212,6 +216,7 @@ A panel's context also has `ctx.params` and `ctx.close()`. A command's context h
 | `notice` | A plugin's toast. |
 | `plugin.ops` | Changes to a plugin's UI tree. |
 | `project` with part `plugins` | What the user can start from the palette in a project: panels that need no parameters, setups and commands. |
+| `plugins` | Every plugin in `~/.comet/plugins`, with its manifest, its source and where it is on. It follows each change Settings asks for, after a `notice` or an `error`. |
 
 ## Runtime
 
