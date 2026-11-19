@@ -2,6 +2,7 @@
 //! the core and sends its UI as operations on a tree of nodes. The app keeps each plugin's nodes and
 //! draws each node with Comet's own component for its primitive.
 
+use crate::diff_view::{DiffMode, DiffState, DiffView, parse};
 use crate::format;
 use crate::protocol::{ClientMessage, DrawnView, TabLayout, UiOp};
 use crate::shell::Comet;
@@ -16,6 +17,7 @@ use std::collections::{HashMap, HashSet};
 /// The node a view is drawn into, and the node type of a text. Neither is a primitive.
 const ROOT_NODE: &str = "root";
 const TEXT_NODE: &str = "#text";
+const DIFF_NODE: &str = "diff";
 
 /// A plugin's UI node, as the app keeps it.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -97,6 +99,8 @@ pub struct Plugins {
     inputs: HashMap<(String, u64), (TextEdit, String)>,
     /// Setups across projects, as last read for the palette.
     pub setups: Vec<crate::protocol::ProjectSetup>,
+    /// Each diff node's state: the patch it was parsed from, and the files a diff view draws.
+    diffs: HashMap<(String, u64), (String, DiffState)>,
 }
 
 impl Plugins {
@@ -106,6 +110,13 @@ impl Plugins {
             nodes.clear();
         }
         apply_ops(nodes, ops);
+    }
+
+    /// Diffs draw as Review's do, unified or split.
+    pub fn set_diff_mode(&mut self, mode: DiffMode) {
+        for (_, diff) in self.diffs.values_mut() {
+            diff.set_mode(mode);
+        }
     }
 
     fn node(&self, plugin: &str, id: u64) -> Option<&Node> {
@@ -127,6 +138,26 @@ fn prop<'a>(props: &'a Map<String, Value>, name: &str) -> Option<&'a str> {
 }
 
 impl Comet {
+    /// Applies a plugin's operations. A diff node whose patch changed is parsed again, which resets its
+    /// folds. A diff node that left keeps no state.
+    pub fn take_plugin_ops(&mut self, plugin: &str, ops: &[UiOp], reset: bool) {
+        self.plugins.apply(plugin, ops, reset);
+        let nodes = self.plugins.nodes.get(plugin);
+        let patch_of = |id: u64| nodes?.get(&id).filter(|n| n.kind == DIFF_NODE).map(|n| prop(&n.props, "patch").unwrap_or(""));
+        self.plugins.diffs.retain(|(owner, id), _| owner != plugin || patch_of(*id).is_some());
+        let changed: Vec<(u64, String)> = nodes
+            .into_iter()
+            .flatten()
+            .filter(|(_, n)| n.kind == DIFF_NODE)
+            .map(|(id, n)| (*id, prop(&n.props, "patch").unwrap_or("").to_owned()))
+            .filter(|(id, patch)| self.plugins.diffs.get(&(plugin.to_owned(), *id)).is_none_or(|(had, _)| had != patch))
+            .collect();
+        for (id, patch) in changed {
+            let state = self.panel.diff_state(parse(&patch));
+            self.plugins.diffs.insert((plugin.to_owned(), id), (patch, state));
+        }
+    }
+
     /// Asks the core for the active tab's layout, once per tab.
     pub fn load_layout(&mut self) {
         let Some(tab) = self.workspace.active.clone() else { return };
@@ -252,6 +283,7 @@ fn node_view(s: &Comet, plugin: &str, id: u64, project: &str, frame: Frame, k: &
                 .build(k)
         }
         "textinput" => input_view(s, plugin, id, props, k),
+        DIFF_NODE => diff_view(s, plugin, id, k),
         "messages" => messages_view(props, k),
         "markdown" => col()
             .w_full()
@@ -358,6 +390,35 @@ fn input_view(s: &Comet, plugin: &str, id: u64, props: &Map<String, Value>, k: &
     col().w_full().min_h(if multiline { 72.0 } else { 0.0 }).px(11.0).py(8.0).radius(8.0).fill(k.c.layer_01).border(1.0, k.c.border_base).child(field)
 }
 
+/// A patch, drawn by the diff view Review uses, with Review's file headers less the button that opens a
+/// file: a plugin's diff may name files the project does not have, such as a pull request's.
+fn diff_view(s: &Comet, plugin: &str, id: u64, k: &Kit) -> El {
+    let key = (plugin.to_owned(), id);
+    let Some((_, state)) = s.plugins.diffs.get(&key) else { return el() };
+    if state.files().is_empty() {
+        return col().w_full().grow(1.0).center().child(text("No changes.").font(crate::theme::text(13.0)).color(k.c.text_faint));
+    }
+    let (get, get_mut, header_key) = (key.clone(), key.clone(), key.clone());
+    let dark = k.dark;
+    let view = DiffView::new(move |s: &Comet| &s.plugins.diffs[&get].1, move |s: &mut Comet| &mut s.plugins.diffs.get_mut(&get_mut).expect("a diff that showed").1)
+        .key(format!("plugin-diff-{plugin}-{id}"))
+        .file_header(move |s: &Comet, f: usize, collapsed: bool| {
+            let Some(file) = s.plugins.diffs.get(&header_key).and_then(|(_, d)| d.files().get(f)) else { return el() };
+            let toggle_key = header_key.clone();
+            let toggle = move |s: &mut Comet| {
+                if let Some((_, diff)) = s.plugins.diffs.get_mut(&toggle_key) {
+                    diff.set_collapsed(f, !collapsed);
+                }
+            };
+            crate::panel::diff_file_header(crate::theme::kit(dark), file, collapsed, toggle, None)
+        })
+        .syntax_theme(crate::theme::code_colors(dark))
+        .code_font(crate::theme::mono(12.0))
+        .build(s, crate::theme::review_kit(dark));
+    // The diff view finds its width by its own key, so it sits in a wrapper that takes the node's key.
+    col().w_full().grow(1.0).min_h(0.0).child(view)
+}
+
 /// A conversation, oldest first, kept scrolled to its end.
 fn messages_view(props: &Map<String, Value>, k: &Kit) -> El {
     let items = props.get("items").and_then(Value::as_array).cloned().unwrap_or_default();
@@ -430,5 +491,31 @@ mod tests {
         assert_eq!(nodes[&1].children, [4]);
         assert_eq!(nodes[&2].children, [3]);
         assert_eq!(nodes[&4].props["label"], "Go");
+    }
+
+    #[test]
+    fn a_diff_node_parses_its_patch_again_only_when_it_changes_and_leaves_with_its_node() {
+        let mut s = Comet::default();
+        let patch = |line: &str| format!("diff --git a/a.rb b/a.rb\n--- a/a.rb\n+++ b/a.rb\n@@ -1 +1 @@\n-old\n+{line}\n");
+        let first = patch("new");
+        s.take_plugin_ops("p", &ops(serde_json::json!([
+            { "op": "create", "id": 1, "type": "root" },
+            { "op": "create", "id": 2, "type": "diff" },
+            { "op": "set", "id": 2, "key": "patch", "value": first },
+            { "op": "insert", "parent": 1, "id": 2 }
+        ])), false);
+        let key = ("p".to_owned(), 2);
+        assert_eq!(s.plugins.diffs[&key].1.files().len(), 1);
+        s.plugins.diffs.get_mut(&key).unwrap().1.set_collapsed(0, true);
+
+        // Operations that leave the patch alone keep the state, folds included.
+        s.take_plugin_ops("p", &ops(serde_json::json!([{ "op": "create", "id": 3, "type": "text" }, { "op": "insert", "parent": 1, "id": 3 }])), false);
+        assert!(s.plugins.diffs[&key].1.collapsed(0));
+
+        s.take_plugin_ops("p", &ops(serde_json::json!([{ "op": "set", "id": 2, "key": "patch", "value": patch("newer") }])), false);
+        assert!(!s.plugins.diffs[&key].1.collapsed(0), "a new patch parses again");
+
+        s.take_plugin_ops("p", &ops(serde_json::json!([{ "op": "remove", "parent": 1, "id": 2 }])), false);
+        assert!(s.plugins.diffs.is_empty());
     }
 }

@@ -116,6 +116,12 @@ import logo from "./logo.svg"
 <Item title="Docs" icon="link" href={docs} />
 ```
 
+`Diff` draws a unified diff, as `git diff` writes it, with the diff view Review uses. It fills the space it is given, so it suits a panel of its own. Its files fold, and it follows Review's choice of unified or split. A new `patch` resets the folds. Past 8 files, every file starts folded, as in Review.
+
+```tsx
+<Diff patch={patch} />
+```
+
 A panel's context also has `ctx.params` and `ctx.close()`. A command's context has no `visible()` or `thread()`, since a command draws nothing.
 
 ## Who owns what

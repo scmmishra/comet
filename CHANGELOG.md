@@ -4,6 +4,8 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- Plugins can draw a diff with `Diff`, which takes a patch and draws it with the diff view Review uses.
+- A long file name in Review's file header shortens with an ellipsis. Before, it ran over the status and the line counts.
 - A task list's checkbox in Markdown has a gap before its text. Before, the box touched the text.
 - A plugin's Markdown scrolls when it is taller than its panel. Before, the panel cut it off.
 - An Antigravity turn that an API error stopped now shows as failed, with the error's message. Before, the error line showed as Antigravity's reply. A thread whose saved thinking the model rejects says it can no longer go on, so you start a new one.

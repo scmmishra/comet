@@ -179,7 +179,7 @@ impl Comet {
             CoreMessage::TerminalExit { id } => self.terminal_exit(&id),
             CoreMessage::File { project, path, file } => self.take_file(project, path, file),
             CoreMessage::FileFound { project, path, file } => self.file_found(&project, &path, &file),
-            CoreMessage::PluginOps { plugin, ops, reset } => self.plugins.apply(&plugin, &ops, reset),
+            CoreMessage::PluginOps { plugin, ops, reset } => self.take_plugin_ops(&plugin, &ops, reset),
             CoreMessage::Layout { tab_id, layout } => {
                 self.plugins.layouts.insert(tab_id, layout);
             }

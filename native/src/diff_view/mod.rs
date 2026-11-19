@@ -20,7 +20,7 @@ mod state;
 mod view;
 mod words;
 
-pub use model::{FileStatus, parse};
+pub use model::{FileDiff, FileStatus, parse};
 pub use state::{DiffMode, DiffState};
 pub use view::DiffView;
 

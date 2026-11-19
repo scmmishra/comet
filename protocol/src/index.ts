@@ -833,6 +833,8 @@ export interface UiPrimitives {
   /** A conversation, oldest first. */
   messages: { items: readonly MessageData[] }
   markdown: { text: string }
+  /** A unified diff, as `git diff` writes it, drawn as Review draws changes. It fills the space it is given. */
+  diff: { patch: string }
 }
 export type UiPrimitive = keyof UiPrimitives
 

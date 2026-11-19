@@ -5,7 +5,7 @@ use crate::format;
 use crate::protocol::{ClientMessage, FileChange, FileTabInfo, FileView, TabInfo};
 use crate::shell::Comet;
 use rune::{El, ScrollSpec, Tx, col, el, icon, row, text};
-use crate::diff_view::{DiffMode, DiffState, DiffView, FileStatus, parse};
+use crate::diff_view::{DiffMode, DiffState, DiffView, FileDiff, FileStatus, parse};
 use rune_kit::{ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Select};
 use rune_theme_opencode::icons as ic;
 use std::collections::HashMap;
@@ -120,14 +120,7 @@ impl Comet {
         if Comet::scope(info) != scope {
             return;
         }
-        let diffs = files.iter().flat_map(|f| parse(&f.patch)).collect::<Vec<_>>();
-        let mut diff = DiffState::new(diffs);
-        diff.set_mode(if self.panel.split { DiffMode::Split } else { DiffMode::Unified });
-        if files.len() > OPEN_FILE_LIMIT {
-            for i in 0..diff.files().len() {
-                diff.set_collapsed(i, true);
-            }
-        }
+        let diff = self.panel.diff_state(files.iter().flat_map(|f| parse(&f.patch)).collect());
         self.panel.reviews.insert(tab, Review { scope, files, diff });
     }
 
@@ -234,9 +227,30 @@ impl Comet {
 
     fn set_split(&mut self, split: bool) {
         self.panel.split = split;
+        let mode = self.panel.diff_mode();
         for review in self.panel.reviews.values_mut() {
-            review.diff.set_mode(if split { DiffMode::Split } else { DiffMode::Unified });
+            review.diff.set_mode(mode);
         }
+        self.plugins.set_diff_mode(mode);
+    }
+}
+
+impl Panel {
+    /// How diffs draw, in Review and in plugin views alike.
+    pub fn diff_mode(&self) -> DiffMode {
+        if self.split { DiffMode::Split } else { DiffMode::Unified }
+    }
+
+    /// The state a diff view draws `diffs` from. Past OPEN_FILE_LIMIT files, every file starts folded.
+    pub fn diff_state(&self, diffs: Vec<FileDiff>) -> DiffState {
+        let mut diff = DiffState::new(diffs);
+        diff.set_mode(self.diff_mode());
+        if diff.files().len() > OPEN_FILE_LIMIT {
+            for i in 0..diff.files().len() {
+                diff.set_collapsed(i, true);
+            }
+        }
+        diff
     }
 }
 
@@ -447,61 +461,71 @@ fn review_view(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     col().w_full().grow(1.0).min_h(0.0).child(controls).child(content)
 }
 
-/// A file's header in Review: the chevron, the file's icon, its folder
-/// muted and its name, a quiet status, its line counts and a button to open it. The whole header folds
-/// the file.
+/// A file's header in Review: the shared header, with a button to open the file.
 fn file_header(tab: String, dark: bool) -> impl Fn(&Comet, usize, bool) -> El + 'static {
     move |s: &Comet, f: usize, collapsed: bool| {
         let k = crate::theme::kit(dark);
         let Some(file) = s.panel.reviews.get(&tab).and_then(|r| r.diff.files().get(f)) else { return el() };
         let path = file.path().to_owned();
-        let (dir, name) = path.rsplit_once('/').map_or((None, path.as_str()), |(d, n)| (Some(d), n));
-        let status = match file.status {
-            FileStatus::Added => Some("added"),
-            FileStatus::Deleted => Some("deleted"),
-            FileStatus::Renamed => Some("renamed"),
-            FileStatus::Copied => Some("copied"),
-            FileStatus::Modified => None,
-        };
-        let (toggle_tab, open_tab, open_path) = (tab.clone(), tab.clone(), path.clone());
+        let name = path.rsplit_once('/').map_or(path.as_str(), |(_, n)| n);
+        let (toggle_tab, open_tab) = (tab.clone(), tab.clone());
         let open = IconButton::new(&ic::ARROW_UP_RIGHT)
             .variant(IconButtonVariant::GhostMuted)
             .control_size(ControlSize::Small)
             .label(format!("Open {name}"))
-            .on_press(move |s: &mut Comet| s.open_file(&open_tab, &open_path, None))
+            .on_press(move |s: &mut Comet| s.open_file(&open_tab, &path, None))
             .build(k);
-        row()
-            .key("review-file-header")
-            .w_full()
-            .h_full()
-            .gap(8.0)
-            .items_center()
-            .px(12.0)
-            .hover(k.c.hover)
-            .role("button")
-            .expanded(!collapsed)
-            .label(format!("{} {path}", if collapsed { "Expand" } else { "Collapse" }))
-            .on_press_tx(move |s: &mut Comet, tx| {
-                if let Some(review) = s.panel.reviews.get_mut(&toggle_tab) {
-                    review.diff.set_collapsed(f, !collapsed);
-                }
-                // At once, as Collapse all does.
-                tx.instant();
-            })
-            .child(crate::icons::chevron(k, !collapsed))
-            .child(icon(crate::icons::file_icon(&path), crate::icons::SIZE))
-            .child(
-                row()
-                    .min_w(0.0)
-                    .shrink()
-                    .children(dir.map(|d| text(format!("{d}/")).font(crate::theme::text(13.0)).color(k.c.text_faint).truncate_head().min_w(0.0).shrink()))
-                    .child(text(name.to_owned()).font(crate::theme::text(13.0)).color(k.c.text_base)),
-            )
-            .children(status.map(|w| text(w).font(crate::theme::text(13.0)).color(k.c.text_faint)))
-            .child(row().grow(1.0))
-            .child(crate::ui::diff_changes(k, file.additions() as u32, file.deletions() as u32))
-            .child(open)
+        let toggle = move |s: &mut Comet| {
+            if let Some(review) = s.panel.reviews.get_mut(&toggle_tab) {
+                review.diff.set_collapsed(f, !collapsed);
+            }
+        };
+        diff_file_header(k, file, collapsed, toggle, Some(open))
     }
+}
+
+/// A file's header in a diff view: the chevron, the file's icon, its folder muted and its name, a quiet
+/// status, its line counts, then `trailing`, such as a button to open the file. The whole header runs
+/// `toggle`, which folds the file.
+pub fn diff_file_header(k: &Kit, file: &FileDiff, collapsed: bool, toggle: impl Fn(&mut Comet) + 'static, trailing: Option<El>) -> El {
+    let path = file.path().to_owned();
+    let (dir, name) = path.rsplit_once('/').map_or((None, path.as_str()), |(d, n)| (Some(d), n));
+    let status = match file.status {
+        FileStatus::Added => Some("added"),
+        FileStatus::Deleted => Some("deleted"),
+        FileStatus::Renamed => Some("renamed"),
+        FileStatus::Copied => Some("copied"),
+        FileStatus::Modified => None,
+    };
+    row()
+        .key("review-file-header")
+        .w_full()
+        .h_full()
+        .gap(8.0)
+        .items_center()
+        .px(12.0)
+        .hover(k.c.hover)
+        .role("button")
+        .expanded(!collapsed)
+        .label(format!("{} {path}", if collapsed { "Expand" } else { "Collapse" }))
+        .on_press_tx(move |s: &mut Comet, tx| {
+            toggle(s);
+            // At once, as Collapse all does.
+            tx.instant();
+        })
+        .child(crate::icons::chevron(k, !collapsed))
+        .child(icon(crate::icons::file_icon(&path), crate::icons::SIZE))
+        .child(
+            row()
+                .min_w(0.0)
+                .shrink()
+                .children(dir.map(|d| text(format!("{d}/")).font(crate::theme::text(13.0)).color(k.c.text_faint).truncate_head().min_w(0.0).shrink()))
+                .child(text(name.to_owned()).font(crate::theme::text(13.0)).color(k.c.text_base).truncate().min_w(0.0).shrink()),
+        )
+        .children(status.map(|w| text(w).font(crate::theme::text(13.0)).color(k.c.text_faint)))
+        .child(row().grow(1.0))
+        .child(crate::ui::diff_changes(k, file.additions() as u32, file.deletions() as u32))
+        .children(trailing)
 }
 
 fn centred(k: &Kit, words: &str) -> El {

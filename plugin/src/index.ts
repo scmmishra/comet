@@ -128,6 +128,7 @@ const PRIMITIVES = {
   textinput: primitive("textinput"),
   messages: primitive("messages"),
   markdown: primitive("markdown"),
+  diff: primitive("diff"),
 } satisfies { [T in UiPrimitive]: (props: UiPrimitives[T]) => JSX.Element }
 
-export const { stack: Stack, text: Text, list: List, item: Item, button: Button, textinput: TextInput, messages: Messages, markdown: Markdown } = PRIMITIVES
+export const { stack: Stack, text: Text, list: List, item: Item, button: Button, textinput: TextInput, messages: Messages, markdown: Markdown, diff: Diff } = PRIMITIVES
