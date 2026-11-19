@@ -75,10 +75,10 @@ export function forgetPlugin(plugin: string) {
   writeJsonFile(configFile(), saved)
 }
 
-/** Where `plugin` is on: everywhere, and the project folders, as `plugins.json` names them. */
+/** Where `plugin` is on: everywhere, and the project folders, with `~` expanded. */
 export function whereOn(plugin: string): { everywhere: boolean; projects: string[] } {
   const saved = readConfig()
-  return { everywhere: saved.everywhere.includes(plugin), projects: Object.entries(saved.projects).flatMap(([folder, list]) => (list.includes(plugin) ? [folder] : [])) }
+  return { everywhere: saved.everywhere.includes(plugin), projects: Object.entries(saved.projects).flatMap(([folder, list]) => (list.includes(plugin) ? [expandHome(folder)] : [])) }
 }
 
 /** The project folders `plugins.json` turns plugins on for, beyond those on everywhere. A broken file names none. */

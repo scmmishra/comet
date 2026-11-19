@@ -4,7 +4,7 @@
 use crate::agents::{mark, state_label, status_line};
 use crate::format;
 use crate::models::{effort_label, permission, permission_for, permission_modes};
-use crate::protocol::{AgentDefaults, AgentInfo, AgentState, AgentVersion, ClientMessage, ColorTheme, ProjectSettings, ThemeChoice};
+use crate::protocol::{AgentDefaults, AgentInfo, AgentState, AgentVersion, ClientMessage, ColorTheme, PluginKind, PluginListing, ProjectSettings, ThemeChoice};
 use crate::shell::Comet;
 use rune::{El, Key, KeyEvent, ScrollSpec, TextEdit, col, el, icon, row, text};
 use rune_kit::{Badge, BadgeVariant, ButtonVariant, Kit, Select, Switch, TextInput};
@@ -12,11 +12,14 @@ use rune_theme_opencode::icons as ic;
 use serde_json::json;
 
 /// The pages, in the sidebar's order: id, title and icon.
-pub const PAGES: [(&str, &str, &rune::Icon); 3] = [
+pub const PAGES: [(&str, &str, &rune::Icon); 4] = [
     ("providers", "Providers", &ic::PROVIDERS),
     ("appearance", "Appearance", &ic::APPEARANCE),
     ("projects", "Projects", &ic::FOLDER),
+    ("plugins", "Plugins", &ic::EXTENSIONS),
 ];
+/// The draft of the source Plugins installs from.
+const PLUGIN_SOURCE: &str = "plugin-source";
 /// The thread text sizes Appearance offers, Comet's `FONT_SIZES`.
 const FONT_SIZES: std::ops::RangeInclusive<u32> = 11..=20;
 /// The colours a project's letter can take, Comet's `PROJECT_COLORS`.
@@ -31,6 +34,12 @@ pub struct SettingsUi {
     /// The project whose icon picker is open.
     icon_picker: Option<String>,
     fields: std::collections::HashMap<String, TextEdit>,
+    /// The plugins as the core last listed them. None until it answers.
+    plugins: Option<Vec<PluginListing>>,
+    /// What Plugins asked the core to do, such as "Installing…", until the core sends the plugins again.
+    plugin_busy: Option<String>,
+    /// The source an install link named. Nothing installs until the user presses Install.
+    install_link: Option<String>,
 }
 
 impl Comet {
@@ -46,6 +55,40 @@ impl Comet {
         if page == "providers" {
             self.core.send(&ClientMessage::AgentsGet);
         }
+        if page == "plugins" {
+            self.core.send(&ClientMessage::PluginsGet);
+        }
+    }
+
+    /// The core listed the plugins, after a change or when Plugins asked.
+    pub fn take_plugins(&mut self, plugins: Vec<PluginListing>) {
+        self.settings.plugins = Some(plugins);
+        self.settings.plugin_busy = None;
+    }
+
+    /// A `comet://plugin/install` link: Plugins opens with the source filled in and a word of caution.
+    /// The link can come from any web page, so nothing installs until the user presses Install.
+    pub fn ask_install(&mut self, source: String) {
+        self.open_settings("plugins");
+        self.settings.fields.insert(PLUGIN_SOURCE.into(), TextEdit::new(source.clone()));
+        self.settings.install_link = Some(source);
+    }
+
+    /// Asks the core to change the plugins, and says so until it answers.
+    fn manage_plugins(&mut self, busy: &str, message: ClientMessage) {
+        self.settings.plugin_busy = Some(busy.to_owned());
+        self.core.send(&message);
+    }
+
+    /// Installs from the source typed in Plugins.
+    fn install_plugin(&mut self) {
+        let source = self.settings.fields.get(PLUGIN_SOURCE).map(|e| e.text.trim().to_owned()).unwrap_or_default();
+        if source.is_empty() || self.settings.plugin_busy.is_some() {
+            return;
+        }
+        self.settings.install_link = None;
+        self.settings.fields.insert(PLUGIN_SOURCE.into(), TextEdit::new(""));
+        self.manage_plugins(&format!("Installing {source}…"), ClientMessage::PluginAdd { source });
     }
 
     /// Shows an agent on Providers, as its tab does.
@@ -135,6 +178,7 @@ pub fn screen(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> El {
     let content = match page {
         "appearance" => appearance(s, k, layer),
         "projects" => projects(s, k, layer),
+        "plugins" => plugins(s, k),
         _ => providers(s, k, layer),
     };
     // `.settings-panel` keeps 4 points each side for the lists' shadows. Each page is its own element:
@@ -511,6 +555,113 @@ fn projects(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> El {
         )
     });
     col().w_full().child(header(k, "Projects", "How each project open in a tab shows in tabs and menus.")).child(body(sections.collect()))
+}
+
+/// Plugins: a field to install one, then a section per plugin with where it is on, and buttons to update
+/// or remove it. It lists the projects open in tabs, and any other the plugin is on in.
+fn plugins(s: &Comet, k: &Kit) -> El {
+    let busy = s.settings.plugin_busy.is_some();
+    let install = crate::theme::small_button("Install").variant(ButtonVariant::Contrast).disabled(busy).on_press(|s: &mut Comet| s.install_plugin()).build(k);
+    let source = field(s, k, PLUGIN_SOURCE.into(), String::new(), "github:owner/repo", "Plugin source", |s, _| s.install_plugin());
+    let caution = s.settings.install_link.as_ref().map(|source| {
+        format!("A link asked Comet to install {source}. A plugin runs code as you, so install it only if you trust where it comes from.")
+    });
+    let install_row = setting(
+        k,
+        title(k, "Install a plugin"),
+        Some(caution.unwrap_or_else(|| "An npm name, github:owner/repo, a git URL, a tarball or a folder. Comet runs no install scripts.".into())),
+        Some(row().gap(8.0).items_center().child(source).child(install)),
+    );
+    let mut sections = vec![list(k, vec![install_row])];
+    if let Some(doing) = &s.settings.plugin_busy {
+        sections.push(text(doing.clone()).font(crate::theme::text(13.0)).color(k.c.text_muted));
+    }
+    match &s.settings.plugins {
+        None => sections.push(text("Reading the plugins…").font(crate::theme::text(13.0)).color(k.c.text_faint)),
+        Some(listed) if listed.is_empty() => sections.push(text("No plugins yet.").font(crate::theme::text(13.0)).color(k.c.text_faint)),
+        Some(listed) => sections.extend(listed.iter().map(|plugin| plugin_section(s, plugin, busy, k))),
+    }
+    col()
+        .w_full()
+        .child(header(k, "Plugins", "Plugins add sidebars, panels, cards and commands. A plugin runs code as you. Turn each on where you want it."))
+        .child(body(sections))
+}
+
+/// One plugin: its title, version and source, then a switch for everywhere and for each project, then its buttons.
+fn plugin_section(s: &Comet, plugin: &PluginListing, busy: bool, k: &Kit) -> El {
+    let name = plugin.name.clone();
+    let switch = |label: String, on: bool, project: Option<String>| {
+        let name = name.clone();
+        Switch::new(on)
+            .web()
+            .label(label)
+            .hide_label()
+            .disabled(busy)
+            .on_toggle(move |s: &mut Comet| {
+                let message = ClientMessage::PluginToggle { name: name.clone(), on: !on, project: project.clone() };
+                s.manage_plugins(&format!("Turning {name} {}…", if on { "off" } else { "on" }), message);
+            })
+            .build(k)
+    };
+    let mut rows = Vec::new();
+    if let Some(error) = &plugin.error {
+        rows.push(setting(k, title(k, "Cannot run"), Some(error.clone()), None));
+    }
+    rows.push(setting(k, title(k, "Everywhere"), Some("On in every project.".into()), Some(switch(format!("{} everywhere", plugin.name), plugin.everywhere, None))));
+    let mut dirs: Vec<String> = Vec::new();
+    for dir in s.workspace.tabs.iter().map(|t| &t.project).chain(&plugin.projects) {
+        if !dirs.contains(dir) {
+            dirs.push(dir.clone());
+        }
+    }
+    for dir in dirs {
+        let on = plugin.projects.contains(&dir);
+        let label = s.account.project_label(&dir);
+        rows.push(setting(k, title(k, &label), Some(format::short_path(&dir)), Some(switch(format!("{} in {label}", plugin.name), on, Some(dir)))));
+    }
+    let (update, remove) = (name.clone(), name.clone());
+    let actions = match plugin.kind {
+        PluginKind::Local => None,
+        kind => Some(
+            row()
+                .gap(8.0)
+                .children((kind == PluginKind::Installed).then(|| {
+                    crate::theme::small_button("Update")
+                        .variant(ButtonVariant::Ghost)
+                        .disabled(busy)
+                        .on_press(move |s: &mut Comet| s.manage_plugins(&format!("Updating {update}…"), ClientMessage::PluginsUpdate { names: Some(vec![update.clone()]) }))
+                        .build(k)
+                }))
+                .child(
+                    crate::theme::small_button("Remove")
+                        .variant(ButtonVariant::Ghost)
+                        .disabled(busy)
+                        .on_press(move |s: &mut Comet| s.manage_plugins(&format!("Removing {remove}…"), ClientMessage::PluginRemove { name: remove.clone() }))
+                        .build(k),
+                ),
+        ),
+    };
+    let from = match plugin.kind {
+        PluginKind::Installed => format!("Installed from {}", plugin.source.as_deref().unwrap_or("?")),
+        PluginKind::Linked => format!("Linked to {}", plugin.source.as_deref().map(format::short_path).unwrap_or_default()),
+        PluginKind::Local => "Made by hand in ~/.comet/plugins. Comet does not change it.".into(),
+    };
+    let named = [plugin.title.as_deref().unwrap_or(&plugin.name), plugin.version.as_deref().unwrap_or("")].join(" ");
+    let heading = row()
+        .w_full()
+        .gap(12.0)
+        .items_center()
+        .child(
+            col()
+                .grow(1.0)
+                .min_w(0.0)
+                .gap(4.0)
+                .child(text(named.trim().to_owned()).font(crate::theme::medium(13.0)).color(k.c.text_base))
+                .children(plugin.description.clone().map(|d| text(d).font(crate::theme::text(13.0)).color(k.c.text_muted).wrap()))
+                .child(text(from).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate().min_w(0.0)),
+        )
+        .children(actions);
+    section_with(heading, list(k, rows))
 }
 
 /// The project's logo-like images to choose its icon from. It asks the

@@ -217,6 +217,34 @@ pub enum AgentState {
     Updating,
 }
 
+/// How a plugin got into `~/.comet/plugins`.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum PluginKind {
+    /// Comet installed it from its source.
+    Installed,
+    /// It links to a folder elsewhere, such as one its author works in.
+    Linked,
+    /// A folder made by hand, which Comet never changes.
+    Local,
+}
+
+/// A plugin in `~/.comet/plugins`, as Settings lists it.
+#[derive(Clone, Debug, Deserialize)]
+pub struct PluginListing {
+    pub name: String,
+    pub kind: PluginKind,
+    pub source: Option<String>,
+    pub title: Option<String>,
+    pub version: Option<String>,
+    pub description: Option<String>,
+    /// Why it cannot run, such as an API this Comet lacks.
+    pub error: Option<String>,
+    pub everywhere: bool,
+    /// The project folders it is on in.
+    pub projects: Vec<String>,
+}
+
 /// An agent as the core knows it now: whether it is installed and signed in, its models and its plan usage.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -953,6 +981,9 @@ pub enum CoreMessage {
     /// A short message for the user, such as a plugin's toast.
     #[serde(rename = "notice")]
     Notice { message: String },
+    /// The plugins in `~/.comet/plugins`, sent whole after each change to them.
+    #[serde(rename = "plugins")]
+    Plugins { plugins: Vec<PluginListing> },
     /// A message the app does not read yet. The core sends several on connect.
     #[serde(other)]
     Other,
@@ -1051,6 +1082,29 @@ pub enum ClientMessage {
     /// Starts every plugin again from its files, such as after an edit, and lays out every tab again.
     #[serde(rename = "plugins.reload")]
     PluginsReload,
+    /// Reads the plugins. The core answers with `plugins`.
+    #[serde(rename = "plugins.get")]
+    PluginsGet,
+    /// Installs a plugin from an npm name, a git URL, a tarball or a folder.
+    #[serde(rename = "plugin.add")]
+    PluginAdd { source: String },
+    /// Removes a plugin Comet installed or linked.
+    #[serde(rename = "plugin.remove")]
+    PluginRemove { name: String },
+    /// Updates installed plugins, those named or else all.
+    #[serde(rename = "plugins.update")]
+    PluginsUpdate {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        names: Option<Vec<String>>,
+    },
+    /// Turns a plugin on or off in a project, or everywhere without one.
+    #[serde(rename = "plugin.toggle")]
+    PluginToggle {
+        name: String,
+        on: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        project: Option<String>,
+    },
     /// Starts a terminal, or reattaches to one already running under this id, which replays its output.
     #[serde(rename = "terminal.open")]
     TerminalOpen { id: String, cols: usize, rows: usize },
@@ -1276,6 +1330,11 @@ mod tests {
             ClientMessage::FileRead { project: "/Users/me/code/web".into(), path: "src/login.ts".into() },
             ClientMessage::FileOpen { project: "/Users/me/code/web".into(), path: "src/login.ts".into(), line: Some(12) },
             ClientMessage::WindowFocus { focused: false },
+            ClientMessage::PluginsGet,
+            ClientMessage::PluginAdd { source: "github:someone/comet-plugin-reviews".into() },
+            ClientMessage::PluginRemove { name: "reviews".into() },
+            ClientMessage::PluginsUpdate { names: Some(vec!["reviews".into()]) },
+            ClientMessage::PluginToggle { name: "reviews".into(), on: true, project: Some("/Users/me/code/web".into()) },
         ];
         let encoded: Vec<Value> = ours.iter().map(|m| serde_json::to_value(m).unwrap()).collect();
         assert_eq!(encoded, fixtures("CLIENT_MESSAGES"));

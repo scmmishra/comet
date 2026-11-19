@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- Settings has a Plugins page. It installs, updates and removes plugins, and turns each on everywhere or per project. A `comet://plugin/install?source=…` link opens it with the source filled in, and installs nothing until you press Install.
 - `comet plugin` installs plugins from npm, git, a tarball or a folder, and updates, links and removes them. It turns a plugin on in a project or everywhere. A running Comet picks up the change without a reload.
 - A plugin can carry a manifest, the `comet` field of its `package.json`, with its name, title and the plugin API versions it works with. Comet does not start a plugin that needs an API it lacks.
 - Plugins can draw a diff with `Diff`, which takes a patch and draws it with the diff view Review uses.

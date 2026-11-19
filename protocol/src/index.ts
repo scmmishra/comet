@@ -1013,6 +1013,33 @@ export type ClientMessage =
   | { readonly type: "plugin.event"; readonly plugin: string; readonly handler: number; readonly args: readonly UiValue[] }
   /** Starts every plugin again from its files, such as after an edit, and lays out every tab again. */
   | { readonly type: "plugins.reload" }
+  /** Reads the plugins in `~/.comet/plugins`. The core answers with `plugins`. */
+  | { readonly type: "plugins.get" }
+  /** Installs a plugin from an npm name, a git URL, a tarball or a folder. The core answers every client with `plugins`. */
+  | { readonly type: "plugin.add"; readonly source: string }
+  /** Removes a plugin Comet installed or linked. The core answers every client with `plugins`. */
+  | { readonly type: "plugin.remove"; readonly name: string }
+  /** Updates installed plugins, those named or else all. The core answers every client with `plugins`. */
+  | { readonly type: "plugins.update"; readonly names?: readonly string[] }
+  /** Turns a plugin on or off in a project, or everywhere without one. The core answers every client with `plugins`. */
+  | { readonly type: "plugin.toggle"; readonly name: string; readonly on: boolean; readonly project?: string }
+
+/** A plugin in `~/.comet/plugins`, as Settings lists it. */
+export interface PluginListing {
+  readonly name: string
+  /** `installed`: Comet installed it from `source`. `linked`: it links to the folder `source`. `local`: a folder made by hand. */
+  readonly kind: "installed" | "linked" | "local"
+  readonly source?: string
+  /** From its manifest. */
+  readonly title?: string
+  readonly version?: string
+  readonly description?: string
+  /** Why it cannot run, such as an API this Comet lacks. */
+  readonly error?: string
+  readonly everywhere: boolean
+  /** The project folders it is on in. */
+  readonly projects: readonly string[]
+}
 
 export type CoreMessage =
   /** Comet's settings, sent on connect and again after every change. */
@@ -1082,3 +1109,5 @@ export type CoreMessage =
   | { readonly type: "error"; readonly message: string; readonly detail?: string }
   /** A short message for the user, such as a plugin's toast. */
   | { readonly type: "notice"; readonly message: string }
+  /** The plugins in `~/.comet/plugins`, sent whole after each change to them. */
+  | { readonly type: "plugins"; readonly plugins: readonly PluginListing[] }

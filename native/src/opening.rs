@@ -1,11 +1,14 @@
-//! The folder `comet <folder>` asks Comet to open. An installed Comet hears it as the link
-//! `comet://open?dir=<folder>`, which the system hands to the running Comet, or to the one it starts. A Comet
-//! run from the repo takes it from `COMET_DIR` at launch.
+//! The links Comet opens. `comet <folder>` asks Comet to open a folder: an installed Comet hears it as the
+//! link `comet://open?dir=<folder>`, which the system hands to the running Comet, or to the one it starts. A
+//! Comet run from the repo takes it from `COMET_DIR` at launch. `comet://plugin/install?source=<source>`
+//! asks Comet to install a plugin, which waits for the user to agree.
 
 use std::path::Path;
 
 /// The link `bin/comet` opens. Only Comet's own links name a folder.
 const OPEN: &str = "comet://open?";
+/// The link a plugin's page can offer to install it.
+const INSTALL: &str = "comet://plugin/install?";
 
 /// The folder a `comet://open?dir=` link names, when it is an existing folder. The link comes from
 /// outside Comet, so anything else is ignored.
@@ -13,6 +16,15 @@ pub fn folder_from_url(url: &str) -> Option<String> {
     let query = url.strip_prefix(OPEN)?;
     let dir = query.split('&').find_map(|pair| pair.strip_prefix("dir="))?;
     folder(&percent_decoded(dir)?)
+}
+
+/// The plugin source a `comet://plugin/install?source=` link names: one line of text. The link comes from
+/// outside Comet, so it only fills in the source Settings shows, and anything else is ignored.
+pub fn plugin_source_from_url(url: &str) -> Option<String> {
+    let query = url.strip_prefix(INSTALL)?;
+    let source = percent_decoded(&query.split('&').find_map(|pair| pair.strip_prefix("source="))?.replace('+', " "))?;
+    let source = source.trim();
+    (!source.is_empty() && !source.chars().any(char::is_control)).then(|| source.to_owned())
 }
 
 /// The folder `COMET_DIR` names, when it is an existing folder.
@@ -58,6 +70,15 @@ mod tests {
         assert_eq!(folder_from_url(&format!("comet://open?dir={escaped}")).as_deref(), dir.to_str());
         for url in ["comet://open?dir=%2Fno%2Fsuch%2Ffolder", "comet://open?dir=relative", "comet://other?dir=%2Ftmp", "https://open?dir=%2Ftmp", "comet://open?dir=%ZZ", "comet://open?name=x"] {
             assert_eq!(folder_from_url(url), None, "{url}");
+        }
+    }
+
+    #[test]
+    fn an_install_link_names_one_line_of_source_and_nothing_else() {
+        assert_eq!(plugin_source_from_url("comet://plugin/install?source=github%3Asomeone%2Fcomet-plugin-reviews").as_deref(), Some("github:someone/comet-plugin-reviews"));
+        assert_eq!(plugin_source_from_url("comet://plugin/install?x=1&source=comet-plugin-reviews").as_deref(), Some("comet-plugin-reviews"));
+        for url in ["comet://plugin/install?source=", "comet://plugin/install?source=a%0Ab", "comet://plugin/install?name=x", "comet://open?source=x", "https://plugin/install?source=x"] {
+            assert_eq!(plugin_source_from_url(url), None, "{url}");
         }
     }
 }

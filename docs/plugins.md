@@ -70,6 +70,18 @@ Comet installs a shared plugin with Bun, so a source can be an npm name, `github
 - A running Comet reloads its plugins when an entry in `~/.comet/plugins` comes or goes, or the packages' lockfile changes.
 - Bun may install a folder's files as hard links. Use a link, not an install, for a plugin you are editing.
 
+### From Settings
+
+Settings → Plugins lists every plugin in `~/.comet/plugins`: its title, version and source, and why it cannot run if it cannot. It installs from a source the user types. Each plugin has a switch for everywhere and one for each project open in a tab, and an installed or linked plugin has Update and Remove.
+
+A page can offer a link to install its plugin:
+
+```
+comet://plugin/install?source=github%3Asomeone%2Fcomet-plugin-reviews
+```
+
+Any web page can open that link, so it only fills in the source and shows a word of caution. Nothing is fetched until the user presses Install.
+
 ### From the terminal
 
 `comet plugin` manages plugins. It works on the files in `~/.comet` and never starts Comet. A running Comet sees the change and reloads its plugins.

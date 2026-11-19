@@ -232,6 +232,13 @@ export const CORE_MESSAGES = [
   },
   { type: "panel.show", tabId: "tab-1", id: "support.conversation?id=1001" },
   { type: "setups", setups: [{ project: "/Users/me/code/web", id: "support.triage", title: "Triage" }] },
+  {
+    type: "plugins",
+    plugins: [
+      { name: "reviews", kind: "installed", source: "github:someone/comet-plugin-reviews", title: "PR Reviews", version: "1.2.0", description: "Pull requests that wait for your review", everywhere: false, projects: ["/Users/me/code/web"] },
+      { name: "support", kind: "local", everywhere: true, projects: [], error: "support needs Comet's plugin API ^2.0.0, and this Comet has 0.1.0. Update Comet or the plugin." },
+    ],
+  },
 ] satisfies CoreMessage[]
 
 /** In the order the native tests build them. */
@@ -299,4 +306,9 @@ export const CLIENT_MESSAGES = [
   { type: "file.read", project: "/Users/me/code/web", path: "src/login.ts" },
   { type: "file.open", project: "/Users/me/code/web", path: "src/login.ts", line: 12 },
   { type: "window.focus", focused: false },
+  { type: "plugins.get" },
+  { type: "plugin.add", source: "github:someone/comet-plugin-reviews" },
+  { type: "plugin.remove", name: "reviews" },
+  { type: "plugins.update", names: ["reviews"] },
+  { type: "plugin.toggle", name: "reviews", on: true, project: "/Users/me/code/web" },
 ] satisfies ClientMessage[]

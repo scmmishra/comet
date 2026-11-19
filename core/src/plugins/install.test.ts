@@ -130,7 +130,7 @@ test("turns a plugin on and off everywhere and per project, keeping a project's 
   setPluginOn("d", true)
   expect(JSON.parse(readFileSync(join(home(), "plugins.json"), "utf8"))).toEqual({ everywhere: ["d"], projects: { "~/code/web": ["a", "b"], "/work/api": ["c"] } })
   setPluginOn("c", false, "/work/api")
-  expect(whereOn("a")).toEqual({ everywhere: false, projects: ["~/code/web"] })
+  expect(whereOn("a")).toEqual({ everywhere: false, projects: [join(process.env.HOME!, "code/web")] })
   expect(JSON.parse(readFileSync(join(home(), "plugins.json"), "utf8")).projects).toEqual({ "~/code/web": ["a", "b"] })
 })
 

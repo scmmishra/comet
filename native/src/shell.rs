@@ -191,6 +191,7 @@ impl Comet {
                 self.toasts.error(message, detail);
             }
             CoreMessage::Notice { message } => self.toasts.show(message, false),
+            CoreMessage::Plugins { plugins } => self.take_plugins(plugins),
             CoreMessage::Other => {}
         }
         let tabs: Vec<String> = self.workspace.tabs.iter().map(|t| t.id.clone()).collect();
@@ -386,8 +387,13 @@ fn copied_poll(s: &mut Comet, tx: &mut Tx) -> bool {
     false
 }
 
-/// A `comet://open?dir=` link, as `bin/comet` opens it: the folder opens in a new tab.
+/// A Comet link. `comet://open?dir=`, as `bin/comet` opens it, opens the folder in a new tab.
+/// `comet://plugin/install?source=` opens Plugins with the source filled in.
 pub fn open_url(s: &mut Comet, url: &str, _: &mut Tx) {
+    if let Some(source) = crate::opening::plugin_source_from_url(url) {
+        s.ask_install(source);
+        return;
+    }
     let Some(dir) = crate::opening::folder_from_url(url) else { return };
     s.workspace.open_asked(dir, &s.account, &s.core);
     s.sync_start();

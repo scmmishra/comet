@@ -8,7 +8,7 @@ use crate::shell::{CoreState, Comet};
 /// A scene: its name, and what it sets in a fresh window.
 type Scene = (&'static str, fn(&mut Comet));
 
-pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("models-other-agent", models_other_agent), ("models-missing-agent", models_missing_agent), ("models-new-tab", models_new_tab), ("start", start), ("worktree", worktree), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-codex", settings_codex), ("settings-antigravity", settings_antigravity), ("settings-signing-in", settings_signing_in), ("models-signing-in", models_signing_in), ("settings-projects", settings_projects), ("settings-appearance", settings_appearance), ("settings-verdigris", settings_verdigris), ("extensions", extensions), ("extensions-skills", extensions_skills), ("stop-notice", stop_notice), ("branch-notice", branch_notice), ("branch-confirm", branch_confirm), ("markdown", markdown), ("file", file)];
+pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("models-other-agent", models_other_agent), ("models-missing-agent", models_missing_agent), ("models-new-tab", models_new_tab), ("start", start), ("worktree", worktree), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("settings", settings), ("settings-codex", settings_codex), ("settings-antigravity", settings_antigravity), ("settings-signing-in", settings_signing_in), ("models-signing-in", models_signing_in), ("settings-projects", settings_projects), ("settings-plugins", settings_plugins), ("settings-appearance", settings_appearance), ("settings-verdigris", settings_verdigris), ("extensions", extensions), ("extensions-skills", extensions_skills), ("stop-notice", stop_notice), ("branch-notice", branch_notice), ("branch-confirm", branch_confirm), ("markdown", markdown), ("file", file)];
 
 /// The core messages in the JSON file `COMET_SCENE_FILE` names, with the thread rows in its `open` list
 /// opened.
@@ -56,6 +56,17 @@ fn settings(s: &mut Comet) {
 fn settings_projects(s: &mut Comet) {
     settings(s);
     s.open_settings("projects");
+}
+
+/// Settings on Plugins, opened by an install link, with an installed plugin and one that cannot run.
+fn settings_plugins(s: &mut Comet) {
+    settings(s);
+    s.ask_install("github:someone/comet-plugin-linear".into());
+    let plugins = serde_json::json!([
+        { "name": "reviews", "kind": "installed", "source": "github:someone/comet-plugin-reviews", "title": "PR Reviews", "version": "1.2.0", "description": "Pull requests that wait for your review.", "everywhere": false, "projects": ["/Users/me/code/web"] },
+        { "name": "support", "kind": "local", "everywhere": true, "projects": [], "error": "support needs Comet's plugin API ^2.0.0, and this Comet has 0.1.0. Update Comet or the plugin." }
+    ]);
+    s.take_plugins(serde_json::from_value(plugins).expect("the scene's plugins decode"));
 }
 
 /// Settings on Appearance, in Comet's colours, dark.

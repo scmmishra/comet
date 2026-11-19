@@ -10,6 +10,7 @@ import { findNamedFile, openableFile, openInEditor, readForView } from "./files"
 import { checkImages } from "./images"
 import { startPlugins } from "./plugins"
 import { watchInstalls } from "./plugins/watch"
+import { pluginListings, pluginManager } from "./plugins/manage"
 import { searchFiles } from "./project-files"
 import { findIconFiles, iconFile } from "./project-icons"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
@@ -59,6 +60,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
   })
   const ui = startPlugins({ broadcast, openThread: (tabId, thread) => void window.openKey(tabId, thread).catch(report), store: window, report })
   const { plugins, layouts } = ui
+  const manager = pluginManager(broadcast)
   // A plugin installed or removed while Comet runs, such as with `comet plugin`, takes effect at once.
   const stopWatching = watchInstalls(() => void ui.reload().catch(report))
   // Each project's commands, made the first time the project is named. They run as long as the core.
@@ -93,8 +95,9 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
 
   /** Runs one message. A failure, sync or async, reaches the client as an error. */
   const handle = async (message: ClientMessage, reply: Send) => {
-    // Every message about a project's data names its folder. It is checked here, once.
-    if ("project" in message) requireProjectFolder(message.project)
+    // Every message about a project's data names its folder. It is checked here, once. Turning a plugin
+    // on or off everywhere names none.
+    if ("project" in message && message.project !== undefined) requireProjectFolder(message.project)
     switch (message.type) {
       case "settings.update":
         settings = updateSettings(settings, message.change)
@@ -198,6 +201,16 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
         return plugins.event(message.plugin, message.handler, message.args)
       case "plugins.reload":
         return ui.reload()
+      case "plugins.get":
+        return reply({ type: "plugins", plugins: pluginListings() })
+      case "plugin.add":
+        return manager.add(message.source)
+      case "plugin.remove":
+        return manager.remove(message.name)
+      case "plugins.update":
+        return manager.update(message.names)
+      case "plugin.toggle":
+        return manager.toggle(message.name, message.on, message.project)
       case "terminal.open":
         return window.openTerminal(message.id, message.cols, message.rows)
       case "terminal.input":
