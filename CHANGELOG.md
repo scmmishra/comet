@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- `mise run install` installs the `comet` command into `~/.local/bin`. Comet.app carries it, so it updates with the app.
 - Settings → Plugins shows each plugin's settings and saves them, and marks a plugin that needs setup.
 - When a plugin's source folder is gone, the error names the plugin and says to remove it. Before, every install failed with Bun's error about a missing folder.
 - `comet plugin add` asks for a plugin's settings in a terminal, and `comet plugin set` lists and sets them.
