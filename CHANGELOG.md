@@ -2,7 +2,7 @@
 
 All notable changes to Comet are listed here. Changes go under `## Unreleased` until they ship. The release workflow publishes the section for the version in `native/Cargo.toml` as that release's notes.
 
-## Unreleased
+## 0.2.0
 
 - Settings → Projects lists recent projects and any project with a saved name, colour or icon, as well as those open in tabs. A worktree's tab lists its repo. Before, it listed only the projects open in tabs.
 - Settings → Plugins lists the same projects as Settings → Projects to turn a plugin on in. A worktree shows as its repo. Before, it listed only the projects open in tabs, and a worktree tab as its own project.
