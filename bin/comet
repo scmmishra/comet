@@ -5,7 +5,7 @@
 #   comet "What's up"      this folder, and sends the prompt on the default agent and model
 # It opens the link comet://open?dir=<folder>, which the system hands to the running Comet, or to the
 # one it starts. `comet plugin …` manages plugins instead, with the core's CLI, and does not start Comet.
-# `mise run install` installs Comet, and links the copy inside Comet.app into ~/.local/bin as `comet`.
+# `mise run install` installs Comet. Comet links the copy inside Comet.app into ~/.local/bin as `comet` when it starts.
 set -euo pipefail
 # The copy inside Comet.app serves that app. The repo's copy serves the installed Comet.
 self="$(readlink -f "$0")"

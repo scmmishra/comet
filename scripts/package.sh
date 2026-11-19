@@ -19,7 +19,8 @@ cp native/target/release/comet "$app/Contents/MacOS/Comet"
 # The core runs from Contents/Resources, where `native/src/core.rs` looks for it.
 rsync -a dist/stage/core/ "$app/Contents/Resources/core/"
 cp dist/stage/bun "$app/Contents/Resources/bun"
-# The command line tool rides in the app, so it updates with it. `install.sh` links it onto the PATH.
+# The command line tool rides in the app, so it updates with it. The core links it onto the PATH when it
+# starts (`core/src/command-line-tool.ts`).
 mkdir -p "$app/Contents/Resources/bin"
 cp bin/comet "$app/Contents/Resources/bin/comet"
 

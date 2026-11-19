@@ -9,22 +9,6 @@ staged="/Applications/.Comet.app.new"
 log="$HOME/.comet/update.log"
 lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
-# Links the command line tool onto the PATH. The link points into the installed app, so each install
-# updates it. A `comet` there that is not a link is someone else's, and stays.
-link_cli() {
-  local bin="$HOME/.local/bin" tool="$app/Contents/Resources/bin/comet"
-  mkdir -p "$bin"
-  if [ -e "$bin/comet" ] && [ ! -L "$bin/comet" ]; then
-    echo "$bin/comet is not a link Comet made, so the command line tool is not installed. Link $tool yourself."
-    return
-  fi
-  ln -sfn "$tool" "$bin/comet"
-  case ":$PATH:" in
-    *":$bin:"*) echo "Linked the comet command into $bin." ;;
-    *) echo "Linked the comet command into $bin. Add $bin to your PATH to run it." ;;
-  esac
-}
-
 "$repo/scripts/package.sh"
 rm -rf "$staged"
 ditto "$repo/dist/mac-arm64/Comet.app" "$staged"
@@ -34,7 +18,6 @@ if ! pgrep -f "^$app/Contents/MacOS/Comet" > /dev/null; then
   # The installed app takes comet:// links, over a build in dist with the same bundle id.
   "$lsregister" -f "$app"
   echo "Installed $app"
-  link_cli
   exit 0
 fi
 
@@ -53,5 +36,3 @@ APP="$app" STAGED="$staged" LSREGISTER="$lsregister" perl -MPOSIX -e 'POSIX::set
   echo "Updated."
 ' > "$log" 2>&1 < /dev/null &
 echo "Comet will quit, update and open again. The log is $log."
-# The link names the installed app's path, so it can be made while the swap waits for Comet to quit.
-link_cli
