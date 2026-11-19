@@ -40,6 +40,8 @@ export interface Handoffs {
 interface Child {
   readonly session: AgentSession
   readonly requests: Map<string, ThreadItem>
+  /** Stops the task, which then ends with what it has said so far. */
+  stop(): void
 }
 
 /** A session that may hand work off, with the tasks running for it. */
@@ -80,7 +82,7 @@ export class Delegations {
       answerQuestion: (requestId, answers) => answer(requestId, (session) => session.answerQuestion(requestId, answers)),
       pending: () => [...caller.children].flatMap((child) => [...child.requests.values()]),
       stop: () => {
-        for (const child of caller.children) void child.session.interrupt().catch(() => undefined)
+        for (const child of caller.children) child.stop()
       },
       close: () => {
         for (const child of caller.children) child.session.close()
@@ -135,16 +137,38 @@ export class Delegations {
     }
     const showItems = () => show({ items: [...items.values()], toolUses: [...items.values()].filter((item) => item.type === "tool").length })
 
+    // The agent's own subagents that still run. A turn can end while a background subagent runs. Claude
+    // Code starts a turn of its own once it ends, and that turn gives the answer. Commands left running in
+    // the background do not hold the task: a dev server never ends, and nothing tells one from a wait.
+    const runningSubagents = new Set<string>()
+    // An error ends the task as failed, whatever the agent left running.
+    let failed = false
+    let stopping = false
+    let done = false
+
     return new Promise<ToolResult>((resolve) => {
-      const finish = () => {
-        const outcome = taskOutcome([...items.values()])
+      const finish = (stopped = false) => {
+        if (done) return
+        done = true
+        const outcome = taskOutcome([...items.values()], stopped)
         show({ status: outcome.status, endedAt: Date.now(), summary: taskWords(outcome.text) })
         children.delete(child)
         child.session.close()
         resolve({ text: outcome.text, isError: outcome.status !== "completed" })
       }
       const emit = (event: ThreadEvent) => {
-        if (event.kind === "status" && !event.busy) return finish()
+        if (done) return
+        if (event.kind === "status") {
+          if (event.busy) failed = false
+          // A subagent may end just before the turn it starts, so the task ends only when a turn does.
+          if (!event.busy && (stopping || failed || !runningSubagents.size)) finish(stopping)
+          return
+        }
+        if (event.kind === "subagent") {
+          if (event.subagent.status === "running") runningSubagents.add(event.subagent.id)
+          else runningSubagents.delete(event.subagent.id)
+          return
+        }
         if (event.kind === "items.remove") {
           event.ids.forEach((id) => items.delete(id))
           return showItems()
@@ -159,11 +183,23 @@ export class Delegations {
         if (event.item.type === "user") return
         items.set(event.item.id, event.item)
         showItems()
+        if (event.item.type !== "error") return
+        failed = true
+        // An error between turns, such as the agent's process exiting while its subagents ran, has no turn to end.
+        if (!session.busy) finish()
       }
-      const child: Child = { session: this.agents.get(info.id).open(host.project, emit, { settings, onSessionId: () => {}, ephemeral: true }), requests: new Map() }
+      const session = this.agents.get(info.id).open(host.project, emit, { settings, onSessionId: () => {}, ephemeral: true })
+      const stop = () => {
+        if (done) return
+        // Between turns there is no turn to stop. Closing the session ends the work it left running.
+        if (!session.busy) return finish(true)
+        stopping = true
+        void session.interrupt().catch(() => undefined)
+      }
+      const child: Child = { session, requests: new Map(), stop }
       children.add(child)
       // The agent that asked gave up on the call, such as when the user stopped its turn.
-      signal.addEventListener("abort", () => void child.session.interrupt().catch(() => undefined))
+      signal.addEventListener("abort", stop)
       show({})
       child.session.send(task)
     })
@@ -212,19 +248,20 @@ export function narrowed(parent: PermissionMode, modes: readonly PermissionMode[
 
 /**
  * How a task ended, from what it left in its thread: its last text when it finished, else why it did not.
- * A task that failed after it answered keeps that answer, after T3 Code: the work it reports may be done.
+ * A task that failed or was stopped after it answered keeps that answer, after T3 Code: the work it reports
+ * may be done. `stopped` says Comet stopped it between turns, which leaves no stopped result.
  */
-function taskOutcome(items: readonly ThreadItem[]): { readonly status: "completed" | "failed" | "stopped"; readonly text: string } {
+function taskOutcome(items: readonly ThreadItem[], stopped: boolean): { readonly status: "completed" | "failed" | "stopped"; readonly text: string } {
   const lastAnswer = (among: readonly ThreadItem[]) => among.findLast((item) => item.type === "text" && item.text.trim())
+  const report = (among: readonly ThreadItem[], end: string) => {
+    const answer = lastAnswer(among)
+    return answer?.type === "text" ? `\n\nIts last report before it ${end}:\n\n${answer.text}` : ""
+  }
   const errorAt = items.findLastIndex((item) => item.type === "error")
   const error = items[errorAt]
-  if (error?.type === "error") {
-    const answer = lastAnswer(items.slice(0, errorAt))
-    const report = answer?.type === "text" ? `\n\nIts last report before it failed:\n\n${answer.text}` : ""
-    return { status: "failed", text: `The task failed: ${error.message}${report}` }
-  }
+  if (error?.type === "error") return { status: "failed", text: `The task failed: ${error.message}${report(items.slice(0, errorAt), "failed")}` }
   const result = items.findLast((item) => item.type === "result")
-  if (result?.type === "result" && result.stopped) return { status: "stopped", text: "The task was stopped before it finished." }
+  if (stopped || (result?.type === "result" && result.stopped)) return { status: "stopped", text: `The task was stopped before it finished.${report(items, "was stopped")}` }
   const answer = lastAnswer(items)
   return answer?.type === "text" ? { status: "completed", text: answer.text } : { status: "failed", text: "The task ended without an answer." }
 }

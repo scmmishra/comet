@@ -59,6 +59,7 @@ type RequestSuggestions = Parameters<CanUseTool>[2]["suggestions"]
  */
 const CONVERSATION_NOT_FOUND = "No conversation found with session ID:"
 const CONVERSATION_LOST = "Claude Code could not find the earlier conversation. Your next message starts a new conversation in this tab."
+const SUBAGENTS_LOST = "Claude Code exited before its subagents finished."
 /** Claude Code's tools that move a session into a worktree and back out. */
 const WORKTREE_TOOLS = new Set(["EnterWorktree", "ExitWorktree"])
 
@@ -320,6 +321,8 @@ export class ClaudeSession implements AgentSession {
   private streamEnded(running: Query) {
     if (this.closed || this.query !== running) return
     if (this.running) return this.fail(new Error("Claude Code exited before it finished the turn."))
+    // Its background subagents end with it, and no turn of its own will report them, so the thread says why.
+    if (this.subagents.running) this.emit({ kind: "item", item: errorItem(new Error(SUBAGENTS_LOST)) })
     this.release()
   }
 

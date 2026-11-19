@@ -268,6 +268,16 @@ test("a stream that ends stops the subagents still running and empties the backg
   expect(lastSubagent(s)).toMatchObject({ subagent: { id: "t1", status: "stopped", endedAt: expect.any(Number) } })
 })
 
+test("a stream that ends between turns with a subagent running says so, and ends no turn", async () => {
+  const s = setup()
+  const running = await started(s)
+  await backgroundWork(s, running)
+  running.end()
+  await until(() => s.items().some((item) => item.type === "error"))
+  expect(s.items().at(-1)).toMatchObject({ type: "error", message: "Claude Code exited before its subagents finished." })
+  expect(s.statuses()).toEqual([true, false])
+})
+
 test("a failure and a close stop the subagents still running and empty the background commands", async () => {
   for (const end of ["fail", "close"] as const) {
     const s = setup()

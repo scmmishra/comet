@@ -84,6 +84,11 @@ export class Subagents {
     }
   }
 
+  /** Whether a subagent still runs, such as one in the background after its turn ended. */
+  get running() {
+    return [...this.byTask.values()].some((tracked) => tracked.subagent.status === "running")
+  }
+
   /**
    * Ends the subagents still running as stopped, after T3 Code, once Claude Code's process is gone. They
    * end with it and never report it. The next process starts subagents of its own.

@@ -165,3 +165,94 @@ test("a closed session ends its tasks and loses its token", async () => {
   expect(codex.calls.at(-1)).toBe("close")
   expect(service.toolsFor(server.authorization)).toBeUndefined()
 })
+
+const subagentOf = (status: Subagent["status"]): ThreadEvent => ({ kind: "subagent", subagent: { id: "a1", description: "Explore", status, background: true, startedAt: 0, toolUses: 0, items: [] } })
+
+/** Whether a promise has settled yet. */
+const settled = async (promise: Promise<unknown>) => Promise.race([promise.then(() => true), Bun.sleep(0).then(() => false)])
+
+test("a task waits for its background subagent, and answers with the turn Claude Code starts once it ends", async () => {
+  const { codex, call, last } = await delegations()
+  const answer = call({ agent: "codex", task: "Explore it." })
+  const session = codex.sessions[0]!
+  session.emit(subagentOf("running"))
+  session.emit({ kind: "item", item: { type: "text", id: "x1", text: "The sub-agent is still running.", done: true } })
+  session.finish()
+  expect(await settled(answer)).toBe(false)
+  expect(last().status).toBe("running")
+
+  // The subagent ends before Claude Code starts its own turn. The task waits for that turn.
+  session.emit(subagentOf("completed"))
+  expect(await settled(answer)).toBe(false)
+  session.emit({ kind: "status", busy: true })
+  session.emit({ kind: "item", item: { type: "text", id: "x2", text: "Found three callers.", done: true } })
+  session.finish()
+  expect(await answer).toEqual({ text: "Found three callers.", isError: false })
+  expect(codex.calls.at(-1)).toBe("close")
+})
+
+test("a later turn that ends without text keeps the task's earlier answer", async () => {
+  const { codex, call } = await delegations()
+  const answer = call({ agent: "codex", task: "Explore it." })
+  const session = codex.sessions[0]!
+  session.emit(subagentOf("running"))
+  session.emit({ kind: "item", item: { type: "text", id: "x1", text: "Tests pass.", done: true } })
+  session.finish()
+  session.emit({ kind: "status", busy: true })
+  session.emit(subagentOf("completed"))
+  session.emit({ kind: "item", item: { type: "tool", id: "t1", name: "Bash", summary: "true", kind: "command", label: "Ran true" } })
+  session.finish()
+  expect(await answer).toEqual({ text: "Tests pass.", isError: false })
+})
+
+test("a task that leaves a command running in the background, such as a dev server, answers at once", async () => {
+  const { codex, call } = await delegations()
+  const answer = call({ agent: "codex", task: "Start the dev server." })
+  const session = codex.sessions[0]!
+  session.emit({ kind: "background", tasks: [{ id: "b1", label: "bun run dev", startedAt: 0 }] })
+  session.emit({ kind: "item", item: { type: "text", id: "x1", text: "The dev server runs on port 3000.", done: true } })
+  session.finish()
+  expect(await answer).toEqual({ text: "The dev server runs on port 3000.", isError: false })
+})
+
+test("a task whose subagent runs ends at once when it fails, even between turns", async () => {
+  const { codex, call } = await delegations()
+  const inTurn = call({ agent: "codex", task: "Explore it." })
+  codex.sessions[0]!.emit(subagentOf("running"))
+  codex.sessions[0]!.emit({ kind: "item", item: { type: "error", id: "e1", message: "Claude Code exited before it finished the turn." } })
+  codex.sessions[0]!.emit({ kind: "status", busy: false })
+  expect(await inTurn).toEqual({ text: "The task failed: Claude Code exited before it finished the turn.", isError: true })
+
+  // Claude Code's process exits while no turn runs, so no turn ends. The error ends the task.
+  const between = call({ agent: "codex", task: "Explore it." })
+  const session = codex.sessions[1]!
+  session.emit(subagentOf("running"))
+  session.emit({ kind: "item", item: { type: "text", id: "x1", text: "The sub-agent is still running.", done: true } })
+  session.finish()
+  session.emit({ kind: "item", item: { type: "error", id: "e2", message: "Claude Code exited before its subagents finished." } })
+  expect(await between).toEqual({ text: "The task failed: Claude Code exited before its subagents finished.\n\nIts last report before it failed:\n\nThe sub-agent is still running.", isError: true })
+})
+
+test("a task stopped in its turn waits for that turn to end, whatever its subagents do", async () => {
+  const { handoffs, codex, call } = await delegations()
+  const answer = call({ agent: "codex", task: "Explore it." })
+  codex.sessions[0]!.emit(subagentOf("running"))
+  handoffs.stop()
+  expect(await answer).toEqual({ text: "The task was stopped before it finished.", isError: true })
+})
+
+test("the asking agent giving up on a task that waits for its subagent stops it, and keeps what it said", async () => {
+  const { codex, call, last } = await delegations()
+  const abort = new AbortController()
+  const answer = call({ agent: "codex", task: "Explore it." }, abort.signal)
+  const session = codex.sessions[0]!
+  session.emit(subagentOf("running"))
+  session.emit({ kind: "item", item: { type: "text", id: "x1", text: "The sub-agent is still running.", done: true } })
+  session.finish()
+  expect(await settled(answer)).toBe(false)
+  abort.abort()
+  expect(await answer).toEqual({ text: "The task was stopped before it finished.\n\nIts last report before it was stopped:\n\nThe sub-agent is still running.", isError: true })
+  expect(last().status).toBe("stopped")
+  // No turn runs, so there is none to interrupt. Closing the session ends the subagent.
+  expect(codex.calls.slice(-1)).toEqual(["close"])
+})

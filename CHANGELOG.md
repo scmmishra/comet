@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- A task handed to Claude waits for the subagents Claude runs in the background, and answers with what Claude says once they finish. Before, it returned Claude's "still running" message. A task that is stopped between turns now reads as stopped, with its last report.
 - When a Codex hook stops a turn, the thread shows the hook's reason. A delegated Codex task that a hook stops reads as failed, with that reason.
 - A Claude subagent that is resumed keeps the steps and summary of its earlier run.
 - Comet runs on a newer Rune. Long threads lay out their Markdown faster. A scroll area inside the thread no longer traps the mouse wheel. Icons follow OpenCode's current catalog, so a command step shows a boxed console mark and Changes shows a plain ±.
