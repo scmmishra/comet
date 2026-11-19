@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- Settings → Plugins sets where a plugin runs with one choice, Everywhere or Some projects, and lists projects one line each, with their mark. Before, each project took a tall row of its own beside an Everywhere switch.
 - `comet plugin` takes a plugin's package name as well as its name, and says which plugins there are when a name matches none. It says when a source is installed already, and when a package is not on npm. It refuses an option a command does not take.
 - `comet plugin remove --purge` removes a plugin's settings too. Without it, `remove` says where the settings stay.
 - Ctrl-C during `comet plugin add`'s questions skips the rest and says the plugin is installed. Before, it ended the command with no word.

@@ -587,40 +587,14 @@ fn plugins(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> El {
         .child(body(sections))
 }
 
-/// One plugin: its title, version and source, then its settings, a switch for everywhere and for each project,
-/// then its buttons.
+/// One plugin: its title, version and source, then its settings, then where it runs, then its buttons.
 fn plugin_section(s: &Comet, plugin: &PluginListing, busy: bool, k: &Kit, layer: &mut Vec<El>) -> El {
     let name = plugin.name.clone();
-    let switch = |label: String, on: bool, project: Option<String>| {
-        let name = name.clone();
-        Switch::new(on)
-            .web()
-            .label(label)
-            .hide_label()
-            .disabled(busy)
-            .on_toggle(move |s: &mut Comet| {
-                let message = ClientMessage::PluginToggle { name: name.clone(), on: !on, project: project.clone() };
-                s.manage_plugins(&format!("Turning {name} {}…", if on { "off" } else { "on" }), message);
-            })
-            .build(k)
-    };
     let mut rows = Vec::new();
     if let Some(error) = &plugin.error {
         rows.push(setting(k, title(k, "Cannot run"), Some(error.clone()), None));
     }
     rows.extend(plugin.settings.iter().map(|wanted| plugin_setting(s, plugin, wanted, busy, k, layer)));
-    rows.push(setting(k, title(k, "Everywhere"), Some("On in every project.".into()), Some(switch(format!("{} everywhere", plugin.name), plugin.everywhere, None))));
-    let mut dirs: Vec<String> = Vec::new();
-    for dir in s.workspace.tabs.iter().map(|t| &t.project).chain(&plugin.projects) {
-        if !dirs.contains(dir) {
-            dirs.push(dir.clone());
-        }
-    }
-    for dir in dirs {
-        let on = plugin.projects.contains(&dir);
-        let label = s.account.project_label(&dir);
-        rows.push(setting(k, title(k, &label), Some(format::short_path(&dir)), Some(switch(format!("{} in {label}", plugin.name), on, Some(dir)))));
-    }
     let (update, remove) = (name.clone(), name.clone());
     let actions = match plugin.kind {
         PluginKind::Local => None,
@@ -669,7 +643,63 @@ fn plugin_section(s: &Comet, plugin: &PluginListing, busy: bool, k: &Kit, layer:
                 .child(text(from).font(crate::theme::text(12.0)).color(k.c.text_faint).truncate().min_w(0.0)),
         )
         .children(actions);
-    section_with(heading, list(k, rows))
+    let lists = col().w_full().gap(12.0).children((!rows.is_empty()).then(|| list(k, rows))).child(list(k, vec![runs_in(s, plugin, busy, k)]));
+    section_with(heading, lists)
+}
+
+/// Where a plugin runs: everywhere, or in the projects switched on. One choice picks between them. Projects show
+/// only for the second, one line each, since everywhere makes them moot. They are the projects open in tabs, and any
+/// other the plugin is on in.
+fn runs_in(s: &Comet, plugin: &PluginListing, busy: bool, k: &Kit) -> El {
+    let toggle = |name: String, on: bool, project: Option<String>| {
+        move |s: &mut Comet| {
+            let message = ClientMessage::PluginToggle { name: name.clone(), on, project: project.clone() };
+            s.manage_plugins(&format!("Turning {name} {}…", if on { "on" } else { "off" }), message);
+        }
+    };
+    let (name, everywhere) = (plugin.name.clone(), plugin.everywhere);
+    let scope = crate::ui::segmented(
+        k,
+        "Where it runs",
+        &[crate::ui::Segment { icon: None, words: Some("Everywhere"), name: "Everywhere" }, crate::ui::Segment { icon: None, words: Some("Some projects"), name: "Some projects" }],
+        usize::from(!everywhere),
+        move |s: &mut Comet, i| {
+            // Picking the choice already shown changes nothing.
+            if busy || (i == 0) == everywhere {
+                return;
+            }
+            toggle(name.clone(), i == 0, None)(s)
+        },
+    );
+    let description = if everywhere { "Every project." } else { "The projects switched on below." };
+    let head = setting(k, title(k, "Runs in"), Some(description.into()), Some(scope));
+    if everywhere {
+        return head;
+    }
+    let mut dirs: Vec<&String> = Vec::new();
+    for dir in s.workspace.tabs.iter().map(|t| &t.project).chain(&plugin.projects) {
+        if !dirs.contains(&dir) {
+            dirs.push(dir);
+        }
+    }
+    let lines = dirs.into_iter().map(|dir| {
+        let (on, label) = (plugin.projects.contains(dir), s.account.project_label(dir));
+        let switch = Switch::new(on).web().label(format!("{} in {label}", plugin.name)).hide_label().disabled(busy).on_toggle(toggle(plugin.name.clone(), !on, Some(dir.clone()))).build(k);
+        row()
+            .key(format!("runs-in-{dir}"))
+            .w_full()
+            .h(36.0)
+            .gap(10.0)
+            .items_center()
+            .child(crate::shell::project_mark(s, dir, k))
+            .child(text(label).font(crate::theme::medium(13.0)).color(k.c.text_base))
+            .child(text(format::short_path(dir)).font(crate::theme::text(13.0)).color(k.c.text_faint).truncate().min_w(0.0).shrink())
+            .child(row().grow(1.0))
+            .child(switch)
+    });
+    let lines: Vec<El> = lines.collect();
+    let empty = lines.is_empty().then(|| text("Open a project in a tab to turn the plugin on there.").font(crate::theme::text(13.0)).color(k.c.text_faint));
+    col().w_full().pb(14.0).child(head.pb(8.0)).children(lines).children(empty)
 }
 
 /// One of a plugin's settings, with the control its type takes: a field for text, which Enter saves, or ⌘Enter
