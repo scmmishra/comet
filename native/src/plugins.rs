@@ -255,6 +255,7 @@ fn node_view(s: &Comet, plugin: &str, id: u64, project: &str, frame: Frame, k: &
         "messages" => messages_view(props, k),
         "markdown" => col()
             .w_full()
+            .grow(1.0)
             .min_h(0.0)
             .scroll(ScrollSpec { stick_bottom: false })
             .child(crate::reply::outside(prop(props, "text").unwrap_or("")).style(theme::markdown(k, s.account.text_size())).build(k)),
