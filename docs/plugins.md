@@ -177,6 +177,8 @@ import logo from "./logo.svg"
 <Item title="Docs" icon="link" href={docs} />
 ```
 
+`Markdown` draws images from local files, named by absolute path: `![Before](/path/to/before.png)`. The app fetches nothing from the network, so a plugin downloads an image first, as the PR review plugin does with a description's screenshots. Any other image draws as its alt text.
+
 `Diff` draws a unified diff, as `git diff` writes it, with the diff view Review uses. It fills the space it is given, so it suits a panel of its own. Its files fold, and it follows Review's choice of unified or split. A new `patch` resets the folds. Past 8 files, every file starts folded, as in Review.
 
 ```tsx

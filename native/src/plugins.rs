@@ -101,6 +101,9 @@ pub struct Plugins {
     pub setups: Vec<crate::protocol::ProjectSetup>,
     /// Each diff node's state: the patch it was parsed from, and the files a diff view draws.
     diffs: HashMap<(String, u64), (String, DiffState)>,
+    /// The pictures each Markdown node shows, by source. Views read the app's state without changing it, so
+    /// they are kept behind a cell.
+    pictures: std::cell::RefCell<HashMap<(String, u64), crate::images::Kept>>,
 }
 
 impl Plugins {
@@ -145,6 +148,7 @@ impl Comet {
         let nodes = self.plugins.nodes.get(plugin);
         let patch_of = |id: u64| nodes?.get(&id).filter(|n| n.kind == DIFF_NODE).map(|n| prop(&n.props, "patch").unwrap_or(""));
         self.plugins.diffs.retain(|(owner, id), _| owner != plugin || patch_of(*id).is_some());
+        self.plugins.pictures.borrow_mut().retain(|(owner, id), _| owner != plugin || nodes.is_some_and(|n| n.get(id).is_some_and(|n| n.kind == "markdown")));
         let changed: Vec<(u64, String)> = nodes
             .into_iter()
             .flatten()
@@ -285,12 +289,12 @@ fn node_view(s: &Comet, plugin: &str, id: u64, project: &str, frame: Frame, k: &
         "textinput" => input_view(s, plugin, id, props, k),
         DIFF_NODE => diff_view(s, plugin, id, k),
         "messages" => messages_view(props, k),
-        "markdown" => col()
-            .w_full()
-            .grow(1.0)
-            .min_h(0.0)
-            .scroll(ScrollSpec { stick_bottom: false })
-            .child(crate::reply::outside(prop(props, "text").unwrap_or("")).style(theme::markdown(k, s.account.text_size())).build(k)),
+        "markdown" => {
+            // The node keeps the pictures it shows, and lets them go when it leaves.
+            let kept = s.plugins.pictures.borrow_mut().entry((plugin.to_owned(), id)).or_default().clone();
+            let markdown = crate::reply::outside(prop(props, "text").unwrap_or("")).images(s.images.file_loader(kept));
+            col().w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).child(markdown.style(theme::markdown(k, s.account.text_size())).build(k))
+        }
         other => text(format!("{other} is not a Comet element.")).font(crate::theme::text(13.0)).color(k.c.text_faint),
     }
 }
@@ -517,5 +521,20 @@ mod tests {
 
         s.take_plugin_ops("p", &ops(serde_json::json!([{ "op": "remove", "parent": 1, "id": 2 }])), false);
         assert!(s.plugins.diffs.is_empty());
+    }
+
+    #[test]
+    fn a_markdown_node_lets_its_pictures_go_when_it_leaves() {
+        let mut s = Comet::default();
+        s.take_plugin_ops("p", &ops(serde_json::json!([
+            { "op": "create", "id": 1, "type": "root" },
+            { "op": "create", "id": 2, "type": "markdown" },
+            { "op": "insert", "parent": 1, "id": 2 }
+        ])), false);
+        s.plugins.pictures.borrow_mut().entry(("p".to_owned(), 2)).or_default();
+        s.take_plugin_ops("p", &ops(serde_json::json!([{ "op": "set", "id": 2, "key": "text", "value": "![a](/tmp/a.png)" }])), false);
+        assert_eq!(s.plugins.pictures.borrow().len(), 1, "a node that stays keeps its pictures");
+        s.take_plugin_ops("p", &ops(serde_json::json!([{ "op": "remove", "parent": 1, "id": 2 }])), false);
+        assert!(s.plugins.pictures.borrow().is_empty());
     }
 }

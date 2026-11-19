@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- A plugin's Markdown draws images from local files. Before, every image drew as a broken image and its alt text.
 - `comet` with no folder opens the folder it runs in. `comet "<prompt>"` opens a new tab there and sends the prompt on the default agent and model.
 - Settings has a Plugins page. It installs, updates and removes plugins, and turns each on everywhere or per project. A `comet://plugin/install?source=…` link opens it with the source filled in, and installs nothing until you press Install.
 - `comet plugin` installs plugins from npm, git, a tarball or a folder, and updates, links and removes them. It turns a plugin on in a project or everywhere. A running Comet picks up the change without a reload.

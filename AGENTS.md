@@ -62,6 +62,7 @@ Do not take screen captures. Rune runs Comet headless, with no window and no cor
 - `src/scenes.rs` lists the scenes. The `file` scene takes core messages from the JSON file `COMET_SCENE_FILE` names, so any thread, review or plugin view can be drawn from data.
 - `--script events.json` replays input: `tap`, `move`, `drag`, `wheel`, `type`, `key` and `paste`, each at a time `t`. A text field takes keys only once a tap has focused it.
 - A headless run has no input method events, no system clipboard and no core. Check those in the installed app.
+- A headless run plays its frames in virtual time, faster than images decode, and its waker does nothing. An image the view starts to load never shows. A scene that must show one waits on it with `Image::wait` before its first frame.
 
 ## References
 
