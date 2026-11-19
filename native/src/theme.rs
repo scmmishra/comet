@@ -379,6 +379,9 @@ pub fn markdown(k: &Kit, size: f32) -> MarkdownStyle {
         .strong_weight(600.0)
         // A 20 point indent with the marker centred in it, in the faint text colour, as a disc marker draws there.
         .list(20.0, 4.0)
+        // rune-kit's checkbox is 16 points, 8 in, which ends past Comet's 20 point indent and meets the text.
+        // A 14 point box at the indent's start leaves a 6 point gap. Its colours are rune-kit's own.
+        .task_checkbox(14.0, k.radius.sm, 0.0, None, k.c.surface_weak, k.c.std_icon, Color::TRANSPARENT, k.c.border_weak)
         .muted(k.c.text_faint)
         .inline_code_font(0.92, 400.0)
         .inline_code_bg(color(d.raised))
