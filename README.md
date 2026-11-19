@@ -12,7 +12,13 @@ Comet needs at least one agent, installed and logged in. It finds [Claude Code](
 
 Download `Comet-arm64.zip` from the [latest release](https://github.com/scmmishra/comet/releases), unzip it and move `Comet.app` to `/Applications`. Comet is not notarized. If macOS refuses to open it, allow it in System Settings › Privacy & Security.
 
-`mise run install` also installs the `comet` command, as a link in `~/.local/bin`. Run `comet` in a folder to open it, `comet "<prompt>"` to start a thread there, or `comet plugin` to manage plugins.
+Comet.app carries the `comet` command. To run it from a terminal, link it onto your `PATH`:
+
+```sh
+ln -s /Applications/Comet.app/Contents/Resources/bin/comet ~/.local/bin/comet
+```
+
+Run `comet` in a folder to open it, `comet "<prompt>"` to start a thread there, or `comet plugin` to manage plugins. A build from source with `mise run install` makes this link for you.
 
 ## Build from source
 
