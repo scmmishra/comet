@@ -86,6 +86,15 @@ struct Finding {
     line: Option<u32>,
 }
 
+/// A file of Review that an agent asked to see, while Review reads the changes it is in.
+struct Revealing {
+    tab: String,
+    scope: String,
+    path: String,
+    /// Whether Review has read those changes, so the file can be scrolled to.
+    read: bool,
+}
+
 #[derive(Default)]
 pub struct Panel {
     reviews: HashMap<String, Review>,
@@ -97,6 +106,8 @@ pub struct Panel {
     file_shown: Option<String>,
     /// The file link last pressed, while the core finds the file it names.
     finding: Option<Finding>,
+    /// The file of Review an agent opened last, until Review scrolls to it.
+    revealing: Option<Revealing>,
     /// Whether a Markdown file tab shows its source, once someone chose, by file tab id.
     markdown_source: HashMap<String, bool>,
     /// The zoom and pan of the image in front. It starts fitted each time a file comes to the front.
@@ -121,6 +132,9 @@ impl Comet {
             return;
         }
         let diff = self.panel.diff_state(files.iter().flat_map(|f| parse(&f.patch)).collect());
+        if let Some(revealing) = self.panel.revealing.as_mut().filter(|r| r.tab == tab && r.scope == scope) {
+            revealing.read = true;
+        }
         self.panel.reviews.insert(tab, Review { scope, files, diff });
     }
 
@@ -129,8 +143,8 @@ impl Comet {
         self.panel.files.insert((project, path), shown);
     }
 
-    /// A turn ended, so Review reads the changes again.
-    pub fn turn_ended(&mut self, tab: &str) {
+    /// Review's changes in `tab` may be old, such as after a turn ended, so Review reads them again.
+    pub fn review_stale(&mut self, tab: &str) {
         if self.panel.asked.as_ref().is_some_and(|(t, _)| t == tab) {
             self.panel.asked = None;
         }
@@ -191,6 +205,23 @@ impl Comet {
         );
         self.workspace.settings_page = None;
         self.sync_panel();
+    }
+
+    /// Opens the tab's pane on Review, as its agent asked, and scrolls to the file `path` names once
+    /// Review has read the changes again. The agent may have changed files since Review last read them.
+    pub fn show_review(&mut self, tab: &str, scope: &str, path: Option<String>) {
+        self.panel.revealing = path.map(|path| Revealing { tab: tab.to_owned(), scope: scope.to_owned(), path, read: false });
+        self.review_stale(tab);
+        self.open_review(tab, scope);
+    }
+
+    /// Scrolls Review to the file an agent opened, once Review has read it. A file not in Review stays unshown.
+    pub fn reveal_review_file(&mut self, tx: &mut Tx) {
+        let Some(revealing) = self.panel.revealing.take_if(|r| r.read) else { return };
+        let Some(review) = self.panel.reviews.get_mut(&revealing.tab) else { return };
+        if let Some(file) = review.diff.file_index(&revealing.path) {
+            review.diff.scroll_to_file(file, tx);
+        }
     }
 
     /// Shows a file Comet knows is there, such as a changed file, in the tab's panel. A relative path is in the project.

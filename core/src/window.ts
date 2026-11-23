@@ -14,6 +14,7 @@ import { Terminals } from "./terminals"
 import { moveTools } from "./tools/move"
 import type { SessionTools, ToolSessions } from "./tools/sessions"
 import type { ToolGroup } from "./tools/tool"
+import { viewPaneTools } from "./tools/view-pane"
 import { TurnWatch } from "./turn"
 import { SHOW_TOOLS } from "./visuals/show"
 import { checkpointsOf, keyedId, keyedProject, loadWindowState, paneWidths, saveWindowState, type ClosedTab, type TabThread, type WindowState } from "./window-state"
@@ -676,6 +677,11 @@ export class Window {
     }
     const rewind = this.thread(tab.id).rewind
     const agent = this.agent(tab)
+    // A parked thread is off its tab, so what its agent opens would show beside another thread.
+    const shown = (message: CoreMessage) => {
+      if (!current()) throw new Error("This thread is no longer on show in its tab, so Comet cannot open anything beside it.")
+      this.hooks.broadcast(message)
+    }
     const handoffs = this.hooks.delegations.open({
       project: tab.project,
       settings: () => this.state.tabs.find((open) => open.id === tab.id) ?? tab,
@@ -688,6 +694,12 @@ export class Window {
       ...(agent.movesThreads && !key ? [moveTools((dir) => this.askMove(tab.id, dir))] : []),
       // A thread that would show the call as a step never hears of the tool, so its agent writes the data out.
       ...(agent.drawsVisuals ? [SHOW_TOOLS] : []),
+      viewPaneTools({
+        project: () => tab.project,
+        changes: (scope) => this.review(tab.id, scope),
+        showFile: (path, line) => shown({ type: "file.show", tabId: tab.id, path, ...(line ? { line } : {}) }),
+        showReview: (scope, path) => shown({ type: "review.show", tabId: tab.id, scope, ...(path ? { path } : {}) }),
+      }),
     ]
     const tools = this.hooks.tools.open(groups)
     const saveSession = (change: Partial<TabThread>) => {

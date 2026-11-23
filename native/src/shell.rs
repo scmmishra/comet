@@ -110,6 +110,7 @@ impl Comet {
         if files {
             self.pick_waiting_file(tx);
         }
+        self.reveal_review_file(tx);
         // Rune does nothing when the families have not changed.
         if settings {
             let (sans, mono) = self.account.font_families();
@@ -156,7 +157,7 @@ impl Comet {
                     self.remember_images(item);
                     // A finished turn may have changed files, so Review reads them again.
                     if matches!(item, crate::protocol::ThreadItem::Result { .. }) {
-                        self.turn_ended(&tab_id);
+                        self.review_stale(&tab_id);
                     }
                 }
                 self.threads.apply(&tab_id, event);
@@ -185,6 +186,8 @@ impl Comet {
                 self.plugins.layouts.insert(tab_id, layout);
             }
             CoreMessage::PanelShow { tab_id, id } => self.panel_shown(&tab_id, &id),
+            CoreMessage::FileShow { tab_id, path, line } => self.open_file(&tab_id, &path, line),
+            CoreMessage::ReviewShow { tab_id, scope, path } => self.show_review(&tab_id, &scope, path),
             CoreMessage::Setups { setups } => self.plugins.setups = setups,
             CoreMessage::Error { message, detail } => {
                 self.branch_notices.failed();

@@ -2,9 +2,10 @@ import { DELEGATE, LIST_AGENTS } from "../delegate/tools"
 import { SHOW } from "../visuals/show"
 import { MOVE_TO_WORKTREE } from "./move"
 import { given, type CometTool } from "./tool"
+import { OPEN_DIFF, OPEN_FILE } from "./view-pane"
 
 /** Every tool Comet offers, whichever sessions get it, so a thread names a call of any of them. */
-const TOOLS: readonly CometTool[] = [LIST_AGENTS, DELEGATE, MOVE_TO_WORKTREE, SHOW]
+const TOOLS: readonly CometTool[] = [LIST_AGENTS, DELEGATE, MOVE_TO_WORKTREE, SHOW, OPEN_FILE, OPEN_DIFF]
 
 /** What a call of one of Comet's tools was given, in short, for its row in a thread. Undefined for a tool that is not Comet's. */
 export function cometToolSummary(tool: string, input: unknown): string | undefined {

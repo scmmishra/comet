@@ -1011,6 +1011,13 @@ pub enum CoreMessage {
         tab_id: String,
         id: String,
     },
+    /// A tab's agent opened a file, so it shows in the tab's view pane, at `line`. `path` is absolute.
+    #[serde(rename = "file.show", rename_all = "camelCase")]
+    FileShow { tab_id: String, path: String, line: Option<u32> },
+    /// A tab's agent opened a diff, so Review shows in the tab's view pane, over `scope`, and reads its
+    /// changes again. `path`, as Review lists it, is the file to scroll to.
+    #[serde(rename = "review.show", rename_all = "camelCase")]
+    ReviewShow { tab_id: String, scope: String, path: Option<String> },
     /// Setups across projects, each with the project it opens in.
     #[serde(rename = "setups")]
     Setups { setups: Vec<ProjectSetup> },

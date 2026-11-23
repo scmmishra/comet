@@ -564,7 +564,30 @@ test("offers Comet's move tool to an agent whose threads can move, and moves its
 test("gives Comet's move tool only to an agent whose threads can move, and its show tool only to one whose threads draw it", async () => {
   const { agent, window, tools } = openInRepo([], false)
   await window.send("a", "Hi")
-  expect(tools.toolsFor(agent.sessions[0]!.options.tools!.authorization)!.tools.map((tool) => tool.name)).toEqual(["list_agents", "delegate"])
+  expect(tools.toolsFor(agent.sessions[0]!.options.tools!.authorization)!.tools.map((tool) => tool.name)).toEqual(["list_agents", "delegate", "open_file", "open_diff"])
+})
+
+test("opens a file or a diff in the view pane of the agent's own tab, while its thread is on show there", async () => {
+  const { repo, agent, window, tools: sessions, sent } = openInRepo()
+  await window.send("a", "Show me a.txt")
+  const tools = sessions.toolsFor(agent.sessions[0]!.options.tools!.authorization)!
+  const signal = new AbortController().signal
+  const last = (type: string) => sent.findLast((message) => message.type === type)
+
+  await tools.call("open_file", { path: "a.txt", line: 2 }, signal)
+  expect(last("file.show")).toEqual({ type: "file.show", tabId: "a", path: join(repo.dir, "a.txt"), line: 2 })
+  expect(tools.call("open_file", { path: "b.txt" }, signal)).rejects.toThrow("No file is at b.txt.")
+
+  expect(tools.call("open_diff", {}, signal)).rejects.toThrow("There are no uncommitted changes, as they are now.")
+  writeFileSync(join(repo.dir, "a.txt"), "two\n")
+  await tools.call("open_diff", { path: join(repo.dir, "a.txt") }, signal)
+  expect(last("review.show")).toEqual({ type: "review.show", tabId: "a", scope: "git", path: "a.txt" })
+  expect(tools.call("open_diff", { path: "b.txt" }, signal)).rejects.toThrow("b.txt is not among the uncommitted changes, as they are now. Those are in: a.txt.")
+  expect(tools.call("open_diff", { scope: "everything" }, signal)).rejects.toThrow("`scope` is one of: thread, git, branch, turn.")
+
+  // A cleared thread's session no longer speaks for the tab.
+  window.clearThread("a")
+  expect(tools.call("open_file", { path: "a.txt" }, signal)).rejects.toThrow("no longer on show in its tab")
 })
 
 test("lists a repo's threads from every checkout, each in the folder it runs in now", async () => {

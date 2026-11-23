@@ -1142,6 +1142,13 @@ export type CoreMessage =
   | { readonly type: "layout"; readonly tabId: string; readonly layout: TabLayout }
   /** A panel instance opened, so the app brings it to the front and opens the view pane. */
   | { readonly type: "panel.show"; readonly tabId: string; readonly id: string }
+  /** A tab's agent opened a file, so the app shows it in the tab's view pane, at `line`. `path` is absolute. */
+  | { readonly type: "file.show"; readonly tabId: string; readonly path: string; readonly line?: number }
+  /**
+   * A tab's agent opened a diff, so the app shows Review in the tab's view pane, over `scope`, and reads its
+   * changes again. `path`, as Review lists it, is the file to scroll to.
+   */
+  | { readonly type: "review.show"; readonly tabId: string; readonly scope: ReviewScope; readonly path?: string }
   /** A tab's new name, from a plugin's thread or a rename. */
   | { readonly type: "tab.title"; readonly tabId: string; readonly title: string }
   /**

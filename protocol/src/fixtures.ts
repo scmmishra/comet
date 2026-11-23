@@ -233,6 +233,8 @@ export const CORE_MESSAGES = [
     layout: { sidebar: { id: "support.inbox", title: "Inbox", plugin: "support", root: 1 }, panels: [], cards: [{ id: "support.summary", title: "Summary", plugin: "support", root: 9 }] },
   },
   { type: "panel.show", tabId: "tab-1", id: "support.conversation?id=1001" },
+  { type: "file.show", tabId: "tab-1", path: "/Users/me/code/web/src/login.ts", line: 42 },
+  { type: "review.show", tabId: "tab-1", scope: "git", path: "src/login.ts" },
   { type: "setups", setups: [{ project: "/Users/me/code/web", id: "support.triage", title: "Triage" }] },
   {
     type: "plugins",
