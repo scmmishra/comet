@@ -5,6 +5,8 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 ## Unreleased
 
 - A plugin's sidebar and the view pane resize. Drag the edge between two panes. One width serves every tab, and Comet keeps it across restarts. The sidebar drags from 136 to 640 points. The session keeps at least 400 points beside the view pane, and the view pane keeps at least 320.
+- Thread search matches a thread's branch, and the pull request of that branch: its number, its title and its link. A pasted link to one of the pull request's tabs, such as Files, matches too. A row that matches only through one of these says which, such as "Branch: feat/inbox-search". Comet asks GitHub through `gh` for the pull requests, and skips the repo's default branch.
+- A search from the palette's root finds threads in every recent project, not only the active one. It shows at most 100 threads. ⌘⇧O still searches one project.
 
 ## 0.2.0
 

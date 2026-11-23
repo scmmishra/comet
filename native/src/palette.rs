@@ -1,5 +1,5 @@
 //! The command palette, after T3 Code: one search over
-//! actions, tabs and recent threads, with nested lists for threads, files and projects. ⌘K opens it,
+//! actions, tabs and the threads of every recent project, with nested lists for threads, files and projects. ⌘K opens it,
 //! ⌘⇧O opens it on the threads and ⌘P on the files.
 
 use crate::format;
@@ -12,6 +12,9 @@ use rune_theme_opencode::icons as ic;
 
 /// Threads the root list shows before the user types.
 const RECENT_THREADS: usize = 20;
+/// Threads a search from the root shows at most. It searches every recent project, and a short query would
+/// otherwise lay out thousands of rows.
+const FOUND_THREADS: usize = 100;
 /// The palette's measures, from `@opencode/ui`'s Dialog and SearchList: 576 points wide,
 /// 14% of the window's height from its top, and a list that scrolls past 302 points.
 const WIDTH: f32 = 576.0;
@@ -87,13 +90,39 @@ struct Entry {
     shortcut: Option<&'static [&'static str]>,
     /// Marks the current choice in a list of choices, such as the theme.
     checked: bool,
+    /// What the row matches beyond what it shows.
+    terms: Vec<Term>,
     action: Action,
 }
 
 impl Entry {
     fn new(section: &str, title: impl Into<String>, action: Action) -> Entry {
-        Entry { section: section.into(), title: title.into(), detail: None, icon: None, file_icon: None, project: None, shortcut: None, checked: false, action }
+        Entry { section: section.into(), title: title.into(), detail: None, icon: None, file_icon: None, project: None, shortcut: None, checked: false, terms: Vec::new(), action }
     }
+}
+
+/// Something a row matches that it does not show, such as a thread's branch. A row that matches a word only
+/// here shows it in place of its detail, after T3 Code, so the user sees why the row is there.
+#[derive(Clone)]
+struct Term {
+    /// What it is, such as "Branch".
+    label: &'static str,
+    text: String,
+    /// A link that a pasted link matches.
+    link: Option<String>,
+}
+
+impl Term {
+    fn matches(&self, word: &str) -> bool {
+        crate::search::contains(&self.text, word) || self.link.as_deref().is_some_and(|link| crate::search::names_link(word, link))
+    }
+}
+
+/// A thread matches its branch and its branch's pull request: the number, the title and the link.
+fn thread_terms(thread: &ThreadSummary) -> Vec<Term> {
+    let branch = thread.branch.iter().map(|b| Term { label: "Branch", text: b.clone(), link: None });
+    let pr = thread.pr.iter().map(|pr| Term { label: "PR", text: format!("#{} {}", pr.number, pr.title), link: Some(pr.url.clone()) });
+    branch.chain(pr).collect()
 }
 
 #[derive(Default)]
@@ -113,6 +142,8 @@ pub struct Palette {
     /// The file search last sent, by project and query, and what the core found for it.
     asked: Option<(String, String)>,
     found: Option<(String, String, Vec<String>)>,
+    /// Whether this opening asked for every recent project's threads, which a search from the root finds.
+    read_threads: bool,
 }
 
 impl Palette {
@@ -144,6 +175,14 @@ impl Comet {
             self.core.send(&ClientMessage::SetupsGet { project });
         }
         self.palette = Palette { open: true, start: pages.len(), pages, ..Palette::default() };
+    }
+
+    /// The projects whose threads a search from the root finds: the active one first, then the recent ones.
+    /// The active tab may work in a worktree, which the recent projects name by its main checkout.
+    fn searched_projects(&self) -> Vec<String> {
+        let active = self.active_project();
+        let others = self.workspace.recent.iter().filter(|p| Some(*p) != active.as_ref()).cloned();
+        active.clone().into_iter().chain(others).collect()
     }
 
     fn active_project(&self) -> Option<String> {
@@ -195,6 +234,7 @@ impl Comet {
             summaries.into_iter().flatten().map(|t| {
                 let mut entry = Entry::new(&self.account.project_label(project), t.title.clone(), Action::Thread(project.to_owned(), t.clone()));
                 entry.detail = Some(format::ago(t.updated_at, format::now_ms()));
+                entry.terms = thread_terms(t);
                 entry
             }).collect()
         };
@@ -313,9 +353,8 @@ impl Comet {
                     entry.project = Some(t.project.clone());
                     entry
                 }));
-                let recent = project.as_deref().map(threads).unwrap_or_default();
                 if self.palette.query.text.trim().is_empty() {
-                    root.extend(recent.into_iter().take(RECENT_THREADS));
+                    root.extend(project.as_deref().map(threads).unwrap_or_default().into_iter().take(RECENT_THREADS));
                 } else {
                     // A search from the root also finds what the nested lists hold.
                     root.extend(themes());
@@ -323,25 +362,45 @@ impl Comet {
                     root.extend(projects(Action::NewSessionIn));
                     root.extend(setups());
                     root.extend(panels());
-                    root.extend(recent);
+                    root.extend(self.searched_projects().iter().flat_map(|p| threads(p)));
                 }
                 root
             }
         }
     }
 
-    /// Every word must appear in the entry's title, its detail or its section. A list the core searched already matches.
+    /// Every word must appear in the entry's title, its detail, its section or one of its terms. A list the
+    /// core searched already matches.
     fn matches(&self) -> Vec<Entry> {
         let entries = self.entries();
         if matches!(self.palette.pages.last(), Some(Page::Files(_))) {
             return entries;
         }
         let query = &self.palette.query.text;
+        let mut threads = 0;
+        let capped = self.palette.pages.is_empty();
         entries
             .into_iter()
-            .filter(|e| {
+            .filter_map(|mut e| {
                 let haystack = format!("{} {} {}", e.title, e.detail.as_deref().unwrap_or(""), e.section);
-                query.split_whitespace().all(|w| crate::search::contains(&haystack, w))
+                let mut hint = None;
+                for w in query.split_whitespace() {
+                    if !crate::search::contains(&haystack, w) {
+                        let term = e.terms.iter().find(|t| t.matches(w))?;
+                        hint.get_or_insert_with(|| format!("{}: {}", term.label, term.text));
+                    }
+                }
+                if hint.is_some() {
+                    e.detail = hint;
+                }
+                Some(e)
+            })
+            .filter(|e| {
+                if !capped || !matches!(e.action, Action::Thread(..)) {
+                    return true;
+                }
+                threads += 1;
+                threads <= FOUND_THREADS
             })
             .collect()
     }
@@ -445,6 +504,14 @@ impl Comet {
         // A key typed after Enter makes a new query, which Enter did not pick from.
         if self.palette.pick_waiting.as_ref().is_some_and(|q| *q != self.palette.query.text) {
             self.palette.pick_waiting = None;
+        }
+        // A search from the root finds threads in every recent project. The first key reads them again, so a
+        // pull request opened since they were read is found too.
+        if self.palette.pages.is_empty() && !self.palette.read_threads && !self.palette.query.text.trim().is_empty() {
+            self.palette.read_threads = true;
+            for project in self.searched_projects() {
+                self.core.send(&ClientMessage::ProjectGet { project, part: "threads".into() });
+            }
         }
         if let Some(Page::Files(project)) = self.palette.pages.last().cloned() {
             let wanted = (project, self.palette.query.text.clone());
@@ -620,6 +687,55 @@ mod tests {
         assert_eq!(titles(&s), ["Speed up the build"]);
         s.palette.query = TextEdit::new("api");
         assert!(titles(&s).contains(&"api".to_owned()), "a search from the root finds projects too");
+    }
+
+    /// The comet of `comet()`, with a thread in /code/api on a branch with a pull request, and the palette open.
+    fn with_pull_request() -> Comet {
+        let mut s = comet();
+        let thread = serde_json::json!({ "type": "project", "project": "/code/api", "part": "threads", "value": [{
+            "id": "s2", "agent": "claude", "title": "Untitled session", "branch": "feat/inbox-search", "updatedAt": 0.0, "project": "/code/api",
+            "pr": { "number": 123, "title": "Search the inbox", "url": "https://github.com/me/api/pull/123" }
+        }] });
+        s.receive(Event::Message(serde_json::from_value(thread).unwrap())).unwrap();
+        s.show_palette(Vec::new());
+        s
+    }
+
+    /// The untitled thread's row for `query`, by its detail, or None when it does not match.
+    fn untitled(s: &mut Comet, query: &str) -> Option<String> {
+        s.palette.query = TextEdit::new(query);
+        s.matches().into_iter().find(|e| e.title == "Untitled session").map(|e| e.detail.unwrap_or_default())
+    }
+
+    #[test]
+    fn a_thread_matches_its_branch_and_says_so() {
+        let mut s = with_pull_request();
+        assert_eq!(untitled(&mut s, "inbox-search").as_deref(), Some("Branch: feat/inbox-search"));
+        assert!(untitled(&mut s, "untitled").is_some_and(|detail| !detail.starts_with("Branch")), "a title match keeps the time");
+    }
+
+    #[test]
+    fn a_thread_matches_its_pull_request_by_number_title_and_link() {
+        let mut s = with_pull_request();
+        let hint = Some("PR: #123 Search the inbox".to_owned());
+        assert_eq!(untitled(&mut s, "#123"), hint);
+        assert_eq!(untitled(&mut s, "inbox search").as_deref(), Some("Branch: feat/inbox-search"), "the first term a word matches names the row");
+        assert_eq!(untitled(&mut s, "https://github.com/me/api/pull/123"), hint);
+        assert_eq!(untitled(&mut s, "https://github.com/me/api/pull/123/files"), hint, "a link from the pull request's tabs");
+        assert_eq!(untitled(&mut s, "github.com/me/api/pull/123/files"), hint, "a link with no scheme");
+        assert_eq!(untitled(&mut s, "https://github.com/me/api/pull/1234"), None);
+    }
+
+    #[test]
+    fn a_search_from_the_root_reads_and_finds_every_recent_project_s_threads() {
+        let mut s = with_pull_request();
+        assert!(untitled(&mut s, "").is_none(), "before the user types, the root lists only the active project's threads");
+        s.palette.query = TextEdit::new("in");
+        s.sync_palette();
+        s.sync_palette();
+        let read: Vec<String> = s.core.sent().iter().filter(|m| m["type"] == "project.get" && m["part"] == "threads").map(|m| m["project"].as_str().unwrap().to_owned()).collect();
+        assert_eq!(read, ["/code/web", "/code/api"], "the first key reads them, once, the active project first");
+        assert!(untitled(&mut s, "#123").is_some(), "another project's thread is found");
     }
 
     #[test]
