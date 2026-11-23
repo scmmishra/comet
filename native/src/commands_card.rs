@@ -335,7 +335,6 @@ fn editor(s: &Comet, k: &Kit, layer: &mut Vec<El>) {
     // `w-fit`: the button keeps to its label, at the start of the row.
     let add = row().w_full().child(add);
     let ready = draft.ready();
-    // The menu draws above the dialog, so it builds into a layer of its own that goes on after the dialog's.
     let mut menus = Vec::new();
     let import = (!editing).then(|| import_menu(s, &draft.project, draft.importing, k, &mut menus));
     let delete = editing.then(|| {

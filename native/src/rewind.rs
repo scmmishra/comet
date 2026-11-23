@@ -4,7 +4,7 @@
 
 use crate::protocol::{ClientMessage, ImageAttachment};
 use crate::shell::Comet;
-use rune::{El, col, row, text};
+use rune::{El, col, row};
 use rune_kit::{ButtonVariant, Checkbox, Dialog, Kit};
 
 #[derive(Default)]
@@ -44,16 +44,10 @@ impl Comet {
 /// The confirmation, for the tab it was asked in.
 pub fn dialog(s: &Comet, tab: &str, k: &Kit, layer: &mut Vec<El>) {
     let Some(ask) = s.rewind.asking.as_ref().filter(|ask| ask.tab == tab) else { return };
-    // The dialog's description keeps to one line, so the explanation sits in the body, where it wraps.
     let agent = s.agent_name(s.tab_agent(tab));
-    let explain = text(format!("{agent} forgets this message and everything after it. The message goes back in the message box, so you can change it and send it again."))
-        .font(crate::theme::text(13.0))
-        .color(k.c.text_muted)
-        .wrap();
     // Only an agent that keeps a copy of each file it edits can take its changes back.
     let restore = s.tab_can(tab, "restore-files").then(|| Checkbox::new(ask.restore_files)
         .label(format!("Restore files {agent} changed since"))
-        // A checkbox's description keeps to one line, so it stays short.
         .description("Changes from commands it ran stay.")
         .on_toggle(|s: &mut Comet| {
             if let Some(ask) = s.rewind.asking.as_mut() {
@@ -68,10 +62,11 @@ pub fn dialog(s: &Comet, tab: &str, k: &Kit, layer: &mut Vec<El>) {
         .child(crate::theme::button("Cancel").variant(ButtonVariant::Ghost).on_press(|s: &mut Comet| s.rewind.asking = None).build(k))
         .child(crate::theme::button("Rewind").variant(ButtonVariant::Submit).on_press(|s: &mut Comet| s.confirm_rewind()).build(k));
     Dialog::new("rewind-thread", "Rewind to this message?")
+        .description(format!("{agent} forgets this message and everything after it. The message goes back in the message box, so you can change it and send it again."))
         .open(true)
         .fit()
         .on_close(|s: &mut Comet| s.rewind.asking = None)
-        .child(col().w_full().gap(16.0).px(16.0).pb(16.0).child(explain).children(restore).child(footer))
+        .child(col().w_full().gap(16.0).px(16.0).pb(16.0).children(restore).child(footer))
         .build(k, layer);
 }
 

@@ -159,8 +159,6 @@ pub fn dialog(s: &Comet, tab: &str, k: &Kit, layer: &mut Vec<El>) {
         return;
     }
     let Some(branch) = s.threads.get(tab).and_then(|t| t.branch.clone()) else { return };
-    // The dialog's description keeps to one line, so the explanation sits in the body, where it wraps.
-    let explain = text("You have uncommitted changes. They'll carry over to the other branch, or block the switch if they conflict.").font(crate::theme::text(13.0)).color(k.c.text_muted).wrap();
     let footer = row()
         .w_full()
         .gap(8.0)
@@ -168,10 +166,11 @@ pub fn dialog(s: &Comet, tab: &str, k: &Kit, layer: &mut Vec<El>) {
         .child(crate::theme::button("Cancel").variant(ButtonVariant::Ghost).on_press(|s: &mut Comet| s.branch_notices.confirming = None).build(k))
         .child(crate::theme::button("Switch branch").variant(ButtonVariant::Submit).on_press(|s: &mut Comet| s.confirm_restore()).build(k));
     Dialog::new("restore-branch", format!("Switch to {branch}?"))
+        .description("You have uncommitted changes. They'll carry over to the other branch, or block the switch if they conflict.")
         .open(true)
         .fit()
         .on_close(|s: &mut Comet| s.branch_notices.confirming = None)
-        .child(rune::col().w_full().gap(16.0).px(16.0).pb(16.0).child(explain).child(footer))
+        .child(rune::col().w_full().gap(16.0).px(16.0).pb(16.0).child(footer))
         .build(k, layer);
 }
 

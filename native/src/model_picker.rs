@@ -146,8 +146,6 @@ pub fn model_picker(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> E
     }
     // rune-kit's Popover caps its width at 320, `@opencode/ui`'s default. Comet widens this one, so it
     // builds the surface from the same parts.
-    // The permission menu anchors to its button inside the picker, so it goes in after the picker: a popover
-    // ahead of its anchor in the layer finds no place for it and opens in the window's corner.
     let mut menus = Vec::new();
     let body = popover_body(s, tab, selected, k, &mut menus).role("dialog").label("Agent, model and effort");
     let picker = crate::ui::popover(k, body).modal(true, |s: &mut Comet| s.picker = Picker::default());

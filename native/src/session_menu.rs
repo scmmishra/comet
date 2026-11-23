@@ -4,7 +4,7 @@
 use crate::protocol::{ClientMessage, TabInfo};
 use crate::shell::Comet;
 use crate::workspace::Place;
-use rune::{El, TextEdit, col, row, text};
+use rune::{El, TextEdit, col, row};
 use rune_kit::{ButtonVariant, ControlSize, Dialog, IconButton, IconButtonVariant, Kit, Menu, MenuItem, Placement, TextInput};
 use rune_theme_opencode::icons as ic;
 
@@ -92,16 +92,12 @@ fn delete_dialog(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) {
         .child(row().grow(1.0))
         .child(crate::theme::button("Cancel").variant(ButtonVariant::Ghost).on_press(|s: &mut Comet| s.session_menu.deleting = None).build(k))
         .child(crate::theme::button("Delete").variant(ButtonVariant::Danger).on_press(|s: &mut Comet| s.delete_session()).build(k));
-    // The dialog's description keeps to one line and runs past the panel, so the warning sits in the body, where it wraps.
-    let warning = text(format!("“{}” and its transcript are deleted from this Mac. If {} is working, it stops. This cannot be undone.", tab.title, s.agent_name(&tab.agent)))
-        .font(crate::theme::text(13.0))
-        .color(k.c.text_muted)
-        .wrap();
     Dialog::new("delete-session", "Delete session?")
+        .description(format!("“{}” and its transcript are deleted from this Mac. If {} is working, it stops. This cannot be undone.", tab.title, s.agent_name(&tab.agent)))
         .open(true)
         .fit()
         .on_close(|s: &mut Comet| s.session_menu.deleting = None)
-        .child(col().w_full().gap(16.0).px(16.0).pb(16.0).child(warning).child(footer))
+        .child(col().w_full().gap(16.0).px(16.0).pb(16.0).child(footer))
         .build(k, layer);
 }
 

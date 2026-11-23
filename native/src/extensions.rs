@@ -91,7 +91,6 @@ pub fn button(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Option<
         .item(list_row("Skills", &ic::GRADUATION_CAP, skills.flatten().map(|x| skills_of(x).count()), List::Skills, shown))
         .on_close(|s: &mut Comet| s.close_extensions())
         .build(k, layer);
-    // The list mounts after the menu, since it anchors to one of the menu's rows.
     if let (true, Some(list)) = (open, shown) {
         let popup = PopupList::new(format!("{MENU}-list"), list.row_key())
             .side(Side::Left)
