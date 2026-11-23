@@ -12,7 +12,7 @@ import { startPlugins } from "./plugins"
 import { watchInstalls, watchSettings } from "./plugins/watch"
 import { pluginManager } from "./plugins/manage"
 import { searchFiles } from "./project-files"
-import { readPullRequests, withPullRequests } from "./pull-requests"
+import { sendThreads } from "./pull-requests"
 import { findIconFiles, iconFile } from "./project-icons"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { loadSettings, saveSettings, updateSettings } from "./settings"
@@ -88,12 +88,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     space: (dir, reply) => readSpace(dir).then(reply),
     commands: (dir, reply) => reply(commandsOf(dir).list()),
     commandSources: (dir, reply) => discoverCommands(dir, new Set(commandsOf(dir).list().map((command) => command.command))).then(reply),
-    threads: async (dir, reply) => {
-      const threads = await window.recentThreads(dir)
-      reply(withPullRequests(dir, threads))
-      // The list shows at once, and again once `gh` finds pull requests. It is read again, since a rename may have come in while `gh` ran.
-      if (await readPullRequests(dir, threads)) reply(withPullRequests(dir, await window.recentThreads(dir)))
-    },
+    threads: (dir, reply) => sendThreads(dir, () => window.recentThreads(dir), reply),
     worktrees: (dir, reply) => listWorktrees(dir).then(reply),
     icons: (dir, reply) => findIconFiles(dir).then(reply),
     skills: (dir, reply) => agents.commands(dir).then(reply),

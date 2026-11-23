@@ -4,6 +4,8 @@ import { mainCheckout } from "./worktrees"
 
 /** How long a branch's pull request, or its lack of one, stays known. The threads list is read often: on the start screen, the session menu and the palette. */
 const FRESH_MS = 10 * 60_000
+/** How long Comet waits to ask again about a repo `gh` failed on, such as one not on GitHub, or with the Mac offline. */
+const RETRY_MS = 60_000
 /** Branches asked about in one GraphQL query. */
 const BRANCHES_PER_QUERY = 50
 /** Pull requests read per branch, to find one from the repo itself among forks' pull requests from a branch of the same name. */
@@ -12,9 +14,21 @@ const PULL_REQUESTS_PER_BRANCH = 5
 /** What is known of each branch, by repo and branch. A branch with no pull request is known too, so it is not asked about again. */
 const known = new Map<string, { readonly pr?: ThreadPullRequest; readonly at: number }>()
 const keyOf = (repo: string, branch: string) => `${repo}\0${branch}`
+/** When `gh` last failed, by repo. */
+const failed = new Map<string, number>()
+
+/**
+ * Sends a project's threads at once, with the pull requests already known, and again once `gh` finds one
+ * it did not know. The second time it lists them again, since a rename may have come in while `gh` ran.
+ */
+export async function sendThreads(project: string, list: () => Promise<ThreadSummary[]>, reply: (threads: ThreadSummary[]) => void) {
+  const threads = await list()
+  reply(withPullRequests(project, threads))
+  if (await readPullRequests(project, threads)) reply(withPullRequests(project, await list()))
+}
 
 /** The threads, each with the pull request of its branch when it is known. `project` names the repo. */
-export function withPullRequests(project: string, threads: readonly ThreadSummary[]): ThreadSummary[] {
+function withPullRequests(project: string, threads: readonly ThreadSummary[]): ThreadSummary[] {
   const repo = mainCheckout(project)
   return threads.map((thread) => {
     const pr = thread.branch && known.get(keyOf(repo, thread.branch))?.pr
@@ -27,9 +41,10 @@ export function withPullRequests(project: string, threads: readonly ThreadSummar
  * fresh. Resolves true when it learned a pull request. A failure, such as a repo not on GitHub or no `gh`,
  * learns nothing.
  */
-export async function readPullRequests(project: string, threads: readonly ThreadSummary[]): Promise<boolean> {
+async function readPullRequests(project: string, threads: readonly ThreadSummary[]): Promise<boolean> {
   const repo = mainCheckout(project)
   const now = Date.now()
+  if (now - (failed.get(repo) ?? -Infinity) < RETRY_MS) return false
   // A detached HEAD has no branch to ask about.
   const stale = [...new Set(threads.flatMap((thread) => (thread.branch && thread.branch !== "HEAD" ? [thread.branch] : [])))].filter((branch) => {
     const found = known.get(keyOf(repo, branch))
@@ -39,7 +54,10 @@ export async function readPullRequests(project: string, threads: readonly Thread
   for (let start = 0; start < stale.length; start += BRANCHES_PER_QUERY) {
     const branches = stale.slice(start, start + BRANCHES_PER_QUERY)
     const found = await queryBranches(repo, branches).catch(() => undefined)
-    if (!found) return learned
+    if (!found) {
+      failed.set(repo, now)
+      return learned
+    }
     for (const branch of branches) {
       const pr = found.get(branch)
       if (pr && known.get(keyOf(repo, branch))?.pr?.url !== pr.url) learned = true
@@ -52,6 +70,7 @@ export async function readPullRequests(project: string, threads: readonly Thread
 /** Forgets what is known, for tests. */
 export function forgetPullRequests() {
   known.clear()
+  failed.clear()
 }
 
 interface Connection {
