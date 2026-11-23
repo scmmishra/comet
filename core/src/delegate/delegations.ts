@@ -1,9 +1,9 @@
 import { DEFAULT_MODEL, PERMISSION_MODES, type AgentId, type AgentInfo, type ModelOption, type PermissionAnswer, type PermissionMode, type RunSettings, type Subagent, type ThreadEvent, type ThreadItem } from "@comet/protocol"
-import type { AgentSession, ToolServer } from "../agents/agent"
+import type { AgentSession } from "../agents/agent"
 import type { Agents } from "../agents/registry"
-import type { ToolResult, ToolSet } from "./mcp"
-import { show, SHOW, SHOW_INSTRUCTIONS } from "../visuals/show"
-import { DELEGATE, INSTRUCTIONS, LIST_AGENTS, MOVE_INSTRUCTIONS, MOVE_TO_WORKTREE, taskWords } from "./tools"
+import type { ToolResult } from "../tools/mcp"
+import type { ToolGroup } from "../tools/tool"
+import { DELEGATE, INSTRUCTIONS, LIST_AGENTS, taskWords } from "./tools"
 
 /** What Comet reads about the session whose agent hands work off. */
 export interface DelegationHost {
@@ -13,18 +13,11 @@ export interface DelegationHost {
   settings(): RunSettings
   /** Adds an event to the session's thread. */
   emit(event: ThreadEvent): void
-  /**
-   * Moves the session's thread into another checkout of its repo once its turn ends, for an agent whose
-   * threads can move. Returns the folder it moves to. A session without it is not offered `move_to_worktree`.
-   */
-  moveTo?(dir: string): string
-  /** Whether the session's thread draws a `show` call as its visual. A session whose thread does not is not offered `show`. */
-  readonly drawsVisuals: boolean
 }
 
-/** What one session's agent may hand off: Comet's tools for it, and the tasks that run for it. */
+/** What one session's agent may hand off: the tools that hand a task off, and the tasks that run for it. */
 export interface Handoffs {
-  readonly tools: ToolServer
+  readonly tools: ToolGroup
   /** Answers a task's permission request. Says whether the request was a task's, so the session itself is not asked. */
   answerPermission(requestId: string, answer: PermissionAnswer): boolean
   answerQuestion(requestId: string, answers: Readonly<Record<string, string>> | undefined): boolean
@@ -32,7 +25,7 @@ export interface Handoffs {
   pending(): ThreadItem[]
   /** Stops the tasks, as stopping the session's turn does. */
   stop(): void
-  /** Ends the tasks and takes back the tools, once the session has closed. */
+  /** Ends the tasks, once the session has closed. */
   close(): void
 }
 
@@ -51,33 +44,29 @@ interface Caller {
 }
 
 /**
- * Work one agent hands another, after T3 Code. Each session gets Comet's tools over MCP, under a token
- * that names it. A `delegate` call opens a session on the agent it names, in the caller's folder, sends
- * it the task and answers with its final message. The task shows as a subagent of the caller's thread. Its
+ * Work one agent hands another, after T3 Code. A `delegate` call opens a session on the agent it names,
+ * in the caller's folder, sends it the task and answers with its final message. The task shows as a subagent of the caller's thread. Its
  * permission requests and questions show in the thread, since only the user can answer them. A task gets
  * no tools of Comet's, so it cannot hand its work on.
  */
 export class Delegations {
-  private readonly callers = new Map<string, Caller>()
+  constructor(private readonly agents: Pick<Agents, "get" | "all" | "info">) {}
 
-  constructor(
-    private readonly agents: Pick<Agents, "get" | "all" | "info">,
-    /** Where Comet's MCP server listens. */
-    private readonly endpoint: () => string,
-  ) {}
-
-  /** Gives a session Comet's tools, under a token of its own. */
+  /** The tools that let a session hand tasks off, and the tasks it hands off. */
   open(host: DelegationHost): Handoffs {
-    const token = crypto.randomUUID() + crypto.randomUUID()
     const caller: Caller = { host, children: new Set() }
-    this.callers.set(token, caller)
     const answer = (requestId: string, give: (session: AgentSession) => void) => {
       const child = [...caller.children].find((found) => found.requests.has(requestId))
       if (child) give(child.session)
       return !!child
     }
     return {
-      tools: { url: this.endpoint(), authorization: `Bearer ${token}`, instructions: [INSTRUCTIONS, ...(host.moveTo ? [MOVE_INSTRUCTIONS] : []), ...(host.drawsVisuals ? [SHOW_INSTRUCTIONS] : [])].join("\n") },
+      tools: {
+        instructions: INSTRUCTIONS,
+        tools: [LIST_AGENTS, DELEGATE],
+        call: async (name, input, signal) =>
+          name === LIST_AGENTS.name ? { text: JSON.stringify({ agents: this.agents.all().flatMap((agent) => listed(this.agents.info(agent.id))) }, null, 2) } : this.delegate(caller, input, signal),
+      },
       answerPermission: (requestId, reply) => answer(requestId, (session) => session.answerPermission(requestId, reply)),
       answerQuestion: (requestId, answers) => answer(requestId, (session) => session.answerQuestion(requestId, answers)),
       pending: () => [...caller.children].flatMap((child) => [...child.requests.values()]),
@@ -87,24 +76,6 @@ export class Delegations {
       close: () => {
         for (const child of caller.children) child.session.close()
         caller.children.clear()
-        this.callers.delete(token)
-      },
-    }
-  }
-
-  /** The tools of the session an Authorization header names, or nothing for a header Comet did not give out. */
-  toolsFor(authorization: string): ToolSet | undefined {
-    const caller = this.callers.get(authorization.replace(/^Bearer /, ""))
-    if (!caller) return undefined
-    const { moveTo, drawsVisuals } = caller.host
-    return {
-      tools: [LIST_AGENTS, DELEGATE, ...(moveTo ? [MOVE_TO_WORKTREE] : []), ...(drawsVisuals ? [SHOW] : [])],
-      call: async (name, input, signal) => {
-        if (name === LIST_AGENTS.name) return { text: JSON.stringify({ agents: this.agents.all().flatMap((agent) => listed(this.agents.info(agent.id))) }, null, 2) }
-        if (name === DELEGATE.name) return this.delegate(caller, input, signal)
-        if (name === MOVE_TO_WORKTREE.name && moveTo) return { text: `Comet moves this thread to ${moveTo(String(input.path ?? ""))} when this turn ends.` }
-        if (name === SHOW.name && drawsVisuals) return show(input)
-        throw new Error(`Comet has no tool called ${name}.`)
       },
     }
   }

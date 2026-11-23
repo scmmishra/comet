@@ -1,7 +1,7 @@
 import { query, type CanUseTool, type PermissionResult, type PermissionUpdate, type Query, type SDKMessage, type SDKRateLimitInfo, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 import type { UUID } from "node:crypto"
 import type { ImageAttachment, PermissionAnswer, RunSettings, ThreadEvent, ThreadItem } from "@comet/protocol"
-import { SERVER_NAME } from "../../delegate/tools"
+import { SERVER_NAME } from "../../tools/mcp"
 import type { AgentHost, AgentSession, Emit, SessionOptions, ToolServer } from "../agent"
 import { Requests, type OpenRequest } from "../requests"
 import { Stop } from "../stopping"

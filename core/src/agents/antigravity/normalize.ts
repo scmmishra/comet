@@ -1,4 +1,4 @@
-import { SERVER_NAME } from "../../delegate/tools"
+import { SERVER_NAME } from "../../tools/mcp"
 import { acpToolReader, stringField, type ToolReader } from "../acp/tools"
 import type { ToolCall } from "../acp/protocol"
 

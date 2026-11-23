@@ -1,5 +1,5 @@
 import { DEFAULT_MODEL, type ImageAttachment, type PermissionAnswer, type RunSettings } from "@comet/protocol"
-import { SERVER_NAME } from "../../delegate/tools"
+import { SERVER_NAME } from "../../tools/mcp"
 import type { AgentSession, Emit, SessionOptions, ToolServer } from "../agent"
 import { RpcError } from "../json-rpc"
 import type { Process } from "../process"

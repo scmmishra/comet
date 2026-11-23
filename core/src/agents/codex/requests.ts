@@ -1,5 +1,5 @@
 import type { PermissionAnswer, PermissionKind, Question, ThreadItem } from "@comet/protocol"
-import { SERVER_NAME } from "../../delegate/tools"
+import { SERVER_NAME } from "../../tools/mcp"
 import { textStart } from "../../text"
 import type { RequestId } from "../json-rpc"
 import { scriptOfWords, shellScript } from "./shell"

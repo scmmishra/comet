@@ -1,5 +1,5 @@
 import type { ImageAttachment, PermissionAnswer, RunSettings, ThreadItem } from "@comet/protocol"
-import { SERVER_NAME } from "../../delegate/tools"
+import { SERVER_NAME } from "../../tools/mcp"
 import type { AgentSession, Emit, SessionOptions, ToolServer } from "../agent"
 import type { RequestId } from "../json-rpc"
 import { Requests } from "../requests"

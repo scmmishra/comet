@@ -26,9 +26,12 @@ export interface ToolSet {
   call(name: string, input: Record<string, unknown>, signal: AbortSignal): Promise<ToolResult>
 }
 
+/** The name agents know Comet's tools under, such as `mcp__comet__delegate` in Claude Code. */
+export const SERVER_NAME = "comet"
+
 /** The protocol version Comet speaks when a client names none. Comet answers with the client's own when it names one. */
 const PROTOCOL_VERSION = "2025-03-26"
-const SERVER_INFO = { name: "comet", version: "1" }
+const SERVER_INFO = { name: SERVER_NAME, version: "1" }
 /** JSON-RPC's codes for a message that is no request, and for a method Comet does not have. */
 const INVALID_REQUEST = -32600
 const METHOD_NOT_FOUND = -32601

@@ -5,6 +5,7 @@ import { join } from "node:path"
 import { fakeAgent, gitRepo, tempFolder, until, useTempHome } from "./test-support"
 import { Agents } from "./agents/registry"
 import { Delegations } from "./delegate/delegations"
+import { ToolSessions } from "./tools/sessions"
 import { Window } from "./window"
 import { capture } from "./checkpoints"
 import { samePath } from "./worktrees"
@@ -24,7 +25,8 @@ function open(state: object) {
   const window = new Window({
     broadcast: (message) => sent.push(message),
     agents,
-    delegations: new Delegations(agents, () => "http://127.0.0.1:0/mcp"),
+    delegations: new Delegations(agents),
+    tools: new ToolSessions(() => "http://127.0.0.1:0/mcp"),
     tabClosed: () => {},
     spaceStale: (project) => stale.push(project),
     turnEnded: () => {},
@@ -179,7 +181,8 @@ function openWithAgents(state: object) {
   const window = new Window({
     broadcast: (message) => sent.push(message),
     agents,
-    delegations: new Delegations(agents, () => "http://127.0.0.1:0/mcp"),
+    delegations: new Delegations(agents),
+    tools: new ToolSessions(() => "http://127.0.0.1:0/mcp"),
     tabClosed: () => {},
     spaceStale: (project) => stale.push(project),
     turnEnded: (tabId, threadKey, outcome) => ended.push([tabId, threadKey, outcome]),
@@ -519,10 +522,10 @@ function openInRepo(threads: { id: string; title: string; updatedAt: number }[] 
   writeFileSync(join(process.env.COMET_HOME!, "window.json"), JSON.stringify({ tabs: [tabIn(repo.dir)], threads: {}, recent: [] }))
   const sent: CoreMessage[] = []
   const agents = new Agents(() => {}, { compactIdle: () => false }, { [id]: agent.make })
-  const delegations = new Delegations(agents, () => "http://127.0.0.1:0/mcp")
-  const window = new Window({ broadcast: (message) => sent.push(message), agents, delegations, tabClosed: () => {}, spaceStale: () => {}, turnEnded: () => {}, threadShown: () => {} })
+  const tools = new ToolSessions(() => "http://127.0.0.1:0/mcp")
+  const window = new Window({ broadcast: (message) => sent.push(message), agents, delegations: new Delegations(agents), tools, tabClosed: () => {}, spaceStale: () => {}, turnEnded: () => {}, threadShown: () => {} })
   const moved = () => sent.find((message): message is Extract<CoreMessage, { type: "tab.moved" }> => message.type === "tab.moved")
-  return { repo, worktree, agent, window, sent, delegations, moved, tabIn }
+  return { repo, worktree, agent, window, sent, tools, moved, tabIn }
 }
 
 test("moves a thread into the worktree its agent entered once its turn ends, and resumes it there", async () => {
@@ -546,9 +549,9 @@ test("moves a thread into the worktree its agent entered once its turn ends, and
 })
 
 test("offers Comet's move tool to an agent whose threads can move, and moves its thread after the turn", async () => {
-  const { worktree, agent, window, delegations, moved } = openInRepo()
+  const { worktree, agent, window, tools: sessions, moved } = openInRepo()
   await window.send("a", "Work in a worktree")
-  const tools = delegations.toolsFor(agent.sessions[0]!.options.tools!.authorization)!
+  const tools = sessions.toolsFor(agent.sessions[0]!.options.tools!.authorization)!
   expect(tools.tools.map((tool) => tool.name)).toContain("move_to_worktree")
   expect(agent.sessions[0]!.options.tools!.instructions).toContain("move_to_worktree")
   expect(tools.call("move_to_worktree", { path: tempFolder("elsewhere") }, new AbortController().signal)).rejects.toThrow("not a checkout")
@@ -559,9 +562,9 @@ test("offers Comet's move tool to an agent whose threads can move, and moves its
 })
 
 test("gives Comet's move tool only to an agent whose threads can move, and its show tool only to one whose threads draw it", async () => {
-  const { agent, window, delegations } = openInRepo([], false)
+  const { agent, window, tools } = openInRepo([], false)
   await window.send("a", "Hi")
-  expect(delegations.toolsFor(agent.sessions[0]!.options.tools!.authorization)!.tools.map((tool) => tool.name)).toEqual(["list_agents", "delegate"])
+  expect(tools.toolsFor(agent.sessions[0]!.options.tools!.authorization)!.tools.map((tool) => tool.name)).toEqual(["list_agents", "delegate"])
 })
 
 test("lists a repo's threads from every checkout, each in the folder it runs in now", async () => {

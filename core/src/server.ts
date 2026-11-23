@@ -3,7 +3,6 @@ import { Agents } from "./agents/registry"
 import { discoverCommands } from "./command-sources"
 import { Commands } from "./commands"
 import { Delegations } from "./delegate/delegations"
-import { serveMcp } from "./delegate/mcp"
 import { Clients } from "./clients"
 import { errorMessage } from "./errors"
 import { findNamedFile, openableFile, openInEditor, readForView } from "./files"
@@ -17,6 +16,8 @@ import { findIconFiles, iconFile } from "./project-icons"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { loadSettings, saveSettings, updateSettings } from "./settings"
 import { readSpace } from "./space"
+import { serveMcp } from "./tools/mcp"
+import { ToolSessions } from "./tools/sessions"
 import { Window } from "./window"
 import { createWorktree, listWorktrees } from "./worktrees"
 
@@ -45,11 +46,12 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
   const report = (error: unknown) => broadcast({ type: "error", message: errorMessage(error) })
   // An agent reaches Comet's tools at the server's own port, which is known once it listens.
   let toolsUrl = ""
-  const delegations = new Delegations(agents, () => toolsUrl)
+  const tools = new ToolSessions(() => toolsUrl)
   const window = new Window({
     broadcast,
     agents,
-    delegations,
+    delegations: new Delegations(agents),
+    tools,
     tabClosed: (tabId) => {
       clients.forget(tabId)
       ui.dropTab(tabId)
@@ -239,7 +241,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       // another agent's whole task, so it may stay open far longer than Bun lets an idle request.
       if (url.pathname === MCP_PATH) {
         server.timeout(request, 0)
-        return serveMcp(request, (authorization) => delegations.toolsFor(authorization))
+        return serveMcp(request, (authorization) => tools.toolsFor(authorization))
       }
       if (url.searchParams.get("token") !== token) return new Response("Forbidden", { status: 403 })
       // A project's icon, for its avatar. Only an image inside a project folder is served.

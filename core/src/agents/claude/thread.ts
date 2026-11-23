@@ -1,7 +1,7 @@
 import type { SDKAPIRetryMessage, SDKAssistantMessage, SDKMessage, SDKMessageOrigin, SDKPartialAssistantMessage, SessionMessage } from "@anthropic-ai/claude-agent-sdk"
 import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, type ThreadItem } from "@comet/protocol"
 import { cutOutput, relativeTo, thought, unfinishedResult } from "../steps"
-import { cometToolSummary } from "../../delegate/tools"
+import { cometToolSummary } from "../../tools/rows"
 import { visualItem } from "../../visuals/show"
 import { textStart } from "../../text"
 import { resultId, selfStartedItem } from "../turn-items"

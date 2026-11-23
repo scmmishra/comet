@@ -1,5 +1,6 @@
 import type { ThreadItem } from "@comet/protocol"
-import { cometToolLabel, cometToolSummary, SERVER_NAME } from "../../delegate/tools"
+import { SERVER_NAME } from "../../tools/mcp"
+import { cometToolLabel, cometToolSummary } from "../../tools/rows"
 import { visualItem } from "../../visuals/show"
 import { firstLine, textStart } from "../../text"
 import { commandLabel, cutOutput, relativeTo, thought, tool } from "../steps"

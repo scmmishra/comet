@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { cometToolLabel, cometToolSummary } from "./tools"
+import { cometToolLabel, cometToolSummary } from "./rows"
 
 test("sums a handed task by its agent and its title, else the task's first line", () => {
   expect(cometToolSummary("delegate", { agent: "codex", task: "Review the login form.\nReport the bugs." })).toBe("codex: Review the login form.")

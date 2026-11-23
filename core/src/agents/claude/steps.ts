@@ -1,5 +1,6 @@
 import type { Step, StepKind } from "@comet/protocol"
-import { cometToolLabel, SERVER_NAME } from "../../delegate/tools"
+import { SERVER_NAME } from "../../tools/mcp"
+import { cometToolLabel } from "../../tools/rows"
 import { commandLabel, tool, type BareStep } from "../steps"
 import { ASK_USER_QUESTION } from "./requests"
 

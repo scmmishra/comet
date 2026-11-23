@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { CATALOG } from "./catalog"
-import { show, SHOW, shownVisual, visualItem } from "./show"
+import { SHOW, SHOW_TOOLS, shownVisual, visualItem } from "./show"
 
 test("offers every part of the catalog in the tool's schema and its description", () => {
   const part = (SHOW.inputSchema.properties as { parts: { items: { properties: Record<string, { enum?: string[] }> } } }).parts.items.properties
@@ -52,10 +52,11 @@ test("tells the model what is wrong with input it cannot draw", () => {
   expect(wrong([{ type: "actions", options: ["x".repeat(81)] }])).toBe("Option 1 has 81 characters. An option fits a button: at most 80, in a few words.")
 })
 
-test("answers a call at once, and makes a thread item only of a show call it can draw", () => {
+test("answers a call at once, and makes a thread item only of a show call it can draw", async () => {
   const input = { parts: [{ type: "actions", options: ["Go on"] }] }
-  expect(show(input)).toEqual({ text: "Shown to the user, above your reply." })
-  expect(() => show({ parts: [] })).toThrow("`parts` needs at least one part.")
+  const signal = new AbortController().signal
+  expect(await SHOW_TOOLS.call("show", input, signal)).toEqual({ text: "Shown to the user, above your reply." })
+  expect(SHOW_TOOLS.call("show", { parts: [] }, signal)).rejects.toThrow("`parts` needs at least one part.")
   expect(visualItem("t1", "show", input)).toEqual({ type: "visual", id: "t1", parts: [{ type: "actions", options: ["Go on"] }] })
   expect(visualItem("t1", "show", { parts: [] })).toBeUndefined()
   expect(visualItem("t1", "delegate", input)).toBeUndefined()

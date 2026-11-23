@@ -11,7 +11,11 @@ import { git } from "./git"
 import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { currentBranch } from "./space"
 import { Terminals } from "./terminals"
+import { moveTools } from "./tools/move"
+import type { SessionTools, ToolSessions } from "./tools/sessions"
+import type { ToolGroup } from "./tools/tool"
 import { TurnWatch } from "./turn"
+import { SHOW_TOOLS } from "./visuals/show"
 import { checkpointsOf, keyedId, keyedProject, loadWindowState, paneWidths, saveWindowState, type ClosedTab, type TabThread, type WindowState } from "./window-state"
 import { checkoutRoot, listWorktrees, mainCheckout, matchingFolder, removeWorktree, samePath } from "./worktrees"
 
@@ -31,10 +35,11 @@ class ThreadMoved extends Error {
   }
 }
 
-/** A session that runs a thread, with the work its agent hands to others. */
+/** A session that runs a thread, with the work its agent hands to others and Comet's tools for it. */
 interface Live {
   readonly session: AgentSession
   readonly handoffs: Handoffs
+  readonly tools: SessionTools
 }
 
 interface WindowHooks {
@@ -42,8 +47,10 @@ interface WindowHooks {
   readonly broadcast: Send
   /** The agents that run the tabs' threads. */
   readonly agents: Pick<Agents, "get" | "all">
-  /** Gives each session Comet's tools, for the work its agent hands another agent. */
+  /** Lets each session hand work to another agent. */
   readonly delegations: Pick<Delegations, "open">
+  /** Gives each session Comet's tools over MCP. */
+  readonly tools: Pick<ToolSessions, "open">
   /** A tab closed, so what runs for it can stop. */
   readonly tabClosed: (tabId: string) => void
   /** A turn ended in a project, so its Space card may name an old branch or old counts. */
@@ -674,10 +681,15 @@ export class Window {
       settings: () => this.state.tabs.find((open) => open.id === tab.id) ?? tab,
       // A task's events show only while its session's thread does.
       emit: (event) => current() && this.hooks.broadcast({ type: "session.event", tabId: tab.id, event }),
-      // A plugin's thread stays in the folder its key belongs to.
-      ...(agent.movesThreads && !key ? { moveTo: (dir: string) => this.askMove(tab.id, dir) } : {}),
-      drawsVisuals: !!agent.drawsVisuals,
     })
+    const groups: ToolGroup[] = [
+      handoffs.tools,
+      // A plugin's thread stays in the folder its key belongs to.
+      ...(agent.movesThreads && !key ? [moveTools((dir) => this.askMove(tab.id, dir))] : []),
+      // A thread that would show the call as a step never hears of the tool, so its agent writes the data out.
+      ...(agent.drawsVisuals ? [SHOW_TOOLS] : []),
+    ]
+    const tools = this.hooks.tools.open(groups)
     const saveSession = (change: Partial<TabThread>) => {
       if (current()) return this.updateThread(tab.id, change)
       // A parked thread keeps its session under its key, so coming back resumes it.
@@ -689,7 +701,7 @@ export class Window {
       resume: this.thread(tab.id).sessionId,
       ...(rewind ? { resumeAt: rewind.at, onResumedAt: () => current() && this.updateThread(tab.id, { rewind: undefined }) } : {}),
       settings: tab,
-      tools: handoffs.tools,
+      tools: tools.server,
       // The thread belongs to the agent that started it from here on.
       onSessionId: (sessionId) => saveSession({ sessionId, agent: agent.id }),
       // A lost session is dropped with the rewind that waited on it, so neither comes back after a restart. The thread keeps its agent.
@@ -700,7 +712,7 @@ export class Window {
       // Messages the agent never read go first in the queue, so the user can send them again.
       onUnsent: (messages) => void (current() && this.setQueue(tab.id, [...messages, ...(this.thread(tab.id).queue ?? [])])),
     })
-    const created: Live = { session, handoffs }
+    const created: Live = { session, handoffs, tools }
     this.sessions.set(tab.id, created)
     return created
   }
@@ -794,9 +806,10 @@ export class Window {
 /** Whether two tabs on one agent run the same way, so a save can skip reconfiguring a session. */
 const sameRunSettings = (a: RunSettings, b: RunSettings) => a.model === b.model && a.effort === b.effort && !!a.fast === !!b.fast && a.permissionMode === b.permissionMode
 
-const close = ({ session, handoffs }: Live) => {
+const close = ({ session, handoffs, tools }: Live) => {
   session.close()
   handoffs.close()
+  tools.close()
 }
 
 /** What a thread keeps when it starts over: its plugin key and the messages that wait. */

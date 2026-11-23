@@ -1,5 +1,5 @@
 import type { ThreadItem, VisualPart } from "@comet/protocol"
-import type { Tool } from "../delegate/mcp"
+import type { CometTool, ToolGroup } from "../tools/tool"
 import { CATALOG, list, optionalText, record } from "./catalog"
 
 /**
@@ -11,7 +11,7 @@ import { CATALOG, list, optionalText, record } from "./catalog"
 type Visual = Pick<Extract<ThreadItem, { type: "visual" }>, "title" | "parts">
 
 /** What a session is told about the tool. */
-export const SHOW_INSTRUCTIONS = [
+const SHOW_INSTRUCTIONS = [
   "Comet can show the user a visual in the thread: a table, a chart, a diagram and buttons, drawn in Comet's own look. Call `show` with the data. Comet draws it.",
   "Use it when an answer is easier to read as a visual than as text: rows of data, amounts to compare, change over time, or how parts connect. Do not write a Markdown table or a Mermaid block in your reply for these.",
   "The visual shows above your reply. Do not repeat its data in the reply. Say what it shows and what it means.",
@@ -26,7 +26,7 @@ const optional = (component: (typeof CATALOG)[string]) => {
   return names.length ? `, and ${names.map((prop) => `\`${prop}\``).join(" and ")} if it helps` : ""
 }
 
-export const SHOW: Tool = {
+export const SHOW: CometTool = {
   name: "show",
   description: `Shows the user a visual above your reply. Its parts draw in order, top to bottom. The kinds of part:\n${Object.entries(CATALOG)
     .map(([name, component]) => `- \`${name}\`, with ${component.required.map((prop) => `\`${prop}\``).join(" and ")}${optional(component)}: ${component.description}`)
@@ -50,6 +50,9 @@ export const SHOW: Tool = {
     required: ["parts"],
     additionalProperties: false,
   },
+  // A visual draws in place of its call. Only a call Comet could not draw shows as a row.
+  summary: (input) => (typeof input.title === "string" ? input.title : ""),
+  label: (summary, done) => `${done ? "Tried to show" : "Showing"} ${summary || "a visual"}`,
 }
 
 /** The visual a `show` call carries. Throws, in words for the model, on input Comet cannot draw. */
@@ -65,10 +68,14 @@ export function shownVisual(input: Record<string, unknown>): Visual {
   return { ...(title ? { title } : {}), parts }
 }
 
-/** Runs a `show` call. */
-export function show(input: Record<string, unknown>) {
-  shownVisual(input)
-  return { text: SHOWN }
+/** The `show` tool, for a session whose thread draws a `show` call as its visual. The call answers at once. */
+export const SHOW_TOOLS: ToolGroup = {
+  instructions: SHOW_INSTRUCTIONS,
+  tools: [SHOW],
+  call: async (_, input) => {
+    shownVisual(input)
+    return { text: SHOWN }
+  },
 }
 
 /** The thread item a call of one of Comet's tools draws in place of its row: a `show` call Comet can draw. Undefined for any other call. */
