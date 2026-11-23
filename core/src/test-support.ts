@@ -1,5 +1,5 @@
 import { afterAll } from "bun:test"
-import type { AgentFeature, AgentId, ThreadEvent } from "@comet/protocol"
+import type { AgentFeature, AgentId, QueuedMessage, ThreadEvent } from "@comet/protocol"
 import type { Agent, AgentHost, AgentSession, Rewound, SessionOptions } from "./agents/agent"
 import type { Transport } from "./agents/json-rpc"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
@@ -125,7 +125,16 @@ export function fakeAgent(id: AgentId, features: readonly AgentFeature[] = [], t
           emit({ kind: "item", item: { type: "result", id: `r${calls.length}`, durationMs: 1, isError: false, stopped: true } })
           emit({ kind: "status", busy: false })
         },
-        forceStop: () => false,
+        // A Force stop ends the turn as stopped, and hands back the messages the test says it never read.
+        forceStop: () => {
+          if (!busy) return false
+          calls.push("forceStop")
+          busy = false
+          emit({ kind: "item", item: { type: "result", id: `r${calls.length}`, durationMs: 1, isError: false, stopped: true } })
+          if (fake.unsent.length) options.onUnsent?.(fake.unsent)
+          emit({ kind: "status", busy: false })
+          return true
+        },
         configure: async (settings) => void calls.push(`configure ${settings.model}`),
         answerPermission: (requestId, answer) => void calls.push(`permission ${requestId} ${answer}`),
         answerQuestion: (requestId) => void calls.push(`question ${requestId}`),
@@ -152,7 +161,7 @@ export function fakeAgent(id: AgentId, features: readonly AgentFeature[] = [], t
     ...(has("sign-in") ? { signIn: async () => void calls.push("signIn") } : {}),
     close: () => void calls.push("closed"),
   })
-  /** `rewound` is what a rewind answers. A test sets it for the case it checks. */
-  const fake: { make: typeof make; calls: FakeCalls; sessions: typeof sessions; rewound: Rewound } = { make, calls, sessions, rewound: { empty: false } }
+  /** `rewound` is what a rewind answers, and `unsent` what a Force stop hands back. A test sets them for the case it checks. */
+  const fake: { make: typeof make; calls: FakeCalls; sessions: typeof sessions; rewound: Rewound; unsent: QueuedMessage[] } = { make, calls, sessions, rewound: { empty: false }, unsent: [] }
   return fake
 }

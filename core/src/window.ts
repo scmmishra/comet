@@ -656,14 +656,15 @@ export class Window {
         this.turnEnds.set(tab.id, summary)
       }
       if (!ended) return
+      // A stop or a failure holds the queue at once. A Force stop closes the session right after, before the summary below is made.
+      if (ended.held && this.thread(tab.id).queue?.length) this.setQueue(tab.id, this.thread(tab.id).queue!, true)
       const message = turn.message
       // The next queued turn starts from the checkpoint this one ends on, so it waits for it.
       void summary.then(async () => {
         if (!current()) return
         const moved = this.moves.has(tab.id) && (await this.moveThread(tab.id, message))
-        if (ended.held && this.thread(tab.id).queue?.length) this.setQueue(tab.id, this.thread(tab.id).queue!, true)
         // A thread that moved sends its next message once the app has moved its tab.
-        else if (!moved) this.sendNextQueued(tab.id)
+        if (!ended.held && !moved) this.sendNextQueued(tab.id)
       })
     }
     const rewind = this.thread(tab.id).rewind

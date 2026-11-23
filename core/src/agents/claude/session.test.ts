@@ -395,46 +395,25 @@ async function inbox(running: FakeQuery, count: number) {
 }
 
 for (const end of ["end", "fail"] as const) {
-  test(`a steer Claude Code exits without reading (${end}) waits after the error, and goes ahead of the next message`, async () => {
-    const s = setup()
+  test(`a steer Claude Code exits without reading (${end}) goes to the queue before the turn ends, and not to the next query`, async () => {
+    // The window holds only a queue that has messages, so they must arrive while the turn still runs.
+    const unsent: { text: string; busy: boolean }[] = []
+    const s: ReturnType<typeof setup> = setup(undefined, (messages) => void unsent.push(...messages.map(({ text }) => ({ text, busy: s.session.busy }))))
     const running = await started(s)
     s.session.steer("Also check the tests")
     const steer = s.items().at(-1)!
     if (end === "end") running.end()
     else running.fail(new Error("Claude Code exited"))
-    await until(() => s.statuses().length === 2)
-    const error = s.items().findLastIndex((item) => item.type === "error")
-    const moved = s.items().findLastIndex((item) => item.id === steer.id)
-    expect(moved).toBeGreaterThan(error)
-    expect(s.items()[moved]).toEqual({ type: "user", id: steer.id, text: "Also check the tests", at: expect.any(Number), waiting: true })
+    await until(() => !s.session.busy)
+    expect(unsent).toEqual([{ text: "Also check the tests", busy: true }])
     expect(s.events).toContainEqual({ kind: "items.remove", ids: [steer.id] })
 
     s.session.send("Again")
     await until(() => s.queries.length === 2)
     const next = s.items().findLast((item) => item.type === "user" && item.text === "Again")!
-    expect(s.items().findLast((item) => item.id === steer.id)).toEqual({ type: "user", id: steer.id, text: "Also check the tests", at: expect.any(Number) })
-    expect(await inbox(s.queries[1]!, 2)).toEqual([
-      { uuid: steer.id, content: "Also check the tests" },
-      { uuid: next.id, content: "Again" },
-    ])
+    expect(await inbox(s.queries[1]!, 1)).toEqual([{ uuid: next.id, content: "Again" }])
   })
 }
-
-test("a steer sent again after an exit goes once, and the message after it goes alone", async () => {
-  const s = setup()
-  const running = await started(s)
-  s.session.steer("Also check the tests")
-  running.end()
-  await until(() => s.statuses().length === 2)
-  s.session.send("Again")
-  await until(() => s.queries.length === 2)
-  s.queries[1]!.push(result("r2"))
-  await until(() => s.statuses().length === 4)
-
-  s.session.send("Third")
-  const third = s.items().at(-1)!
-  expect(await inbox(s.queries[1]!, 3)).toMatchObject([{ content: "Also check the tests" }, { content: "Again" }, { uuid: third.id, content: "Third" }])
-})
 
 test("a stream that ends between turns shows nothing, and the next message starts Claude Code again", async () => {
   const s = setup()
@@ -555,8 +534,9 @@ test("a Force stop hands a steer Claude Code has not read to the queue, and none
 })
 
 for (const echoed of [true, false]) {
-  test(`a steer that missed its turn is ${echoed ? "not sent again after the next turn took it" : "sent again when Claude Code exits before the next turn takes it"}`, async () => {
-    const s = setup()
+  test(`a steer that missed its turn ${echoed ? "is not queued after the next turn took it" : "goes to the queue when Claude Code exits before the next turn takes it"}`, async () => {
+    const unsent: unknown[] = []
+    const s = setup(undefined, (messages) => void unsent.push(...messages))
     const running = await started(s)
     s.session.steer("Now reply with just: second")
     const steer = s.items().at(-1)!
@@ -565,11 +545,6 @@ for (const echoed of [true, false]) {
     if (echoed) running.push({ type: "system", subtype: "init", uuid: "i2", session_id: "s1", model: "claude-haiku-5-5", user_message_uuids: [steer.id] })
     running.end()
     await until(() => !s.session.busy)
-    expect(s.items().findLast((item) => item.id === steer.id)).toEqual({ type: "user", id: steer.id, text: "Now reply with just: second", at: expect.any(Number), ...(echoed ? {} : { waiting: true }) })
-
-    s.session.send("Again")
-    await until(() => s.queries.length === 2)
-    const next = s.items().findLast((item) => item.type === "user" && item.text === "Again")!
-    expect(await inbox(s.queries[1]!, echoed ? 1 : 2)).toMatchObject(echoed ? [{ uuid: next.id }] : [{ uuid: steer.id }, { uuid: next.id }])
+    expect(unsent).toEqual(echoed ? [] : [{ id: steer.id, text: "Now reply with just: second" }])
   })
 }

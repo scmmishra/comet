@@ -96,8 +96,6 @@ export class ClaudeSession implements AgentSession {
    * and one that missed its turn until the next turn names it.
    */
   private waitingSteers = new Map<string, UserItem>()
-  /** The steered messages Claude Code exited without reading. The next message sends them first. */
-  private unreadSteers: UserItem[] = []
   private settings: RunSettings
   /** Where the next query resumes, until a turn has run there. Later queries resume at the end, as usual. */
   private resumeAt?: string
@@ -144,7 +142,6 @@ export class ClaudeSession implements AgentSession {
     this.running = true
     this.emit({ kind: "status", busy: true })
     if (!this.started) void this.start()
-    this.sendUnreadSteers()
     this.inbox!.push(userMessage(uuid, text, images))
   }
 
@@ -345,7 +342,7 @@ export class ClaudeSession implements AgentSession {
     this.settleOpen(this.stop.pending ? "stopped" : "failed")
     if (!this.lost && errorMessage(error).includes(CONVERSATION_NOT_FOUND)) this.forget()
     else if (!this.lost) this.emit({ kind: "item", item: errorItem(error) })
-    this.keepUnreadSteers()
+    this.queueUnreadSteers()
     this.endTurn()
     this.release()
   }
@@ -411,37 +408,17 @@ export class ClaudeSession implements AgentSession {
    */
   private moveMissedSteers() {
     for (const { waiting: _, ...item } of this.moveWaitingSteers()) {
-      // It stays unread until the next turn names it, so Claude Code exiting before then keeps it.
+      // It stays unread until the next turn names it, so Claude Code exiting before then queues it.
       this.waitingSteers.set(item.id, item)
       this.emit({ kind: "item", item })
     }
   }
 
   /**
-   * Keeps each steered message Claude Code exited without reading, after T3 Code. It moves after the
-   * failure and stays waiting. The next message sends it first, since the new Claude Code never saw it.
-   * A steer that waited behind a stop goes too, as it does when Claude Code stays up.
-   */
-  private keepUnreadSteers() {
-    for (const moved of this.moveWaitingSteers()) {
-      const item = { ...moved, waiting: true }
-      this.unreadSteers.push(item)
-      this.emit({ kind: "item", item })
-    }
-  }
-
-  /** Sends the steered messages Claude Code exited without reading, and shows them as no longer waiting, as a sent message is. */
-  private sendUnreadSteers() {
-    for (const { waiting: _, ...item } of this.unreadSteers.splice(0)) {
-      this.emit({ kind: "item", item })
-      // A steer's item id is the uuid Comet gave it.
-      this.inbox!.push(userMessage(item.id as UUID, item.text, item.images ?? []))
-    }
-  }
-
-  /**
-   * Hands each steered message Claude Code has not read to the window's queue. A Force stop closes the session,
-   * so the session cannot keep it for the next message, as it does when Claude Code exits.
+   * Hands each steered message Claude Code has not read to the window's queue, where the user can send,
+   * edit or drop it. The turn ended without it: Claude Code exited, or a Force stop cut it off. A steer
+   * that waited behind a stop goes too. The window holds the queue once the turn ends, as after any stop
+   * or error, so nothing sends it by itself. It goes before the turn ends, since an empty queue is not held.
    */
   private queueUnreadSteers() {
     const unread = this.moveWaitingSteers()

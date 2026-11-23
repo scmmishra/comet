@@ -348,14 +348,34 @@ test("sends the next queued message once the turn ends", async () => {
   expect(saved().threads.a.queue).toMatchObject([{ text: "three" }])
 })
 
-test("puts the messages a session closed without reading first in the queue", async () => {
+test("puts the messages a turn ended without first in the queue, and holds it after a failure", async () => {
   const project = tempFolder("queue")
   const { window, sent, codex } = openWithAgents({ tabs: [codexTab("a", project)], threads: {}, recent: [] })
   await window.send("a", "one")
   await window.send("a", "two")
-  codex.sessions[0]!.options.onUnsent!([{ id: "steer", text: "Also check the tests" }])
-  expect(saved().threads.a.queue).toMatchObject([{ id: "steer", text: "Also check the tests" }, { text: "two" }])
-  expect(sent.at(-1)).toMatchObject({ type: "queue", tabId: "a", messages: [{ id: "steer" }, { text: "two" }] })
+  const session = codex.sessions[0]!
+  session.emit({ kind: "item", item: { type: "error", id: "e1", message: "Claude Code exited before it finished the turn." } })
+  session.options.onUnsent!([{ id: "steer", text: "Also check the tests" }])
+  session.emit({ kind: "status", busy: false })
+  expect(saved().threads.a).toMatchObject({ queue: [{ id: "steer", text: "Also check the tests" }, { text: "two" }], queueHeld: true })
+  expect(sent.at(-1)).toMatchObject({ type: "queue", tabId: "a", messages: [{ id: "steer" }, { text: "two" }], held: true })
+  await Bun.sleep(10)
+  expect(codex.calls).toEqual(["send one"])
+})
+
+test("holds the queue after a Force stop, with the messages the turn never read first", async () => {
+  const project = tempFolder("queue")
+  const { window, codex } = openWithAgents({ tabs: [codexTab("a", project)], threads: {}, recent: [] })
+  codex.unsent = [{ id: "steer", text: "Also check the tests" }]
+  await window.send("a", "one")
+  await window.send("a", "two")
+  window.forceStop("a")
+  expect(codex.calls).toEqual(["send one", "forceStop", "close"])
+  expect(saved().threads.a).toMatchObject({ queue: [{ id: "steer" }, { text: "two" }], queueHeld: true })
+  await Bun.sleep(10)
+  expect(codex.calls).toEqual(["send one", "forceStop", "close"])
+  window.resumeQueue("a")
+  await until(() => codex.calls.includes("send Also check the tests"))
 })
 
 test("holds the queue after a stop or an error, until it is resumed", async () => {
