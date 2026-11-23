@@ -439,6 +439,13 @@ export interface AgentInfo {
   readonly signInLink?: string
 }
 
+/** A pull request a thread search can match. */
+export interface ThreadPullRequest {
+  readonly number: number
+  readonly title: string
+  readonly url: string
+}
+
 /** A past thread in a project, as its agent saved it. */
 export interface ThreadSummary {
   /** The agent's session id, which resumes the thread. */
@@ -447,6 +454,8 @@ export interface ThreadSummary {
   readonly agent: AgentId
   readonly title: string
   readonly branch?: string
+  /** The pull request of the thread's branch, when `gh` finds one. Thread search matches its number, title and link. */
+  readonly pr?: ThreadPullRequest
   /** Milliseconds since the epoch. */
   readonly updatedAt: number
   /** The tab that has the thread open, if one does. */

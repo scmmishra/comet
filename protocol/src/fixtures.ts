@@ -124,7 +124,7 @@ export const CORE_MESSAGES = [
     project: "/Users/me/code/web",
     part: "threads",
     value: [
-      { id: "s1", agent: "claude", title: "Fix the login form", branch: "login", updatedAt: 1_700_000_000_000, tabId: "tab-1", project: "/Users/me/code/web" },
+      { id: "s1", agent: "claude", title: "Fix the login form", branch: "login", pr: { number: 42, title: "Fix login", url: "https://github.com/me/web/pull/42" }, updatedAt: 1_700_000_000_000, tabId: "tab-1", project: "/Users/me/code/web" },
       { id: "s2", agent: "codex", title: "Add tests", updatedAt: 1_699_000_000_000, project: "/Users/me/.comet/worktrees/web/add-tests" },
     ],
   },
