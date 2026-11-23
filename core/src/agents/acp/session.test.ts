@@ -4,6 +4,7 @@ import { tempFolder, until } from "../../test-support"
 import type { SessionOptions } from "../agent"
 import { unfinishedResult } from "../steps"
 import { FAKE_OPTIONS, fakeAcpAgent } from "./test-agent"
+import { START_TIMEOUT_MS } from "./connection"
 import { HOLD_LIMIT_MS, REPLY_LIMIT_MS, SETTLE_MS } from "./after-prompt"
 import type { AcpFlavor, BackgroundWork, PromptCheck } from "./flavor"
 import type { ConfigOption, SessionUpdate } from "./protocol"
@@ -131,6 +132,38 @@ test("cancels a turn and waits for its prompt to answer, then ends it as stopped
   run.agent().endTurn("cancelled")
   await until(() => !run.session.busy)
   expect(run.last("result")).toMatchObject({ isError: false, stopped: true })
+})
+
+test("stops a turn whose agent does not answer as it starts: ends its process, and the next message starts it again", async () => {
+  const run = start({}, { initialize: () => new Promise(() => {}) })
+  run.session.send("Hello")
+  await until(() => run.agent().sent("initialize").length === 1)
+  const stuck = run.agent()
+  await run.session.interrupt()
+  await until(() => !run.session.busy)
+  expect(run.last("result")).toMatchObject({ isError: false, stopped: true })
+  expect(run.items().filter((item) => item.type === "error")).toEqual([])
+  await stuck.process.exited
+
+  run.agents.push(fakeAcpAgent())
+  run.session.send("Again")
+  await until(() => run.agent().sent("session/prompt").length === 1)
+  expect(run.agent().sent("session/new").length).toBe(1)
+})
+
+test("fails a turn whose agent does not answer as it starts, once the bound passes", async () => {
+  const run = start({}, { initialize: () => new Promise(() => {}) })
+  // The bound starts as the message is sent, so the clock is fake from before it.
+  jest.useFakeTimers()
+  try {
+    run.session.send("Hello")
+    jest.advanceTimersByTime(START_TIMEOUT_MS)
+  } finally {
+    jest.useRealTimers()
+  }
+  await until(() => !run.session.busy)
+  expect(run.last("error")?.message).toBe("The agent did not answer initialize in 90 seconds, so Comet stopped it. The next message starts it again.")
+  await run.agent().process.exited
 })
 
 test.each([

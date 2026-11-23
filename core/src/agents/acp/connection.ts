@@ -13,6 +13,14 @@ import {
   type StopReason,
 } from "./protocol"
 
+/**
+ * How long an agent has to answer each call that starts a session, as in T3 Code: `initialize`, then
+ * `session/new` or `session/resume`. The bound is per call. Resuming a long thread may take longer than
+ * `initialize`, and 90 seconds leaves it room. `authenticate` has no bound, since it waits while the user
+ * signs in with Google in the browser.
+ */
+export const START_TIMEOUT_MS = 90_000
+
 /** What the client does with the messages an agent sends it. */
 export interface AcpClient {
   readonly update: (notification: SessionNotification) => void
@@ -60,7 +68,7 @@ export class AcpConnection {
       { versioned: true, ...(client.stray ? { stray: client.stray } : {}) },
     )
     try {
-      await rpc.request("initialize", {
+      await answerInTime(rpc, "initialize", {
         protocolVersion: PROTOCOL_VERSION,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
         clientInfo: options.clientInfo,
@@ -74,12 +82,12 @@ export class AcpConnection {
   }
 
   newSession(params: SessionParams): Promise<SessionSetup> {
-    return this.rpc.request("session/new", params)
+    return answerInTime(this.rpc, "session/new", params)
   }
 
   /** Continues a saved session without replaying its history, as `session/load` would. */
   resumeSession(sessionId: string, params: SessionParams): Promise<SessionSetup> {
-    return this.rpc.request("session/resume", { sessionId, ...params })
+    return answerInTime(this.rpc, "session/resume", { sessionId, ...params })
   }
 
   /** Runs a turn. It answers once the turn has ended, also after a cancel. */
@@ -107,5 +115,25 @@ export class AcpConnection {
   /** Ends the connection, which ends the agent's process. */
   close() {
     this.rpc.close()
+  }
+}
+
+/**
+ * Asks the agent a call that starts a session. An agent that never answers would leave its turn starting
+ * for good, so after `START_TIMEOUT_MS` the call fails and the connection closes, which ends the process.
+ */
+async function answerInTime<T>(rpc: JsonRpc, method: string, params: unknown): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const silent = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      // Rejected first: closing fails the pending request, and its message would win the race.
+      reject(new Error(`The agent did not answer ${method} in ${START_TIMEOUT_MS / 1000} seconds, so Comet stopped it. The next message starts it again.`))
+      rpc.close()
+    }, START_TIMEOUT_MS)
+  })
+  try {
+    return await Promise.race([rpc.request<T>(method, params), silent])
+  } finally {
+    clearTimeout(timer)
   }
 }

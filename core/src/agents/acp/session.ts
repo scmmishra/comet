@@ -114,7 +114,8 @@ export class AcpSession implements AgentSession {
 
   /**
    * Asks the agent to cancel the turn. Its prompt then answers, and the turn ends as stopped. A turn that
-   * went on after its prompt has no prompt to answer, so it ends as stopped once the agent is quiet.
+   * went on after its prompt has no prompt to answer, so it ends as stopped once the agent is quiet. A turn
+   * whose agent is still starting has no session to cancel, so its process ends, and the turn ends as stopped.
    */
   async interrupt() {
     const turn = this.turn
@@ -122,6 +123,7 @@ export class AcpSession implements AgentSession {
     // ACP asks the client to answer every open request as cancelled.
     this.cancelRequests()
     if (this.live) this.live.connection.cancel(this.live.sessionId)
+    else if (turn.prompting) this.process?.close()
     this.wait(turn)
   }
 
@@ -178,9 +180,15 @@ export class AcpSession implements AgentSession {
   }
 
   private async run(turn: Turn, text: string, images: readonly ImageAttachment[]) {
+    let live: Live
     try {
-      const live = await this.connect()
-      // A stop asked while the agent started cancels the turn before its prompt.
+      live = await this.connect()
+    } catch (error) {
+      // A stop while the agent started ended its process, so the start failed because of the stop.
+      return this.stop.pending ? this.finish(turn, "cancelled") : this.fail(turn, error)
+    }
+    try {
+      // A stop asked as the start finished cancels the turn before its prompt.
       if (this.stop.pending) return this.finish(turn, "cancelled")
       const check = this.flavor.watchPrompt?.(live.sessionId)
       this.finish(turn, await live.connection.prompt(live.sessionId, this.prompt(text, images)), check)
