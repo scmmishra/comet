@@ -39,3 +39,12 @@ test("a client that left is sent nothing", () => {
   clients.replyTo(a)({ type: "recent", projects: [] })
   expect(a.got).toEqual([])
 })
+
+test("sends text an agent cut inside an emoji with a replacement character, so the client can read the message", () => {
+  const clients = new Clients()
+  const a = { sent: [] as string[], send: (data: string) => void a.sent.push(data) }
+  clients.add(a)
+  clients.broadcast({ type: "session.history", tabId: "t", items: [user("😀".slice(0, 1))] })
+  expect(a.sent.every((data) => !/\\ud[89a-f][0-9a-f]{2}/i.test(data))).toBe(true)
+  expect((JSON.parse(a.sent[0]!) as Extract<CoreMessage, { type: "session.history" }>).items[0]).toMatchObject({ text: "\ufffd" })
+})

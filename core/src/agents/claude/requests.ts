@@ -1,6 +1,7 @@
 import type { PermissionAnswer, PermissionKind, Question, ThreadItem } from "@comet/protocol"
 import type { CanUseTool, PermissionResult, PermissionUpdate } from "@anthropic-ai/claude-agent-sdk"
 import { stripVTControlCharacters } from "node:util"
+import { textStart } from "../../text"
 
 /**
  * What Comet shows for Claude Code's permission requests, and how the user's answers go back, after
@@ -62,7 +63,7 @@ export function permissionItem(tool: string, input: Record<string, unknown>, opt
 function summary(tool: string, input: Record<string, unknown>): string {
   const path = ["file_path", "path", "filename"].map((key) => input[key]).find((value) => typeof value === "string")
   const text = typeof path === "string" ? path : JSON.stringify(input)
-  return `${tool}: ${text.length > SUMMARY_LENGTH ? `${text.slice(0, SUMMARY_LENGTH - 3)}...` : text}`
+  return `${tool}: ${text.length > SUMMARY_LENGTH ? `${textStart(text, SUMMARY_LENGTH - 3)}...` : text}`
 }
 
 /**

@@ -3,6 +3,7 @@ import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, typ
 import { cutOutput, relativeTo, thought, unfinishedResult } from "../steps"
 import { cometToolSummary } from "../../delegate/tools"
 import { visualItem } from "../../visuals/show"
+import { textStart } from "../../text"
 import { resultId, selfStartedItem } from "../turn-items"
 import { modelLabel } from "./models"
 import { cometTool, toolStep } from "./steps"
@@ -412,7 +413,7 @@ function taskSummary(content: unknown): string | undefined {
 
 function pluginText(text: string): string {
   const plain = text.replace(UNSAFE_CHARACTERS, " ").trim()
-  return plain.length > PLUGIN_ERROR_LIMIT ? `${plain.slice(0, PLUGIN_ERROR_LIMIT)}...` : plain
+  return plain.length > PLUGIN_ERROR_LIMIT ? `${textStart(plain, PLUGIN_ERROR_LIMIT)}...` : plain
 }
 
 function retryReason(error: SDKAPIRetryMessage["error"], status: number | null): string {

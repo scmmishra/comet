@@ -26,7 +26,7 @@ export class Clients {
 
   /** Sends to every client. */
   readonly broadcast: Send = (message) => {
-    const data = JSON.stringify(message)
+    const data = wireJson(message)
     for (const [socket, rows] of this.clients) deliver(socket, rows, message, data)
   }
 
@@ -34,7 +34,7 @@ export class Clients {
   replyTo(socket: Socket): Send {
     return (message) => {
       const rows = this.clients.get(socket)
-      if (rows) deliver(socket, rows, message, JSON.stringify(message))
+      if (rows) deliver(socket, rows, message, wireJson(message))
     }
   }
 
@@ -47,5 +47,16 @@ export class Clients {
 function deliver(socket: Socket, rows: ThreadRows, message: CoreMessage, data: string) {
   socket.send(data)
   const after = rows.after(message)
-  if (after) socket.send(JSON.stringify(after))
+  if (after) socket.send(wireJson(after))
+}
+
+/**
+ * A message as JSON the client can read. The client rejects JSON that holds half of a surrogate pair, and drops the
+ * whole message. Comet cuts its own text whole, but an agent can send text with half of one, so such text gets a
+ * replacement character. JSON.stringify writes half a pair as an escape such as `\ud83d`, so only a message with
+ * one is written again.
+ */
+function wireJson(message: unknown): string {
+  const data = JSON.stringify(message)
+  return data.includes("\\ud") ? JSON.stringify(message, (_, value) => (typeof value === "string" ? value.toWellFormed() : value)) : data
 }

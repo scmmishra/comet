@@ -1,5 +1,5 @@
 import { basename } from "node:path"
-import { firstLine } from "../text"
+import { firstLine, textStart } from "../text"
 import { SHOW } from "../visuals/show"
 import type { Tool } from "./mcp"
 
@@ -58,7 +58,7 @@ export const MOVE_TO_WORKTREE: Tool = {
 }
 
 /** A task in a few words: the start of its first line. */
-export const taskWords = (text: string) => firstLine(text).slice(0, 80)
+export const taskWords = (text: string) => textStart(firstLine(text), 80)
 
 /**
  * What a call of one of Comet's tools was given, in short, for its row in a thread: the agent and the

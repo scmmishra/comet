@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- A thread whose cut text ended inside an emoji shows again. Comet cuts long tool output, summaries and terminal output between whole characters. Before, half an emoji made the app drop the message, and a restored Claude thread could open empty.
 - An Antigravity turn fails with an error when Antigravity does not answer within 90 seconds as it starts, and Comet ends Antigravity's process. Stop also ends a turn whose agent is still starting. Before, the turn stayed busy, and only Force stop ended it.
 - An Antigravity turn that an HTTP error stopped, such as a 502 from Google, shows the error's message. Before, it showed only that an error stopped the turn.
 - An Antigravity turn stays open while a command Antigravity left running in the background still runs, and Stop ends that command. A reply Antigravity starts by itself, once such a command ends, shows as its own turn, and a permission it asks for there waits for you. Before, the tab showed idle and that reply was never finished.

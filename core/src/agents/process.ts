@@ -1,4 +1,5 @@
 import { spawn } from "../environment"
+import { textEnd } from "../text"
 import type { Transport } from "./json-rpc"
 
 /** How much of a process's stderr is kept, to say why it ended. */
@@ -43,7 +44,7 @@ export function run(command: string[], options: { readonly cwd?: string; readonl
   const listeners: ((line: string) => void)[] = []
   const drained = (async () => {
     for await (const line of lines(child.stderr)) {
-      tail = `${tail}${line}\n`.slice(-STDERR_TAIL)
+      tail = textEnd(`${tail}${line}\n`, STDERR_TAIL)
       for (const listener of listeners) listener(line)
     }
   })()
@@ -111,7 +112,7 @@ function describeEnd(name: string, code: number, signal: string | null, stderr: 
 /** The last few lines of stderr, cut to the last characters when they run long. */
 function stderrEnd(stderr: string): string {
   const text = stderr.split("\n").slice(-REPORT_LINES).join("\n").trim()
-  return text.length > REPORT_CHARS ? `…${text.slice(-REPORT_CHARS)}` : text
+  return text.length > REPORT_CHARS ? `…${textEnd(text, REPORT_CHARS)}` : text
 }
 
 /** A byte stream as its lines, without their newlines. A last line with no newline is still a line. */

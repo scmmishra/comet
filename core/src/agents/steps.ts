@@ -1,4 +1,5 @@
 import type { Step, StepKind } from "@comet/protocol"
+import { textStart } from "../text"
 
 /** A step as the mapper makes it, before it is named. */
 export type BareStep = Step extends infer T ? (T extends Step ? Omit<T, "kind" | "label"> : never) : never
@@ -14,7 +15,7 @@ const WRAPPERS = new Set(["sudo", "env", "time", "nice", "nohup", "exec", "comma
 const MAX_TOOL_OUTPUT = 4000
 
 /** A tool's output as the thread keeps it, cut where it runs long. */
-export const cutOutput = (text: string) => (text.length > MAX_TOOL_OUTPUT ? `${text.slice(0, MAX_TOOL_OUTPUT)}\n…` : text)
+export const cutOutput = (text: string) => (text.length > MAX_TOOL_OUTPUT ? `${textStart(text, MAX_TOOL_OUTPUT)}\n…` : text)
 
 /** A path as the thread shows it: relative to the project when it is inside it. */
 export const relativeTo = (dir: string, path: string) => (path.startsWith(`${dir}/`) ? path.slice(dir.length + 1) : path)

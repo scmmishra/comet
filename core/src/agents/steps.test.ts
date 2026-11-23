@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { commandLabel, thought, tool } from "./steps"
+import { commandLabel, cutOutput, thought, tool } from "./steps"
 
 const done = { output: "", isError: false }
 
@@ -25,4 +25,10 @@ test("says whether a command is running, ran or failed", () => {
 
 test("keeps every label to one line", () => {
   expect(tool({ type: "tool", id: "a", name: "Grep", summary: "a\n  b" }, "search", "Searched a\n  b").label).toBe("Searched a b")
+})
+
+test("cuts long tool output between whole characters, so the message that carries it stays valid JSON", () => {
+  const output = cutOutput(`${"a".repeat(3999)}${"😀".repeat(10)}`)
+  expect(output).toBe(`${"a".repeat(3999)}\n…`)
+  expect(JSON.stringify(output)).not.toMatch(/\\ud[89a-f][0-9a-f]{2}/i)
 })

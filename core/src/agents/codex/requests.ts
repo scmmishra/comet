@@ -1,5 +1,6 @@
 import type { PermissionAnswer, PermissionKind, Question, ThreadItem } from "@comet/protocol"
 import { SERVER_NAME } from "../../delegate/tools"
+import { textStart } from "../../text"
 import type { RequestId } from "../json-rpc"
 import { scriptOfWords, shellScript } from "./shell"
 
@@ -165,7 +166,7 @@ function elicitationRequest(asked: Elicitation, rpcId: RequestId, accept: boolea
   if (asked.mode === "url") return { answer: elicitationReply(asked, "cancel") }
   if (accept || asked.serverName === SERVER_NAME) return { answer: elicitationReply(asked, "allow") }
   const message = asked.message?.trim() || `Allow ${asked.serverName} to run a tool`
-  return asking(permission(`elicitation:${rpcId}`, asked.serverName, "permission", message.slice(0, MAX_DETAIL), undefined), (answer) => elicitationReply(asked, answer))
+  return asking(permission(`elicitation:${rpcId}`, asked.serverName, "permission", textStart(message, MAX_DETAIL), undefined), (answer) => elicitationReply(asked, answer))
 }
 
 /**

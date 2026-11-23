@@ -1,7 +1,7 @@
 import type { ThreadItem } from "@comet/protocol"
 import { cometToolLabel, cometToolSummary, SERVER_NAME } from "../../delegate/tools"
 import { visualItem } from "../../visuals/show"
-import { firstLine } from "../../text"
+import { firstLine, textStart } from "../../text"
 import { commandLabel, cutOutput, relativeTo, thought, tool } from "../steps"
 import { fileEdits } from "./diff"
 import type { CodexItem, CodexTurn, FileUpdate } from "./protocol"
@@ -104,7 +104,7 @@ const agentName = (path: string) => path.split("/").filter(Boolean).at(-1) ?? pa
 
 function argumentsSummary(args: unknown): string {
   const text = args === null || args === undefined ? "" : JSON.stringify(args)
-  return text.length > MAX_SUMMARY ? `${text.slice(0, MAX_SUMMARY - 1)}…` : text
+  return text.length > MAX_SUMMARY ? `${textStart(text, MAX_SUMMARY - 1)}…` : text
 }
 
 /** An MCP result's text. Content that is not text shows as its type. */

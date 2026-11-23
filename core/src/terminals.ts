@@ -1,6 +1,7 @@
 import type { Subprocess } from "bun"
 import { spawn } from "./environment"
 import { loginShell } from "./shell"
+import { textEnd } from "./text"
 
 /** Output kept per terminal, so a terminal the page draws again shows what it showed before. */
 const MAX_BUFFER_CHARS = 256 * 1024
@@ -75,7 +76,7 @@ export class Terminals {
   private receive(id: string, data: string) {
     const entry = this.running.get(id)
     if (!entry || !data) return
-    entry.buffer = (entry.buffer + data).slice(-MAX_BUFFER_CHARS)
+    entry.buffer = textEnd(entry.buffer + data, MAX_BUFFER_CHARS)
     this.events.output(id, data)
   }
 }

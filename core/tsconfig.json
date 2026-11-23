@@ -1,6 +1,8 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
+    // Bun runs the core, and has ES2024's String.prototype.toWellFormed.
+    "target": "ES2024",
     "types": ["bun"]
   },
   "include": ["src"]
