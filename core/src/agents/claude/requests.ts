@@ -77,6 +77,20 @@ export function permissionResult(answer: PermissionAnswer, tool: string, input: 
   return { behavior: "deny", message: "The user declined this tool call." }
 }
 
+/**
+ * What a new Claude Code process takes at start to keep the session's approvals. The SDK applies a rule
+ * only through an answer or at start. Comet's settings own the permission mode, so a mode change is
+ * left out. Suggestions add rules and folders, so removals are left out too.
+ */
+export function keptApprovals(approvals: readonly PermissionUpdate[]): { readonly allowedTools: string[]; readonly additionalDirectories: string[] } {
+  const allowedTools = approvals.flatMap((update) => (update.type === "addRules" && update.behavior === "allow" ? update.rules.map(ruleText) : []))
+  const additionalDirectories = approvals.flatMap((update) => (update.type === "addDirectories" ? update.directories : []))
+  return { allowedTools, additionalDirectories }
+}
+
+/** A rule as Claude Code's settings and `allowedTools` spell it, such as `Bash(npm test:*)`. */
+const ruleText = ({ toolName, ruleContent }: { toolName: string; ruleContent?: string }) => (ruleContent ? `${toolName}(${ruleContent})` : toolName)
+
 function sessionRules(tool: string, suggestions: readonly PermissionUpdate[] | undefined): PermissionUpdate[] {
   const rules = (suggestions ?? []).map((suggestion) => ({ ...suggestion, destination: "session" as const }))
   return rules.length ? rules : [{ type: "addRules", rules: [{ toolName: tool }], behavior: "allow", destination: "session" }]

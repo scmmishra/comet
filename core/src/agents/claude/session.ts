@@ -1,4 +1,4 @@
-import { query, type CanUseTool, type PermissionResult, type Query, type SDKMessage, type SDKRateLimitInfo, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
+import { query, type CanUseTool, type PermissionResult, type PermissionUpdate, type Query, type SDKMessage, type SDKRateLimitInfo, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 import type { UUID } from "node:crypto"
 import type { ImageAttachment, PermissionAnswer, RunSettings, ThreadEvent, ThreadItem } from "@comet/protocol"
 import { SERVER_NAME } from "../../delegate/tools"
@@ -12,7 +12,7 @@ import { sdkEffort, sdkModel } from "./models"
 import { BackgroundTasks } from "./background-tasks"
 import { claudeCodePath } from "./executable"
 import { Subagents } from "./subagents"
-import { ASK_USER_QUESTION, permissionItem, permissionResult, questionItem, questionResult } from "./requests"
+import { ASK_USER_QUESTION, keptApprovals, permissionItem, permissionResult, questionItem, questionResult } from "./requests"
 import { COMET_TOOL, toolStep } from "./steps"
 import { ThreadMapper } from "./thread"
 
@@ -64,6 +64,12 @@ const CONVERSATION_LOST = "Claude Code could not find the earlier conversation. 
 const SUBAGENTS_LOST = "Claude Code exited before its subagents finished."
 /** Claude Code's tools that move a session into a worktree and back out. */
 const WORKTREE_TOOLS = new Set(["EnterWorktree", "ExitWorktree"])
+/**
+ * How long Claude Code's process stays up with nothing to do, after T3 Code. Each process holds hundreds
+ * of megabytes. MCP servers that keep state, such as a browser, start over with a new process, so the
+ * wait is long. By then the prompt cache has expired, so resuming costs no extra tokens.
+ */
+const IDLE_CLOSE_MS = 20 * 60_000
 
 /** A request waiting for the user, with what Claude asked. */
 interface ClaudeRequest extends OpenRequest<PermissionResult> {
@@ -72,7 +78,7 @@ interface ClaudeRequest extends OpenRequest<PermissionResult> {
   readonly suggestions: RequestSuggestions
 }
 
-/** One Claude conversation. It starts on the first message. */
+/** One Claude conversation. It starts Claude Code on the first message, closes it once it sits idle, and starts it again on the next message. */
 export class ClaudeSession implements AgentSession {
   /** Each query reads its own inbox. A failed query's input loop may still wait on its inbox, and must not take the next message. */
   private inbox?: Inbox
@@ -105,12 +111,17 @@ export class ClaudeSession implements AgentSession {
   private readonly worktreeCalls = new Set<string>()
   /** Set once Claude Code said the conversation to resume is gone, so the failure that follows adds no second error. */
   private lost = false
+  /** Closes Claude Code's process once the session has sat idle for `idleMs`. */
+  private idleTimer?: ReturnType<typeof setTimeout>
+  /** The rules and folders the user allowed for the session. A new process takes them at start, so they outlast the process. */
+  private approvals: PermissionUpdate[] = []
 
   constructor(
     private readonly dir: string,
     private readonly emit: Emit,
     private readonly options: ClaudeSessionOptions,
     private readonly runQuery: typeof query = query,
+    private readonly idleMs = IDLE_CLOSE_MS,
   ) {
     this.sessionId = options.resume
     this.resumeAt = options.resumeAt
@@ -184,10 +195,12 @@ export class ClaudeSession implements AgentSession {
     this.stop.clear()
     this.running = false
     this.emit({ kind: "status", busy: false })
+    this.waitIdle()
   }
 
   close() {
     this.closed = true
+    clearTimeout(this.idleTimer)
     this.stop.clear()
     this.requests.settleAll(() => ({ behavior: "deny", message: "The session was closed." }))
     this.endWork()
@@ -204,6 +217,7 @@ export class ClaudeSession implements AgentSession {
     if (!this.started) await this.start()
     if (!this.query) throw new Error("Claude Code did not start, so Comet could not restore the files.")
     const result = await this.query.rewindFiles(messageId)
+    this.waitIdle()
     if (!result.canRewind) throw new Error(result.error ?? "Claude Code kept no copies of the files from that message.")
   }
 
@@ -219,7 +233,10 @@ export class ClaudeSession implements AgentSession {
   private answer(requestId: string, type: ClaudeRequest["item"]["type"], result: (input: Record<string, unknown>, tool: string, suggestions: RequestSuggestions) => PermissionResult) {
     const request = this.requests.get(requestId)
     if (request?.item.type !== type) return
-    this.requests.settle(request, result(request.input, request.tool, request.suggestions))
+    const reply = result(request.input, request.tool, request.suggestions)
+    if (reply.behavior === "allow") this.approvals.push(...(reply.updatedPermissions ?? []).filter((update) => update.destination === "session"))
+    this.requests.settle(request, reply)
+    this.waitIdle()
   }
 
   /**
@@ -230,6 +247,8 @@ export class ClaudeSession implements AgentSession {
     this.started = true
     this.lost = false
     const inbox = (this.inbox = new Inbox())
+    const approved = keptApprovals(this.approvals)
+    const allowedTools = [...(this.options.tools ? [`${COMET_TOOL}*`] : []), ...approved.allowedTools]
     let executable: string
     try {
       executable = await claudeCodePath()
@@ -246,7 +265,9 @@ export class ClaudeSession implements AgentSession {
         forwardSubagentText: true,
         agentProgressSummaries: true,
         systemPrompt: { type: "preset", preset: "claude_code", ...(this.options.tools ? { append: this.options.tools.instructions } : {}) },
-        ...(this.options.tools ? { mcpServers: toolServers(this.options.tools), allowedTools: [`${COMET_TOOL}*`] } : {}),
+        ...(this.options.tools ? { mcpServers: toolServers(this.options.tools) } : {}),
+        ...(allowedTools.length ? { allowedTools } : {}),
+        ...(approved.additionalDirectories.length ? { additionalDirectories: approved.additionalDirectories } : {}),
         canUseTool: this.askPermission,
         model: sdkModel(this.settings.model),
         ...(this.settings.effort ? { effort: sdkEffort(this.settings.effort) } : {}),
@@ -274,6 +295,8 @@ export class ClaudeSession implements AgentSession {
   private async pump(running: Query) {
     try {
       for await (const message of running) {
+        // A query the session let go, such as one closed while idle, no longer speaks for it.
+        if (this.query !== running) return
         // A session Claude Code could not find stays dropped, whatever id the rest of its frames carry.
         if (message.session_id && message.session_id !== this.sessionId && !this.lost) {
           this.sessionId = message.session_id
@@ -312,10 +335,12 @@ export class ClaudeSession implements AgentSession {
             this.options.onResumedAt?.()
           }
         }
+        // Any frame may end the work that kept the process up, such as a background command.
+        this.waitIdle()
       }
       this.streamEnded(running)
     } catch (error) {
-      this.fail(error)
+      if (!this.closed && this.query === running) this.fail(error)
     }
   }
 
@@ -367,6 +392,7 @@ export class ClaudeSession implements AgentSession {
 
   /** Lets the query go, so the next message starts Claude Code again. */
   private release() {
+    clearTimeout(this.idleTimer)
     this.endWork()
     this.inbox?.close()
     this.query = undefined
@@ -464,6 +490,33 @@ export class ClaudeSession implements AgentSession {
     }
   }
 
+  /**
+   * Whether Claude Code's process may close. It may not while a turn runs, a request waits or a stop is
+   * pending, nor while background work runs, which would end with it. A session that leaves no transcript
+   * cannot resume, so its process stays.
+   */
+  private get idle() {
+    const working = this.running || this.stop.pending || this.requests.waiting || this.subagents.running || this.backgroundTasks.running
+    return !!this.query && !working && !this.options.ephemeral
+  }
+
+  /** Starts the idle wait again, if the session is idle now. Each call restarts it, so the wait counts from the last activity. */
+  private waitIdle() {
+    clearTimeout(this.idleTimer)
+    if (this.idle) this.idleTimer = setTimeout(() => this.closeIdle(), this.idleMs)
+  }
+
+  /**
+   * Closes Claude Code's process after it sat idle, after T3 Code. The thread stays as it is. The next message
+   * starts a process that resumes the same session, with the session's settings and approvals.
+   */
+  private closeIdle() {
+    const running = this.query
+    if (!running || !this.idle) return
+    this.release()
+    running.close()
+  }
+
   /** Claude Code's process is gone or going, and the subagents and commands it ran in the background end with it. */
   private endWork() {
     this.subagents.stopRunning()
@@ -488,7 +541,10 @@ export class ClaudeSession implements AgentSession {
       const request = { item, tool, input, suggestions: options.suggestions, resolve }
       this.requests.add(request)
       // An interrupted turn cancels its request.
-      options.signal.addEventListener("abort", () => this.requests.settle(request, { behavior: "deny", message: "The request was cancelled." }))
+      options.signal.addEventListener("abort", () => {
+        this.requests.settle(request, { behavior: "deny", message: "The request was cancelled." })
+        this.waitIdle()
+      })
     })
 }
 

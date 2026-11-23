@@ -14,6 +14,7 @@ const SETTINGS: RunSettings = { agent: "claude", model: "default", permissionMod
 /** A query that yields the SDK messages a test pushes, and records the calls the session makes. */
 class FakeQuery implements AsyncIterable<SDKMessage> {
   interrupts = 0
+  closed = false
   private messages: SDKMessage[] = []
   private failure?: Error
   private ended = false
@@ -70,11 +71,12 @@ class FakeQuery implements AsyncIterable<SDKMessage> {
     return { percentage: 10, totalTokens: 20_000, maxTokens: 200_000 }
   }
   close() {
+    this.closed = true
     this.end()
   }
 }
 
-function setup(resume?: string, onUnsent?: SessionOptions["onUnsent"]) {
+function setup(resume?: string, onUnsent?: SessionOptions["onUnsent"], { idleMs, ephemeral }: { idleMs?: number; ephemeral?: boolean } = {}) {
   const events: ThreadEvent[] = []
   const queries: FakeQuery[] = []
   const run = ({ prompt, options }: { prompt?: AsyncIterable<SDKUserMessage>; options?: Options }) => {
@@ -96,10 +98,12 @@ function setup(resume?: string, onUnsent?: SessionOptions["onUnsent"]) {
       onRenamed: (title) => void renames.push(title),
       onMoved: (dir) => void moves.push(dir),
       ...(onUnsent ? { onUnsent } : {}),
+      ...(ephemeral ? { ephemeral } : {}),
       onRateLimit: () => {},
       compactIdle: () => false,
     },
     run as never,
+    idleMs,
   )
   const items = () => events.flatMap((event) => (event.kind === "item" ? [event.item] : []))
   const results = () => items().filter((item): item is Extract<ThreadItem, { type: "result" }> => item.type === "result")
@@ -548,3 +552,92 @@ for (const echoed of [true, false]) {
     expect(unsent).toEqual(echoed ? [] : [{ id: steer.id, text: "Now reply with just: second" }])
   })
 }
+
+/** How long a test session waits idle before it closes Claude Code's process. */
+const IDLE_MS = 20
+
+/** Starts a session that closes its process when idle, and ends its first turn. */
+async function idleAfterTurn() {
+  const s = setup(undefined, undefined, { idleMs: IDLE_MS })
+  const running = await started(s)
+  running.push(result("r1"))
+  await until(() => s.statuses().length === 2)
+  return { s, running }
+}
+
+/** Waits past the idle time. */
+const pastIdle = () => Bun.sleep(IDLE_MS * 4)
+
+test("an idle session closes Claude Code's process, and shows nothing for it", async () => {
+  const { s, running } = await idleAfterTurn()
+  const shown = s.events.length
+  await until(() => running.closed)
+  await pastIdle()
+  // The thread, the background card and the MCP list all stay as they were.
+  expect(s.events).toHaveLength(shown)
+  expect(s.session.busy).toBe(false)
+})
+
+test("a busy session keeps its process", async () => {
+  const s = setup(undefined, undefined, { idleMs: IDLE_MS })
+  const running = await started(s)
+  await pastIdle()
+  expect(running.closed).toBe(false)
+})
+
+test("a session keeps its process while background work runs, and waits idle again once it ends", async () => {
+  const { s, running } = await idleAfterTurn()
+  running.push({ type: "system", subtype: "background_tasks_changed", uuid: "bt1", session_id: "s1", tasks: [{ task_id: "b1", task_type: "local_bash", description: "npm run dev" }] })
+  running.push({ type: "system", subtype: "task_started", uuid: "ts1", session_id: "s1", task_id: "t1", tool_use_id: "call1", task_type: "local_agent", description: "Find tests", is_backgrounded: true })
+  await until(() => lastSubagent(s) !== undefined)
+  await pastIdle()
+  expect(running.closed).toBe(false)
+
+  running.push({ type: "system", subtype: "background_tasks_changed", uuid: "bt2", session_id: "s1", tasks: [] })
+  await pastIdle()
+  expect(running.closed).toBe(false)
+
+  running.push({ type: "system", subtype: "task_notification", uuid: "tn1", session_id: "s1", task_id: "t1", status: "completed", output_file: "", summary: "Found them" })
+  await until(() => running.closed)
+})
+
+test("a request that waits keeps the process, and the wait starts again once it is answered", async () => {
+  const { s, running } = await idleAfterTurn()
+  const ask = running.options.canUseTool as CanUseTool
+  void ask("Bash", { command: "ls" }, { signal: new AbortController().signal, toolUseID: "call1" } as never)
+  await pastIdle()
+  expect(running.closed).toBe(false)
+
+  s.session.answerPermission("call1", "allow")
+  await until(() => running.closed)
+})
+
+test("the next message after an idle close resumes the same session, with the settings and approvals it had", async () => {
+  const { s, running } = await idleAfterTurn()
+  const ask = running.options.canUseTool as CanUseTool
+  const suggestions = [
+    { type: "addRules", rules: [{ toolName: "Bash", ruleContent: "npm test:*" }], behavior: "allow", destination: "localSettings" },
+    { type: "addDirectories", directories: ["/work/shared"], destination: "localSettings" },
+    { type: "setMode", mode: "acceptEdits", destination: "session" },
+  ]
+  void ask("Bash", { command: "npm test" }, { signal: new AbortController().signal, toolUseID: "call1", suggestions } as never)
+  s.session.answerPermission("call1", "allow-session")
+  void ask("Edit", { file_path: "/work/app/a.ts" }, { signal: new AbortController().signal, toolUseID: "call2" } as never)
+  s.session.answerPermission("call2", "allow-session")
+  await until(() => running.closed)
+
+  await s.session.configure({ ...SETTINGS, model: "opus", effort: "high", permissionMode: "acceptEdits" })
+  s.session.send("Again")
+  await until(() => s.queries.length === 2)
+  expect(s.queries[1]!.options).toMatchObject({ resume: "s1", model: "opus", effort: "high", permissionMode: "acceptEdits", allowedTools: ["Bash(npm test:*)", "Edit"], additionalDirectories: ["/work/shared"] })
+  expect(s.sessionIds).toEqual(["s1"])
+})
+
+test("a session that leaves no transcript keeps its process, since nothing could resume it", async () => {
+  const s = setup(undefined, undefined, { idleMs: IDLE_MS, ephemeral: true })
+  const running = await started(s)
+  running.push(result("r1"))
+  await until(() => !s.session.busy)
+  await pastIdle()
+  expect(running.closed).toBe(false)
+})

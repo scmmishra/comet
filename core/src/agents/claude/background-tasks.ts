@@ -23,6 +23,11 @@ export class BackgroundTasks {
     this.emit({ kind: "background", tasks: this.tasks })
   }
 
+  /** Whether a command runs in the background. */
+  get running() {
+    return this.tasks.length > 0
+  }
+
   /** Empties the list once Claude Code's process is gone, since its commands end with it. */
   clear() {
     if (!this.tasks.length) return
