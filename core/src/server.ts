@@ -141,6 +141,8 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
       case "tabs.save":
         window.save(message.tabs, message.active)
         return layouts.sendVisible()
+      case "widths.save":
+        return window.saveWidths(message.widths)
       case "window.focus":
         return layouts.windowFocus(message.focused)
       case "tab.reopen":

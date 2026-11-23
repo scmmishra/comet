@@ -126,6 +126,7 @@ Left:
 - rune-kit's `Dialog` keeps its title and description to one line each, and a long one runs past the panel and pushes the close button out. Comet puts longer text in the dialog's body, where it wraps. A `Checkbox` description keeps to one line too, so Comet keeps it short.
 - A truncated text draws only its first line, but takes the height of all its lines. Text with newlines makes its row tall, so Comet passes one line to `.truncate()`.
 - Rune lights a `.hover()` style on every element under the pointer, including elements under an overlay. Only a modal makes them inert. rune-kit's `scrim` catches presses but not hover, and its `Popover` uses one. Comet makes each of its popovers a modal that closes on an outside press.
+- rune-kit has no resize handle of its own. Its grip lives inside `SplitView`, a whole window of another shape. Comet's handle in `native/src/panes.rs` follows `@opencode/ui`'s `ResizeHandle`.
 
 ## Comet's design rules
 

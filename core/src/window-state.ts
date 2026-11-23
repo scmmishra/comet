@@ -1,4 +1,4 @@
-import { DEFAULT_AGENT, type AgentId, type ChangedFile, type ContextReading, type PluginLayout, type QueuedMessage, type TabInfo } from "@comet/protocol"
+import { DEFAULT_AGENT, type AgentId, type ChangedFile, type ContextReading, type PaneWidths, type PluginLayout, type QueuedMessage, type TabInfo } from "@comet/protocol"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { instanceHome, writeJsonFile } from "./data-files"
@@ -69,6 +69,8 @@ export interface WindowState {
    * now. An agent lists a thread under the folder it started in, so this says where to resume it.
    */
   readonly moved: Readonly<Record<string, string>>
+  /** The widths the user dragged the panes to. */
+  readonly widths: PaneWidths
 }
 
 /** A closed tab: the tab, where it stood in the bar, and its thread and layout as they were. */
@@ -96,7 +98,7 @@ export function loadWindowState(): WindowState {
   try {
     saved = JSON.parse(readFileSync(windowStatePath(), "utf8")) as Partial<WindowState>
   } catch {
-    return { tabs: [], threads: {}, recent: [], keyed: {}, layouts: {}, closed: [], moved: {} }
+    return { tabs: [], threads: {}, recent: [], keyed: {}, layouts: {}, closed: [], moved: {}, widths: {} }
   }
   return {
     tabs: Array.isArray(saved.tabs) ? saved.tabs.filter(isTab).map(withAgent) : [],
@@ -107,6 +109,7 @@ export function loadWindowState(): WindowState {
     layouts: typeof saved.layouts === "object" && saved.layouts ? saved.layouts : {},
     closed: Array.isArray(saved.closed) ? saved.closed.filter((closed) => isTab(closed?.tab) && Number.isInteger(closed.index)).map((closed) => ({ ...closed, tab: withAgent(closed.tab) })) : [],
     moved: typeof saved.moved === "object" && saved.moved ? saved.moved : {},
+    widths: paneWidths(saved.widths),
   }
 }
 
@@ -140,6 +143,16 @@ function keyedFromSessions(saved: { keys?: unknown }): Record<string, TabThread>
 
 /** A tab saved before Comet ran more than one agent names none, and ran Claude Code. */
 const withAgent = (tab: TabInfo): TabInfo => (tab.agent ? tab : { ...tab, agent: DEFAULT_AGENT })
+
+/** The pane widths in `value` that are a positive number of points. The app clamps them to the window when it draws them. */
+export function paneWidths(value: unknown): PaneWidths {
+  const widths = (typeof value === "object" && value ? value : {}) as Record<string, unknown>
+  const width = (key: keyof PaneWidths) => {
+    const points = widths[key]
+    return typeof points === "number" && Number.isFinite(points) && points > 0 ? { [key]: points } : {}
+  }
+  return { ...width("sidebar"), ...width("session") }
+}
 
 function isTab(value: unknown): value is TabInfo {
   const tab = value as Partial<TabInfo> | null

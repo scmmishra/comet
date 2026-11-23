@@ -775,6 +775,17 @@ export interface TabInfo extends RunSettings {
   readonly panelOpen?: boolean
 }
 
+/**
+ * The widths the user dragged the window's panes to, in points. One set serves every tab. Absent means
+ * the pane has not been dragged, so it keeps its default width.
+ */
+export interface PaneWidths {
+  /** A plugin's sidebar. */
+  readonly sidebar?: number
+  /** The session, while the view pane is open beside it. The view pane takes the rest of the row. */
+  readonly session?: number
+}
+
 /** A value a plugin's UI node can hold. A function becomes a handler id, which the app calls back through `plugin.event`. */
 export type UiValue = string | number | boolean | null | undefined | { readonly handler: number } | readonly UiValue[] | { readonly [key: string]: UiValue }
 
@@ -948,6 +959,8 @@ export type ClientMessage =
   | { readonly type: "tab.reopen" }
   /** The window's tabs, in order, sent whenever they change. */
   | { readonly type: "tabs.save"; readonly tabs: readonly TabInfo[]; readonly active?: string }
+  /** The pane widths, sent when a drag on a pane's edge ends. */
+  | { readonly type: "widths.save"; readonly widths: PaneWidths }
   /** Comet's window gained or lost focus. Plugins hear which of their views are on screen. */
   | { readonly type: "window.focus"; readonly focused: boolean }
   /** Opens a file from the thread in the editor. A relative path is in the project. The core refuses anything that is not a file. */
@@ -1071,6 +1084,8 @@ export type CoreMessage =
    * session.history message.
    */
   | { readonly type: "tabs"; readonly tabs: readonly TabInfo[]; readonly active?: string }
+  /** The saved pane widths, sent once on connect, before the tabs. */
+  | { readonly type: "widths"; readonly widths: PaneWidths }
   /** Folders tabs have opened, most recent first, a worktree's by its repo's main checkout. Sent on connect, before the tabs, and when a tab opens a folder. */
   | { readonly type: "recent"; readonly projects: readonly string[] }
   | { [K in ProjectPart]: { readonly type: "project"; readonly project: string; readonly part: K; readonly value: ProjectParts[K] } }[ProjectPart]

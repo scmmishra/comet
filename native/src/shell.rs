@@ -33,8 +33,6 @@ const SETTINGS_TRAVEL: f32 = 48.0;
 /// The tab's card behind Settings: pushed back, so its top edge peeks out above Settings' card, and dimmed.
 const COVERED_SCALE: f32 = 0.98;
 const COVERED_OPACITY: f32 = 0.7;
-/// A plugin's sidebar, `w-[320px]`.
-const SIDEBAR_WIDTH: f32 = 320.0;
 /// The session's header, `h-[46px]`.
 const HEADER_HEIGHT: f32 = 46.0;
 /// A project's mark. `@opencode/ui`'s avatar is 16 points: its CSS, outside Tailwind's layers, beats the
@@ -84,6 +82,7 @@ pub struct Comet {
     pub rewind: crate::rewind::Rewind,
     pub branch_notices: crate::branch_notice::BranchNotices,
     pub worktrees: crate::worktrees::Worktrees,
+    pub panes: crate::panes::Panes,
 }
 
 impl Comet {
@@ -125,6 +124,7 @@ impl Comet {
             CoreMessage::Settings { settings } => self.account.settings = Some(settings),
             CoreMessage::Agents { agents } => self.account.agents = agents,
             CoreMessage::Recent { projects } => w.recent = projects,
+            CoreMessage::Widths { widths } => self.panes.restore(widths),
             CoreMessage::Tabs { tabs, active } => {
                 result = w.restore(tabs, active, account, core);
                 self.reload_layouts();
@@ -441,12 +441,20 @@ pub fn view(s: &Comet, cx: &mut Cx<Comet>) -> El {
             let size = cx.layout_size("session-body");
             let window = cx.layout_size("window");
             let session = col().key("session-body").w_full().h_full().min_h(0.0).child(session(s, tab, dark, size, window, layer));
-            let pane = (tab.panel_open == Some(true)).then(|| card("panel-card", crate::panel::panel(s, tab, k, layer)));
+            let pane_open = tab.panel_open == Some(true);
+            let sidebar_view = s.plugins.layouts.get(&tab.id).and_then(|l| l.sidebar.as_ref());
+            let placed = s.panes.place(cx.layout_size("ground").map(|size| size[0]), sidebar_view.is_some(), pane_open);
+            // Beside the view pane, the session keeps the width it was dragged to and the pane takes the rest.
+            let session = match placed.session {
+                Some(width) => card("session-card", session).w(width).min_w(width).grow(0.0),
+                None => card("session-card", session),
+            };
+            let pane = pane_open.then(|| card("panel-card", crate::panel::panel(s, tab, k, layer)));
             // A plugin's sidebar sits before the session, as a card of its own.
-            let sidebar = s.plugins.layouts.get(&tab.id).and_then(|l| l.sidebar.as_ref()).map(|view| {
-                col().key("sidebar").w(SIDEBAR_WIDTH).h_full().min_h(0.0).padding(9.0).radius(PANEL_RADIUS).clip_rounded(PANEL_RADIUS).fill(k.c.layer_01).border(1.0, k.c.border_muted).child(crate::plugins::view(s, view, &tab.project, crate::plugins::Frame::Pane, k))
+            let sidebar = sidebar_view.zip(placed.sidebar).map(|(view, width)| {
+                col().key("sidebar").w(width).h_full().min_h(0.0).padding(9.0).radius(PANEL_RADIUS).clip_rounded(PANEL_RADIUS).fill(k.c.layer_01).border(1.0, k.c.border_muted).child(crate::plugins::view(s, view, &tab.project, crate::plugins::Frame::Pane, k))
             });
-            row().w_full().grow(1.0).min_h(0.0).gap(PANEL_INSET).children(sidebar).child(card("session-card", session)).children(pane)
+            row().w_full().grow(1.0).min_h(0.0).gap(crate::panes::GAP).children(sidebar).child(session).children(pane).children(s.panes.handles(placed, k))
         }
         (status, _) => {
             let words = match status {

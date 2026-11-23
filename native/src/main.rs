@@ -26,6 +26,7 @@ mod model_picker;
 mod models;
 mod opening;
 mod palette;
+mod panes;
 mod panel;
 mod plugins;
 mod projects;

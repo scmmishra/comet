@@ -12,7 +12,7 @@ import { isProjectFolder, requireProjectFolder } from "./project-path"
 import { currentBranch } from "./space"
 import { Terminals } from "./terminals"
 import { TurnWatch } from "./turn"
-import { checkpointsOf, keyedId, keyedProject, loadWindowState, saveWindowState, type ClosedTab, type TabThread, type WindowState } from "./window-state"
+import { checkpointsOf, keyedId, keyedProject, loadWindowState, paneWidths, saveWindowState, type ClosedTab, type TabThread, type WindowState } from "./window-state"
 import { checkoutRoot, listWorktrees, mainCheckout, matchingFolder, removeWorktree, samePath } from "./worktrees"
 
 type Send = (message: CoreMessage) => void
@@ -97,9 +97,10 @@ export class Window {
     return releaseCheckpoints(threads.map(({ project, thread }) => ({ project, commits: thread ? checkpointsOf(thread) : [] })))
   }
 
-  /** Sends a client the window: its recent folders, then its tabs, then each tab's thread. */
+  /** Sends a client the window: its recent folders and pane widths, then its tabs, then each tab's thread. */
   async greet(reply: Send) {
     reply({ type: "recent", projects: this.recent() })
+    reply({ type: "widths", widths: this.state.widths })
     reply({ type: "tabs", tabs: this.state.tabs, active: this.state.active })
     for (const tab of this.state.tabs) await this.sendThread(tab, reply)
   }
@@ -135,6 +136,11 @@ export class Window {
     reply(sessionMessage(tab.id, thread))
     reply({ type: "session.history", tabId: tab.id, items: await this.history(tab, thread.sessionId), context: thread.context })
     if (!thread.context) this.fillContext(tab.id, thread.sessionId)
+  }
+
+  /** Saves the pane widths the app sends, keeping only the ones that are a width. */
+  saveWidths(widths: unknown) {
+    this.persist({ widths: paneWidths(widths) })
   }
 
   /**

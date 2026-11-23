@@ -2,18 +2,18 @@ import { expect, test } from "bun:test"
 import { existsSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { useTempHome } from "./test-support"
-import { loadWindowState, saveWindowState } from "./window-state"
+import { loadWindowState, paneWidths, saveWindowState } from "./window-state"
 
 useTempHome()
 
 test("an empty window when nothing is saved", () => {
-  expect(loadWindowState()).toEqual({ tabs: [], threads: {}, recent: [], keyed: {}, layouts: {}, closed: [], moved: {} })
+  expect(loadWindowState()).toEqual({ tabs: [], threads: {}, recent: [], keyed: {}, layouts: {}, closed: [], moved: {}, widths: {} })
 })
 
 test("saves and loads the window's tabs across projects, with each tab's thread", () => {
   const comet = { id: "t1", title: "Fix tabs", project: "/work/comet", terminals: [{ id: "x1", title: "Terminal" }], panelActive: "x1", agent: "codex" as const, model: "opus", effort: "high" as const, fast: true, permissionMode: "acceptEdits" as const }
   const chatwoot = { id: "t2", title: "Inbox", project: "/work/chatwoot", terminals: [], agent: "claude" as const, model: "default", permissionMode: "default" as const }
-  const state = { tabs: [comet, chatwoot], active: "t2", threads: { t1: { sessionId: "s1", threadStart: "abc", turnFrom: "def", turnTo: "123" } }, recent: ["/work/chatwoot", "/work/comet"], keyed: { "/work/comet\nconv-1": { key: "conv-1", sessionId: "s1" } }, layouts: { t2: { sidebar: "support.inbox", panels: [{ panel: "support.conversation", params: { id: 1 } }], hiddenCards: [] } }, closed: [], moved: {} }
+  const state = { tabs: [comet, chatwoot], active: "t2", threads: { t1: { sessionId: "s1", threadStart: "abc", turnFrom: "def", turnTo: "123" } }, recent: ["/work/chatwoot", "/work/comet"], keyed: { "/work/comet\nconv-1": { key: "conv-1", sessionId: "s1" } }, layouts: { t2: { sidebar: "support.inbox", panels: [{ panel: "support.conversation", params: { id: 1 } }], hiddenCards: [] } }, closed: [], moved: {}, widths: { sidebar: 280, session: 640 } }
   saveWindowState(state)
   expect(loadWindowState()).toEqual(state)
 })
@@ -29,12 +29,20 @@ test("drops a saved tab that is not whole", () => {
   expect(loadWindowState().tabs).toEqual([])
 })
 
+test("keeps only the pane widths that are a positive number of points", () => {
+  expect(paneWidths({ sidebar: 280, session: "wide", extra: 1 })).toEqual({ sidebar: 280 })
+  expect(paneWidths({ sidebar: -10, session: Number.NaN })).toEqual({})
+  expect(paneWidths(null)).toEqual({})
+  writeFileSync(join(process.env.COMET_HOME!, "window.json"), JSON.stringify({ tabs: [], threads: {}, recent: [], keyed: {}, widths: { session: 0 } }))
+  expect(loadWindowState().widths).toEqual({})
+})
+
 test("a dev Comet keeps its window apart from the installed Comet's", () => {
   const home = process.env.COMET_HOME!
-  saveWindowState({ tabs: [], threads: {}, recent: ["/work/installed"], keyed: {}, layouts: {}, closed: [], moved: {} })
+  saveWindowState({ tabs: [], threads: {}, recent: ["/work/installed"], keyed: {}, layouts: {}, closed: [], moved: {}, widths: {} })
   process.env.COMET_INSTANCE = "dev"
   try {
-    saveWindowState({ tabs: [], threads: {}, recent: ["/work/dev"], keyed: {}, layouts: {}, closed: [], moved: {} })
+    saveWindowState({ tabs: [], threads: {}, recent: ["/work/dev"], keyed: {}, layouts: {}, closed: [], moved: {}, widths: {} })
     expect(existsSync(join(home, "dev", "window.json"))).toBe(true)
     expect(loadWindowState().recent).toEqual(["/work/dev"])
   } finally {

@@ -30,6 +30,8 @@ export const CORE_MESSAGES = [
   { type: "tabs", tabs: TABS, active: "tab-2" },
   { type: "tabs", tabs: [] },
   { type: "recent", projects: ["/Users/me/code/api", "/Users/me/code/web"] },
+  { type: "widths", widths: { sidebar: 280.5, session: 640.5 } },
+  { type: "widths", widths: {} },
   {
     type: "agents",
     agents: [
@@ -273,6 +275,7 @@ export const CLIENT_MESSAGES = [
   { type: "mcp.toggle", project: "/Users/me/code/web", agent: "codex", name: "github", enabled: false },
   { type: "tab.reopen" },
   { type: "tabs.save", tabs: TABS, active: "tab-2" },
+  { type: "widths.save", widths: { sidebar: 280.5, session: 640.5 } },
   { type: "session.send", tabId: "tab-1", text: "Add a test", followUp: "queue" },
   { type: "session.send", tabId: "tab-1", text: "Hi", images: [{ mediaType: "image/png", data: "iVBORw==" }] },
   { type: "session.interrupt", tabId: "tab-1" },

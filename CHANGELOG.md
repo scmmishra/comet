@@ -2,6 +2,10 @@
 
 All notable changes to Comet are listed here. Changes go under `## Unreleased` until they ship. The release workflow publishes the section for the version in `native/Cargo.toml` as that release's notes.
 
+## Unreleased
+
+- A plugin's sidebar and the view pane resize. Drag the edge between two panes. One width serves every tab, and Comet keeps it across restarts. The sidebar drags from 136 to 640 points. The session keeps at least 400 points beside the view pane, and the view pane keeps at least 320.
+
 ## 0.2.0
 
 - Settings → Projects lists recent projects and any project with a saved name, colour or icon, as well as those open in tabs. A worktree's tab lists its repo. Before, it listed only the projects open in tabs.

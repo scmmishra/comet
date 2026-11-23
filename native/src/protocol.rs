@@ -61,6 +61,18 @@ pub struct TabInfo {
     pub rest: Map<String, Value>,
 }
 
+/// The widths the user dragged the window's panes to, in points. One set serves every tab. Absent means
+/// the pane has not been dragged.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq)]
+pub struct PaneWidths {
+    /// A plugin's sidebar.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sidebar: Option<f32>,
+    /// The session, while the view pane is open beside it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<f32>,
+}
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ThemeChoice {
@@ -871,6 +883,9 @@ pub enum CoreMessage {
     /// Folders tabs have opened, most recent first.
     #[serde(rename = "recent")]
     Recent { projects: Vec<String> },
+    /// The saved pane widths, sent once on connect, before the tabs.
+    #[serde(rename = "widths")]
+    Widths { widths: PaneWidths },
     /// Every agent as the core knows it now, sent whole each time one changes.
     #[serde(rename = "agents")]
     Agents { agents: Vec<AgentInfo> },
@@ -1216,6 +1231,9 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         active: Option<String>,
     },
+    /// The pane widths, sent when a drag on a pane's edge ends.
+    #[serde(rename = "widths.save")]
+    WidthsSave { widths: PaneWidths },
 }
 
 #[cfg(test)]
@@ -1308,6 +1326,7 @@ mod tests {
             ClientMessage::McpToggle { project: "/Users/me/code/web".into(), agent: "codex".into(), name: "github".into(), enabled: false },
             ClientMessage::TabReopen,
             ClientMessage::TabsSave { tabs, active },
+            ClientMessage::WidthsSave { widths: PaneWidths { sidebar: Some(280.5), session: Some(640.5) } },
             ClientMessage::SessionSend { tab_id: "tab-1".into(), text: "Add a test".into(), images: vec![], follow_up: Some("queue".into()) },
             ClientMessage::SessionSend { tab_id: "tab-1".into(), text: "Hi".into(), images: vec![ImageAttachment { media_type: "image/png".into(), data: "iVBORw==".into() }], follow_up: None },
             ClientMessage::SessionInterrupt { tab_id: "tab-1".into() },

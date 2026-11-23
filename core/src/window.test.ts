@@ -58,6 +58,15 @@ test("leaves a deleted folder out of the recent list, and lets an older tab in o
   expect(sent.filter((message) => message.type === "recent").at(-1)).toEqual({ type: "recent", projects: [one] })
 })
 
+test("saves the pane widths the app sends, and greets a client with them before the tabs", async () => {
+  const { window, sent } = open({ tabs: [], threads: {}, recent: [] })
+  window.saveWidths({ sidebar: 280, session: "wide" })
+  expect(saved().widths).toEqual({ sidebar: 280 })
+  await window.greet((message) => sent.push(message))
+  expect(sent.map((message) => message.type)).toEqual(["recent", "widths", "tabs"])
+  expect(sent[1]).toEqual({ type: "widths", widths: { sidebar: 280 } })
+})
+
 test("refuses a tab that opens a folder that is not there", () => {
   const { window } = open({ tabs: [], threads: {}, recent: [] })
   expect(() => window.save([tab("a", "/no/such/folder")], "a")).toThrow("not a folder")
