@@ -57,7 +57,7 @@ test("gives up on an agent that does not answer a call that starts a session, an
       jest.useRealTimers()
     }
     expect(agent.sent(method).length).toBe(1)
-    expect(failure?.message).toBe(`The agent did not answer ${method} in 90 seconds, so Comet stopped it. The next message starts it again.`)
+    expect(failure?.message).toBe(`The agent did not answer ${method} in 90 seconds, so Comet stopped it.`)
     await agent.process.exited
   }
 })

@@ -8,7 +8,7 @@ import { Stop } from "../stopping"
 import { errorItem, resultId, selfStartedItem, userItem } from "../turn-items"
 import { AfterPrompt, opensTurn } from "./after-prompt"
 import { choices, currentName, modelOption, thoughtOption } from "./config-options"
-import { AcpConnection } from "./connection"
+import { AcpConnection, StartTimeout } from "./connection"
 import type { AcpFlavor, PromptCheck, PromptFailure } from "./flavor"
 import { CANCELLED, permissionItem, permissionResponse, questionItem, questionResponse } from "./permissions"
 import { promptContent, takesInstructions } from "./prompt"
@@ -185,7 +185,8 @@ export class AcpSession implements AgentSession {
       live = await this.connect()
     } catch (error) {
       // A stop while the agent started ended its process, so the start failed because of the stop.
-      return this.stop.pending ? this.finish(turn, "cancelled") : this.fail(turn, error)
+      if (this.stop.pending) return this.finish(turn, "cancelled")
+      return this.fail(turn, error instanceof StartTimeout ? new Error(`${error.message} The next message starts it again.`) : error)
     }
     try {
       // A stop asked as the start finished cancels the turn before its prompt.

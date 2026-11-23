@@ -119,6 +119,16 @@ export class AcpConnection {
 }
 
 /**
+ * The agent did not answer a call that starts a session in time, so Comet ended its process. It says what
+ * happened. Each caller adds what to do next, since a turn and a sign-in start the agent again differently.
+ */
+export class StartTimeout extends Error {
+  constructor(method: string) {
+    super(`The agent did not answer ${method} in ${START_TIMEOUT_MS / 1000} seconds, so Comet stopped it.`)
+  }
+}
+
+/**
  * Asks the agent a call that starts a session. An agent that never answers would leave its turn starting
  * for good, so after `START_TIMEOUT_MS` the call fails and the connection closes, which ends the process.
  */
@@ -127,7 +137,7 @@ async function answerInTime<T>(rpc: JsonRpc, method: string, params: unknown): P
   const silent = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
       // Rejected first: closing fails the pending request, and its message would win the race.
-      reject(new Error(`The agent did not answer ${method} in ${START_TIMEOUT_MS / 1000} seconds, so Comet stopped it. The next message starts it again.`))
+      reject(new StartTimeout(method))
       rpc.close()
     }, START_TIMEOUT_MS)
   })

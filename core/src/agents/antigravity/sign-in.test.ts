@@ -1,5 +1,6 @@
-import { expect, test } from "bun:test"
+import { expect, jest, test } from "bun:test"
 import { until } from "../../test-support"
+import { START_TIMEOUT_MS } from "../acp/connection"
 import { fakeAcpAgent, FAKE_OPTIONS } from "../acp/test-agent"
 import { signInWithGoogle } from "./sign-in"
 import { BROWSER_COMMAND, signInLink } from "./sign-in-link"
@@ -66,6 +67,21 @@ test("says so when the account has no plan, and gives up after the timeout", asy
   const waiting = fakeAcpAgent({ authenticate: () => new Promise(() => {}) })
   await expect(signInWithGoogle(waiting.process, { ...options, timeoutMs: 20 })).rejects.toThrow("Google sign-in timed out. Start sign-in again.")
   expect(await waiting.process.exited).toBe(1)
+})
+
+test("says to start sign-in again when the agent does not answer as it starts", async () => {
+  const silent = fakeAcpAgent({ initialize: () => new Promise(() => {}) })
+  // The bound starts with the call, so the clock is fake from before it.
+  jest.useFakeTimers()
+  let failure: Error | undefined
+  try {
+    const signingIn = signInWithGoogle(silent.process, { connect: CONNECT, cwd: "/tmp", open: () => {}, learn: () => {}, signal: new AbortController().signal }).catch((error: Error) => (failure = error))
+    jest.advanceTimersByTime(START_TIMEOUT_MS)
+    await signingIn
+  } finally {
+    jest.useRealTimers()
+  }
+  expect(failure?.message).toBe("The agent did not answer initialize in 90 seconds, so Comet stopped it. Start sign-in again.")
 })
 
 test("stops when the user stops it, and ends the agent's process", async () => {

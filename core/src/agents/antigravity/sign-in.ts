@@ -1,5 +1,5 @@
 import { errorMessage } from "../../errors"
-import { AcpConnection, type ConnectOptions } from "../acp/connection"
+import { AcpConnection, StartTimeout, type ConnectOptions } from "../acp/connection"
 import { CANCELLED } from "../acp/permissions"
 import type { ConfigOption } from "../acp/protocol"
 import type { Process } from "../process"
@@ -61,6 +61,7 @@ export async function signInWithGoogle(process: Process, options: SignInOptions)
   try {
     await Promise.race([signedIn, timedOut, whenAborted(options.signal)])
   } catch (error) {
+    if (error instanceof StartTimeout) throw new Error(`${error.message} Start sign-in again.`)
     const message = errorMessage(error)
     throw message.includes(SUBSCRIPTION_REQUIRED) ? new Error("This Google account has no plan that includes Antigravity.") : error
   } finally {
