@@ -714,7 +714,7 @@ test("shows why a hook stopped a turn that answered as a warning, so the answer 
   s.codex.notify("turn/completed", { threadId: THREAD, turn: turn("completed") })
   await until(() => !s.session.busy)
   expect(s.items().some((found) => found.type === "error")).toBe(false)
-  expect(s.last("notice")).toEqual({ type: "notice", id: `hook-stop:${TURN}`, text: "The stop hook stopped the turn.\nStop here.", warning: true })
+  expect(s.last("notice")).toEqual({ type: "notice", id: `hook-stop:${TURN}`, text: "The stop hook stopped the turn.\nStop here.", warning: true, stopsTurn: true })
 })
 
 test("a hook that stops a turn after only commentary shows as an error", async () => {

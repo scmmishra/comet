@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- A task handed to Codex passes on why a hook stopped its turn, along with its answer. Before, the agent that asked got the answer alone.
 - A message sent while Claude Code worked is kept when Claude Code exits before it reads the message. It shows after the error, still waiting, and goes to Claude Code ahead of the next message. Before, it was lost and stayed marked as waiting.
 - Codex in Full access runs a command it deems dangerous, such as `rm -rf`, without asking. Before, it asked first. It still asks before network access that Codex's network settings do not allow.
 - Comet runs on a newer Rune. It fixes a crash on macOS 26, a window left black after a GPU hang, and input method and dead-key bugs. A pointer move that changes nothing no longer redraws, and long replies lay out links and text faster. The Window menu gains Zoom and Bring All to Front, and the Edit menu gains Start Dictation and Emoji & Symbols.

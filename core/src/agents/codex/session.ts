@@ -459,10 +459,11 @@ const answers = (item: CodexItem) => item.type === "agentMessage" && item.phase 
 /**
  * Why a hook stopped the turn. A turn with no answer shows it as an error, so a task handed to Codex reads
  * as failed with the hook's reason. A turn that answered first shows it as a warning, and keeps its answer.
+ * A task handed to Codex then adds the reason to that answer.
  */
 function hookStopItem(turnId: string, reason: string, answered: boolean): ThreadItem {
   const id = `hook-stop:${turnId}`
-  return answered ? { type: "notice", id, text: reason, warning: true } : { type: "error", id, message: reason }
+  return answered ? { type: "notice", id, text: reason, warning: true, stopsTurn: true } : { type: "error", id, message: reason }
 }
 
 /** Comet's tools as an MCP server Codex connects to over HTTP, with what to tell the model about them. */

@@ -249,12 +249,14 @@ export function narrowed(parent: PermissionMode, modes: readonly PermissionMode[
 /**
  * How a task ended, from what it left in its thread: its last text when it finished, else why it did not.
  * A task that failed or was stopped after it answered keeps that answer, after T3 Code: the work it reports
- * may be done. `stopped` says Comet stopped it between turns, which leaves no stopped result.
+ * may be done. `stopped` says Comet stopped it between turns, which leaves no stopped result. A task whose
+ * turn stopped after it answered, such as by a hook, adds the reason to its answer, so the agent that asked
+ * learns of it. The turn still completed, so the task did too.
  */
 function taskOutcome(items: readonly ThreadItem[], stopped: boolean): { readonly status: "completed" | "failed" | "stopped"; readonly text: string } {
-  const lastAnswer = (among: readonly ThreadItem[]) => among.findLast((item) => item.type === "text" && item.text.trim())
+  const answerAt = (among: readonly ThreadItem[]) => among.findLastIndex((item) => item.type === "text" && item.text.trim())
   const report = (among: readonly ThreadItem[], end: string) => {
-    const answer = lastAnswer(among)
+    const answer = among[answerAt(among)]
     return answer?.type === "text" ? `\n\nIts last report before it ${end}:\n\n${answer.text}` : ""
   }
   const errorAt = items.findLastIndex((item) => item.type === "error")
@@ -262,7 +264,10 @@ function taskOutcome(items: readonly ThreadItem[], stopped: boolean): { readonly
   if (error?.type === "error") return { status: "failed", text: `The task failed: ${error.message}${report(items.slice(0, errorAt), "failed")}` }
   const result = items.findLast((item) => item.type === "result")
   if (stopped || (result?.type === "result" && result.stopped)) return { status: "stopped", text: `The task was stopped before it finished.${report(items, "was stopped")}` }
-  const answer = lastAnswer(items)
-  return answer?.type === "text" ? { status: "completed", text: answer.text } : { status: "failed", text: "The task ended without an answer." }
+  const answeredAt = answerAt(items)
+  const answer = items[answeredAt]
+  if (answer?.type !== "text") return { status: "failed", text: "The task ended without an answer." }
+  const reasons = items.slice(answeredAt + 1).flatMap((item) => (item.type === "notice" && item.stopsTurn ? [item.text] : []))
+  return { status: "completed", text: reasons.length ? `${answer.text}\n\nIts turn was stopped after this answer:\n\n${reasons.join("\n\n")}` : answer.text }
 }
 

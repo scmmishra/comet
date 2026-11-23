@@ -86,6 +86,20 @@ test("runs a task on the agent it names, in the caller's folder, and answers wit
   expect(codex.calls.at(-1)).toBe("close")
 })
 
+test("a task that answered before a hook stopped its turn passes on the hook's reason with the answer", async () => {
+  const { codex, call, last } = await delegations()
+  const answer = call({ agent: "codex", task: "Fix the bug." })
+  const [session] = codex.sessions
+  // An earlier turn's stop reason, before the last answer, is stale. So is a notice that stopped nothing.
+  session!.emit({ kind: "item", item: { type: "notice", id: "hook-stop:t0", text: "Old reason.", warning: true, stopsTurn: true } })
+  session!.emit({ kind: "item", item: { type: "text", id: "x1", text: "Fixed the bug.", done: true } })
+  session!.emit({ kind: "item", item: { type: "notice", id: "mcp-failed:1", text: "MCP server github did not start.", warning: true } })
+  session!.emit({ kind: "item", item: { type: "notice", id: "hook-stop:t1", text: "Run the tests before you finish.", warning: true, stopsTurn: true } })
+  session!.finish()
+  expect(await answer).toEqual({ text: "Fixed the bug.\n\nIts turn was stopped after this answer:\n\nRun the tests before you finish.", isError: false })
+  expect(last()).toMatchObject({ status: "completed", summary: "Fixed the bug." })
+})
+
 test("a task never runs with more than the thread that started it", async () => {
   expect(narrowed("acceptEdits", MODES)).toBe("acceptEdits")
   expect(narrowed("bypassPermissions", ["default", "acceptEdits"])).toBe("acceptEdits")
