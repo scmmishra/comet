@@ -8,7 +8,7 @@ use crate::shell::{CoreState, Comet};
 /// A scene: its name, and what it sets in a fresh window.
 type Scene = (&'static str, fn(&mut Comet));
 
-pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("models-other-agent", models_other_agent), ("models-missing-agent", models_missing_agent), ("models-new-tab", models_new_tab), ("start", start), ("worktree", worktree), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("panes", panes), ("settings", settings), ("settings-codex", settings_codex), ("settings-antigravity", settings_antigravity), ("settings-signing-in", settings_signing_in), ("models-signing-in", models_signing_in), ("settings-projects", settings_projects), ("settings-plugins", settings_plugins), ("settings-appearance", settings_appearance), ("settings-verdigris", settings_verdigris), ("extensions", extensions), ("extensions-skills", extensions_skills), ("stop-notice", stop_notice), ("branch-notice", branch_notice), ("branch-confirm", branch_confirm), ("markdown", markdown), ("file", file)];
+pub const SCENES: &[Scene] = &[("thread", thread), ("models", models), ("models-other-agent", models_other_agent), ("models-missing-agent", models_missing_agent), ("models-new-tab", models_new_tab), ("start", start), ("worktree", worktree), ("review", review), ("terminal", terminal), ("palette", palette), ("plugin", plugin), ("panes", panes), ("settings", settings), ("settings-codex", settings_codex), ("settings-antigravity", settings_antigravity), ("settings-signing-in", settings_signing_in), ("models-signing-in", models_signing_in), ("settings-projects", settings_projects), ("settings-plugins", settings_plugins), ("settings-appearance", settings_appearance), ("settings-verdigris", settings_verdigris), ("settings-dracula", settings_dracula), ("extensions", extensions), ("extensions-skills", extensions_skills), ("stop-notice", stop_notice), ("branch-notice", branch_notice), ("branch-confirm", branch_confirm), ("markdown", markdown), ("file", file)];
 
 /// The core messages in the JSON file `COMET_SCENE_FILE` names, with the thread rows in its `open` list
 /// opened.
@@ -86,9 +86,19 @@ fn settings_appearance(s: &mut Comet) {
 
 /// Settings on Appearance in Verdigris, following the system, so `--theme` picks its flavour.
 fn settings_verdigris(s: &mut Comet) {
+    settings_in(s, crate::protocol::ColorTheme::Verdigris);
+}
+
+/// Settings on Appearance in Dracula, following the system, so `--theme` picks its flavour.
+fn settings_dracula(s: &mut Comet) {
+    settings_in(s, crate::protocol::ColorTheme::Dracula);
+}
+
+/// Settings on Appearance in `theme`, following the system.
+fn settings_in(s: &mut Comet, theme: crate::protocol::ColorTheme) {
     settings_appearance(s);
     if let Some(settings) = s.account.settings.as_mut() {
-        settings.appearance.color_theme = crate::protocol::ColorTheme::Verdigris;
+        settings.appearance.color_theme = theme;
         settings.appearance.theme = crate::protocol::ThemeChoice::Auto;
     }
 }

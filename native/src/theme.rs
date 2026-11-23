@@ -153,6 +153,61 @@ const VERDIGRIS: Flavours = Flavours {
     },
 };
 
+/// Dracula, MIT, from draculatheme.com/spec: Dracula Classic is dark and Alucard Classic is light.
+/// Surfaces take the spec's background shades, and the steps between them are mixed from those. Selected
+/// fills take the spec's functional purple, darker than its accent, so white text reads on them. Faint
+/// text is a step lighter than Dracula's comment colour, which reads too faintly on the panel.
+const DRACULA: Flavours = Flavours {
+    dark: Colors {
+        ground: "#21222c",
+        panel: "#282a36",
+        code: "#242531",
+        card: "#2e303e",
+        raised: "#343746",
+        hover: "#3b3d4e",
+        line: "#3e4052",
+        outline: ("#ffffff", 0.05),
+        fg: "#f8f8f2",
+        fg_2: "#9aa3c4",
+        fg_3: "#6e7daf",
+        accent: "#bd93f9",
+        add: ("#50fa7b", 0.09),
+        del: ("#ff5555", 0.09),
+        ready: "#815cd6",
+        tab: "#343746",
+        tab_hover: ("#282a36", 1.0),
+        well: "#343746",
+        added: "#50fa7b",
+        removed: "#ff5555",
+        code_fg: "#f8f8f2",
+        syntax: [(S::Keyword, "#ff79c6"), (S::String, "#f1fa8c"), (S::Number, "#bd93f9"), (S::Comment, "#6272a4"), (S::Type, "#8be9fd"), (S::Function, "#50fa7b"), (S::Property, "#f8f8f2"), (S::Punctuation, "#f8f8f2"), (S::Operator, "#ff79c6"), (S::Variable, "#f8f8f2"), (S::Parameter, "#ffb86c"), (S::Heading, "#bd93f9"), (S::Link, "#8be9fd"), (S::Regex, "#ff5555"), (S::Attribute, "#50fa7b")],
+    },
+    light: Colors {
+        ground: "#ece9df",
+        panel: "#fffbeb",
+        code: "#f5f2e5",
+        card: "#f9f6e6",
+        raised: "#efeddc",
+        hover: "#e5e2d3",
+        line: "#dedccf",
+        outline: ("#000000", 0.07),
+        fg: "#1f1f1f",
+        fg_2: "#6c664b",
+        fg_3: "#8e886c",
+        accent: "#644ac9",
+        add: ("#14710a", 0.09),
+        del: ("#cb3a2a", 0.08),
+        ready: "#644ac9",
+        tab: "#fffbeb",
+        tab_hover: ("#000000", 0.04),
+        well: "#f7f3e3",
+        added: "#14710a",
+        removed: "#cb3a2a",
+        code_fg: "#1f1f1f",
+        syntax: [(S::Keyword, "#a3144d"), (S::String, "#846e15"), (S::Number, "#644ac9"), (S::Comment, "#6c664b"), (S::Type, "#036a96"), (S::Function, "#14710a"), (S::Property, "#1f1f1f"), (S::Punctuation, "#1f1f1f"), (S::Operator, "#a3144d"), (S::Variable, "#1f1f1f"), (S::Parameter, "#a34d14"), (S::Heading, "#644ac9"), (S::Link, "#036a96"), (S::Regex, "#cb3a2a"), (S::Attribute, "#14710a")],
+    },
+};
+
 /// The colour theme the window draws in. Comet has one window, and the shell sets this from the settings
 /// before it draws, so the helpers below that take only `dark` follow it.
 static ACTIVE: AtomicU8 = AtomicU8::new(0);
@@ -174,6 +229,7 @@ fn flavour(theme: ColorTheme, dark: bool) -> &'static Colors {
     let flavours = match theme {
         ColorTheme::Comet => &COMET,
         ColorTheme::Verdigris => &VERDIGRIS,
+        ColorTheme::Dracula => &DRACULA,
     };
     if dark { &flavours.dark } else { &flavours.light }
 }

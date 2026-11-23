@@ -481,7 +481,7 @@ export const THEMES = ["dark", "light", "auto"] as const
 export type ThemeChoice = (typeof THEMES)[number]
 
 /** The colours Comet draws in. Each has a light and a dark flavour, and the theme above picks between them. */
-export const COLOR_THEMES = ["comet", "verdigris"] as const
+export const COLOR_THEMES = ["comet", "verdigris", "dracula"] as const
 export type ColorTheme = (typeof COLOR_THEMES)[number]
 
 /** Thread text sizes Comet allows, in px. Outside them, text either crowds or no longer fits a line. */

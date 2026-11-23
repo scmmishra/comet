@@ -111,17 +111,19 @@ pub enum ColorTheme {
     #[default]
     Comet,
     Verdigris,
+    Dracula,
 }
 
 impl ColorTheme {
     /// The colour themes, in the order Appearance lists them.
-    pub const ALL: [ColorTheme; 2] = [ColorTheme::Comet, ColorTheme::Verdigris];
+    pub const ALL: [ColorTheme; 3] = [ColorTheme::Comet, ColorTheme::Verdigris, ColorTheme::Dracula];
 
     /// The colour theme as the settings file names it.
     pub fn id(self) -> &'static str {
         match self {
             ColorTheme::Comet => "comet",
             ColorTheme::Verdigris => "verdigris",
+            ColorTheme::Dracula => "dracula",
         }
     }
 
@@ -129,6 +131,7 @@ impl ColorTheme {
         match self {
             ColorTheme::Comet => "Comet",
             ColorTheme::Verdigris => "Verdigris",
+            ColorTheme::Dracula => "Dracula",
         }
     }
 }
