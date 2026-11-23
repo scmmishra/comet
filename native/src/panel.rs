@@ -191,8 +191,14 @@ impl Comet {
         self.sync_panel();
     }
 
-    /// Opens the tab's pane on Review, comparing with `scope`.
+    /// Opens the tab's pane on Review, comparing with `scope`, as the user asks. Settings close, so the pane shows.
     pub fn open_review(&mut self, tab: &str, scope: &str) {
+        self.workspace.settings_page = None;
+        self.review_in_pane(tab, scope);
+    }
+
+    /// Brings Review to the front of the tab's pane, comparing with `scope`, and opens the pane.
+    fn review_in_pane(&mut self, tab: &str, scope: &str) {
         let scope = scope.to_owned();
         self.workspace.change_tab(
             tab,
@@ -203,23 +209,25 @@ impl Comet {
             },
             &self.core,
         );
-        self.workspace.settings_page = None;
         self.sync_panel();
     }
 
     /// Opens the tab's pane on Review, as its agent asked, and scrolls to the file `path` names once
     /// Review has read the changes again. The agent may have changed files since Review last read them.
+    /// Settings stay open: the agent's tab may not be the one in front.
     pub fn show_review(&mut self, tab: &str, scope: &str, path: Option<String>) {
         self.panel.revealing = path.map(|path| Revealing { tab: tab.to_owned(), scope: scope.to_owned(), path, read: false });
         self.review_stale(tab);
-        self.open_review(tab, scope);
+        self.review_in_pane(tab, scope);
     }
 
-    /// Scrolls Review to the file an agent opened, once Review has read it. A file not in Review stays unshown.
+    /// Scrolls Review to the file an agent opened, once Review has read it, unfolding it if Review folded
+    /// it. A file not in Review stays unshown.
     pub fn reveal_review_file(&mut self, tx: &mut Tx) {
         let Some(revealing) = self.panel.revealing.take_if(|r| r.read) else { return };
         let Some(review) = self.panel.reviews.get_mut(&revealing.tab) else { return };
         if let Some(file) = review.diff.file_index(&revealing.path) {
+            review.diff.set_collapsed(file, false);
             review.diff.scroll_to_file(file, tx);
         }
     }
@@ -736,6 +744,31 @@ mod tests {
         s.receive(found("models/user.rb", "/code/web/app/models/user.rb")).unwrap();
         let sent = serde_json::to_value(s.core.sent()).unwrap();
         assert!(sent.as_array().unwrap().iter().any(|m| m["type"] == "file.read"), "pressing the link again reads the file again: {sent}");
+    }
+
+    #[test]
+    fn an_agent_opens_a_file_or_review_in_its_tabs_pane_and_leaves_settings_open() {
+        let mut s = comet();
+        s.open_settings("providers");
+        let message = |value: serde_json::Value| Event::Message(serde_json::from_value(value).unwrap());
+        s.receive(message(serde_json::json!({ "type": "file.show", "tabId": "t", "path": "/code/web/src/login.ts", "line": 3 }))).unwrap();
+        assert_eq!(open_files(&s), [("/code/web/src/login.ts".to_owned(), Some(3))]);
+
+        let asked = |s: &mut Comet| serde_json::to_value(s.core.sent()).unwrap().as_array().unwrap().iter().any(|m| m == &serde_json::json!({ "type": "review.get", "tabId": "t", "scope": "git" }));
+        let _ = s.core.sent();
+        s.receive(message(serde_json::json!({ "type": "review.show", "tabId": "t", "scope": "git", "path": "src/login.ts" }))).unwrap();
+        let tab = s.workspace.active_tab().unwrap();
+        assert_eq!((tab.panel_open, tab.panel_active.as_deref(), tab.review_scope.as_deref()), (Some(true), None, Some("git")));
+        assert!(s.workspace.settings_page.is_some(), "an agent does not close the user's settings");
+        assert!(asked(&mut s));
+        let review = serde_json::json!({ "type": "review", "tabId": "t", "scope": "git", "files": [{ "path": "src/login.ts", "status": "modified", "additions": 1, "deletions": 0, "patch": "--- a/src/login.ts\n+++ b/src/login.ts\n@@ -1 +1,2 @@\n one\n+two\n" }] });
+        s.receive(message(review)).unwrap();
+        assert!(s.panel.revealing.as_ref().is_some_and(|r| r.read), "Review scrolls to the file once it has read it");
+
+        // The agent may have changed files since, so Review reads a scope it already shows again.
+        s.receive(message(serde_json::json!({ "type": "review.show", "tabId": "t", "scope": "git" }))).unwrap();
+        assert!(asked(&mut s));
+        assert!(s.panel.revealing.is_none(), "with no file named, nothing waits to be scrolled to");
     }
 
     #[test]

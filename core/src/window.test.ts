@@ -582,12 +582,31 @@ test("opens a file or a diff in the view pane of the agent's own tab, while its 
   writeFileSync(join(repo.dir, "a.txt"), "two\n")
   await tools.call("open_diff", { path: join(repo.dir, "a.txt") }, signal)
   expect(last("review.show")).toEqual({ type: "review.show", tabId: "a", scope: "git", path: "a.txt" })
-  expect(tools.call("open_diff", { path: "b.txt" }, signal)).rejects.toThrow("b.txt is not among the uncommitted changes, as they are now. Those are in: a.txt.")
+  expect(tools.call("open_diff", { path: "b.txt" }, signal)).rejects.toThrow("b.txt is not among the uncommitted changes, as they are now. Those are, from the repo's root: a.txt.")
   expect(tools.call("open_diff", { scope: "everything" }, signal)).rejects.toThrow("`scope` is one of: thread, git, branch, turn.")
 
   // A cleared thread's session no longer speaks for the tab.
   window.clearThread("a")
   expect(tools.call("open_file", { path: "a.txt" }, signal)).rejects.toThrow("no longer on show in its tab")
+})
+
+test("finds a changed file for a project in a folder of its repo, which Review lists from the repo's root", async () => {
+  const repo = gitRepo({ "app/src/a.ts": "one\n" })
+  const project = join(repo.dir, "app")
+  writeFileSync(join(process.env.COMET_HOME!, "window.json"), JSON.stringify({ tabs: [tab("a", project)], threads: {}, recent: [] }))
+  const sent: CoreMessage[] = []
+  const agent = fakeAgent("claude")
+  const agents = new Agents(() => {}, { compactIdle: () => false }, { claude: agent.make })
+  const sessions = new ToolSessions(() => "http://127.0.0.1:0/mcp")
+  const window = new Window({ broadcast: (message) => sent.push(message), agents, delegations: new Delegations(agents), tools: sessions, tabClosed: () => {}, spaceStale: () => {}, turnEnded: () => {}, threadShown: () => {} })
+  await window.send("a", "Show me the diff")
+  const tools = sessions.toolsFor(agent.sessions[0]!.options.tools!.authorization)!
+  writeFileSync(join(project, "src/a.ts"), "two\n")
+  const signal = new AbortController().signal
+  for (const path of ["src/a.ts", join(project, "src/a.ts"), "app/src/a.ts"]) {
+    await tools.call("open_diff", { path }, signal)
+    expect(sent.findLast((message) => message.type === "review.show")).toEqual({ type: "review.show", tabId: "a", scope: "git", path: "app/src/a.ts" })
+  }
 })
 
 test("lists a repo's threads from every checkout, each in the folder it runs in now", async () => {

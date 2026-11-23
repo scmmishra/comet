@@ -1,6 +1,7 @@
 import { basename, relative, resolve } from "node:path"
 import { REVIEW_SCOPES, type FileChange, type ReviewScope } from "@comet/protocol"
 import { openableFile } from "../files"
+import { checkoutRoot } from "../worktrees"
 import type { CometTool, ToolGroup } from "./tool"
 
 /** The scope `open_diff` shows when the agent names none: the changes as they are now, which a turn that runs has not finished yet. */
@@ -22,7 +23,7 @@ export interface ViewPaneHost {
 
 const INSTRUCTIONS = [
   "Comet shows a view pane beside this thread. Call `open_file` to show the user a file there, at a line, and `open_diff` to show them changes in Review.",
-  "Use them when the user asks to see a file or a diff, or when the lines your answer is about are easier to read in place. Do not open every file you read. They do not take the user's focus.",
+  "Use them when the user asks to see a file or a diff, or when the lines your answer is about are easier to read in place. Do not open every file you read. Each brings what it opens to the front of the view pane. Neither switches the user's tab.",
 ].join("\n")
 
 const SCOPE_WORDS: Record<ReviewScope, string> = {
@@ -56,7 +57,7 @@ export const OPEN_DIFF: CometTool = {
   inputSchema: {
     type: "object",
     properties: {
-      path: { type: "string", description: "A changed file to scroll to, absolute or relative to the project's folder." },
+      path: { type: "string", description: "A changed file to scroll to: absolute, relative to the project's folder, or relative to the repo's root." },
       scope: { type: "string", enum: [...REVIEW_SCOPES], description: `The changes to show. Leave it out for \`${DEFAULT_SCOPE}\`.` },
     },
     additionalProperties: false,
@@ -94,13 +95,14 @@ async function openDiff(host: ViewPaneHost, input: Record<string, unknown>) {
     host.showReview(scope, undefined)
     return { text: "Opened Review in the view pane." }
   }
-  // Review lists a file by its path in the project. The agent may name it by its absolute path.
+  // Review lists a file by its path from the repo's root, which is above a project in a subfolder. The
+  // agent may name it from the project's folder, absolutely, or as a refusal below listed it.
   const project = host.project()
-  const wanted = relative(project, resolve(project, path))
-  const change = changes.find((found) => found.path === wanted)
+  const wanted = relative(checkoutRoot(project) ?? project, resolve(project, path))
+  const change = changes.find((found) => found.path === wanted) ?? changes.find((found) => found.path === path)
   if (!change) {
     const listed = changes.slice(0, LISTED_CHANGES).map((found) => found.path)
-    throw new Error(`${path} is not among the ${SCOPE_WORDS[scope]}. Those are in: ${listed.join(", ")}${changes.length > listed.length ? ", and more" : ""}.`)
+    throw new Error(`${path} is not among the ${SCOPE_WORDS[scope]}. Those are, from the repo's root: ${listed.join(", ")}${changes.length > listed.length ? ", and more" : ""}.`)
   }
   host.showReview(scope, change.path)
   return { text: "Opened Review in the view pane, at the file." }
