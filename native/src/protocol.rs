@@ -459,6 +459,14 @@ pub struct ProjectSetup {
     pub title: String,
 }
 
+/// A pull request a thread search can match.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct ThreadPullRequest {
+    pub number: u32,
+    pub title: String,
+    pub url: String,
+}
+
 /// A past thread of a project, which a tab can continue.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -469,6 +477,8 @@ pub struct ThreadSummary {
     pub agent: String,
     pub title: String,
     pub branch: Option<String>,
+    /// The pull request of the thread's branch, when `gh` finds one.
+    pub pr: Option<ThreadPullRequest>,
     /// Milliseconds since the epoch.
     pub updated_at: f64,
     /// The tab that has the thread open, if one does.
