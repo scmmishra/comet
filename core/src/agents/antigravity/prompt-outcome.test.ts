@@ -74,6 +74,22 @@ test("reads the message of an error, without the stack trace, else says only tha
   }
 })
 
+test("reads the message of an HTTP error, and of the one error a match may not run past", () => {
+  // The CLI writes a gateway failure with its HTTP status line in place of a gRPC status, as T3 Code found.
+  const badGateway = new Uint8Array([...errorPayload("Error 502, Message: Bad Gateway: Failed to connect to backend API, Status: 502 Bad Gateway, Details: []"), ...plain("\nThe model is currently unreachable.")])
+  const twoErrors = errorPayload("Error 500, Message: First, Status: unknown, Details: []\nError 429, Message: Too many requests, Status: RESOURCE_EXHAUSTED, Details: []")
+  const cases: [Uint8Array, string][] = [
+    [badGateway, "Bad Gateway: Failed to connect to backend API"],
+    [twoErrors, "Too many requests"],
+  ]
+  for (const [payload, message] of cases) {
+    const id = sessionWith()
+    const check = watchPrompt(id)!
+    add(id, [[USER_STEP, plain("hi")], [ERROR_STEP, payload]])
+    expect(check()?.message).toBe(message)
+  }
+})
+
 test("leaves a turn whose prompt added no error step, even when an earlier one ended with one", () => {
   const id = sessionWith([[USER_STEP, plain("hi")], [ERROR_STEP, errorPayload(SIGNATURE_LINE)]])
   const check = watchPrompt(id)!

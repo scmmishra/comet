@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- An Antigravity turn that an HTTP error stopped, such as a 502 from Google, shows the error's message. Before, it showed only that an error stopped the turn.
 - An Antigravity turn stays open while a command Antigravity left running in the background still runs, and Stop ends that command. A reply Antigravity starts by itself, once such a command ends, shows as its own turn, and a permission it asks for there waits for you. Before, the tab showed idle and that reply was never finished.
 - A task handed to Codex passes on why a hook stopped its turn, along with its answer. Before, the agent that asked got the answer alone.
 - A message sent while Claude Code worked is kept when Claude Code exits before it reads the message. It shows after the error, still waiting, and goes to Claude Code ahead of the next message. Before, it was lost and stayed marked as waiting.

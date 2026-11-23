@@ -19,8 +19,11 @@ const SESSION_ID = /^[\w-]+$/
 /** Claude's answer for a thinking block without a valid signature, as T3 Code reads it. */
 const SIGNATURE = /\bmessages\.\d+\.content\.\d+(?:\.thinking\.signature: Field required|: Invalid `signature` in `thinking` block)/
 const QUOTA = /\breason:QUOTA_EXHAUSTED\b/
-/** A Google API error, as the CLI writes it, after T3 Code. */
-const API_ERROR = /Error \d{3}, Message: (.+?), Status: [A-Z_]+/s
+/**
+ * A Google API error, as the CLI writes it, after T3 Code. Its status is a gRPC code, or an HTTP status
+ * line such as `502 Bad Gateway`. The message stops at the next error, so a match never spans two.
+ */
+const API_ERROR = /Error \d{3}, Message: ((?:(?!, Status: |Error \d{3}, Message: ).)+), Status: (?:[A-Z_]+|\d{3}[^,\n]*)/s
 /**
  * The error line the CLI also sends as the reply, such as `INVALID_ARGUMENT (code 400): <message>`. The
  * step is protobuf, and the byte before the status is its length, so only what follows the code is read.
