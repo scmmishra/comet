@@ -1,6 +1,7 @@
 import { version as coreVersion } from "../../../package.json"
 import type { AgentHost } from "../agent"
-import type { AcpFlavor } from "../acp/flavor"
+import type { AcpFlavor, BackgroundWork } from "../acp/flavor"
+import type { ToolCall } from "../acp/protocol"
 import type { Process } from "../process"
 import type { ModelCache } from "./models"
 import { modeId } from "./modes"
@@ -27,6 +28,23 @@ const PERSONAL_GOOGLE_AUTH = "oauth-personal"
 /** Antigravity asks its multiple-choice questions as permission requests, marked by the call's id. */
 const QUESTION_PREFIX = "interaction_"
 
+/** The titles of Antigravity's `schedule` call, as T3 Code found them. */
+const SCHEDULE_TITLES = new Set(["Run schedule", "Running schedule"])
+
+/** Whether a command call runs a daemon, such as a server, which Antigravity marks in its input. */
+const runsDaemon = (call: ToolCall) => !!call.rawInput && typeof call.rawInput === "object" && (call.rawInput as Record<string, unknown>).IsDaemon === true
+
+/**
+ * What Antigravity does after its prompt answers. It answers while a command it put in the background
+ * still runs, and replies by itself once the command ends. Its `schedule` call runs until its wake fires,
+ * and the wake replies the same way. A daemon may never end, so it does not hold the turn. Antigravity
+ * sends usage after each model call, and that update ends a reply it started itself.
+ */
+export const antigravityBackground: BackgroundWork = {
+  outlivesPrompt: (call) => SCHEDULE_TITLES.has(call.title ?? "") || (call.kind === "execute" && !runsDaemon(call)),
+  endsReply: (update) => update.sessionUpdate === "usage_update",
+}
+
 /** Starts Antigravity in a folder. It throws a sentence the user reads when Antigravity is not installed. */
 export function launchAntigravity(dir: string): Process {
   const runtime = resolveRuntime()
@@ -44,6 +62,7 @@ export function antigravityFlavor(host: AgentHost, models: ModelCache): AcpFlavo
     isQuestion: (request) => request.toolCall.toolCallId.startsWith(QUESTION_PREFIX),
     needsSignIn: (line) => signInLink(line) !== undefined,
     watchPrompt,
+    background: antigravityBackground,
     signedOut() {
       host.publish({ state: "signed-out", problem: SIGN_IN_PROBLEM })
       return SIGN_IN_TO_SEND

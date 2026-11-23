@@ -87,7 +87,10 @@ export class AcpConnection {
     return (await this.rpc.request<{ stopReason: StopReason }>("session/prompt", { sessionId, prompt })).stopReason
   }
 
-  /** Asks the running turn to stop. The turn's prompt then answers, normally with `cancelled`. */
+  /**
+   * Asks the running turn to stop. The turn's prompt then answers, normally with `cancelled`. An agent that
+   * works past its prompt may also stop that work, with no prompt open.
+   */
   cancel(sessionId: string) {
     this.rpc.notify("session/cancel", { sessionId })
   }

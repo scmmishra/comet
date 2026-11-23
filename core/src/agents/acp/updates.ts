@@ -41,6 +41,11 @@ export class UpdateMapper {
     return this.endText(at)
   }
 
+  /** A tool call as everything reported about it so far merges it. */
+  call(toolCallId: string): ToolCall | undefined {
+    return this.tools.get(toolCallId)
+  }
+
   /** Takes back the text being written when `matches` says it is not the agent's reply. */
   dropText(matches: (text: string) => boolean): ThreadEvent[] {
     const text = this.text

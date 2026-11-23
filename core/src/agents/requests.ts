@@ -23,6 +23,11 @@ export class Requests<Reply, R extends OpenRequest<Reply> = OpenRequest<Reply>> 
     this.emit({ kind: "item", item: request.item })
   }
 
+  /** Whether any request waits for the user. */
+  get waiting(): boolean {
+    return this.open.size > 0
+  }
+
   get(requestId: string): R | undefined {
     return this.open.get(requestId)
   }

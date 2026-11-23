@@ -15,6 +15,14 @@ export function userItem(id: string, text: string, images: readonly ImageAttachm
   return { type: "user", id, text, ...(images.length ? { images } : {}), at: Date.now(), ...(steered ? { steered: true } : {}) }
 }
 
+/**
+ * The opener of a turn the agent started itself, such as after a background command ended. `key` names
+ * the turn uniquely, and `text` says why it started.
+ */
+export function selfStartedItem(key: string, text: string, at?: number): Item<"user"> {
+  return { type: "user", id: `self-started:${key}`, text, selfStarted: true, ...(at !== undefined ? { at } : {}) }
+}
+
 /** The id of the result of the turn a message opened. A thread read back from a transcript names its results this way, so what Comet saved about a turn finds it again. */
 export const resultId = (messageId: string) => `${RESULT_PREFIX}${messageId}`
 

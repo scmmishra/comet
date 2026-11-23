@@ -36,8 +36,9 @@ interface Step {
 
 /**
  * Antigravity ends a prompt that an API error stopped as a normal turn, with the error line as its reply.
- * Its session log ends that turn with an error step. So before a prompt this notes the log's last step,
- * and after it reads the last step the prompt added. A log it cannot read leaves the turn as the agent ended it.
+ * Its session log ends that turn with an error step. So this notes the log's last step now, before a prompt
+ * or before work the agent does after it, and once the turn ends reads the last step added since. A log it
+ * cannot read leaves the turn as the agent ended it.
  */
 export function watchPrompt(sessionId: string): PromptCheck | undefined {
   if (!SESSION_ID.test(sessionId)) return undefined

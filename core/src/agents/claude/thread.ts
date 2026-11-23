@@ -3,7 +3,7 @@ import { IMAGE_TYPES, type ImageAttachment, type TextEdit, type ThreadEvent, typ
 import { cutOutput, relativeTo, thought, unfinishedResult } from "../steps"
 import { cometToolSummary } from "../../delegate/tools"
 import { visualItem } from "../../visuals/show"
-import { resultId } from "../turn-items"
+import { resultId, selfStartedItem } from "../turn-items"
 import { modelLabel } from "./models"
 import { cometTool, toolStep } from "./steps"
 
@@ -158,7 +158,7 @@ export class ThreadMapper {
     const summary = this.wake
     this.wake = undefined
     if (!idle) return []
-    const opener = item({ type: "user", id: `self-started:${uuid}`, text: summary || SELF_STARTED, selfStarted: true, ...(at !== undefined ? { at } : {}) })
+    const opener = item(selfStartedItem(uuid, summary || SELF_STARTED, at))
     return [opener, { kind: "status", busy: true }]
   }
 

@@ -1,7 +1,7 @@
 import type { PermissionMode } from "@comet/protocol"
 import type { Process } from "../process"
 import type { ConnectOptions } from "./connection"
-import type { ConfigOption, PermissionRequest } from "./protocol"
+import type { ConfigOption, PermissionRequest, SessionUpdate, ToolCall } from "./protocol"
 import type { ToolReader } from "./tools"
 
 /**
@@ -24,11 +24,18 @@ export interface AcpFlavor {
   /** Whether a line the agent printed outside the protocol says it waits for a sign-in. */
   needsSignIn?(line: string): boolean
   /**
-   * Reads, before a prompt, what is needed to check the prompt once it ends. An agent that reports some
-   * failures as a normal end gives this, and the check finds them. It runs unless the turn was stopped.
-   * Neither the read nor the check may throw.
+   * Reads what is needed to check, once a turn ends, the work the agent did since. An agent that reports
+   * some failures as a normal end gives this, and the check finds them. It is read before each prompt. For
+   * an agent with `background` work, it is also read when a prompt answers while that work goes on, and when
+   * a turn ends, for a turn the agent may start next. The check runs unless the turn was stopped. Neither the
+   * read nor the check may throw.
    */
   watchPrompt?(sessionId: string): PromptCheck | undefined
+  /**
+   * Set for an agent that goes on working after its prompt answers. It runs some calls past the prompt,
+   * and replies by itself once they end. The turn then stays open until that work and its reply end.
+   */
+  readonly background?: BackgroundWork
   /** The agent asked for a sign-in, so the account is signed out. Answers what the turn says to the user. */
   signedOut(): string
   /**
@@ -38,10 +45,18 @@ export interface AcpFlavor {
   learn(options: readonly ConfigOption[], opened: boolean): void
 }
 
-/** Checks a prompt once it ended. Undefined means the turn ends as its stop reason says. */
+/** What an agent that works past its prompt says about that work. */
+export interface BackgroundWork {
+  /** Whether a running call goes on after the prompt answers, so that the turn waits for it to end. */
+  outlivesPrompt(call: ToolCall): boolean
+  /** Whether an update ends a reply. A reply the agent starts by itself has no prompt to answer, so this ends it. */
+  endsReply(update: SessionUpdate): boolean
+}
+
+/** Checks a turn once it ended. Undefined means the turn ends as its stop reason says. */
 export type PromptCheck = () => PromptFailure | undefined
 
-/** Why a prompt failed although its stop reason did not say so. */
+/** Why a turn failed although the agent ended it as normal. */
 export interface PromptFailure {
   /** What the turn says to the user. */
   readonly message: string

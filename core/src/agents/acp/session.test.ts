@@ -1,11 +1,12 @@
-import { expect, test } from "bun:test"
+import { expect, jest, test } from "bun:test"
 import type { RunSettings, ThreadEvent, ThreadItem } from "@comet/protocol"
 import { tempFolder, until } from "../../test-support"
 import type { SessionOptions } from "../agent"
 import { unfinishedResult } from "../steps"
 import { FAKE_OPTIONS, fakeAcpAgent } from "./test-agent"
-import type { AcpFlavor, PromptCheck } from "./flavor"
-import type { ConfigOption } from "./protocol"
+import { HOLD_LIMIT_MS, REPLY_LIMIT_MS, SETTLE_MS } from "./after-prompt"
+import type { AcpFlavor, BackgroundWork, PromptCheck } from "./flavor"
+import type { ConfigOption, SessionUpdate } from "./protocol"
 import { AcpSession } from "./session"
 import { AcpThreadStore } from "./thread-record"
 import { acpToolReader } from "./tools"
@@ -16,7 +17,7 @@ const SIGN_IN_LINE = "SIGN IN https://example.com/sign-in"
 const SIGN_IN_TO_SEND = "Sign in, then send again."
 
 /** A session on a fake agent, with what it emitted, the session ids it reported and what its flavor heard. */
-function start(options: Partial<SessionOptions> = {}, handlers: Parameters<typeof fakeAcpAgent>[0] = {}, check?: PromptCheck) {
+function start(options: Partial<SessionOptions> = {}, handlers: Parameters<typeof fakeAcpAgent>[0] = {}, check?: PromptCheck, background?: BackgroundWork) {
   const agents = [fakeAcpAgent(handlers)]
   const events: ThreadEvent[] = []
   const ids: string[] = []
@@ -38,6 +39,7 @@ function start(options: Partial<SessionOptions> = {}, handlers: Parameters<typeo
     },
     learn: (found, opened) => void learned.push({ options: found, opened }),
     ...(check ? { watchPrompt: () => check } : {}),
+    ...(background ? { background } : {}),
   }
   const session = new AcpSession("/repo", (event) => void events.push(event), { settings: SETTINGS, onSessionId: (id) => void ids.push(id), ...options }, flavor, threads)
   const items = () => events.flatMap((event) => (event.kind === "item" ? [event.item] : []))
@@ -283,5 +285,286 @@ test("keeps a reply that says more than the error, and does not check a stopped 
   run.agent().endTurn("cancelled")
   await until(() => !run.session.busy)
   expect(checked).toBe(1)
+  expect(run.last("result")).toMatchObject({ isError: false, stopped: true })
+})
+
+/** An agent that runs commands past its prompt, except daemons, and ends each reply with its usage, as Antigravity does. */
+const BACKGROUND: BackgroundWork = {
+  outlivesPrompt: (call) => call.kind === "execute" && (call.rawInput as { IsDaemon?: boolean } | undefined)?.IsDaemon !== true,
+  endsReply: (update) => update.sessionUpdate === "usage_update",
+}
+
+const command = (toolCallId: string, status: "pending" | "in_progress" | "completed" | "failed", IsDaemon = false): SessionUpdate => ({
+  sessionUpdate: toolCallId.endsWith("-update") ? "tool_call_update" : "tool_call",
+  toolCallId: toolCallId.replace(/-update$/, ""),
+  title: "sleep 20",
+  kind: "execute",
+  status,
+  rawInput: { command: "sleep 20 && echo DONE", IsDaemon },
+})
+const text = (chunk: string): SessionUpdate => ({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: chunk } })
+const USAGE: SessionUpdate = { sessionUpdate: "usage_update", used: 10, size: 100 }
+
+/** Runs `body` on fake timers. Bun.sleep waits on real time, so `flush` lets the fake agent's messages land instead. */
+async function fakeTime(body: () => Promise<void>) {
+  jest.useFakeTimers()
+  try {
+    await body()
+  } finally {
+    jest.useRealTimers()
+  }
+}
+
+const flush = async () => {
+  for (let i = 0; i < 50; i++) await Promise.resolve()
+}
+
+/** A session whose first prompt started `sleep 20` in the background. With `answer`, the prompt has answered, as Antigravity's does. */
+async function heldTurn(check?: PromptCheck, answer = true) {
+  const run = start({}, {}, check, BACKGROUND)
+  run.session.send("Sleep, then tell me")
+  await until(() => run.agent().sent("session/prompt").length === 1)
+  run.agent().update(command("t1", "in_progress"))
+  run.agent().update(text("STARTED"))
+  run.agent().update(USAGE)
+  if (!answer) return run
+  run.agent().endTurn()
+  await until(() => run.items().some((item) => item.type === "text" && item.done))
+  return run
+}
+
+test("holds a turn while a command it runs past its prompt still runs, and ends it after the late reply", async () => {
+  const run = await heldTurn()
+  expect(run.session.busy).toBe(true)
+  expect(run.last("result")).toBeUndefined()
+  // The reply's first marker comes before another call, as in Antigravity's own frames.
+  await fakeTime(async () => {
+    run.agent().update(command("t1-update", "completed"))
+    await flush()
+    jest.advanceTimersByTime(REPLY_LIMIT_MS - 1)
+    expect(run.session.busy).toBe(true)
+    run.agent().update(USAGE)
+    run.agent().update(command("t2", "in_progress"))
+    run.agent().update(command("t2-update", "completed"))
+    await flush()
+    jest.advanceTimersByTime(SETTLE_MS)
+    expect(run.session.busy).toBe(true)
+    run.agent().update(text("DONE"))
+    run.agent().update(USAGE)
+    await flush()
+    jest.advanceTimersByTime(SETTLE_MS - 1)
+    expect(run.session.busy).toBe(true)
+    jest.advanceTimersByTime(1)
+  })
+  expect(run.session.busy).toBe(false)
+  expect(run.items().filter((item) => item.type === "user")).toHaveLength(1)
+  expect(run.items().filter((item) => item.type === "text" && item.done).map((item) => item.type === "text" && item.text)).toEqual(["STARTED", "DONE"])
+  expect(run.last("result")).toMatchObject({ isError: false })
+  expect(run.events.filter((event) => event.kind === "status")).toEqual([
+    { kind: "status", busy: true },
+    { kind: "status", busy: false },
+  ])
+  expect((await run.threads.history("/repo", "s1")).map((item) => item.type)).toEqual(["user", "tool", "text", "tool", "text", "result"])
+})
+
+test("ends a turn whose prompt answers while only a daemon runs", async () => {
+  const run = start({}, {}, undefined, BACKGROUND)
+  run.session.send("Start the server")
+  await until(() => run.agent().sent("session/prompt").length === 1)
+  run.agent().update(command("t1", "in_progress", true))
+  run.agent().endTurn()
+  await until(() => !run.session.busy)
+  expect(run.last("result")).toMatchObject({ isError: false })
+})
+
+test("checks a held turn's late reply once it ends, and fails it when the check finds an error", async () => {
+  let checks = 0
+  const run = await heldTurn(() => (++checks === 2 ? { message: "Quota reached." } : undefined))
+  await fakeTime(async () => {
+    run.agent().update(command("t1-update", "completed"))
+    run.agent().update(text("Partly done."))
+    run.agent().update(USAGE)
+    await flush()
+    jest.advanceTimersByTime(SETTLE_MS)
+  })
+  expect(checks).toBe(2)
+  expect(run.last("error")?.message).toBe("Quota reached.")
+  expect(run.last("result")).toMatchObject({ isError: true })
+})
+
+test("stops a held turn: cancels the command, and ends as stopped once the agent is quiet", async () => {
+  const run = await heldTurn()
+  await fakeTime(async () => {
+    await run.session.interrupt()
+    expect(run.agent().sent("session/cancel")).toEqual([{ sessionId: "s1" }])
+    expect(run.session.busy).toBe(true)
+    // The cancel ends the command.
+    run.agent().update(command("t1-update", "failed"))
+    await flush()
+    jest.advanceTimersByTime(SETTLE_MS)
+  })
+  expect(run.session.busy).toBe(false)
+  expect(run.last("result")).toMatchObject({ isError: false, stopped: true })
+
+  // The agent's note on the stop lands with no turn open, and opens none.
+  run.agent().update(command("t1-update", "failed"))
+  await until(() => run.events.at(-1)?.kind === "item")
+  expect(run.session.busy).toBe(false)
+})
+
+test("fails a held turn when the agent's process exits, and ends its open calls as unfinished", async () => {
+  const run = await heldTurn()
+  run.agent().die("crashed", 2)
+  await until(() => !run.session.busy)
+  expect(run.last("error")?.message).toBe("The fake agent exited with code 2.\n\ncrashed")
+  expect(run.items().findLast((item) => item.type === "tool" && item.id === "t1")).toMatchObject({ result: unfinishedResult("failed") })
+})
+
+test("ends a held turn whose command stays quiet past the limit", async () => {
+  const run = await heldTurn(undefined, false)
+  await fakeTime(async () => {
+    run.agent().endTurn()
+    await flush()
+    jest.advanceTimersByTime(HOLD_LIMIT_MS - 1)
+    expect(run.session.busy).toBe(true)
+    jest.advanceTimersByTime(1)
+  })
+  expect(run.session.busy).toBe(false)
+  expect(run.last("result")).toMatchObject({ isError: false })
+})
+
+test("opens a turn the agent starts itself, and ends it once its reply ends", async () => {
+  const run = start({}, {}, undefined, BACKGROUND)
+  run.session.send("Hello")
+  await until(() => run.agent().sent("session/prompt").length === 1)
+  run.agent().endTurn()
+  await until(() => !run.session.busy)
+  const before = run.events.length
+
+  await fakeTime(async () => {
+    run.agent().update(text("A wake fired."))
+    await flush()
+    expect(run.session.busy).toBe(true)
+    run.agent().update(USAGE)
+    await flush()
+    jest.advanceTimersByTime(SETTLE_MS)
+  })
+  const events = run.events.slice(before)
+  const opener = events.find((event) => event.kind === "item" && event.item.type === "user")
+  expect(opener).toMatchObject({ item: { text: "The agent started a turn on its own.", selfStarted: true } })
+  const id = opener?.kind === "item" ? opener.item.id : ""
+  expect(events.filter((event) => event.kind === "status")).toEqual([
+    { kind: "status", busy: true },
+    { kind: "status", busy: false },
+  ])
+  expect(run.last("text")).toMatchObject({ text: "A wake fired.", done: true })
+  expect(run.last("result")).toMatchObject({ id: `result:${id}`, isError: false })
+  expect((await run.threads.history("/repo", "s1")).map((item) => item.type)).toEqual(["user", "result", "user", "text", "result"])
+})
+
+test("a permission request with no turn open waits in a turn the agent starts itself", async () => {
+  const run = start({}, {}, undefined, BACKGROUND)
+  run.session.send("Hello")
+  await until(() => run.agent().sent("session/prompt").length === 1)
+  run.agent().endTurn()
+  await until(() => !run.session.busy)
+
+  let allowed: Promise<unknown> = Promise.resolve()
+  await fakeTime(async () => {
+    run.agent().update(command("t2-update", "pending"))
+    allowed = run.agent().request("session/request_permission", {
+      sessionId: "s1",
+      toolCall: { toolCallId: "t2", title: "echo AFTER", kind: "execute", rawInput: { command: "echo AFTER" } },
+      options: [{ optionId: "allow", name: "Allow", kind: "allow_once" }],
+    })
+    await flush()
+    expect(run.session.busy).toBe(true)
+    // A request waits for the user however long it takes.
+    jest.advanceTimersByTime(HOLD_LIMIT_MS)
+    expect(run.session.busy).toBe(true)
+    run.session.answerPermission("t2", "allow")
+    await flush()
+    run.agent().update(command("t2-update", "completed"))
+    run.agent().update(text("WRITTEN"))
+    run.agent().update(USAGE)
+    await flush()
+    jest.advanceTimersByTime(SETTLE_MS)
+  })
+  expect(await allowed).toEqual({ outcome: { outcome: "selected", optionId: "allow" } })
+  expect(run.session.busy).toBe(false)
+  expect(run.last("result")).toMatchObject({ isError: false })
+})
+
+test("leaves an agent that does not work past its prompt as it was: no turn opens by itself", async () => {
+  const run = start()
+  run.session.send("Hello")
+  await until(() => run.agent().sent("session/prompt").length === 1)
+  run.agent().endTurn()
+  await until(() => !run.session.busy)
+  run.agent().update(text("Stray"))
+  await until(() => run.last("text")?.text === "Stray")
+  expect(run.session.busy).toBe(false)
+  expect(run.items().map((item) => item.type)).toEqual(["user", "result", "text"])
+})
+
+test("ends a reply whose end the agent never marks, once it has been quiet past the limit", async () => {
+  const run = await heldTurn()
+  await fakeTime(async () => {
+    run.agent().update(command("t1-update", "completed"))
+    run.agent().update(text("DONE"))
+    await flush()
+    jest.advanceTimersByTime(REPLY_LIMIT_MS - 1)
+    expect(run.session.busy).toBe(true)
+    jest.advanceTimersByTime(1)
+  })
+  expect(run.session.busy).toBe(false)
+  expect(run.last("text")).toMatchObject({ text: "DONE", done: true })
+})
+
+test("checks a turn the agent starts itself, as it checks a prompt", async () => {
+  let checks = 0
+  const run = start({}, {}, () => (++checks === 2 ? { message: "Quota reached." } : undefined), BACKGROUND)
+  run.session.send("Hello")
+  await until(() => run.agent().sent("session/prompt").length === 1)
+  run.agent().endTurn()
+  await until(() => !run.session.busy)
+  expect(run.last("error")).toBeUndefined()
+
+  await fakeTime(async () => {
+    run.agent().update(text("Quota reached."))
+    run.agent().update(USAGE)
+    await flush()
+    jest.advanceTimersByTime(SETTLE_MS)
+  })
+  expect(checks).toBe(2)
+  expect(run.last("error")?.message).toBe("Quota reached.")
+  expect(run.last("result")).toMatchObject({ isError: true })
+})
+
+test("stops a turn the agent started itself, and the agent's note on the stop opens no other turn", async () => {
+  const run = start({}, {}, undefined, BACKGROUND)
+  run.session.send("Hello")
+  await until(() => run.agent().sent("session/prompt").length === 1)
+  run.agent().endTurn()
+  await until(() => !run.session.busy)
+  const before = run.events.length
+
+  await fakeTime(async () => {
+    run.agent().update({ sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "Writing a story." } })
+    await flush()
+    await run.session.interrupt()
+    // Antigravity's answer to a cancel in its reply, as it sends it.
+    run.agent().update(USAGE)
+    run.agent().update(text("\n⚠ The stream was interrupted. Please continue the task you were working on.\n"))
+    await flush()
+    jest.advanceTimersByTime(SETTLE_MS)
+  })
+  const events = run.events.slice(before)
+  expect(run.agent().sent("session/cancel")).toEqual([{ sessionId: "s1" }])
+  expect(events.filter((event) => event.kind === "item" && event.item.type === "user")).toHaveLength(1)
+  expect(events.filter((event) => event.kind === "status")).toEqual([
+    { kind: "status", busy: true },
+    { kind: "status", busy: false },
+  ])
   expect(run.last("result")).toMatchObject({ isError: false, stopped: true })
 })

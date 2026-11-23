@@ -139,7 +139,8 @@ export class Delegations {
 
     // The agent's own subagents that still run. A turn can end while a background subagent runs. Claude
     // Code starts a turn of its own once it ends, and that turn gives the answer. Commands left running in
-    // the background do not hold the task: a dev server never ends, and nothing tells one from a wait.
+    // the background do not hold the task here: a dev server never ends. An agent's session may keep its
+    // turn open for a command it waits on, as Antigravity's does, and the task then waits with it.
     const runningSubagents = new Set<string>()
     // An error ends the task as failed, whatever the agent left running.
     let failed = false
