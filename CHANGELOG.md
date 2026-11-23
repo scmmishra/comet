@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- A thread's context ring stays after a rewind, after a plugin switches the tab back to one of its threads, and when a reply ends while Comet reads a long thread at start. Before, the ring went missing until the next reply ended.
 - An agent can open a file or a diff in the view pane beside its thread. `open_file` shows a file at a line. `open_diff` opens Review on a scope, uncommitted changes unless the agent names another, and scrolls to a changed file. Review reads the changes again first, so it shows the edits the agent just made. What an agent opens comes to the front of its own tab's view pane. It does not switch your tab or close Settings. Every agent gets both tools.
 - Comet has a third colour theme, Dracula. Its dark flavour takes Dracula Classic's colours, and its light flavour takes Alucard Classic's, both from the Dracula spec. Both sit on darker, cooler surfaces than the spec's.
 - Comet closes a Claude Code process that has sat idle for 20 minutes, which frees hundreds of megabytes per tab. The tab and its thread stay. The next message resumes the same conversation, with its model, effort, mode and the approvals you gave for the session. A turn, a waiting request or background work keeps the process up. Before, every open tab kept its process for as long as the tab was open.

@@ -142,8 +142,9 @@ export class Window {
     if (thread.branch) reply({ type: "thread.branch", tabId: tab.id, branch: thread.branch })
     if (!thread.sessionId) return
     reply(sessionMessage(tab.id, thread))
-    reply({ type: "session.history", tabId: tab.id, items: await this.history(tab, thread.sessionId), context: thread.context })
-    if (!thread.context) this.fillContext(tab.id, thread.sessionId)
+    const items = await this.history(tab, thread.sessionId)
+    reply(this.historyMessage(tab.id, items))
+    if (!this.thread(tab.id).context) this.fillContext(tab.id, thread.sessionId)
   }
 
   /** Saves the pane widths the app sends, keeping only the ones that are a width. */
@@ -232,7 +233,7 @@ export class Window {
     this.hooks.agents.get(agent)
     this.closeSession(tabId)
     this.setThread(tabId, { sessionId: threadId, agent })
-    reply({ type: "session.history", tabId, items: await this.history(tab, threadId) })
+    reply(this.historyMessage(tabId, await this.history(tab, threadId)))
     this.fillContext(tabId, threadId)
   }
 
@@ -267,7 +268,7 @@ export class Window {
     // A transcript read mid-turn closes that turn with a result timed to its last reply. The turn is still running, so its result is left for the live one.
     const running = back?.live.session.busy ?? false
     const shown = running && items.at(-1)?.type === "result" ? items.slice(0, -1) : items
-    this.hooks.broadcast({ type: "session.history", tabId, items: shown })
+    this.hooks.broadcast(this.historyMessage(tabId, shown))
     if (running) this.hooks.broadcast({ type: "session.event", tabId, event: { kind: "status", busy: true } })
     // A task's request that came while the thread was away still waits for the user.
     for (const item of back?.live.handoffs.pending() ?? []) this.hooks.broadcast({ type: "session.event", tabId, event: { kind: "item", item } })
@@ -442,7 +443,7 @@ export class Window {
     // A rewind to the first message leaves nothing to resume, so the next message starts a new session.
     const rewind = !rewound.empty && rewound.resumeAt ? { at: rewound.resumeAt, from: messageId } : undefined
     this.setThread(tabId, rewound.empty ? kept : { ...this.thread(tabId), ...kept, turnFrom: undefined, rewind })
-    this.hooks.broadcast({ type: "session.history", tabId, items: rewound.empty ? [] : await this.history(tab, sessionId) })
+    this.hooks.broadcast(this.historyMessage(tabId, rewound.empty ? [] : await this.history(tab, sessionId)))
   }
 
   /** Refuses a rewind to the message whose turn moved the thread into its folder, or to one before it. Those turns ran in another folder. */
@@ -774,6 +775,16 @@ export class Window {
       const files = item.type === "result" ? saved[resultMessage(item.id)] : undefined
       return files ? [item, changesItem(resultMessage(item.id), files)] : [item]
     })
+  }
+
+  /**
+   * A tab's thread, read back, with the context reading the core holds for it now. The app takes the ring
+   * from this message, so a history without the reading would clear it. It is read after the transcript,
+   * since a reading may arrive while a long transcript is read.
+   */
+  private historyMessage(tabId: string, items: readonly ThreadItem[]): CoreMessage {
+    const { context } = this.thread(tabId)
+    return { type: "session.history", tabId, items, ...(context ? { context } : {}) }
   }
 
   /** A thread with no context reading gets one now, so its ring shows before its next reply. */

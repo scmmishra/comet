@@ -1,5 +1,5 @@
 import { afterAll } from "bun:test"
-import type { AgentFeature, AgentId, QueuedMessage, ThreadEvent } from "@comet/protocol"
+import type { AgentFeature, AgentId, ContextReading, QueuedMessage, ThreadEvent } from "@comet/protocol"
 import type { Agent, AgentHost, AgentSession, Rewound, SessionOptions } from "./agents/agent"
 import type { Transport } from "./agents/json-rpc"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
@@ -144,8 +144,11 @@ export function fakeAgent(id: AgentId, features: readonly AgentFeature[] = [], t
     },
     threads: {
       list: async () => [...threads],
-      history: async (_dir, threadId) => [{ type: "user", id: `${threadId}-u1`, text: `From ${id}` }],
-      context: async () => undefined,
+      history: async (_dir, threadId) => {
+        await fake.holdHistory
+        return [{ type: "user", id: `${threadId}-u1`, text: `From ${id}` }]
+      },
+      context: async () => fake.reading,
       ...(has("rename") ? { rename: async (_dir: string, threadId: string, title: string) => void calls.push(`rename ${threadId} ${title}`) } : {}),
       ...(has("fork")
         ? {
@@ -161,7 +164,16 @@ export function fakeAgent(id: AgentId, features: readonly AgentFeature[] = [], t
     ...(has("sign-in") ? { signIn: async () => void calls.push("signIn") } : {}),
     close: () => void calls.push("closed"),
   })
-  /** `rewound` is what a rewind answers, and `unsent` what a Force stop hands back. A test sets them for the case it checks. */
-  const fake: { make: typeof make; calls: FakeCalls; sessions: typeof sessions; rewound: Rewound; unsent: QueuedMessage[] } = { make, calls, sessions, rewound: { empty: false }, unsent: [] }
+  /**
+   * `rewound` is what a rewind answers, `unsent` what a Force stop hands back, and `reading` the context a
+   * thread reads at. A history read waits for `holdHistory`. A test sets them for the case it checks.
+   */
+  const fake: { make: typeof make; calls: FakeCalls; sessions: typeof sessions; rewound: Rewound; unsent: QueuedMessage[]; reading?: ContextReading; holdHistory?: Promise<void> } = {
+    make,
+    calls,
+    sessions,
+    rewound: { empty: false },
+    unsent: [],
+  }
   return fake
 }

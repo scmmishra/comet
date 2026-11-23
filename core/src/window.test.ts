@@ -254,6 +254,32 @@ test("resumes a past thread on the agent it ran on, and reads its history from t
   expect(saved().threads.a).toEqual({ sessionId: "x1", agent: "codex" })
 })
 
+/** A context reading, as the ring shows it. */
+const reading = { percent: 35, tokens: 70_000, maxTokens: 200_000 }
+
+test("sends a thread's history with the reading that arrived while its transcript was read, so the ring stays", async () => {
+  const project = tempFolder("agents")
+  const { window, claude } = openWithAgents({ tabs: [tab("a", project)], threads: { a: { sessionId: "c1", agent: "claude" } }, recent: [] })
+  let release = () => {}
+  claude.holdHistory = new Promise<void>((resolve) => (release = resolve))
+  const replies: CoreMessage[] = []
+  const greeted = window.greet((message) => replies.push(message))
+  // A turn ends while a long transcript is still being read.
+  await window.send("a", "Go on")
+  claude.sessions[0]!.emit({ kind: "context", reading })
+  release()
+  await greeted
+  expect(replies.find((message) => message.type === "session.history")).toMatchObject({ context: reading })
+})
+
+test("shows a plugin thread that comes back with the reading it kept, so its ring shows", async () => {
+  const project = tempFolder("agents")
+  const keyed = { [`${project}\nconv-2`]: { key: "conv-2", sessionId: "c1", agent: "claude", context: reading } }
+  const { window, sent } = openWithAgents({ tabs: [tab("a", project)], threads: { a: { key: "conv-1" } }, keyed, recent: [] })
+  await window.openKey("a", { key: "conv-2" })
+  expect(sent.find((message) => message.type === "session.history")).toEqual({ type: "session.history", tabId: "a", items: [{ type: "user", id: "c1-u1", text: "From claude" }], context: reading })
+})
+
 test("refuses what a thread's agent cannot do, and says which agent", async () => {
   const project = tempFolder("agents")
   const { window, codex } = openWithAgents({ tabs: [{ ...tab("a", project), agent: "codex" }], threads: { a: { sessionId: "x1", agent: "codex" } }, recent: [] })
@@ -266,8 +292,10 @@ test("refuses what a thread's agent cannot do, and says which agent", async () =
 
 test("rewinds through the thread's agent, restoring files first when asked, and keeps a transcript the agent already cut", async () => {
   const project = tempFolder("agents")
-  const { window, claude } = openWithAgents({ tabs: [tab("a", project)], threads: { a: { sessionId: "c1", agent: "claude" } }, recent: [] })
+  const { window, claude, sent } = openWithAgents({ tabs: [tab("a", project)], threads: { a: { sessionId: "c1", agent: "claude", context: reading } }, recent: [] })
   await window.rewindThread("a", "u1", true)
+  // The thread keeps its reading until the next reply, so the ring stays.
+  expect(sent.find((message) => message.type === "session.history")).toMatchObject({ context: reading })
   expect(claude.calls).toEqual(["restore u1", "close", "rewind c1 u1"])
   expect(saved().threads.a).toMatchObject({ sessionId: "c1", agent: "claude" })
   expect(saved().threads.a.rewind).toBeUndefined()
