@@ -424,6 +424,37 @@ test("in full access, asks Codex for MCP prompts and accepts each without a card
   expect(s.last("permission")).toBeUndefined()
 })
 
+test("in full access, accepts a command Codex deems dangerous without a card", async () => {
+  const s = setup({ settings: { ...SETTINGS, permissionMode: "bypassPermissions" } })
+  await started(s)
+  // What Codex 0.169.0 sent for `rm -rf junk` under full access.
+  s.codex.ask(0, "item/commandExecution/requestApproval", { threadId: THREAD, turnId: TURN, itemId: "exec-rm", command: "/bin/zsh -lc 'rm -rf junk'", cwd: DIR, reason: null })
+  await until(() => s.codex.reply(0) !== undefined)
+  expect(s.codex.reply(0)).toEqual({ id: 0, result: { decision: "accept" } })
+  expect(s.last("permission")).toBeUndefined()
+})
+
+test("in full access, still asks before a command that needs network access the network settings do not allow", async () => {
+  const s = setup({ settings: { ...SETTINGS, permissionMode: "bypassPermissions" } })
+  await started(s)
+  const asks = [{ networkApprovalContext: { host: "example.com", protocol: "https" } }, { proposedNetworkPolicyAmendments: [{ host: "example.com", action: "allow" }] }]
+  for (const [index, network] of asks.entries()) {
+    s.codex.ask(index, "item/commandExecution/requestApproval", { threadId: THREAD, turnId: TURN, itemId: `exec-${index}`, command: "curl https://example.com", reason: null, ...network })
+    await until(() => s.last("permission")?.requestId === `exec-${index}`)
+    expect(s.codex.reply(index)).toBeUndefined()
+    s.session.answerPermission(`exec-${index}`, "decline")
+    await until(() => s.codex.reply(index) !== undefined)
+  }
+})
+
+test("outside full access, asks before a command Codex deems dangerous", async () => {
+  const s = setup()
+  await started(s)
+  s.codex.ask(0, "item/commandExecution/requestApproval", { threadId: THREAD, turnId: TURN, itemId: "exec-rm", command: "/bin/zsh -lc 'rm -rf junk'", reason: null })
+  await until(() => s.last("permission")?.requestId === "exec-rm")
+  expect(s.codex.reply(0)).toBeUndefined()
+})
+
 test("cancels an MCP prompt Comet cannot answer: one that opens a page, and a form with a required field it cannot fill", async () => {
   for (const permissionMode of ["default", "bypassPermissions"] as const) {
     const s = setup({ settings: { ...SETTINGS, permissionMode } })

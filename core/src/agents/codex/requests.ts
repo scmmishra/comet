@@ -43,17 +43,19 @@ type Params = Record<string, unknown> & { readonly itemId?: string; readonly rea
 /**
  * The request Codex asks with `method`: one for the user, one Comet answers itself, or undefined for one
  * Comet does not handle. `rpcId` is the id Codex gave the request. `files` gives the paths of a file
- * change Codex has already reported, by its item id. `acceptMcp` accepts every MCP prompt without asking.
+ * change Codex has already reported, by its item id. `accept` says the user allowed everything, as in
+ * full access, so Comet accepts what it can without asking.
  */
 export function readRequest(
   method: string,
   params: Params,
   rpcId: RequestId,
   files: (itemId: string) => readonly string[] | undefined,
-  acceptMcp: boolean,
+  accept: boolean,
 ): CodexRequest | AnsweredRequest | undefined {
   switch (method) {
     case "item/commandExecution/requestApproval": {
+      if (accept && !asksNetwork(params as Params & NetworkAsk)) return { answer: decide("allow") }
       const command = typeof params.command === "string" ? shellScript(params.command) : ""
       return asking(permission(String(params.approvalId ?? params.itemId), "Bash", "command", command || "Run a command", params.reason), decide)
     }
@@ -74,11 +76,23 @@ export function readRequest(
       return asking(permission(String(params.callId), "Edit", "file-change", paths.join(", ") || "Change files", params.reason), review)
     }
     case ELICITATION:
-      return elicitationRequest(params as Params & Elicitation, rpcId, acceptMcp)
+      return elicitationRequest(params as Params & Elicitation, rpcId, accept)
     default:
       return undefined
   }
 }
+
+/** What a command approval carries when the command needs network access that Codex's network settings do not allow. */
+interface NetworkAsk {
+  readonly networkApprovalContext?: unknown
+  readonly proposedNetworkPolicyAmendments?: readonly unknown[] | null
+}
+
+/**
+ * Whether a command approval asks about network access, after T3 Code. The user's network settings stay in
+ * force in full access too, so such a command still asks.
+ */
+const asksNetwork = (params: NetworkAsk) => params.networkApprovalContext != null || (params.proposedNetworkPolicyAmendments?.length ?? 0) > 0
 
 const asking = (item: PermissionItem, reply: (answer: PermissionAnswer) => unknown): CodexRequest => ({ item, reply, dismissed: reply("decline") })
 
@@ -144,12 +158,12 @@ interface Elicitation {
 /**
  * An MCP server's question. Codex asks before it calls an MCP tool. Comet approves a call of its own tools
  * itself: the user chose the thread's permission mode, and work handed to another agent runs no broader
- * than it. With `acceptMcp`, it approves every question. A question that sends the user to a page is
+ * than it. With `accept`, it approves every question. A question that sends the user to a page is
  * cancelled, since Comet opens none. An MCP server's question has no item of its own, so the request's own id names it.
  */
-function elicitationRequest(asked: Elicitation, rpcId: RequestId, acceptMcp: boolean): CodexRequest | AnsweredRequest {
+function elicitationRequest(asked: Elicitation, rpcId: RequestId, accept: boolean): CodexRequest | AnsweredRequest {
   if (asked.mode === "url") return { answer: elicitationReply(asked, "cancel") }
-  if (acceptMcp || asked.serverName === SERVER_NAME) return { answer: elicitationReply(asked, "allow") }
+  if (accept || asked.serverName === SERVER_NAME) return { answer: elicitationReply(asked, "allow") }
   const message = asked.message?.trim() || `Allow ${asked.serverName} to run a tool`
   return asking(permission(`elicitation:${rpcId}`, asked.serverName, "permission", message.slice(0, MAX_DETAIL), undefined), (answer) => elicitationReply(asked, answer))
 }

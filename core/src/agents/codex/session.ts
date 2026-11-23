@@ -9,7 +9,7 @@ import { turnError, turnResult } from "./history"
 import { userInput } from "./input"
 import { changedPaths, mayStayOpen, threadItems, unfinishedItems } from "./items"
 import { modelName, turnModel, type ModelCatalog } from "./models"
-import { acceptsMcpPrompts, runPolicy, threadPolicy } from "./permissions"
+import { acceptsPrompts, runPolicy, threadPolicy } from "./permissions"
 import type { CodexConfigRead, CodexItem, CodexModel, CodexTurn, HookCompleted, McpStartup, ReasoningSummary, TokenUsage } from "./protocol"
 import { asksApproval, readRequest, type CodexRequest } from "./requests"
 import type { AppServer, ThreadOwner, ThreadParams } from "./server"
@@ -218,7 +218,7 @@ export class CodexSession implements AgentSession, ThreadOwner {
   }
 
   request(method: string, params: ThreadParams, rpcId: RequestId): Promise<unknown> | undefined {
-    const asked = readRequest(method, params, rpcId, (itemId) => this.files.get(itemId), acceptsMcpPrompts(this.settings.permissionMode))
+    const asked = readRequest(method, params, rpcId, (itemId) => this.files.get(itemId), acceptsPrompts(this.settings.permissionMode))
     if (!asked) return undefined
     if ("answer" in asked) return Promise.resolve(asked.answer)
     return new Promise((resolve) => this.requests.add({ ...asked, resolve, rpcId }))

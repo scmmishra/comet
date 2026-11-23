@@ -13,7 +13,8 @@ export interface RunPolicy {
 /**
  * Full access does not use `never`. Under it, Codex declines every MCP prompt itself, before Comet sees it.
  * A tool that asks, such as Codex's browser access, then reads a refusal the user never gave. So full
- * access asks Codex for MCP prompts alone, after T3 Code, and Comet accepts each one itself.
+ * access asks Codex for MCP prompts alone, after T3 Code, and Comet accepts each one itself. Under this
+ * policy, Codex still asks before a command it deems dangerous, and Comet accepts that too.
  */
 const FULL_ACCESS_APPROVAL = { granular: { mcp_elicitations: true, request_permissions: false, rules: false, sandbox_approval: false, skill_approval: false } } as const
 
@@ -22,7 +23,8 @@ const WORKSPACE_WRITE = { type: "workspaceWrite", writableRoots: [], networkAcce
 /**
  * Comet's permission modes in Codex's terms, as T3 Code maps them. Supervised asks before anything leaves
  * a read-only sandbox. Auto-accept edits lets Codex write in the project and asks for the rest. Auto
- * lets Codex's reviewer answer in the user's place. Full access has no sandbox, and never asks the user.
+ * lets Codex's reviewer answer in the user's place. Full access has no sandbox, and asks the user only about
+ * network access that Codex's network settings do not allow.
  */
 const POLICIES: Record<PermissionMode, RunPolicy> = {
   default: { approvalPolicy: "untrusted", approvalsReviewer: "user", sandboxPolicy: { type: "readOnly", networkAccess: false } },
@@ -31,8 +33,8 @@ const POLICIES: Record<PermissionMode, RunPolicy> = {
   bypassPermissions: { approvalPolicy: FULL_ACCESS_APPROVAL, approvalsReviewer: "user", sandboxPolicy: { type: "dangerFullAccess" } },
 }
 
-/** Whether Comet accepts MCP prompts itself. In full access, the user has already allowed everything. */
-export const acceptsMcpPrompts = (mode: PermissionMode) => POLICIES[mode].approvalPolicy === FULL_ACCESS_APPROVAL
+/** Whether Comet accepts Codex's prompts itself, without asking the user. In full access, the user has already allowed everything. */
+export const acceptsPrompts = (mode: PermissionMode) => POLICIES[mode].approvalPolicy === FULL_ACCESS_APPROVAL
 
 /** `thread/start` names the sandbox by mode, and `turn/start` by policy. */
 const SANDBOX_MODES = { readOnly: "read-only", workspaceWrite: "workspace-write", dangerFullAccess: "danger-full-access" } as const
