@@ -17,10 +17,11 @@ function agentThat(id: AgentId, reading: Partial<AgentInfo> = {}) {
   return { ...fake, make }
 }
 
-/** Delegations for one session, whose thread runs Claude in `mode`, with Codex to hand work to. */
+/** Delegations for one session, whose thread runs Claude in `mode`, with Codex and Claude to hand work to. */
 async function delegations(mode: PermissionMode = "acceptEdits", codexReading: Partial<AgentInfo> = {}) {
   const codex = agentThat("codex", codexReading)
-  const agents = new Agents(() => {}, { compactIdle: () => false }, { claude: agentThat("claude").make, codex: codex.make })
+  const claude = agentThat("claude")
+  const agents = new Agents(() => {}, { compactIdle: () => false }, { claude: claude.make, codex: codex.make })
   agents.send(() => {})
   await Bun.sleep(0)
   const events: ThreadEvent[] = []
@@ -31,7 +32,7 @@ async function delegations(mode: PermissionMode = "acceptEdits", codexReading: P
   const tools = service.toolsFor(server.authorization)!
   const subagents = () => events.flatMap((event) => (event.kind === "subagent" ? [event.subagent] : []))
   const call = (input: Record<string, unknown>, signal = new AbortController().signal) => tools.call("delegate", input, signal)
-  return { service, host, handoffs, server, tools, codex, events, call, last: (): Subagent => subagents().at(-1)! }
+  return { service, host, handoffs, server, tools, codex, claude, events, call, last: (): Subagent => subagents().at(-1)! }
 }
 
 test("gives each session a server under its own token, and knows no other caller", async () => {
@@ -98,6 +99,17 @@ test("a task that answered before a hook stopped its turn passes on the hook's r
   session!.finish()
   expect(await answer).toEqual({ text: "Fixed the bug.\n\nIts turn was stopped after this answer:\n\nRun the tests before you finish.", isError: false })
   expect(last()).toMatchObject({ status: "completed", summary: "Fixed the bug." })
+})
+
+test("a task handed to Claude passes on the reason of a hook that stopped its turn after it answered", async () => {
+  const { claude, call } = await delegations()
+  const answer = call({ agent: "claude", task: "Fix the bug." })
+  const [session] = claude.sessions
+  // Claude Code reports the reply, then the hook's notice, then the turn's result.
+  session!.emit({ kind: "item", item: { type: "text", id: "a1", text: "Fixed the bug.", done: true } })
+  session!.emit({ kind: "item", item: { type: "notice", id: "n1", text: "Stop says: run the tests first", warning: true, stopsTurn: true } })
+  session!.finish()
+  expect(await answer).toEqual({ text: "Fixed the bug.\n\nIts turn was stopped after this answer:\n\nStop says: run the tests first", isError: false })
 })
 
 test("a task never runs with more than the thread that started it", async () => {

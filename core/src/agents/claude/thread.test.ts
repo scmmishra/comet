@@ -97,7 +97,7 @@ test("shows Claude Code's notices and warnings, but not transcript notes or a St
   const notice = (uuid: string, level: string, content: string, extra: object = {}) => mapper.map(sdk({ type: "system", subtype: "informational", uuid, level, content, ...extra }))
   expect(notice("n1", "info", "Saved the transcript")).toEqual([])
   expect(notice("n2", "notice", "Stop says: tests passed")).toEqual([])
-  expect(notice("n3", "notice", "Stop says: fix the lint first", { prevent_continuation: true })).toEqual([{ kind: "item", item: { type: "notice", id: "n3", text: "Stop says: fix the lint first", warning: true } }])
+  expect(notice("n3", "notice", "Stop says: fix the lint first", { prevent_continuation: true })).toEqual([{ kind: "item", item: { type: "notice", id: "n3", text: "Stop says: fix the lint first", warning: true, stopsTurn: true } }])
   expect(notice("n4", "warning", "The hook timed out")).toEqual([{ kind: "item", item: { type: "notice", id: "n4", text: "The hook timed out", warning: true } }])
   expect(notice("n5", "suggestion", "Try /compact")).toEqual([{ kind: "item", item: { type: "notice", id: "n5", text: "Try /compact", warning: false } }])
 })

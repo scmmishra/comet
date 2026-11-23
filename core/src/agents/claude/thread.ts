@@ -166,12 +166,14 @@ export class ThreadMapper {
   /**
    * A notice Claude Code shows the user, such as a hook's note, after T3 Code. Notes meant only for the
    * transcript stay out, and so does the summary a Stop hook leaves after every turn unless it stopped the turn.
+   * A notice from a hook that stopped the turn says so, so a delegated task passes its reason on.
    */
   private mapNotice(message: Extract<SDKMessage, { type: "system"; subtype: "informational" }>): ThreadEvent[] {
     if (message.level === "info") return []
     const stopHookSummary = message.level === "notice" && message.content.startsWith("Stop says: ") && !message.prevent_continuation
     if (stopHookSummary) return []
-    return [item({ type: "notice", id: message.uuid, text: message.content, warning: message.level === "warning" || !!message.prevent_continuation })]
+    const stopsTurn = !!message.prevent_continuation
+    return [item({ type: "notice", id: message.uuid, text: message.content, warning: message.level === "warning" || stopsTurn, ...(stopsTurn ? { stopsTurn } : {}) })]
   }
 
   /**
