@@ -33,6 +33,7 @@ function start(options: Partial<SessionOptions> = {}, handlers: Parameters<typeo
     modeId: (mode) => (mode === "bypassPermissions" ? "never-ask" : "default"),
     tools: acpToolReader,
     isQuestion: (request) => request.toolCall.toolCallId.startsWith("question_"),
+    isCometTool: (request) => request.toolCall.title === "Run comet",
     needsSignIn: (line) => line.startsWith("SIGN IN "),
     signedOut: () => {
       signedOut++
@@ -215,6 +216,26 @@ test("asks for permission, answers with the chosen option, and cancels open requ
   await until(() => run.last("permission")?.requestId === "t2")
   run.session.close()
   expect(await open).toEqual({ outcome: { outcome: "cancelled" } })
+})
+
+test("allows a call of Comet's own tools once without asking, unless the request offers no way to allow it once", async () => {
+  const run = start()
+  run.session.send("Hand this to Codex")
+  await until(() => run.agent().sent("session/prompt").length === 1)
+  const options = [
+    { optionId: "always", name: "Always", kind: "allow_always" },
+    { optionId: "once", name: "Allow", kind: "allow_once" },
+    { optionId: "no", name: "Deny", kind: "reject_once" },
+  ]
+  const toolCall = { toolCallId: "t1", title: "Run comet", kind: "other" }
+  expect(await run.agent().request("session/request_permission", { sessionId: "s1", toolCall, options })).toEqual({ outcome: { outcome: "selected", optionId: "once" } })
+  expect(run.last("permission")).toBeUndefined()
+
+  const asked = run.agent().request("session/request_permission", { sessionId: "s1", toolCall: { ...toolCall, toolCallId: "t2" }, options: [options[0], options[2]] })
+  await until(() => !!run.last("permission"))
+  expect(run.last("permission")).toMatchObject({ requestId: "t2" })
+  run.session.answerPermission("t2", "decline")
+  expect(await asked).toEqual({ outcome: { outcome: "selected", optionId: "no" } })
 })
 
 test("fails the turn with the sign-in problem when the agent needs a sign-in, and signs the account out", async () => {

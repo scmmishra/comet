@@ -21,6 +21,8 @@ export interface AcpFlavor {
   readonly tools: ToolReader
   /** Whether a permission request asks a multiple-choice question instead. */
   isQuestion?(request: PermissionRequest): boolean
+  /** Whether a permission request asks to run one of Comet's own tools, which Comet approves itself. */
+  isCometTool?(request: PermissionRequest): boolean
   /** Whether a line the agent printed outside the protocol says it waits for a sign-in. */
   needsSignIn?(line: string): boolean
   /**

@@ -5,7 +5,7 @@ import type { ToolCall } from "../acp/protocol"
 import type { Process } from "../process"
 import type { ModelCache } from "./models"
 import { modeId } from "./modes"
-import { antigravityTools } from "./normalize"
+import { antigravityTools, isCometTool } from "./normalize"
 import { watchPrompt } from "./prompt-outcome"
 import { launch, resolveRuntime } from "./runtime"
 import { signInLink } from "./sign-in-link"
@@ -60,6 +60,7 @@ export function antigravityFlavor(host: AgentHost, models: ModelCache): AcpFlavo
     modeId,
     tools: antigravityTools,
     isQuestion: (request) => request.toolCall.toolCallId.startsWith(QUESTION_PREFIX),
+    isCometTool: (request) => isCometTool(request.toolCall),
     needsSignIn: (line) => signInLink(line) !== undefined,
     watchPrompt,
     background: antigravityBackground,

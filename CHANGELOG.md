@@ -4,11 +4,12 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- Antigravity runs Comet's own tools, such as handing a task to another agent, without asking, in every mode. Before, it asked before each call.
 - A thread whose cut text ended inside an emoji shows again. Comet cuts long tool output, summaries and terminal output between whole characters. Before, half an emoji made the app drop the message, and a restored Claude thread could open empty.
 - An Antigravity turn fails with an error when Antigravity does not answer within 90 seconds as it starts, and Comet ends Antigravity's process. Stop also ends a turn whose agent is still starting. Before, the turn stayed busy, and only Force stop ended it.
 - An Antigravity turn that an HTTP error stopped, such as a 502 from Google, shows the error's message. Before, it showed only that an error stopped the turn.
 - An Antigravity turn stays open while a command Antigravity left running in the background still runs, and Stop ends that command. A reply Antigravity starts by itself, once such a command ends, shows as its own turn, and a permission it asks for there waits for you. Before, the tab showed idle and that reply was never finished.
-- A task handed to Codex passes on why a hook stopped its turn, along with its answer. Before, the agent that asked got the answer alone.
+- A task handed to Codex or Claude passes on why a hook stopped its turn, along with its answer. Before, the agent that asked got the answer alone.
 - A message sent while Claude Code worked is kept when Claude Code exits before it reads the message. It shows after the error, still waiting, and goes to Claude Code ahead of the next message. Before, it was lost and stayed marked as waiting.
 - Codex in Full access runs a command it deems dangerous, such as `rm -rf`, without asking. Before, it asked first. It still asks before network access that Codex's network settings do not allow.
 - Comet runs on a newer Rune. It fixes a crash on macOS 26, a window left black after a GPU hang, and input method and dead-key bugs. A pointer move that changes nothing no longer redraws, and long replies lay out links and text faster. The Window menu gains Zoom and Bring All to Front, and the Edit menu gains Start Dictation and Emoji & Symbols.

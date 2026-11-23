@@ -22,6 +22,18 @@ test("reads a permission request whose call id marks an interaction as a questio
   expect(flavor.isQuestion?.(request("t1"))).toBe(false)
 })
 
+test("knows a permission request for one of Comet's own tools by the server its title names", () => {
+  const request = (toolCall: Omit<ToolCall, "toolCallId">): PermissionRequest => ({ sessionId: "s1", toolCall: { toolCallId: "call_1", ...toolCall }, options: [] })
+  // As agy 1.5.15 asks for an MCP tool: the input holds only the tool's arguments.
+  expect(flavor.isCometTool?.(request({ title: "Run mcp_comet_delegate", kind: "other", rawInput: { toolSummary: "Delegate", agent: "codex" } }))).toBe(true)
+  expect(flavor.isCometTool?.(request({ title: "Run mcp_comet_list_agents?", kind: "other" }))).toBe(true)
+  expect(flavor.isCometTool?.(request({ title: "Run mcp_github_create_issue", kind: "other" }))).toBe(false)
+  expect(flavor.isCometTool?.(request({ title: "Running delegate", kind: "other" }))).toBe(false)
+  // A command whose title looks like one of Comet's tools.
+  expect(flavor.isCometTool?.(request({ title: "Run mcp_comet_delegate", kind: "execute" }))).toBe(false)
+  expect(flavor.isCometTool?.(request({ title: "Run mcp_comet_delegate", rawInput: { CommandLine: "Run mcp_comet_delegate" } }))).toBe(false)
+})
+
 test("holds a turn for a command or a scheduled wake that runs past the prompt, but not for a daemon", () => {
   const background = flavor.background!
   const command = (rawInput: unknown): ToolCall => ({ toolCallId: "t1", kind: "execute", title: "sleep 20", status: "in_progress", rawInput })

@@ -305,14 +305,22 @@ export class AcpSession implements AgentSession {
     this.wait(turn)
   }
 
-  /** A request shows as its own item until it is answered. Its id is the tool call's, which shows separately. */
-  private ask = (request: PermissionRequest) =>
-    new Promise<PermissionResponse>((resolve) => {
+  /**
+   * A request shows as its own item until it is answered. Its id is the tool call's, which shows separately.
+   * Comet approves a call of its own tools itself, once, in every mode: the user chose the thread's
+   * permission mode, and work handed to another agent runs no broader than it. A request that offers no
+   * way to allow it once waits for the user.
+   */
+  private ask = (request: PermissionRequest) => {
+    const own = this.flavor.isCometTool?.(request) ? permissionResponse(request, "allow") : undefined
+    if (own && own !== CANCELLED) return Promise.resolve(own)
+    return new Promise<PermissionResponse>((resolve) => {
       if (!this.turn && this.flavor.background) this.selfStart()
       const item = this.flavor.isQuestion?.(request) ? questionItem(request) : permissionItem(request, this.flavor.tools)
       this.requests.add({ item, request, resolve })
       if (this.turn) this.wait(this.turn)
     })
+  }
 
   /** The user answered a request, so the agent goes on with its turn. */
   private answered() {
