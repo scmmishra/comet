@@ -4,7 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
-- Comet has a third colour theme, Dracula. Its dark flavour is Dracula Classic and its light flavour is Alucard Classic, both from the Dracula spec.
+- Comet has a third colour theme, Dracula. Its dark flavour takes Dracula Classic's colours, and its light flavour takes Alucard Classic's, both from the Dracula spec. Both sit on darker, cooler surfaces than the spec's.
 - Comet closes a Claude Code process that has sat idle for 20 minutes, which frees hundreds of megabytes per tab. The tab and its thread stay. The next message resumes the same conversation, with its model, effort, mode and the approvals you gave for the session. A turn, a waiting request or background work keeps the process up. Before, every open tab kept its process for as long as the tab was open.
 - A message sent while Claude Code worked goes back to the queue when Claude Code exits or you Force stop the turn before Claude Code reads it. The queue pauses, as after a Stop or an error, so you can send, edit or drop it. Before, it stayed marked as waiting and was lost.
 - Antigravity runs Comet's own tools, such as handing a task to another agent, without asking, in every mode. Before, it asked before each call.
