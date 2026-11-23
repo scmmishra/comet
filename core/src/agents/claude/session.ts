@@ -91,7 +91,10 @@ export class ClaudeSession implements AgentSession {
   private closed = false
   /** Set from a steered message until Claude Code takes it in, or its turn ends without it. */
   private steering = false
-  /** The steered messages Claude Code has not taken in yet, by uuid. It holds one behind a running foreground tool. */
+  /**
+   * The steered messages Claude Code has not taken in yet, by uuid. It holds one behind a running foreground tool,
+   * and one that missed its turn until the next turn names it.
+   */
   private waitingSteers = new Map<string, UserItem>()
   /** The steered messages Claude Code exited without reading. The next message sends them first. */
   private unreadSteers: UserItem[] = []
@@ -175,6 +178,7 @@ export class ClaudeSession implements AgentSession {
     if (!this.stop.pending) return false
     this.settleOpen("stopped")
     this.emit({ kind: "item", item: forcedStop() })
+    this.queueUnreadSteers()
     this.endTurn()
     return true
   }
@@ -394,6 +398,8 @@ export class ClaudeSession implements AgentSession {
       const item = this.waitingSteers.get(uuid)
       if (!item) continue
       this.waitingSteers.delete(uuid)
+      // A steer that missed its turn already shows as no longer waiting.
+      if (!item.waiting) continue
       const { waiting: _, ...taken } = item
       this.emit({ kind: "item", item: taken })
     }
@@ -404,7 +410,11 @@ export class ClaudeSession implements AgentSession {
    * Code starts the next turn with it, so it shows as that turn's first message, and not as a steer.
    */
   private moveMissedSteers() {
-    for (const { waiting: _, ...item } of this.moveWaitingSteers()) this.emit({ kind: "item", item })
+    for (const { waiting: _, ...item } of this.moveWaitingSteers()) {
+      // It stays unread until the next turn names it, so Claude Code exiting before then keeps it.
+      this.waitingSteers.set(item.id, item)
+      this.emit({ kind: "item", item })
+    }
   }
 
   /**
@@ -413,7 +423,8 @@ export class ClaudeSession implements AgentSession {
    * A steer that waited behind a stop goes too, as it does when Claude Code stays up.
    */
   private keepUnreadSteers() {
-    for (const item of this.moveWaitingSteers()) {
+    for (const moved of this.moveWaitingSteers()) {
+      const item = { ...moved, waiting: true }
       this.unreadSteers.push(item)
       this.emit({ kind: "item", item })
     }
@@ -428,7 +439,16 @@ export class ClaudeSession implements AgentSession {
     }
   }
 
-  /** Takes the waiting steers out of the thread, to show again at its end, each as a message of its own and not a steer. */
+  /**
+   * Hands each steered message Claude Code has not read to the window's queue. A Force stop closes the session,
+   * so the session cannot keep it for the next message, as it does when Claude Code exits.
+   */
+  private queueUnreadSteers() {
+    const unread = this.moveWaitingSteers()
+    if (unread.length) this.options.onUnsent?.(unread.map(({ id, text, images }) => ({ id, text, ...(images?.length ? { images } : {}) })))
+  }
+
+  /** Takes the waiting steers out of the thread, each to show again at its end as a message of its own and not a steer, or to queue. */
   private moveWaitingSteers(): UserItem[] {
     const moved = [...this.waitingSteers.values()].map(({ steered: _, ...item }) => item)
     this.waitingSteers.clear()

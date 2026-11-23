@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- A message sent while Claude Code worked goes back to the queue when you Force stop the turn before Claude Code reads it. Before, it stayed marked as waiting and was never sent.
 - Antigravity runs Comet's own tools, such as handing a task to another agent, without asking, in every mode. Before, it asked before each call.
 - A thread whose cut text ended inside an emoji shows again. Comet cuts long tool output, summaries and terminal output between whole characters. Before, half an emoji made the app drop the message, and a restored Claude thread could open empty.
 - An Antigravity turn fails with an error when Antigravity does not answer within 90 seconds as it starts, and Comet ends Antigravity's process. Stop also ends a turn whose agent is still starting. Before, the turn stayed busy, and only Force stop ended it.

@@ -696,6 +696,8 @@ export class Window {
       // The app names the tab and saves it, as after a rename from Comet. A parked thread's tab shows another thread.
       onRenamed: (title) => current() && this.hooks.broadcast({ type: "tab.title", tabId: tab.id, title }),
       ...(agent.movesThreads && !key ? { onMoved: (dir: string) => void (current() && this.askMove(tab.id, dir)) } : {}),
+      // Messages the agent never read go first in the queue, so the user can send them again.
+      onUnsent: (messages) => void (current() && this.setQueue(tab.id, [...messages, ...(this.thread(tab.id).queue ?? [])])),
     })
     const created: Live = { session, handoffs }
     this.sessions.set(tab.id, created)

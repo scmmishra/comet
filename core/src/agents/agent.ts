@@ -1,4 +1,4 @@
-import type { AgentFeature, AgentId, AgentInfo, ContextReading, ImageAttachment, McpServer, PermissionAnswer, RunSettings, Skill, ThreadEvent, ThreadItem, ThreadSummary } from "@comet/protocol"
+import type { AgentFeature, AgentId, AgentInfo, ContextReading, ImageAttachment, McpServer, PermissionAnswer, QueuedMessage, RunSettings, Skill, ThreadEvent, ThreadItem, ThreadSummary } from "@comet/protocol"
 
 /**
  * What Comet needs from a coding agent, such as Claude Code or Codex. An agent runs conversations, keeps
@@ -105,6 +105,8 @@ export interface SessionOptions {
   readonly onRenamed?: (title: string) => void
   /** Called when the agent moved its session into another folder with a tool of its own, such as a worktree it entered. */
   readonly onMoved?: (dir: string) => void
+  /** Called when a session closes with messages the agent never read, such as a steer a Force stop cut off. The window queues them. */
+  readonly onUnsent?: (messages: readonly QueuedMessage[]) => void
   readonly tools?: ToolServer
   /** Whether the session leaves no saved thread, such as work one agent hands another. Its transcript is not listed or resumed. */
   readonly ephemeral?: boolean

@@ -348,6 +348,16 @@ test("sends the next queued message once the turn ends", async () => {
   expect(saved().threads.a.queue).toMatchObject([{ text: "three" }])
 })
 
+test("puts the messages a session closed without reading first in the queue", async () => {
+  const project = tempFolder("queue")
+  const { window, sent, codex } = openWithAgents({ tabs: [codexTab("a", project)], threads: {}, recent: [] })
+  await window.send("a", "one")
+  await window.send("a", "two")
+  codex.sessions[0]!.options.onUnsent!([{ id: "steer", text: "Also check the tests" }])
+  expect(saved().threads.a.queue).toMatchObject([{ id: "steer", text: "Also check the tests" }, { text: "two" }])
+  expect(sent.at(-1)).toMatchObject({ type: "queue", tabId: "a", messages: [{ id: "steer" }, { text: "two" }] })
+})
+
 test("holds the queue after a stop or an error, until it is resumed", async () => {
   const project = tempFolder("queue")
   const { window, sent, codex } = openWithAgents({ tabs: [codexTab("a", project), codexTab("b", project)], threads: {}, recent: [] })

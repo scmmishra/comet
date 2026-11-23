@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import type { CanUseTool, Options, Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 import type { RunSettings, ThreadEvent, ThreadItem } from "@comet/protocol"
+import type { SessionOptions } from "../agent"
 import { until } from "../../test-support"
 import { ClaudeSession } from "./session"
 
@@ -73,7 +74,7 @@ class FakeQuery implements AsyncIterable<SDKMessage> {
   }
 }
 
-function setup(resume?: string) {
+function setup(resume?: string, onUnsent?: SessionOptions["onUnsent"]) {
   const events: ThreadEvent[] = []
   const queries: FakeQuery[] = []
   const run = ({ prompt, options }: { prompt?: AsyncIterable<SDKUserMessage>; options?: Options }) => {
@@ -94,6 +95,7 @@ function setup(resume?: string) {
       onSessionLost: () => void sessionIds.push(undefined),
       onRenamed: (title) => void renames.push(title),
       onMoved: (dir) => void moves.push(dir),
+      ...(onUnsent ? { onUnsent } : {}),
       onRateLimit: () => {},
       compactIdle: () => false,
     },
@@ -536,3 +538,38 @@ test("a conversation Claude Code names as missing only in its exit error is drop
   await until(() => s.queries.length === 2)
   expect(s.queries[1]!.options.resume).toBeUndefined()
 })
+
+test("a Force stop hands a steer Claude Code has not read to the queue, and none stays waiting", async () => {
+  const unsent: unknown[] = []
+  const s = setup(undefined, (messages) => void unsent.push(...messages))
+  await started(s)
+  s.session.steer("Also check the tests")
+  const steer = s.items().at(-1)!
+  await s.session.interrupt()
+  expect(s.session.forceStop()).toBe(true)
+  expect(s.events).toContainEqual({ kind: "items.remove", ids: [steer.id] })
+  expect(unsent).toEqual([{ id: steer.id, text: "Also check the tests" }])
+  const shown = new Map(s.items().map((item) => [item.id, item]))
+  for (const { ids } of s.events.flatMap((event) => (event.kind === "items.remove" ? [event] : []))) for (const id of ids) shown.delete(id)
+  expect([...shown.values()].some((item) => item.type === "user" && item.waiting)).toBe(false)
+})
+
+for (const echoed of [true, false]) {
+  test(`a steer that missed its turn is ${echoed ? "not sent again after the next turn took it" : "sent again when Claude Code exits before the next turn takes it"}`, async () => {
+    const s = setup()
+    const running = await started(s)
+    s.session.steer("Now reply with just: second")
+    const steer = s.items().at(-1)!
+    running.push(result("r1", { stop_reason: "end_turn", user_message_uuids: [s.items()[0]!.id] }))
+    await until(() => s.results().length === 1)
+    if (echoed) running.push({ type: "system", subtype: "init", uuid: "i2", session_id: "s1", model: "claude-haiku-5-5", user_message_uuids: [steer.id] })
+    running.end()
+    await until(() => !s.session.busy)
+    expect(s.items().findLast((item) => item.id === steer.id)).toEqual({ type: "user", id: steer.id, text: "Now reply with just: second", at: expect.any(Number), ...(echoed ? {} : { waiting: true }) })
+
+    s.session.send("Again")
+    await until(() => s.queries.length === 2)
+    const next = s.items().findLast((item) => item.type === "user" && item.text === "Again")!
+    expect(await inbox(s.queries[1]!, echoed ? 1 : 2)).toMatchObject(echoed ? [{ uuid: next.id }] : [{ uuid: steer.id }, { uuid: next.id }])
+  })
+}
