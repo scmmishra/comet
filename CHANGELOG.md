@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- Comet runs on a newer Rune. It fixes a crash on macOS 26, a window left black after a GPU hang, and input method and dead-key bugs. A pointer move that changes nothing no longer redraws, and long replies lay out links and text faster. The Window menu gains Zoom and Bring All to Front, and the Edit menu gains Start Dictation and Emoji & Symbols.
 - A plugin's sidebar and the view pane resize. Drag the edge between two panes. One width serves every tab, and Comet keeps it across restarts. The sidebar drags from 136 to 640 points. The session keeps at least 400 points beside the view pane, and the view pane keeps at least 320.
 
 ## 0.2.0
