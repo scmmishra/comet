@@ -362,7 +362,12 @@ impl Comet {
                     root.extend(projects(Action::NewSessionIn));
                     root.extend(setups());
                     root.extend(panels());
-                    root.extend(self.searched_projects().iter().flat_map(|p| threads(p)));
+                    // A worktree's tab and its repo's recent entry list the same threads, so each shows once.
+                    let mut seen = std::collections::HashSet::new();
+                    root.extend(self.searched_projects().iter().flat_map(|p| threads(p)).filter(|e| match &e.action {
+                        Action::Thread(_, t) => seen.insert((t.agent.clone(), t.id.clone())),
+                        _ => true,
+                    }));
                 }
                 root
             }
@@ -724,6 +729,21 @@ mod tests {
         assert_eq!(untitled(&mut s, "https://github.com/me/api/pull/123/files"), hint, "a link from the pull request's tabs");
         assert_eq!(untitled(&mut s, "github.com/me/api/pull/123/files"), hint, "a link with no scheme");
         assert_eq!(untitled(&mut s, "https://github.com/me/api/pull/1234"), None);
+        assert_eq!(untitled(&mut s, "github"), None, "part of a link names none, since every link holds it");
+    }
+
+    #[test]
+    fn a_thread_shows_once_when_the_active_tab_is_in_a_worktree_of_a_recent_project() {
+        let mut s = with_pull_request();
+        let messages = serde_json::json!([
+            { "type": "tabs", "active": "w", "tabs": [{ "id": "w", "title": "Side", "project": "/wt/api", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] },
+            { "type": "project", "project": "/wt/api", "part": "threads", "value": [{ "id": "s2", "agent": "claude", "title": "Untitled session", "updatedAt": 0.0, "project": "/code/api" }] }
+        ]);
+        for m in serde_json::from_value::<Vec<CoreMessage>>(messages).unwrap() {
+            s.receive(Event::Message(m)).unwrap();
+        }
+        s.palette.query = TextEdit::new("untitled");
+        assert_eq!(titles(&s), ["Untitled session"]);
     }
 
     #[test]
