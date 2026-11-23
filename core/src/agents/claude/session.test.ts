@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { CanUseTool, Options, Query, SDKMessage } from "@anthropic-ai/claude-agent-sdk"
+import type { CanUseTool, Options, Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 import type { RunSettings, ThreadEvent, ThreadItem } from "@comet/protocol"
 import { until } from "../../test-support"
 import { ClaudeSession } from "./session"
@@ -18,7 +18,11 @@ class FakeQuery implements AsyncIterable<SDKMessage> {
   private ended = false
   private waiting?: { resolve: (result: IteratorResult<SDKMessage>) => void; reject: (error: Error) => void }
 
-  constructor(readonly options: Options) {}
+  constructor(
+    readonly options: Options,
+    /** The inbox the session gave the query. */
+    readonly prompt?: AsyncIterable<SDKUserMessage>,
+  ) {}
 
   push(message: object) {
     const waiting = this.waiting
@@ -72,8 +76,8 @@ class FakeQuery implements AsyncIterable<SDKMessage> {
 function setup(resume?: string) {
   const events: ThreadEvent[] = []
   const queries: FakeQuery[] = []
-  const run = ({ options }: { options?: Options }) => {
-    const running = new FakeQuery(options ?? {})
+  const run = ({ prompt, options }: { prompt?: AsyncIterable<SDKUserMessage>; options?: Options }) => {
+    const running = new FakeQuery(options ?? {}, prompt)
     queries.push(running)
     return running as unknown as Query
   }
@@ -375,6 +379,59 @@ test("a stream that ends mid-turn fails the turn, and the next message starts Cl
 
   s.session.send("Again")
   await until(() => s.queries.length === 2)
+})
+
+/** The messages a query's inbox holds, in order. */
+async function inbox(running: FakeQuery, count: number) {
+  const read: unknown[] = []
+  const messages = running.prompt![Symbol.asyncIterator]()
+  while (read.length < count) {
+    const { value } = await messages.next()
+    read.push({ uuid: value.uuid, content: value.message.content, ...(value.priority ? { priority: value.priority } : {}) })
+  }
+  return read
+}
+
+for (const end of ["end", "fail"] as const) {
+  test(`a steer Claude Code exits without reading (${end}) waits after the error, and goes ahead of the next message`, async () => {
+    const s = setup()
+    const running = await started(s)
+    s.session.steer("Also check the tests")
+    const steer = s.items().at(-1)!
+    if (end === "end") running.end()
+    else running.fail(new Error("Claude Code exited"))
+    await until(() => s.statuses().length === 2)
+    const error = s.items().findLastIndex((item) => item.type === "error")
+    const moved = s.items().findLastIndex((item) => item.id === steer.id)
+    expect(moved).toBeGreaterThan(error)
+    expect(s.items()[moved]).toEqual({ type: "user", id: steer.id, text: "Also check the tests", at: expect.any(Number), waiting: true })
+    expect(s.events).toContainEqual({ kind: "items.remove", ids: [steer.id] })
+
+    s.session.send("Again")
+    await until(() => s.queries.length === 2)
+    const next = s.items().findLast((item) => item.type === "user" && item.text === "Again")!
+    expect(s.items().findLast((item) => item.id === steer.id)).toEqual({ type: "user", id: steer.id, text: "Also check the tests", at: expect.any(Number) })
+    expect(await inbox(s.queries[1]!, 2)).toEqual([
+      { uuid: steer.id, content: "Also check the tests" },
+      { uuid: next.id, content: "Again" },
+    ])
+  })
+}
+
+test("a steer sent again after an exit goes once, and the message after it goes alone", async () => {
+  const s = setup()
+  const running = await started(s)
+  s.session.steer("Also check the tests")
+  running.end()
+  await until(() => s.statuses().length === 2)
+  s.session.send("Again")
+  await until(() => s.queries.length === 2)
+  s.queries[1]!.push(result("r2"))
+  await until(() => s.statuses().length === 4)
+
+  s.session.send("Third")
+  const third = s.items().at(-1)!
+  expect(await inbox(s.queries[1]!, 3)).toMatchObject([{ content: "Also check the tests" }, { content: "Again" }, { uuid: third.id, content: "Third" }])
 })
 
 test("a stream that ends between turns shows nothing, and the next message starts Claude Code again", async () => {

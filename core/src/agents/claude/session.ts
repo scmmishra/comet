@@ -1,4 +1,5 @@
 import { query, type CanUseTool, type PermissionResult, type Query, type SDKMessage, type SDKRateLimitInfo, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
+import type { UUID } from "node:crypto"
 import type { ImageAttachment, PermissionAnswer, RunSettings, ThreadEvent, ThreadItem } from "@comet/protocol"
 import { SERVER_NAME } from "../../delegate/tools"
 import type { AgentHost, AgentSession, Emit, SessionOptions, ToolServer } from "../agent"
@@ -52,6 +53,7 @@ export interface ClaudeSessionOptions extends SessionOptions, Pick<AgentHost, "c
 }
 
 type RequestSuggestions = Parameters<CanUseTool>[2]["suggestions"]
+type UserItem = Extract<ThreadItem, { type: "user" }>
 
 /**
  * How Claude Code answers a resume whose conversation is gone, in a result's errors or in its exit error,
@@ -90,7 +92,9 @@ export class ClaudeSession implements AgentSession {
   /** Set from a steered message until Claude Code takes it in, or its turn ends without it. */
   private steering = false
   /** The steered messages Claude Code has not taken in yet, by uuid. It holds one behind a running foreground tool. */
-  private waitingSteers = new Map<string, Extract<ThreadItem, { type: "user" }>>()
+  private waitingSteers = new Map<string, UserItem>()
+  /** The steered messages Claude Code exited without reading. The next message sends them first. */
+  private unreadSteers: UserItem[] = []
   private settings: RunSettings
   /** Where the next query resumes, until a turn has run there. Later queries resume at the end, as usual. */
   private resumeAt?: string
@@ -137,7 +141,8 @@ export class ClaudeSession implements AgentSession {
     this.running = true
     this.emit({ kind: "status", busy: true })
     if (!this.started) void this.start()
-    this.inbox!.push({ type: "user", message: { role: "user", content: userContent(text, images) }, parent_tool_use_id: null, uuid })
+    this.sendUnreadSteers()
+    this.inbox!.push(userMessage(uuid, text, images))
   }
 
   /**
@@ -152,7 +157,7 @@ export class ClaudeSession implements AgentSession {
     this.waitingSteers.set(uuid, item)
     this.emit({ kind: "item", item })
     this.steering = true
-    this.inbox!.push({ type: "user", message: { role: "user", content: userContent(text, images) }, parent_tool_use_id: null, priority: "now", uuid })
+    this.inbox!.push({ ...userMessage(uuid, text, images), priority: "now" })
   }
 
   /** Claude Code reports each command as stopped once it ends. */
@@ -332,11 +337,11 @@ export class ClaudeSession implements AgentSession {
    */
   private fail(error: unknown) {
     this.steering = false
-    this.waitingSteers.clear()
     this.requests.settleAll(() => ({ behavior: "deny", message: "The session failed." }))
     this.settleOpen(this.stop.pending ? "stopped" : "failed")
     if (!this.lost && errorMessage(error).includes(CONVERSATION_NOT_FOUND)) this.forget()
     else if (!this.lost) this.emit({ kind: "item", item: errorItem(error) })
+    this.keepUnreadSteers()
     this.endTurn()
     this.release()
   }
@@ -399,11 +404,36 @@ export class ClaudeSession implements AgentSession {
    * Code starts the next turn with it, so it shows as that turn's first message, and not as a steer.
    */
   private moveMissedSteers() {
-    if (!this.waitingSteers.size) return
-    const missed = [...this.waitingSteers.values()]
+    for (const { waiting: _, ...item } of this.moveWaitingSteers()) this.emit({ kind: "item", item })
+  }
+
+  /**
+   * Keeps each steered message Claude Code exited without reading, after T3 Code. It moves after the
+   * failure and stays waiting. The next message sends it first, since the new Claude Code never saw it.
+   * A steer that waited behind a stop goes too, as it does when Claude Code stays up.
+   */
+  private keepUnreadSteers() {
+    for (const item of this.moveWaitingSteers()) {
+      this.unreadSteers.push(item)
+      this.emit({ kind: "item", item })
+    }
+  }
+
+  /** Sends the steered messages Claude Code exited without reading, and shows them as no longer waiting, as a sent message is. */
+  private sendUnreadSteers() {
+    for (const { waiting: _, ...item } of this.unreadSteers.splice(0)) {
+      this.emit({ kind: "item", item })
+      // A steer's item id is the uuid Comet gave it.
+      this.inbox!.push(userMessage(item.id as UUID, item.text, item.images ?? []))
+    }
+  }
+
+  /** Takes the waiting steers out of the thread, to show again at its end, each as a message of its own and not a steer. */
+  private moveWaitingSteers(): UserItem[] {
+    const moved = [...this.waitingSteers.values()].map(({ steered: _, ...item }) => item)
     this.waitingSteers.clear()
-    this.emit({ kind: "items.remove", ids: missed.map((item) => item.id) })
-    for (const { waiting: _, steered: __, ...item } of missed) this.emit({ kind: "item", item })
+    if (moved.length) this.emit({ kind: "items.remove", ids: moved.map((item) => item.id) })
+    return moved
   }
 
   /**
@@ -492,6 +522,9 @@ function echoedUuids(message: SDKMessage): readonly string[] {
 
 /** Comet's tools as an MCP server Claude Code connects to over HTTP. */
 const toolServers = (tools: ToolServer) => ({ [SERVER_NAME]: { type: "http" as const, url: tools.url, headers: { Authorization: tools.authorization } } })
+
+/** A message for Claude Code. Claude Code keeps its uuid in the transcript. */
+const userMessage = (uuid: UUID, text: string, images: readonly ImageAttachment[]): SDKUserMessage => ({ type: "user", message: { role: "user", content: userContent(text, images) }, parent_tool_use_id: null, uuid })
 
 /** A message's content for Claude. Images go before the text, as the API recommends. */
 function userContent(text: string, images: readonly ImageAttachment[]) {
