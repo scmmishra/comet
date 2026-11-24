@@ -313,8 +313,12 @@ pub mod commands {
         s.core.send(&ClientMessage::PluginsReload);
     }
 
+    /// ⌘1 to ⌘9, in order. The menu names each after `workspace::tab_number`.
+    pub const SHOW_TAB: [fn(&mut Comet, &mut Tx); crate::workspace::NUMBERED_TABS] =
+        [show_tab::<0>, show_tab::<1>, show_tab::<2>, show_tab::<3>, show_tab::<4>, show_tab::<5>, show_tab::<6>, show_tab::<7>, show_tab::<8>];
+
     /// ⌘1 to ⌘9: a model while the model picker is open, else a tab.
-    pub fn show_tab<const INDEX: usize>(s: &mut Comet, _: &mut Tx) {
+    fn show_tab<const INDEX: usize>(s: &mut Comet, _: &mut Tx) {
         if s.pick_model_by_number(INDEX) {
             return;
         }
@@ -734,6 +738,17 @@ mod tests {
         let sent = rt.state.core.sent();
         assert!(sent.iter().any(|m| m["type"] == "tabs.save"), "the new tab is saved");
         assert!(sent.iter().any(|m| m["type"] == "project.get" && m["part"] == "threads"), "its start screen reads the project's threads");
+    }
+
+    #[test]
+    fn each_tab_shortcut_picks_the_tab_its_number_names() {
+        let tabs: Vec<TabInfo> = (1..=crate::workspace::NUMBERED_TABS + 1).map(|n| tab(&format!("t{n}"), "Tab")).collect();
+        let mut rt = runtime(tabs, "t10");
+        for (index, action) in commands::SHOW_TAB.into_iter().enumerate() {
+            rt.update(action);
+            let number = crate::workspace::tab_number(index).unwrap();
+            assert_eq!(rt.state.workspace.active.as_deref(), Some(format!("t{number}").as_str()));
+        }
     }
 
     #[test]

@@ -26,8 +26,6 @@ const ROW_HEIGHT: f32 = 36.0;
 /// A rail button and the mark inside it.
 const RAIL_BUTTON: f32 = 36.0;
 const RAIL_MARK: f32 = 18.0;
-/// ⌘1 to ⌘9, the tab shortcuts, pick the first nine models while the picker is open.
-const TAB_SHORTCUTS: usize = 9;
 /// How faint an agent that is not ready draws.
 const NOT_READY: f32 = 0.45;
 
@@ -86,7 +84,7 @@ impl Comet {
         self.picker.open
     }
 
-    /// ⌘1 to ⌘9 pick one of the models on show while the picker is open. Whether the picker took the shortcut.
+    /// ⌘1 to ⌘9, the tab shortcuts, pick one of the models on show while the picker is open. Whether the picker took the shortcut.
     pub fn pick_model_by_number(&mut self, index: usize) -> bool {
         if !self.digits_pick_models() {
             return false;
@@ -282,7 +280,7 @@ fn model_list(s: &Comet, tab: &TabInfo, agent: &AgentInfo, k: &Kit) -> El {
     let check = || icon(&ic::CHECK, 15.0).color(k.c.text_base);
     let rows = shown.iter().map(|option| {
         let picked = agent.id == tab.agent && option.value == tab.model;
-        let shortcut = recent.iter().position(|a| a.value == option.value).filter(|i| *i < TAB_SHORTCUTS && !locked).map(|i| (i + 1).to_string());
+        let shortcut = recent.iter().position(|a| a.value == option.value).filter(|_| !locked).and_then(crate::workspace::tab_number).map(|n| n.to_string());
         let (id, on, value) = (tab.id.clone(), agent.id.clone(), option.value.clone());
         let ink = if locked { k.c.text_faint } else { k.c.text_base };
         let line = row()

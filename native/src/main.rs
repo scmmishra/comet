@@ -75,15 +75,6 @@ const COMMANDS: &[Command] = &[
     ("Command Palette…", "cmd+k", "View", commands::palette),
     ("Search Threads…", "cmd+shift+o", "View", commands::search_threads),
     ("Search Files…", "cmd+p", "View", commands::search_files),
-    ("Tab 1", "cmd+1", "View", commands::show_tab::<0>),
-    ("Tab 2", "cmd+2", "View", commands::show_tab::<1>),
-    ("Tab 3", "cmd+3", "View", commands::show_tab::<2>),
-    ("Tab 4", "cmd+4", "View", commands::show_tab::<3>),
-    ("Tab 5", "cmd+5", "View", commands::show_tab::<4>),
-    ("Tab 6", "cmd+6", "View", commands::show_tab::<5>),
-    ("Tab 7", "cmd+7", "View", commands::show_tab::<6>),
-    ("Tab 8", "cmd+8", "View", commands::show_tab::<7>),
-    ("Tab 9", "cmd+9", "View", commands::show_tab::<8>),
 ];
 
 /// Whether Rune will run headless, by its flags. Rune keeps the rule in `Args::headless`, which it
@@ -141,6 +132,11 @@ fn main() {
     for &(title, keys, menu, action) in COMMANDS {
         let item = MenuItem::new(title, action).key_equivalent(keys.parse().expect("a shortcut"));
         app = app.menu_item(if menu == APP_MENU { item } else { item.menu(menu) });
+    }
+    for (index, action) in commands::SHOW_TAB.into_iter().enumerate() {
+        let number = workspace::tab_number(index).expect("a ⌘ number for each tab shortcut");
+        let item = MenuItem::new(format!("Tab {number}"), action).key_equivalent(format!("cmd+{number}").parse().expect("a shortcut"));
+        app = app.menu_item(item.menu("View"));
     }
 
     // The core starts beside the window, not after it, so both take their time at once. What it sends
