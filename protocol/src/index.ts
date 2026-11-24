@@ -135,8 +135,11 @@ export type ThreadItem =
       readonly postTokens?: number
       readonly error?: string
     }
-  /** The end of a turn. `stopped` means the user stopped it. */
-  | { readonly type: "result"; readonly id: string; readonly durationMs: number; readonly isError: boolean; readonly stopped?: boolean }
+  /**
+   * The end of a turn. `stopped` means the user stopped it. `output` is the JSON the turn's output schema
+   * asked for, for a session opened with one.
+   */
+  | { readonly type: "result"; readonly id: string; readonly durationMs: number; readonly isError: boolean; readonly stopped?: boolean; readonly output?: unknown }
   | { readonly type: "error"; readonly id: string; readonly message: string }
   /**
    * Something the agent says about the turn that is not its reply, such as a hook's note. A warning stands
@@ -393,7 +396,7 @@ export interface ModelOption {
  * - `mcp`: Comet lists the agent's MCP servers in a project and turns them on or off.
  * - `slash-commands`: the agent runs a skill or command named after a `/` in a message, so the composer offers them.
  */
-export const AGENT_FEATURES = ["steer", "rewind", "restore-files", "fork", "rename", "delete", "compact-idle", "sign-in", "install", "mcp", "slash-commands"] as const
+export const AGENT_FEATURES = ["steer", "rewind", "restore-files", "fork", "rename", "delete", "compact-idle", "sign-in", "install", "mcp", "slash-commands", "structured-output"] as const
 export type AgentFeature = (typeof AGENT_FEATURES)[number]
 
 /** An agent's version on this Mac, and whether a newer one is out. A version that could not be read is absent. */

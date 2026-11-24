@@ -128,6 +128,34 @@ test("starts an ephemeral thread when the session leaves no saved thread", async
   expect(s.codex.sent("thread/start")[0]).toMatchObject({ ephemeral: true })
 })
 
+test("asks for output that follows a schema, and puts the parsed answer on the turn's result", async () => {
+  const schema = { type: "object", properties: { title: { type: "string" } }, required: ["title"] }
+  const s = setup({ outputSchema: schema })
+  await started(s)
+  expect(s.codex.sent("turn/start")[0]).toMatchObject({ outputSchema: schema })
+  s.codex.notify(...item("item/completed", { type: "agentMessage", id: "msg_1", text: '{"title":"Guide"}', phase: "final_answer" }))
+  s.codex.notify("turn/completed", { threadId: THREAD, turn: turn("completed") })
+  await until(() => s.last("result") !== undefined)
+  expect(s.last("result")!.output).toEqual({ title: "Guide" })
+})
+
+test("leaves the output out of a turn without a schema, and of one whose answer is not JSON", async () => {
+  const plain = setup()
+  await started(plain)
+  expect(plain.codex.sent("turn/start")[0]).not.toHaveProperty("outputSchema")
+  plain.codex.notify(...item("item/completed", { type: "agentMessage", id: "msg_1", text: '{"title":"Guide"}', phase: "final_answer" }))
+  plain.codex.notify("turn/completed", { threadId: THREAD, turn: turn("completed") })
+  await until(() => plain.last("result") !== undefined)
+  expect(plain.last("result")).not.toHaveProperty("output")
+
+  const prose = setup({ outputSchema: { type: "object" } })
+  await started(prose)
+  prose.codex.notify(...item("item/completed", { type: "agentMessage", id: "msg_1", text: "Here is the guide.", phase: "final_answer" }))
+  prose.codex.notify("turn/completed", { threadId: THREAD, turn: turn("completed") })
+  await until(() => prose.last("result") !== undefined)
+  expect(prose.last("result")).not.toHaveProperty("output")
+})
+
 test("names the default model and its effort, and takes new settings from the next turn", async () => {
   const s = setup()
   await started(s)

@@ -28,7 +28,7 @@ export function historyItems(dir: string, turns: readonly CodexTurn[]): ThreadIt
 export const messageId = (message: UserMessage) => message.clientId ?? message.id
 
 /** The end of the turn `message` opened. `stopping` marks a turn the user asked to stop, whatever Codex reports. */
-export function turnResult(turn: CodexTurn, message: string, stopping: boolean): ThreadItem {
+export function turnResult(turn: CodexTurn, message: string, stopping: boolean): Extract<ThreadItem, { type: "result" }> {
   const durationMs = turn.durationMs ?? (turn.startedAt !== null && turn.completedAt !== null ? (turn.completedAt - turn.startedAt) * 1000 : 0)
   const stopped = stopping || turn.status === "interrupted"
   return { type: "result", id: resultId(message), durationMs, isError: turn.status === "failed", ...(stopped ? { stopped } : {}) }

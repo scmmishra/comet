@@ -40,6 +40,8 @@ class Turn {
   attempt = 0
   /** Whether the turn has given an answer, not only commentary before a tool call. */
   answered = false
+  /** The turn's last answer. Codex gives the output a turn's schema asked for as its final answer. */
+  answer?: string
   /** Why a hook stopped the turn, once one has. */
   hookStop?: string
   /** The items the turn started and has not completed, which may stay open for good, by id. */
@@ -252,6 +254,7 @@ export class CodexSession implements AgentSession, ThreadOwner {
       summary: await summary,
       ...runPolicy(this.settings.permissionMode),
       ...chosen,
+      ...(this.options.outputSchema ? { outputSchema: this.options.outputSchema } : {}),
     })
     turn.id ??= started.id
     if (started.startedAt !== null) this.started(started.id)
@@ -335,7 +338,10 @@ export class CodexSession implements AgentSession, ThreadOwner {
       if (done) this.turn?.open.delete(item.id)
       else this.turn?.open.set(item.id, item)
     }
-    if (done && this.turn && answers(item)) this.turn.answered = true
+    if (done && this.turn && answers(item) && item.type === "agentMessage") {
+      this.turn.answered = true
+      this.turn.answer = item.text
+    }
     for (const found of threadItems(this.dir, item, done, done ? Date.now() : undefined)) this.emit({ kind: "item", item: found })
   }
 
@@ -400,7 +406,9 @@ export class CodexSession implements AgentSession, ThreadOwner {
     this.settleOpen(ended.status)
     if (turn.hookStop) this.emit({ kind: "item", item: hookStopItem(ended.id, turn.hookStop, turn.answered) })
     if (ended.status === "failed") this.emit({ kind: "item", item: turnError(ended) })
-    this.emit({ kind: "item", item: turnResult(ended, turn.message, this.stop.pending) })
+    const result = turnResult(ended, turn.message, this.stop.pending)
+    const output = this.options.outputSchema && ended.status === "completed" ? parsedOutput(turn.answer) : undefined
+    this.emit({ kind: "item", item: output === undefined ? result : { ...result, output } })
     this.endTurn()
   }
 
@@ -471,3 +479,13 @@ const toolServer = (tools: ToolServer) => ({
   config: { [`mcp_servers.${SERVER_NAME}`]: { url: tools.url, http_headers: { Authorization: tools.authorization }, tool_timeout_sec: TOOL_TIMEOUT_SEC } },
   developerInstructions: tools.instructions,
 })
+
+/** The JSON a turn's final answer holds, or undefined for an answer that is not JSON. */
+function parsedOutput(answer: string | undefined): unknown {
+  if (answer === undefined) return undefined
+  try {
+    return JSON.parse(answer)
+  } catch {
+    return undefined
+  }
+}

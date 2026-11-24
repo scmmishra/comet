@@ -1,8 +1,8 @@
-import type { IconName, MessageData, PanelParams, PluginSettingValue, Tint, UiPrimitive, UiPrimitives } from "@comet/protocol"
+import type { AgentId, IconName, MessageData, PanelParams, PluginSettingValue, Tint, UiPrimitive, UiPrimitives } from "@comet/protocol"
 import type { JSX } from "solid-js"
 import { createElement, spread } from "./renderer"
 
-export type { IconName, MessageData, PanelParams, PluginSettingValue, Tint }
+export type { AgentId, IconName, MessageData, PanelParams, PluginSettingValue, Tint }
 
 /**
  * Comet's plugin API. A plugin is a TSX module in `~/.comet/plugins/<name>/index.tsx` whose default
@@ -12,6 +12,18 @@ export type { IconName, MessageData, PanelParams, PluginSettingValue, Tint }
  * `setup` runs once, for every tab. It registers what the plugin offers. Each view Comet draws gets a
  * context for its own tab, so state made in `setup` is shared by every tab and state made in a view is not.
  */
+
+/** What a run of `ctx.run` runs on, and how it stops. */
+export interface RunOptions {
+  /** The agent to run on, such as `"claude"`. Absent means the tab's agent. */
+  readonly agent?: AgentId
+  /** The agent's model, by its value or its name, such as `"sonnet"`. It needs `agent`. Absent means the agent's default. */
+  readonly model?: string
+  /** The model's effort level, such as `"low"`. Absent means the tab's, on the tab's agent, else the model's default. */
+  readonly effort?: string
+  /** Stops the run when it aborts. */
+  readonly signal?: AbortSignal
+}
 
 /** What a view or a command can ask of Comet, for the tab it runs in. */
 export interface TabContext {
@@ -26,13 +38,15 @@ export interface TabContext {
   /** Opens or resumes the tab's thread for `key`, on the tab's agent. A new thread starts with `prompt`, when given. */
   openThread(thread: { readonly key: string; readonly title?: string; readonly prompt?: string }): void
   /**
-   * Runs `prompt` on the tab's agent and model, in the tab's folder, and resolves with the agent's final
-   * reply. No thread shows the run, so it adds nothing to the tab's thread. The agent asks before it edits
-   * a file or runs a command that may change something, and Comet declines every request. It may still
-   * read files and run commands it treats as read-only, such as `git diff`. It rejects when the run
-   * fails, or when `signal` aborts or the tab closes, which stops it.
+   * Runs `prompt` in the tab's folder, on the agent and model `options` name, else the tab's, and resolves
+   * with the agent's final reply. With `schema`, a JSON schema, the reply follows it and resolves as its
+   * parsed JSON. Only Claude Code and Codex take a schema. No thread shows the run, so it adds nothing to
+   * the tab's thread. The agent asks before it edits a file or runs a command that may change something,
+   * and Comet declines every request. It may still read files and run commands it treats as read-only,
+   * such as `git diff`. It rejects when the run fails, or when `signal` aborts or the tab closes.
    */
-  run(prompt: string, options?: { readonly signal?: AbortSignal }): Promise<string>
+  run<T = unknown>(prompt: string, options: RunOptions & { readonly schema: Readonly<Record<string, unknown>> }): Promise<T>
+  run(prompt: string, options?: RunOptions): Promise<string>
   /** Shows a short message. */
   toast(message: string): void
 }

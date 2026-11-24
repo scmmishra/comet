@@ -113,6 +113,8 @@ export interface SessionOptions {
   readonly tools?: ToolServer
   /** Whether the session leaves no saved thread, such as work one agent hands another. Its transcript is not listed or resumed. */
   readonly ephemeral?: boolean
+  /** A JSON schema each turn's final output follows. The turn's result carries the output. Only an agent with `structured-output` takes it. */
+  readonly outputSchema?: Readonly<Record<string, unknown>>
 }
 
 /**

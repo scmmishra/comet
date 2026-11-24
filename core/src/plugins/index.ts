@@ -1,15 +1,15 @@
 import type { CoreMessage } from "@comet/protocol"
 import { Layouts, type LayoutStore } from "./layouts"
 import { Plugins, type KeyedThread } from "./plugins"
-import type { PluginRun } from "./runs"
+import type { PluginRun, RunOptions } from "./runs"
 
 interface PluginHost {
   /** Sends to every client. */
   readonly broadcast: (message: CoreMessage) => void
   /** Shows the thread for a key in a tab, as a plugin asked. */
   readonly openThread: (tabId: string, thread: KeyedThread) => void
-  /** Runs a prompt on a tab's agent, in a session no thread shows, as a plugin asked. */
-  readonly run: (tabId: string, prompt: string) => PluginRun
+  /** Runs a prompt for a tab, in a session no thread shows, as a plugin asked. */
+  readonly run: (tabId: string, prompt: string, options: RunOptions) => PluginRun
   /** Where each tab's layout is kept. */
   readonly store: LayoutStore
   /** Tells the user about a failure in something a plugin asked for. */

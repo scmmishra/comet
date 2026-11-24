@@ -277,6 +277,7 @@ export class ClaudeSession implements AgentSession {
         // It allows the mode and does not set it.
         allowDangerouslySkipPermissions: true,
         ...(this.options.ephemeral ? { persistSession: false } : {}),
+        ...(this.options.outputSchema ? { outputFormat: { type: "json_schema", schema: { ...this.options.outputSchema } } } : {}),
         ...(this.sessionId ? { resume: this.sessionId } : {}),
         ...(this.sessionId && this.resumeAt ? { resumeSessionAt: this.resumeAt } : {}),
         // Claude Code keeps a copy of each file before its tools edit it, so a rewind can restore them.

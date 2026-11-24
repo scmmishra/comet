@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tempFolder } from "../test-support"
 import { startPlugins } from "."
+import type { RunOptions } from "./runs"
 
 export function installPlugin(name: string, source: string) {
   mkdirSync(join(process.env.COMET_HOME!, "plugins", name), { recursive: true })
@@ -24,7 +25,7 @@ export function harness() {
   const threads: { tabId: string; key: string; title?: string; prompt?: string }[] = []
   const nodes: Record<string, Record<number, UiNode>> = {}
   /** Each run a plugin started. A test ends one with `answer` or `fail`, as its agent would. */
-  const runs: { tabId: string; prompt: string; stopped: boolean; closed: boolean; answer: (reply: string) => void; fail: (error: Error) => void }[] = []
+  const runs: { tabId: string; prompt: string; options: RunOptions; stopped: boolean; closed: boolean; answer: (reply: unknown) => void; fail: (error: Error) => void }[] = []
   /** The tab the window shows. A test sets it, then calls `layouts.sendVisible()` as the core does on a save. */
   const screen: { active?: TabInfo } = {}
   /** The full key of the plugin thread each tab shows. `showThread` moves a tab, as the window does. */
@@ -38,9 +39,9 @@ export function harness() {
   const ui = startPlugins({
     broadcast,
     openThread: (tabId, thread) => threads.push({ tabId, ...thread }),
-    run: (tabId, prompt) => {
-      const { promise, resolve, reject } = Promise.withResolvers<string>()
-      const run = { tabId, prompt, stopped: false, closed: false, answer: resolve, fail: reject }
+    run: (tabId, prompt, options) => {
+      const { promise, resolve, reject } = Promise.withResolvers<unknown>()
+      const run = { tabId, prompt, options, stopped: false, closed: false, answer: resolve, fail: reject }
       runs.push(run)
       return {
         done: promise,

@@ -177,10 +177,17 @@ Each view and command gets a `ctx` for its tab:
 | `ctx.open(panel, params?)` | Opens a panel instance in the tab, or brings the open one to the front. The view pane opens. |
 | `ctx.isOpen(panel, params?)` | Whether that instance is open in the tab. It updates as panels open and close. |
 | `ctx.openThread({ key, title?, prompt? })` | Opens or resumes the tab's thread for `key`, on the tab's agent. Keys belong to the plugin, so two plugins never share a thread. |
-| `ctx.run(prompt, { signal? })` | Runs a prompt on the tab's agent and resolves with its final reply. No thread shows the run. |
+| `ctx.run(prompt, { agent?, model?, effort?, schema?, signal? })` | Runs a prompt on an agent and resolves with its final reply. No thread shows the run. |
 | `ctx.toast(message)` | Shows a short message. |
 
-`ctx.run` runs a prompt on the tab's agent and model, in the tab's folder, in a session no thread shows or lists. It adds nothing to the tab's thread. It resolves with the agent's final reply as text, so a plugin can ask for JSON and parse it.
+`ctx.run` runs a prompt in the tab's folder, in a session no thread shows or lists. It adds nothing to the tab's thread. It resolves with the agent's final reply as text.
+
+- `agent` names the agent to run on, such as `"claude"` or `"codex"`. Without it, the run takes the tab's agent, model, effort and fast mode.
+- `model` names one of the agent's models, by its value or its name, such as `"sonnet"`. It needs `agent`, since each agent names its models its own way. Without it, the run takes the agent's default model.
+- `effort` names one of the model's effort levels, such as `"low"`.
+- A plugin can let the user choose these in its settings: a `select` for the agent, and text for the model.
+- `schema` is a JSON schema the reply follows. The run then resolves with the parsed JSON, not text. Claude Code and Codex take a schema, and a run with one on Antigravity is refused. Codex follows OpenAI's strict rules: every object needs `"additionalProperties": false`, and lists all its properties in `required`. Claude Code takes either.
+- Comet refuses an agent, model or effort it does not have, and says which it has.
 
 - The run is in Supervised mode, so the agent asks before it edits a file or runs a command that may change something. No thread shows its requests, so Comet declines each one. The agent may still read files and run commands it treats as read-only, such as `git diff`, without asking.
 - It rejects when the run fails or ends without an answer, when `signal` aborts, and when the tab closes. A reload of the plugins ends its runs, and their promises never settle.
@@ -188,8 +195,17 @@ Each view and command gets a `ctx` for its tab:
 - It needs the plugin API 0.2.1, so a plugin that calls it declares `"api": "^0.2.1"`.
 
 ```tsx
-const [guide, setGuide] = createSignal<string>()
-const generate = () => ctx.run(`Write a review guide for this diff:\n\n${diff}`).then(setGuide, (error) => ctx.toast(error.message))
+const GUIDE = {
+  type: "object",
+  additionalProperties: false,
+  required: ["title", "stops"],
+  properties: { title: { type: "string" }, stops: { type: "array", items: { type: "string" } } },
+}
+const [guide, setGuide] = createSignal<{ title: string; stops: string[] }>()
+const generate = () =>
+  ctx
+    .run<{ title: string; stops: string[] }>(`Write a review guide for this diff:\n\n${diff}`, { agent: "claude", model: "sonnet", schema: GUIDE })
+    .then(setGuide, (error) => ctx.toast(error.message))
 <Button label="Generate guide" onClick={generate} />
 ```
 

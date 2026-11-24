@@ -76,7 +76,7 @@ class FakeQuery implements AsyncIterable<SDKMessage> {
   }
 }
 
-function setup(resume?: string, onUnsent?: SessionOptions["onUnsent"], { idleMs, ephemeral }: { idleMs?: number; ephemeral?: boolean } = {}) {
+function setup(resume?: string, onUnsent?: SessionOptions["onUnsent"], { idleMs, ephemeral, outputSchema }: { idleMs?: number; ephemeral?: boolean; outputSchema?: Record<string, unknown> } = {}) {
   const events: ThreadEvent[] = []
   const queries: FakeQuery[] = []
   const run = ({ prompt, options }: { prompt?: AsyncIterable<SDKUserMessage>; options?: Options }) => {
@@ -99,6 +99,7 @@ function setup(resume?: string, onUnsent?: SessionOptions["onUnsent"], { idleMs,
       onMoved: (dir) => void moves.push(dir),
       ...(onUnsent ? { onUnsent } : {}),
       ...(ephemeral ? { ephemeral } : {}),
+      ...(outputSchema ? { outputSchema } : {}),
       onRateLimit: () => {},
       compactIdle: () => false,
     },
@@ -132,6 +133,19 @@ test("a message starts a turn and its result ends it", async () => {
   expect(s.statuses()).toEqual([true, false])
   expect(s.session.busy).toBe(false)
   expect(s.results()).toEqual([{ type: "result", id: "r1", durationMs: 5, isError: false }])
+})
+
+test("asks Claude Code for output that follows a schema, and puts it on the turn's result", async () => {
+  const schema = { type: "object", properties: { title: { type: "string" } } }
+  const s = setup(undefined, undefined, { outputSchema: schema })
+  const running = await started(s)
+  expect(running.options.outputFormat).toEqual({ type: "json_schema", schema })
+  running.push(result("r1", { structured_output: { title: "Guide" } }))
+  await until(() => s.results().length === 1)
+  expect(s.results()).toEqual([{ type: "result", id: "r1", durationMs: 5, isError: false, output: { title: "Guide" } }])
+
+  const plain = await started(setup())
+  expect(plain.options.outputFormat).toBeUndefined()
 })
 
 test("a turn Claude Code starts after a background task makes the tab busy until it ends", async () => {

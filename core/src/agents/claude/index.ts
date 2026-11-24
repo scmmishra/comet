@@ -22,7 +22,7 @@ export function claudeAgent(host: AgentHost): Agent {
   return {
     id: "claude",
     name: "Claude Code",
-    features: ["steer", "rewind", "restore-files", "fork", "rename", "delete", "compact-idle", "mcp", "slash-commands"],
+    features: ["steer", "rewind", "restore-files", "fork", "rename", "delete", "compact-idle", "mcp", "slash-commands", "structured-output"],
     // Claude Code finds a thread's transcript from any worktree of its repo. Its EnterWorktree tool also moves a thread.
     movesThreads: true,
     drawsVisuals: true,

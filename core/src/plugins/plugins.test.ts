@@ -277,6 +277,7 @@ export default definePlugin((comet) => {
   const ask = (ctx, input) => ctx.run(input, { signal: controller.signal }).then((reply) => ctx.toast("reply " + reply), (error) => ctx.toast("error " + error.message))
   comet.command("ask", { title: "Ask", input: "Prompt", run: ask })
   comet.command("cancel", { title: "Cancel", run: () => { controller.abort(); controller = new AbortController() } })
+  comet.command("guide", { title: "Guide", input: "Prompt", run: (ctx, input) => ctx.run(input, { agent: "claude", model: "haiku", schema: { type: "object" }, signal: controller.signal }).then((reply) => ctx.toast("json " + JSON.stringify(reply))) })
 })
 `
 
@@ -298,6 +299,15 @@ test("runs a plugin's prompt for its tab, and gives the plugin the reply or why 
   runs[1]!.fail(new Error("The run failed: the agent exited."))
   await until(() => notices().length === 2)
   expect(notices().at(-1)).toBe("error The run failed: the agent exited.")
+
+  // What the plugin chose reaches the core, without the signal, and a JSON reply comes back whole.
+  await plugins.command("tab-1", project, "runner.guide", "Write a guide.")
+  await until(() => runs.length === 3)
+  expect(runs[0]!.options).toEqual({})
+  expect(runs[2]!.options).toEqual({ agent: "claude", model: "haiku", schema: { type: "object" } })
+  runs[2]!.answer({ title: "Guide", stops: [1, 2] })
+  await until(() => notices().length === 3)
+  expect(notices().at(-1)).toBe('json {"title":"Guide","stops":[1,2]}')
   plugins.stop()
 }, 20_000)
 

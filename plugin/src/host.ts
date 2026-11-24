@@ -1,7 +1,7 @@
 import { panelInstanceId, splitContributionId, type PanelParams, type PluginLayout, type PluginSettingValue, type UiOp, type UiValue } from "@comet/protocol"
 import { basename } from "node:path"
 import { createRoot as solidRoot, createSignal, type Accessor, type JSX, type Setter } from "solid-js"
-import type { Comet, PanelContext, PanelOptions, PluginDefinition, SetupOptions, TabContext, TurnEnd, TurnOutcome, ViewContext } from "./index"
+import type { Comet, PanelContext, PanelOptions, PluginDefinition, RunOptions, SetupOptions, TabContext, TurnEnd, TurnOutcome, ViewContext } from "./index"
 import { callHandler, createRoot, createComponent, dispose, onOps, render, snapshot, type PluginNode } from "./renderer"
 
 export type ViewKind = "sidebar" | "panel" | "card"
@@ -56,7 +56,7 @@ export type ToPlugin =
   /** A turn ended in a thread the plugin opened. `key` is the plugin's own, without its prefix. */
   | { readonly type: "turnEnd"; readonly tabId: string; readonly key: string; readonly outcome: TurnOutcome }
   /** A run the plugin started ended, with the agent's reply or why there is none. */
-  | { readonly type: "ran"; readonly id: number; readonly reply: string }
+  | { readonly type: "ran"; readonly id: number; readonly reply: unknown }
   | { readonly type: "ran"; readonly id: number; readonly error: string }
 
 /** Messages from a plugin's worker to the core. */
@@ -71,12 +71,15 @@ export type FromPlugin =
   | { readonly type: "thread"; readonly tabId: string; readonly key: string; readonly title?: string; readonly prompt?: string }
   | { readonly type: "open"; readonly tabId: string; readonly panel: string; readonly params?: PanelParams }
   /** Runs a prompt on a tab's agent. `id` is the plugin's own, and the answer names it. */
-  | { readonly type: "run"; readonly id: number; readonly tabId: string; readonly prompt: string }
+  | { readonly type: "run"; readonly id: number; readonly tabId: string; readonly prompt: string; readonly options: RunChoice }
   | { readonly type: "stopRun"; readonly id: number }
   | { readonly type: "close"; readonly tabId: string; readonly id: string }
   | { readonly type: "toast"; readonly message: string }
   /** Something the plugin did failed. The core shows it, named after the plugin. */
   | { readonly type: "error"; readonly message: string }
+
+/** What a run runs on, as a plugin chose it: its options without the signal, which stays in the worker. */
+export type RunChoice = Omit<RunOptions, "signal"> & { readonly schema?: Readonly<Record<string, unknown>> }
 
 declare const self: Worker
 
@@ -156,14 +159,14 @@ function run(plugin: PluginDefinition, initial: Readonly<Record<string, PluginSe
 
   const tabs = new Map<string, Tab>()
   // The runs that wait for the core's answer, by id.
-  const runs = new Map<number, { readonly resolve: (reply: string) => void; readonly reject: (error: Error) => void }>()
+  const runs = new Map<number, { readonly resolve: (reply: unknown) => void; readonly reject: (error: Error) => void }>()
   let runIds = 0
-  const runIn = (tabId: string, prompt: string, signal?: AbortSignal) => {
+  const runIn = (tabId: string, prompt: string, { signal, ...options }: RunOptions & Pick<RunChoice, "schema"> = {}) => {
     if (signal?.aborted) return Promise.reject(new Error("The run was stopped before it started."))
     const id = ++runIds
-    return new Promise<string>((resolve, reject) => {
+    return new Promise<unknown>((resolve, reject) => {
       runs.set(id, { resolve, reject })
-      post({ type: "run", id, tabId, prompt })
+      post({ type: "run", id, tabId, prompt, options })
       signal?.addEventListener("abort", () => post({ type: "stopRun", id }), { once: true })
     })
   }
@@ -185,7 +188,7 @@ function run(plugin: PluginDefinition, initial: Readonly<Record<string, PluginSe
     open: (panel, params) => post({ type: "open", tabId, panel, ...(params ? { params } : {}) }),
     isOpen: (panel, params) => tabOf(tabId).open().has(panelInstanceId(panel, params)),
     openThread: (thread) => post({ type: "thread", tabId, ...thread }),
-    run: (prompt, options) => runIn(tabId, prompt, options?.signal),
+    run: ((prompt: string, options?: RunOptions) => runIn(tabId, prompt, options)) as TabContext["run"],
     toast: comet.toast,
   })
   const undraw = (tab: Tab, key: string) => {

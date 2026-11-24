@@ -122,7 +122,7 @@ export class ThreadMapper {
       case "result":
         this.lastReply = undefined
         this.retrying = false
-        return [item({ type: "result", id: message.uuid, durationMs: message.duration_ms, isError: message.is_error })]
+        return [item({ type: "result", id: message.uuid, durationMs: message.duration_ms, isError: message.is_error, ...(message.subtype === "success" && message.structured_output !== undefined ? { output: message.structured_output } : {}) })]
       default:
         return []
     }

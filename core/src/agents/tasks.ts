@@ -1,5 +1,5 @@
-import type { AgentInfo, RunSettings, ThreadEvent, ThreadItem } from "@comet/protocol"
-import type { Agent, AgentSession } from "./agent"
+import { DEFAULT_MODEL, type AgentInfo, type ModelOption, type ThreadEvent, type ThreadItem } from "@comet/protocol"
+import type { Agent, AgentSession, SessionOptions } from "./agent"
 
 /** A request a task's agent makes that only the user can answer: a permission request or a question. */
 export type TaskRequest = Extract<ThreadItem, { readonly type: "permission" | "question" }>
@@ -14,11 +14,11 @@ export interface TaskWatch {
 
 /**
  * How a task ended. A completed task gives its last text, with the reasons a turn was stopped after it,
- * such as by a hook. A task that failed or was stopped keeps the last text it gave before, since the work
+ * such as by a hook, and the output its schema asked for, when it had one and the agent gave it. A task that failed or was stopped keeps the last text it gave before, since the work
  * it reports may be done. A failed task with no error ended without an answer.
  */
 export type TaskOutcome =
-  | { readonly status: "completed"; readonly answer: string; readonly stopReasons: readonly string[] }
+  | { readonly status: "completed"; readonly answer: string; readonly stopReasons: readonly string[]; readonly output?: unknown }
   | { readonly status: "failed"; readonly error?: string; readonly lastAnswer?: string }
   | { readonly status: "stopped"; readonly lastAnswer?: string }
 
@@ -35,7 +35,7 @@ export interface Task {
  * Runs a prompt on an agent, in a session no thread lists, until its final turn ends. The delegate tool
  * and a plugin's `ctx.run` both run work this way, so they agree on when a task is over.
  */
-export function startTask(agent: Pick<Agent, "open">, dir: string, settings: RunSettings, prompt: string, watch: TaskWatch): Task {
+export function startTask(agent: Pick<Agent, "open">, dir: string, run: Pick<SessionOptions, "settings" | "outputSchema">, prompt: string, watch: TaskWatch): Task {
   const items = new Map<string, ThreadItem>()
   // The agent's own subagents that still run. A turn can end while a background subagent runs. Claude
   // Code starts a turn of its own once it ends, and that turn gives the answer. Commands left running in
@@ -83,7 +83,7 @@ export function startTask(agent: Pick<Agent, "open">, dir: string, settings: Run
     // An error between turns, such as the agent's process exiting while its subagents ran, has no turn to end.
     if (!session.busy) finish()
   }
-  const session = agent.open(dir, emit, { settings, onSessionId: () => {}, ephemeral: true })
+  const session = agent.open(dir, emit, { ...run, onSessionId: () => {}, ephemeral: true })
   session.send(prompt)
   return {
     session,
@@ -104,6 +104,22 @@ export function notReady(info: AgentInfo): string | undefined {
   return info.state === "ready" ? undefined : `${info.name} is not ready: ${(info.problem ?? info.state).replace(/\.$/, "")}.`
 }
 
+/** The model a task names, by its value or its name, else the agent's default. */
+export function chosenModel(info: AgentInfo, asked: unknown): ModelOption {
+  const wanted = typeof asked === "string" && asked.trim() ? asked.trim().toLowerCase() : DEFAULT_MODEL
+  const model = info.models.find((found) => [found.value, found.label, found.runs].some((name) => name?.toLowerCase() === wanted))
+  if (!model) throw new Error(`${info.name} has no model called "${String(asked)}". Its models are: ${info.models.map((found) => found.value).join(", ")}.`)
+  return model
+}
+
+/** The effort level a task names, checked against its model, or undefined for the model's default. */
+export function chosenEffort(info: AgentInfo, model: ModelOption, asked: unknown): string | undefined {
+  if (typeof asked !== "string" || !asked.trim()) return undefined
+  const effort = asked.trim().toLowerCase()
+  if (!model.efforts.includes(effort)) throw new Error(`${info.name}'s ${model.label} has no effort level "${asked}". ${model.efforts.length ? `Its levels are: ${model.efforts.join(", ")}.` : "It takes none."}`)
+  return effort
+}
+
 /**
  * How a task ended, from what it left in its thread, after T3 Code. `stopped` says Comet stopped it
  * between turns, which leaves no stopped result. A task whose turn stopped after it answered, such as by
@@ -120,9 +136,11 @@ function outcomeOf(items: readonly ThreadItem[], stopped: boolean): TaskOutcome 
   if (error?.type === "error") return { status: "failed", error: error.message, ...lastAnswer(items.slice(0, errorAt)) }
   const result = items.findLast((item) => item.type === "result")
   if (stopped || (result?.type === "result" && result.stopped)) return { status: "stopped", ...lastAnswer(items) }
+  // A turn with a schema may give its output with no text, as Claude Code does through a tool of its own.
+  const output = result?.type === "result" && result.output !== undefined ? { output: result.output } : undefined
   const answeredAt = answerAt(items)
   const answer = items[answeredAt]
-  if (answer?.type !== "text") return { status: "failed" }
+  if (answer?.type !== "text" && !output) return { status: "failed" }
   const stopReasons = items.slice(answeredAt + 1).flatMap((item) => (item.type === "notice" && item.stopsTurn ? [item.text] : []))
-  return { status: "completed", answer: answer.text, stopReasons }
+  return { status: "completed", answer: answer?.type === "text" ? answer.text : "", stopReasons, ...output }
 }

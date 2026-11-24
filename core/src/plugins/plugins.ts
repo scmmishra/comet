@@ -1,5 +1,5 @@
 import type { TurnOutcome } from "@comet/plugin"
-import type { FromPlugin, Offers, ToPlugin, ViewRequest, ViewResult } from "@comet/plugin/host"
+import type { FromPlugin, Offers, RunChoice, ToPlugin, ViewRequest, ViewResult } from "@comet/plugin/host"
 import { contributionId, splitContributionId, type CoreMessage, type PanelParams, type PluginContributions, type ProjectSetup, type UiValue } from "@comet/protocol"
 import { errorMessage } from "../errors"
 import { isProjectFolder } from "../project-path"
@@ -10,7 +10,7 @@ import { bundlePlugin } from "./bundle"
 import { checkPlugin, readManifest } from "./manifest"
 import { pluginSettingValues } from "./settings"
 import { pluginProjects, pluginsOn } from "./config"
-import type { PluginRun } from "./runs"
+import type { PluginRun, RunOptions } from "./runs"
 
 type Send = (message: CoreMessage) => void
 
@@ -28,8 +28,8 @@ interface PluginHooks {
   readonly broadcast: Send
   /** A plugin asked to open a tab's thread for a key. */
   readonly openThread: (tabId: string, thread: KeyedThread) => void
-  /** A plugin asked to run a prompt on a tab's agent. It throws when the run cannot start. */
-  readonly run: (tabId: string, prompt: string) => PluginRun
+  /** A plugin asked to run a prompt for a tab. It throws when the run cannot start. */
+  readonly run: (tabId: string, prompt: string, options: RunOptions) => PluginRun
   /** A plugin asked to open a panel instance in a tab. */
   readonly openPanel: (tabId: string, panel: string, params: PanelParams) => void
   /** A panel asked to close itself. */
@@ -327,7 +327,7 @@ export class Plugins {
       const { tabId, key, title, prompt } = message
       // A thread key belongs to its plugin, so two plugins in one project never share a thread.
       this.hooks.openThread(tabId, { key: contributionId(plugin, key), ...(title ? { title } : {}), ...(prompt ? { prompt } : {}) })
-    } else if (message.type === "run") this.run(running, message.id, message.tabId, message.prompt)
+    } else if (message.type === "run") this.run(running, message.id, message.tabId, message.prompt, message.options)
     else if (message.type === "stopRun") running.runs.get(message.id)?.run.stop()
     else if (message.type === "open") this.hooks.openPanel(message.tabId, message.panel, message.params ?? {})
     else if (message.type === "close") this.hooks.closePanel(message.tabId, message.id)
@@ -336,10 +336,10 @@ export class Plugins {
   }
 
   /** Starts a run a plugin asked for, and answers it once the run ends. */
-  private run(running: Running, id: number, tabId: string, prompt: string) {
+  private run(running: Running, id: number, tabId: string, prompt: string, options: RunChoice) {
     let run: PluginRun
     try {
-      run = this.hooks.run(tabId, prompt)
+      run = this.hooks.run(tabId, prompt, options)
     } catch (error) {
       return this.post(running, { type: "ran", id, error: errorMessage(error) })
     }

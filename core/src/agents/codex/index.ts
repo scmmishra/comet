@@ -25,7 +25,7 @@ export function codexAgent(host: AgentHost, launch: Launch = launchCodex): Agent
   return {
     id: "codex",
     name: "Codex",
-    features: ["steer", "rewind", "fork", "rename", "delete", "mcp"],
+    features: ["steer", "rewind", "fork", "rename", "delete", "mcp", "structured-output"],
     // Codex resumes a thread in whatever folder it is given.
     movesThreads: true,
     drawsVisuals: true,

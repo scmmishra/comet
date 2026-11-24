@@ -1,7 +1,7 @@
-import { DEFAULT_MODEL, PERMISSION_MODES, type AgentId, type AgentInfo, type ModelOption, type PermissionAnswer, type PermissionMode, type RunSettings, type Subagent, type ThreadEvent, type ThreadItem } from "@comet/protocol"
+import { PERMISSION_MODES, type AgentId, type AgentInfo, type PermissionAnswer, type PermissionMode, type RunSettings, type Subagent, type ThreadEvent, type ThreadItem } from "@comet/protocol"
 import type { AgentSession } from "../agents/agent"
 import type { Agents } from "../agents/registry"
-import { notReady, startTask, type TaskOutcome } from "../agents/tasks"
+import { chosenEffort, chosenModel, notReady, startTask, type TaskOutcome } from "../agents/tasks"
 import type { ToolResult } from "../tools/mcp"
 import type { ToolGroup } from "../tools/tool"
 import { DELEGATE, INSTRUCTIONS, LIST_AGENTS, taskWords } from "./tools"
@@ -107,7 +107,7 @@ export class Delegations {
       host.emit({ kind: "subagent", subagent })
     }
     const requests = new Map<string, ThreadItem>()
-    const running = startTask(this.agents.get(info.id), host.project, settings, task, {
+    const running = startTask(this.agents.get(info.id), host.project, { settings }, task, {
       items: (items) => show({ items: [...items], toolUses: items.filter((item) => item.type === "tool").length }),
       // Only the user can answer a request, so it shows in the caller's thread, and its answer comes back here.
       request: (item) => {
@@ -144,21 +144,6 @@ function listed(info: AgentInfo | undefined) {
   if (!info || info.state === "checking") return []
   const models = info.models.map((model) => ({ model: model.value, name: model.runs ?? model.label, ...(model.efforts.length ? { efforts: model.efforts, ...(model.defaultEffort ? { defaultEffort: model.defaultEffort } : {}) } : {}) }))
   return [{ agent: info.id, name: info.name, ready: info.state === "ready", ...(info.state === "ready" ? { models } : { problem: info.problem ?? info.state }) }]
-}
-
-/** The model a task names, by its value or its name, else the agent's default. */
-function chosenModel(info: AgentInfo, asked: unknown): ModelOption {
-  const wanted = typeof asked === "string" && asked.trim() ? asked.trim().toLowerCase() : DEFAULT_MODEL
-  const model = info.models.find((found) => [found.value, found.label, found.runs].some((name) => name?.toLowerCase() === wanted))
-  if (!model) throw new Error(`${info.name} has no model called "${String(asked)}". Its models are: ${info.models.map((found) => found.value).join(", ")}.`)
-  return model
-}
-
-function chosenEffort(info: AgentInfo, model: ModelOption, asked: unknown): string | undefined {
-  if (typeof asked !== "string" || !asked.trim()) return undefined
-  const effort = asked.trim().toLowerCase()
-  if (!model.efforts.includes(effort)) throw new Error(`${info.name}'s ${model.label} has no effort level "${asked}". ${model.efforts.length ? `Its levels are: ${model.efforts.join(", ")}.` : "It takes none."}`)
-  return effort
 }
 
 /**
