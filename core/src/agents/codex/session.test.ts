@@ -336,6 +336,34 @@ test("grants extra permissions for the turn or the session, and none when refuse
   }
 })
 
+test("names every path a permissions request asks for, from its entries and its older lists", async () => {
+  const s = setup()
+  await started(s)
+  // Codex 0.169 lists paths in `entries`, and may list a path in its older `write` list too.
+  const fileSystem = {
+    read: null,
+    write: ["/w/out"],
+    entries: [
+      { access: "write", path: { type: "path", path: "/w/out" } },
+      { access: "write", path: { type: "special", value: { kind: "root" } } },
+      { access: "read", path: { type: "glob_pattern", pattern: "/w/docs/**/*.md" } },
+      { access: "read", path: { type: "special", value: { kind: "project_roots", subpath: "src" } } },
+      { access: "write", path: { type: "special", value: { kind: "unknown", path: "", subpath: null } } },
+    ],
+  }
+  s.codex.ask(0, "item/permissions/requestApproval", { threadId: THREAD, turnId: TURN, itemId: "p0", cwd: DIR, reason: "Build the docs", permissions: { network: null, fileSystem } })
+  await until(() => s.last("permission")?.requestId === "p0")
+  expect(s.last("permission")).toMatchObject({ detail: "Allow writing to /w/out, / (the whole disk), an unknown path and reading /w/docs/**/*.md, the project roots/src", reason: "Build the docs" })
+})
+
+test("names the host a command asks to reach", async () => {
+  const s = setup()
+  await started(s)
+  s.codex.ask(0, "item/commandExecution/requestApproval", { threadId: THREAD, turnId: TURN, itemId: "exec-net", command: "curl https://example.com", cwd: DIR, reason: "Needs network", networkApprovalContext: { host: "example.com", protocol: "https" } })
+  await until(() => s.last("permission")?.requestId === "exec-net")
+  expect(s.last("permission")).toMatchObject({ detail: "curl https://example.com\nNetwork access to example.com (https)", reason: "Needs network" })
+})
+
 test("answers Codex's older approvals in their own words", async () => {
   const s = setup()
   await started(s)

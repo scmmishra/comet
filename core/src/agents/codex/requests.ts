@@ -56,9 +56,12 @@ export function readRequest(
 ): CodexRequest | AnsweredRequest | undefined {
   switch (method) {
     case "item/commandExecution/requestApproval": {
-      if (accept && !asksNetwork(params as Params & NetworkAsk)) return { answer: decide("allow") }
-      const command = typeof params.command === "string" ? shellScript(params.command) : ""
-      return asking(permission(String(params.approvalId ?? params.itemId), "Bash", "command", command || "Run a command", params.reason), decide)
+      const ask = params as Params & NetworkAsk
+      if (accept && !asksNetwork(ask)) return { answer: decide("allow") }
+      const command = (typeof params.command === "string" ? shellScript(params.command) : "") || "Run a command"
+      const target = ask.networkApprovalContext
+      const detail = target ? `${command}\nNetwork access to ${target.host} (${target.protocol})` : command
+      return asking(permission(String(params.approvalId ?? params.itemId), "Bash", "command", detail, params.reason), decide)
     }
     case "item/fileChange/requestApproval": {
       const paths = files(String(params.itemId))
@@ -85,7 +88,8 @@ export function readRequest(
 
 /** What a command approval carries when the command needs network access that Codex's network settings do not allow. */
 interface NetworkAsk {
-  readonly networkApprovalContext?: unknown
+  /** The host the command asks to reach, and how. */
+  readonly networkApprovalContext?: { readonly host: string; readonly protocol: string } | null
   readonly proposedNetworkPolicyAmendments?: readonly unknown[] | null
 }
 
@@ -105,22 +109,76 @@ function permission(requestId: string, tool: string, kind: PermissionKind, detai
 /** Extra access Codex asks for beyond its sandbox: the network, and folders to read or write. */
 interface Permissions {
   readonly network: { readonly enabled: boolean | null } | null
-  readonly fileSystem: { readonly read: readonly string[] | null; readonly write: readonly string[] | null } | null
+  readonly fileSystem: FileSystemAsk | null
 }
+
+/**
+ * The paths Codex asks for. Codex 0.169 lists them in `entries`, and still sends the older `read` and
+ * `write` lists, which it will remove. A path can appear in both.
+ */
+interface FileSystemAsk {
+  readonly read: readonly string[] | null
+  readonly write: readonly string[] | null
+  readonly entries?: readonly { readonly access: Access; readonly path: FileSystemPath }[]
+}
+
+type Access = "read" | "write" | "deny"
+
+type FileSystemPath =
+  | { readonly type: "path"; readonly path: string }
+  | { readonly type: "glob_pattern"; readonly pattern: string }
+  | { readonly type: "special"; readonly value: SpecialPath }
+
+/** The paths Codex names by kind rather than by path. */
+type SpecialPath =
+  | { readonly kind: "root" | "minimal" | "tmpdir" | "slash_tmp" }
+  | { readonly kind: "project_roots"; readonly subpath: string | null }
+  | { readonly kind: "unknown"; readonly path: string; readonly subpath: string | null }
+
+/** How the request names each kind of access, in the order it lists them. */
+const ACCESS_WORDS: Record<Access, string> = { write: "writing to", read: "reading", deny: "no access to" }
 
 /** Allowing grants what Codex asked for, for the turn or the session. A refusal grants nothing. */
 function permissionsRequest(params: Params & { permissions: Permissions }): CodexRequest {
   const { network, fileSystem } = params.permissions
+  const paths = fileSystem ? askedPaths(fileSystem) : undefined
   const asked = [
     network?.enabled ? "network access" : undefined,
-    fileSystem?.write?.length ? `writing to ${fileSystem.write.join(", ")}` : undefined,
-    fileSystem?.read?.length ? `reading ${fileSystem.read.join(", ")}` : undefined,
+    ...(Object.keys(ACCESS_WORDS) as Access[]).map((access) => (paths?.[access].size ? `${ACCESS_WORDS[access]} ${[...paths[access]].join(", ")}` : undefined)),
   ].filter(Boolean)
   const detail = asked.length ? `Allow ${asked.join(" and ")}` : "Allow more access"
   return asking(permission(String(params.itemId), "Permissions", "permission", detail, params.reason), (answer) => {
     const allowed = answer === "allow" || answer === "allow-session"
     return { permissions: allowed ? granted(params.permissions) : {}, scope: answer === "allow-session" ? "session" : "turn" }
   })
+}
+
+/** Each path Codex asks for, by access, from both its lists. A set drops a path that both list. */
+function askedPaths(fileSystem: FileSystemAsk): Record<Access, Set<string>> {
+  const paths: Record<Access, Set<string>> = { write: new Set(fileSystem.write ?? []), read: new Set(fileSystem.read ?? []), deny: new Set() }
+  for (const entry of fileSystem.entries ?? []) paths[entry.access]?.add(pathLabel(entry.path))
+  return paths
+}
+
+/** How a path reads in the request, after T3 Code. */
+function pathLabel(path: FileSystemPath): string {
+  if (path.type === "path") return path.path
+  if (path.type === "glob_pattern") return path.pattern
+  const special = path.value
+  switch (special.kind) {
+    case "root":
+      return "/ (the whole disk)"
+    case "minimal":
+      return "the minimal system paths"
+    case "tmpdir":
+      return "the temporary folder"
+    case "slash_tmp":
+      return "/tmp"
+    case "project_roots":
+      return ["the project roots", special.subpath].filter(Boolean).join("/")
+    case "unknown":
+      return [special.path, special.subpath].filter(Boolean).join("/") || "an unknown path"
+  }
 }
 
 /** What Codex asked for, in the shape its grant takes, which leaves out what was not asked. */
