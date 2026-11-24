@@ -247,6 +247,12 @@ import logo from "./logo.svg"
 <Diff patch={patch} />
 ```
 
+`sections` splits a diff under headings, in one scroll. Each section has a `title`, a quiet `label` above it and a `note` below it, all optional but the title. Its `patch` holds its own files. A heading scrolls with the diff, and never sticks to the top as a file header does. A split diff's files start open, however many there are, since its headings already give the overview. The PR review plugin's guide uses it, one section per stop. It needs the plugin API 0.2.2.
+
+```tsx
+<Diff sections={[{ label: "Login · 1 of 4", title: "Check attempts before the password", note: "Login asks the limiter first.", patch }]} />
+```
+
 A panel's context also has `ctx.params` and `ctx.close()`. A command's context has no `visible()` or `thread()`, since a command draws nothing.
 
 ## Who owns what

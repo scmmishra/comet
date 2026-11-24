@@ -1,8 +1,8 @@
-import type { AgentId, IconName, MessageData, PanelParams, PluginSettingValue, Tint, UiPrimitive, UiPrimitives } from "@comet/protocol"
+import type { AgentId, DiffSection, IconName, MessageData, PanelParams, PluginSettingValue, Tint, UiPrimitive, UiPrimitives } from "@comet/protocol"
 import type { JSX } from "solid-js"
 import { createElement, spread } from "./renderer"
 
-export type { AgentId, IconName, MessageData, PanelParams, PluginSettingValue, Tint }
+export type { AgentId, DiffSection, IconName, MessageData, PanelParams, PluginSettingValue, Tint }
 
 /**
  * Comet's plugin API. A plugin is a TSX module in `~/.comet/plugins/<name>/index.tsx` whose default

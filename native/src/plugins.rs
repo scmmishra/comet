@@ -99,11 +99,31 @@ pub struct Plugins {
     inputs: HashMap<(String, u64), (TextEdit, String)>,
     /// Setups across projects, as last read for the palette.
     pub setups: Vec<crate::protocol::ProjectSetup>,
-    /// Each diff node's state: the patch it was parsed from, and the files a diff view draws.
-    diffs: HashMap<(String, u64), (String, DiffState)>,
+    /// Each diff node as drawn, by plugin and node.
+    diffs: HashMap<(String, u64), PluginDiff>,
     /// The pictures each Markdown node shows, by source. Views read the app's state without changing it, so
     /// they are kept behind a cell.
     pictures: std::cell::RefCell<HashMap<(String, u64), crate::images::Kept>>,
+}
+
+/// A diff node as drawn: the props it was made from, so a change parses it again, its sections'
+/// headings, and the files a diff view draws.
+struct PluginDiff {
+    source: Value,
+    sections: Vec<SectionHeading>,
+    state: DiffState,
+}
+
+/// A section's heading, as the plugin sent it: a quiet label, a title and a note.
+struct SectionHeading {
+    label: Option<String>,
+    title: String,
+    note: Option<String>,
+}
+
+/// What a diff node is made from: its patch, or its sections, each with a patch of its own.
+fn diff_source(props: &Map<String, Value>) -> Value {
+    serde_json::json!([props.get("patch"), props.get("sections")])
 }
 
 impl Plugins {
@@ -117,8 +137,8 @@ impl Plugins {
 
     /// Diffs draw as Review's do, unified or split.
     pub fn set_diff_mode(&mut self, mode: DiffMode) {
-        for (_, diff) in self.diffs.values_mut() {
-            diff.set_mode(mode);
+        for diff in self.diffs.values_mut() {
+            diff.state.set_mode(mode);
         }
     }
 
@@ -141,25 +161,46 @@ fn prop<'a>(props: &'a Map<String, Value>, name: &str) -> Option<&'a str> {
 }
 
 impl Comet {
-    /// Applies a plugin's operations. A diff node whose patch changed is parsed again, which resets its
-    /// folds. A diff node that left keeps no state.
+    /// Applies a plugin's operations. A diff node whose patch or sections changed is parsed again, which
+    /// resets its folds. A diff node that left keeps no state.
     pub fn take_plugin_ops(&mut self, plugin: &str, ops: &[UiOp], reset: bool) {
         self.plugins.apply(plugin, ops, reset);
         let nodes = self.plugins.nodes.get(plugin);
-        let patch_of = |id: u64| nodes?.get(&id).filter(|n| n.kind == DIFF_NODE).map(|n| prop(&n.props, "patch").unwrap_or(""));
-        self.plugins.diffs.retain(|(owner, id), _| owner != plugin || patch_of(*id).is_some());
+        let is_diff = |id: u64| nodes.and_then(|n| n.get(&id)).is_some_and(|n| n.kind == DIFF_NODE);
+        self.plugins.diffs.retain(|(owner, id), _| owner != plugin || is_diff(*id));
         self.plugins.pictures.borrow_mut().retain(|(owner, id), _| owner != plugin || nodes.is_some_and(|n| n.get(id).is_some_and(|n| n.kind == "markdown")));
-        let changed: Vec<(u64, String)> = nodes
+        let changed: Vec<(u64, Map<String, Value>)> = nodes
             .into_iter()
             .flatten()
             .filter(|(_, n)| n.kind == DIFF_NODE)
-            .map(|(id, n)| (*id, prop(&n.props, "patch").unwrap_or("").to_owned()))
-            .filter(|(id, patch)| self.plugins.diffs.get(&(plugin.to_owned(), *id)).is_none_or(|(had, _)| had != patch))
+            .filter(|(id, n)| self.plugins.diffs.get(&(plugin.to_owned(), **id)).is_none_or(|had| had.source != diff_source(&n.props)))
+            .map(|(id, n)| (*id, n.props.clone()))
             .collect();
-        for (id, patch) in changed {
-            let state = self.panel.diff_state(parse(&patch));
-            self.plugins.diffs.insert((plugin.to_owned(), id), (patch, state));
+        for (id, props) in changed {
+            let diff = self.plugin_diff(&props);
+            self.plugins.diffs.insert((plugin.to_owned(), id), diff);
         }
+    }
+
+    /// Parses a diff node's patch, or each of its sections' patches, into the files a diff view draws.
+    fn plugin_diff(&self, props: &Map<String, Value>) -> PluginDiff {
+        let source = diff_source(props);
+        let Some(sections) = props.get("sections").and_then(Value::as_array) else {
+            return PluginDiff { source, sections: Vec::new(), state: self.panel.diff_state(parse(prop(props, "patch").unwrap_or(""))) };
+        };
+        let (mut files, mut firsts, mut headings) = (Vec::new(), Vec::new(), Vec::new());
+        for section in sections {
+            let text = |name: &str| section.get(name).and_then(Value::as_str).filter(|t| !t.is_empty()).map(str::to_owned);
+            firsts.push(files.len());
+            files.extend(parse(section.get("patch").and_then(Value::as_str).unwrap_or("")));
+            headings.push(SectionHeading { label: text("label"), title: text("title").unwrap_or_default(), note: text("note") });
+        }
+        // Review folds a long list of files so it reads as an overview. Headings give a split diff its
+        // overview, and its files read in order, so they start open.
+        let mut state = DiffState::new(files);
+        state.set_mode(self.panel.diff_mode());
+        state.set_sections(firsts);
+        PluginDiff { source, sections: headings, state }
     }
 
     /// Asks the core for the active tab's layout, once per tab.
@@ -398,20 +439,21 @@ fn input_view(s: &Comet, plugin: &str, id: u64, props: &Map<String, Value>, k: &
 /// file: a plugin's diff may name files the project does not have, such as a pull request's.
 fn diff_view(s: &Comet, plugin: &str, id: u64, k: &Kit) -> El {
     let key = (plugin.to_owned(), id);
-    let Some((_, state)) = s.plugins.diffs.get(&key) else { return el() };
-    if state.files().is_empty() {
+    let Some(diff) = s.plugins.diffs.get(&key) else { return el() };
+    if diff.state.files().is_empty() {
         return col().w_full().grow(1.0).center().child(text("No changes.").font(crate::theme::text(13.0)).color(k.c.text_faint));
     }
-    let (get, get_mut, header_key) = (key.clone(), key.clone(), key.clone());
+    let (get, get_mut, header_key, section_key) = (key.clone(), key.clone(), key.clone(), key.clone());
     let dark = k.dark;
-    let view = DiffView::new(move |s: &Comet| &s.plugins.diffs[&get].1, move |s: &mut Comet| &mut s.plugins.diffs.get_mut(&get_mut).expect("a diff that showed").1)
+    let view = DiffView::new(move |s: &Comet| &s.plugins.diffs[&get].state, move |s: &mut Comet| &mut s.plugins.diffs.get_mut(&get_mut).expect("a diff that showed").state)
         .key(format!("plugin-diff-{plugin}-{id}"))
+        .section(move |s: &Comet, n: usize| s.plugins.diffs.get(&section_key).and_then(|d| d.sections.get(n)).map_or_else(el, |heading| section_heading(heading, crate::theme::kit(dark))))
         .file_header(move |s: &Comet, f: usize, collapsed: bool| {
-            let Some(file) = s.plugins.diffs.get(&header_key).and_then(|(_, d)| d.files().get(f)) else { return el() };
+            let Some(file) = s.plugins.diffs.get(&header_key).and_then(|d| d.state.files().get(f)) else { return el() };
             let toggle_key = header_key.clone();
             let toggle = move |s: &mut Comet| {
-                if let Some((_, diff)) = s.plugins.diffs.get_mut(&toggle_key) {
-                    diff.set_collapsed(f, !collapsed);
+                if let Some(diff) = s.plugins.diffs.get_mut(&toggle_key) {
+                    diff.state.set_collapsed(f, !collapsed);
                 }
             };
             crate::panel::diff_file_header(crate::theme::kit(dark), file, collapsed, toggle, None)
@@ -421,6 +463,14 @@ fn diff_view(s: &Comet, plugin: &str, id: u64, k: &Kit) -> El {
         .build(s, crate::theme::review_kit(dark));
     // The diff view finds its width by its own key, so it sits in a wrapper that takes the node's key.
     col().w_full().grow(1.0).min_h(0.0).child(view)
+}
+
+/// A section's heading above its files: its label, quiet, then its title and its note.
+fn section_heading(heading: &SectionHeading, k: &Kit) -> El {
+    let label = heading.label.clone().map(|t| text(t).font(crate::theme::text(12.0)).color(k.c.text_faint).wrap());
+    let title = text(heading.title.clone()).font(crate::theme::medium(14.0)).color(k.c.text_base).wrap();
+    let note = heading.note.clone().map(|t| text(t).font(crate::theme::text(13.0)).color(k.c.text_muted).wrap());
+    col().w_full().px(12.0).pt(20.0).pb(10.0).gap(2.0).children(label).child(title).children(note.map(|n| n.mt(4.0)))
 }
 
 /// A conversation, oldest first, kept scrolled to its end.
@@ -509,18 +559,48 @@ mod tests {
             { "op": "insert", "parent": 1, "id": 2 }
         ])), false);
         let key = ("p".to_owned(), 2);
-        assert_eq!(s.plugins.diffs[&key].1.files().len(), 1);
-        s.plugins.diffs.get_mut(&key).unwrap().1.set_collapsed(0, true);
+        assert_eq!(s.plugins.diffs[&key].state.files().len(), 1);
+        s.plugins.diffs.get_mut(&key).unwrap().state.set_collapsed(0, true);
 
         // Operations that leave the patch alone keep the state, folds included.
         s.take_plugin_ops("p", &ops(serde_json::json!([{ "op": "create", "id": 3, "type": "text" }, { "op": "insert", "parent": 1, "id": 3 }])), false);
-        assert!(s.plugins.diffs[&key].1.collapsed(0));
+        assert!(s.plugins.diffs[&key].state.collapsed(0));
 
         s.take_plugin_ops("p", &ops(serde_json::json!([{ "op": "set", "id": 2, "key": "patch", "value": patch("newer") }])), false);
-        assert!(!s.plugins.diffs[&key].1.collapsed(0), "a new patch parses again");
+        assert!(!s.plugins.diffs[&key].state.collapsed(0), "a new patch parses again");
 
         s.take_plugin_ops("p", &ops(serde_json::json!([{ "op": "remove", "parent": 1, "id": 2 }])), false);
         assert!(s.plugins.diffs.is_empty());
+    }
+
+    #[test]
+    fn a_diff_node_with_sections_parses_each_and_heads_its_first_file() {
+        let mut s = Comet::default();
+        let patch = |file: &str| format!("diff --git a/{file} b/{file}\n--- a/{file}\n+++ b/{file}\n@@ -1 +1 @@\n-old\n+new\n");
+        let sections = serde_json::json!([
+            { "label": "Runtime · 1 of 2", "title": "Count attempts", "note": "A limiter counts them.", "patch": format!("{}{}", patch("a.ts"), patch("b.ts")) },
+            { "title": "Test the limiter", "patch": patch("a.test.ts") }
+        ]);
+        s.take_plugin_ops("p", &ops(serde_json::json!([
+            { "op": "create", "id": 1, "type": "root" },
+            { "op": "create", "id": 2, "type": "diff" },
+            { "op": "set", "id": 2, "key": "sections", "value": sections },
+            { "op": "insert", "parent": 1, "id": 2 }
+        ])), false);
+        let key = ("p".to_owned(), 2);
+        let diff = &s.plugins.diffs[&key];
+        assert_eq!(diff.state.files().iter().map(|f| f.path()).collect::<Vec<_>>(), ["a.ts", "b.ts", "a.test.ts"]);
+        assert_eq!(diff.sections.iter().map(|h| (h.label.as_deref(), h.title.as_str(), h.note.as_deref())).collect::<Vec<_>>(), [
+            (Some("Runtime · 1 of 2"), "Count attempts", Some("A limiter counts them.")),
+            (None, "Test the limiter", None),
+        ]);
+        // The diff view's rows are its own, so the test reads them by name.
+        let headings: Vec<usize> = diff.state.rows.iter().filter(|r| format!("{r:?}").starts_with("Section")).map(|r| r.file()).collect();
+        assert_eq!(headings, [0, 2]);
+
+        // New sections parse again.
+        s.take_plugin_ops("p", &ops(serde_json::json!([{ "op": "set", "id": 2, "key": "sections", "value": [{ "title": "All", "patch": patch("c.ts") }] }])), false);
+        assert_eq!(s.plugins.diffs[&key].state.files().len(), 1);
     }
 
     #[test]

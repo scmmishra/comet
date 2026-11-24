@@ -115,10 +115,14 @@ pub(crate) const LINE_H: f32 = 20.0;
 pub(crate) const HEADER_H: f32 = 40.0;
 pub(crate) const GAP_H: f32 = 32.0;
 pub(crate) const NOTE_H: f32 = 40.0;
+/// A section's heading: a label, a title and a note of a line or two. Its text wraps, so this only estimates it.
+pub(crate) const SECTION_H: f32 = 76.0;
 
 /// One row of the virtual list.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Row {
+    /// The heading of section `s`, above the header of `f`, its first file.
+    Section { s: u32, f: u32 },
     /// A file's header.
     File(u32),
     /// A file with no lines to show: binary, or only renamed or re-moded.
@@ -137,7 +141,7 @@ pub(crate) enum Row {
 impl Row {
     pub(crate) fn file(self) -> usize {
         match self {
-            Row::File(f) | Row::Note(f) | Row::Gap { f, .. } | Row::Ctx { f, .. } | Row::Line { f, .. } | Row::Pair { f, .. } => f as usize,
+            Row::Section { f, .. } | Row::File(f) | Row::Note(f) | Row::Gap { f, .. } | Row::Ctx { f, .. } | Row::Line { f, .. } | Row::Pair { f, .. } => f as usize,
         }
     }
 }
@@ -171,6 +175,8 @@ const CHUNK: u32 = 128;
 /// [`DiffView`](super::DiffView) draws it.
 pub struct DiffState {
     files: Vec<FileDiff>,
+    /// The first file of each section, in order. A diff without sections has none.
+    sections: Vec<u32>,
     ui: Vec<FileUi>,
     mode: DiffMode,
     wrap: bool,
@@ -222,6 +228,7 @@ impl DiffState {
     pub fn new(files: Vec<FileDiff>) -> DiffState {
         let mut s = DiffState {
             files: Vec::new(),
+            sections: Vec::new(),
             ui: Vec::new(),
             mode: DiffMode::Unified,
             wrap: false,
@@ -272,6 +279,8 @@ impl DiffState {
         self.digits = files.iter().map(|f| f.last_line().max(1).ilog10() + 1).map(|d| d.max(3)).collect();
         self.columns = files.iter().map(FileDiff::columns).max().unwrap_or(0);
         self.files = files;
+        // Sections name files by their place, so they describe only the files they came with.
+        self.sections.clear();
         self.set_selection(None);
         self.chunks.borrow_mut().clear();
         self.visible = 0;
@@ -283,6 +292,13 @@ impl DiffState {
 
     pub fn files(&self) -> &[FileDiff] {
         &self.files
+    }
+
+    /// Splits the files into sections, each starting at the file `firsts` names, in order. Each section's
+    /// heading shows above its first file's header.
+    pub fn set_sections(&mut self, firsts: Vec<usize>) {
+        self.sections = firsts.into_iter().map(|f| f as u32).collect();
+        self.rebuild();
     }
 
     /// The index of the file at `path` (its new path, or old for a deleted file).
@@ -678,6 +694,7 @@ impl DiffState {
 
     fn estimate(&self, r: usize) -> f32 {
         match self.rows[r] {
+            Row::Section { .. } => SECTION_H,
             Row::File(_) => HEADER_H,
             Row::Note(_) => NOTE_H,
             Row::Gap { .. } => GAP_H,
@@ -759,6 +776,10 @@ impl DiffState {
         self.hunk_rows.clear();
         for (f, file) in self.files.iter().enumerate() {
             let fu = f as u32;
+            // A section with no files of its own starts at the same file as the next, so it shows no heading.
+            if let Some(s) = self.sections.iter().rposition(|&first| first == fu) {
+                rows.push(Row::Section { s: s as u32, f: fu });
+            }
             self.file_rows.push(rows.len() as u32);
             rows.push(Row::File(fu));
             if self.ui[f].collapsed {
@@ -822,6 +843,7 @@ impl DiffState {
     /// moves it rather than replacing it.
     fn key_of(&self, r: Row) -> String {
         match r {
+            Row::Section { s, .. } => format!("ds{s}"),
             Row::File(f) => format!("df{f}"),
             Row::Note(f) => format!("df{f}.note"),
             Row::Gap { f, gap } => format!("df{f}.g{gap}"),
@@ -882,6 +904,7 @@ mod tests {
         s.rows
             .iter()
             .map(|&r| match r {
+                Row::Section { s, .. } => format!("section{s}"),
                 Row::File(_) => "file".into(),
                 Row::Note(_) => "note".into(),
                 Row::Gap { gap, .. } => format!("gap{gap}:{}", s.hidden(0, gap as usize).unwrap()),
@@ -992,6 +1015,24 @@ mod tests {
         s.hover_text(Side::New, "b", false);
         s.hover_text(Side::New, "c", true);
         assert_eq!(s.copy_side(), Side::New);
+    }
+
+    #[test]
+    fn sections_head_their_first_files_and_no_file_header_sticks_over_a_heading() {
+        let files = (0..3).map(|i| FileDiff::from_texts(format!("f{i}"), "a\n", "b\n")).collect();
+        let mut s = DiffState::new(files);
+        // The second section has no files of its own, so only the third's heading shows above f1.
+        s.set_sections(vec![0, 1, 1]);
+        assert_eq!(shown(&s), ["section0", "file", "1|-", "-|1", "section2", "file", "1|-", "-|1", "file", "1|-", "-|1"]);
+        assert_eq!(s.keys[4], "ds2");
+        // A heading belongs to its first file, and that file's header does not stick over it.
+        assert_eq!(s.set_visible_rows(4..9), (Some(1), false));
+        assert_eq!((s.visible_file(), s.sticky()), (1, None));
+        assert_eq!(s.set_visible_rows(6..9), (None, true));
+        assert_eq!(s.sticky(), Some(1));
+        // Sections describe the files they came with, so new files drop them.
+        s.set_files(vec![FileDiff::from_texts("y", "a\n", "b\n")]);
+        assert_eq!(shown(&s), ["file", "1|-", "-|1"]);
     }
 
     #[test]

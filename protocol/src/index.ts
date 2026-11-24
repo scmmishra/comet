@@ -830,6 +830,15 @@ export interface MessageData {
  * The UI primitives a plugin draws with, by node type, and their props as the plugin writes them. The
  * plugin package builds its components from this list, and the app draws each type, so both change together.
  */
+/** One section of a split diff: a heading over files of its own. `label` is a quiet line above the title. */
+export interface DiffSection {
+  readonly label?: string
+  readonly title: string
+  readonly note?: string
+  /** The section's files, as a unified diff. */
+  readonly patch: string
+}
+
 export interface UiPrimitives {
   /** Children in a row or a column. */
   stack: { direction?: "row" | "column"; gap?: number; grow?: boolean }
@@ -859,8 +868,11 @@ export interface UiPrimitives {
   /** A conversation, oldest first. */
   messages: { items: readonly MessageData[] }
   markdown: { text: string }
-  /** A unified diff, as `git diff` writes it, drawn as Review draws changes. It fills the space it is given. */
-  diff: { patch: string }
+  /**
+   * A unified diff, as `git diff` writes it, drawn as Review draws changes. It fills the space it is given
+   * and scrolls. `sections` splits it under headings, each over a patch of its own, in one scroll.
+   */
+  diff: { patch?: string; sections?: readonly DiffSection[] }
 }
 export type UiPrimitive = keyof UiPrimitives
 

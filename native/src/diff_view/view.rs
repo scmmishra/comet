@@ -69,6 +69,8 @@ pub struct DiffView<S> {
     header: Option<Rc<dyn Fn(&S, usize) -> El>>,
     /// Comet's change: the app's own file header, in place of the built-in one.
     file_header: Option<Rc<dyn Fn(&S, usize, bool) -> El>>,
+    /// Comet's change: the heading of each section, by its index, for a diff split into sections.
+    section: Option<Rc<dyn Fn(&S, usize) -> El>>,
     /// Comet's change: the code's syntax colours and font, in place of the kit's.
     syntax: Option<SyntaxTheme>,
     code_font: Option<TextStyle>,
@@ -87,6 +89,7 @@ impl<S: 'static> DiffView<S> {
             annotation: None,
             header: None,
             file_header: None,
+            section: None,
             syntax: None,
             code_font: None,
             on_select: None,
@@ -138,6 +141,14 @@ impl<S: 'static> DiffView<S> {
     /// file tree.
     pub fn on_visible_file(mut self, f: impl Fn(&mut S, usize) + 'static) -> Self {
         self.on_visible_file = Some(Rc::new(f));
+        self
+    }
+
+    /// Comet's change: draws the heading of each section with `f`, given its index, for a diff split
+    /// with [`DiffState::set_sections`]. The heading scrolls with the diff: unlike a file header, it never
+    /// sticks to the top.
+    pub fn section(mut self, f: impl Fn(&S, usize) -> El + 'static) -> Self {
+        self.section = Some(Rc::new(f));
         self
     }
 
@@ -385,6 +396,7 @@ impl<S: 'static> View<S> {
         let r = st.rows[i];
         let key = st.keys[i].as_str();
         match r {
+            Row::Section { s: n, .. } => self.section(s, st, n as usize),
             Row::File(f) => self.file_header(s, st, f as usize, false),
             Row::Note(f) => memo(key, (self.look.version, st.rev, st.view_width().to_bits()), || self.note(st, f as usize)),
             Row::Gap { f, gap } => memo(key, (self.look.version, st.rev, st.view_width().to_bits(), self.d.fold_row), || match self.d.fold_row {
@@ -778,6 +790,16 @@ impl<S: 'static> View<S> {
             inner = inner.max_w(w).sticky_left(0.0);
         }
         row().w_full().h(NOTE_H).fill(l.bg).role("note").label(msg).child(inner)
+    }
+
+    /// A section's heading, as wide as the view and held to its left edge while the code scrolls.
+    fn section(&self, s: &S, st: &DiffState, n: usize) -> El {
+        let Some(custom) = &self.d.section else { return col() };
+        let mut heading = col().w_full().fill(self.look.bg).role("heading").child(custom(s, n));
+        if let Some(w) = self.view_w(st, false) {
+            heading = heading.w(w).sticky_left(0.0);
+        }
+        heading
     }
 
     fn file_header(&self, s: &S, st: &DiffState, f: usize, sticky: bool) -> El {
