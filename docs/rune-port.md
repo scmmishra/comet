@@ -124,7 +124,8 @@ Left:
 - Rune has no left-start placement, so a subagent's detail centres beside its row.
 - A surface anchored beside its anchor is not fitted to the window, only one above or below it, and a rune-kit `Menu` takes no maximum height. A submenu opens beside its row, so a long one runs off the window. The header's MCP servers and skills open their lists beside the menu in a `PopupList`, which takes a maximum height, not in a submenu.
 - A truncated text draws only its first line, but takes the height of all its lines. Text with newlines makes its row tall, so Comet passes one line to `.truncate()`.
-- Rune lights a `.hover()` style on every element under the pointer, including elements under an overlay. Only a modal makes them inert. rune-kit's `scrim` catches presses but not hover, and its `Popover` uses one. Comet makes each of its popovers a modal that closes on an outside press. Rune's d6ed683f stops hover at the topmost element, which may fix this. It needs a check in the app.
+- rune-kit's `Dialog` draws a 6 point radius. `@opencode/ui`'s dialog now takes 12 px, and its Large size is 680 by 600 px on `bg-base`, with X-large at 880 by 680 px (OpenCode 46744b64, 8bb7fab2, 56625a3e, 40f7e4da).
+- rune-kit's `BadgeVariant` has only Neutral, Accent and Subtle. `@opencode/ui`'s Badge added `danger`: the danger state's fill and ink, with a 0.5 px danger border (OpenCode 9e3290ab). Comet's "N failing" badge draws with its own `tinted_badge` in `native/src/ui.rs`.
 - rune-kit has no resize handle of its own. Its grip lives inside `SplitView`, a whole window of another shape. Comet's handle in `native/src/panes.rs` follows `@opencode/ui`'s `ResizeHandle`.
 
 ## Comet's design rules

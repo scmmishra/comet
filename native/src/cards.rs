@@ -76,8 +76,9 @@ pub fn rail(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
 /// A project's cards folded into a chip in the session header, for when the session is too narrow for the
 /// rail. A click on the chip opens the project's cards and the plugin cards, and a click outside them or Escape closes
 /// them. They do not open on hover: the pointer lost them crossing the gap between the chip and the cards.
-/// Like Comet's other popovers, the cards are a modal. Rune lights a `.hover()` under the pointer even beneath an
-/// overlay, unless a modal makes it inert.
+/// Like Comet's other popovers, the cards are a modal. Rune used to light a `.hover()` under the pointer even beneath
+/// an overlay, unless a modal made it inert. Rune 4bd96797 lights only the topmost element and its ancestors. Once that
+/// is checked in the installed app, the popovers need not be modals, unless one relies on the modal for focus or Escape.
 pub fn space_chip(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
     let space = s.projects.get(&tab.project).and_then(|p| p.space.as_ref());
     let words = |w: String, color| text(w).font(crate::theme::text(12.0)).color(color);
