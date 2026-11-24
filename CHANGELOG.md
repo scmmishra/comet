@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- Hold ⌘ alone for a moment, and each of the first nine tabs shows its ⌘1 to ⌘9 number in place of its project mark. The numbers hide when you let go, press another modifier or leave the window. They do not show while the model picker is open, since ⌘1 to ⌘9 pick models there.
 - Comet runs on a newer Rune. The first window shows sooner at launch. Metal recovers from more GPU failures, where before the window could get stuck. Trackpad scrolling no longer stalls when it starts after a pause. The thread's minimap lights its marks at once. Hover no longer lights up elements under an open popover.
 - A Codex approval says what it approves. A command that needs the network names the host it wants to reach. A permissions request names every path it asks for, including the ones only Codex 0.169's new list carries. Before, such a request could show only "Allow more access".
 - A thread's context ring stays after a rewind, after a plugin switches the tab back to one of its threads, and when a reply ends while Comet reads a long thread at start. Before, the ring went missing until the next reply ended.

@@ -12,6 +12,13 @@ use serde_json::Map;
 pub const NEW_TAB_TITLE: &str = "New session";
 /// A tab named after a message keeps this many characters of its first line.
 const TITLE_LENGTH: usize = 40;
+/// How many tabs ⌘1 to ⌘9 reach, from the first.
+const NUMBERED_TABS: usize = 9;
+
+/// The ⌘ number that selects the tab at `index`, as `Workspace::show_tab_at` does. Tabs past the ninth have none.
+pub fn tab_number(index: usize) -> Option<usize> {
+    (index < NUMBERED_TABS).then_some(index + 1)
+}
 
 /// Whether a tab still has the name a new tab gets.
 pub fn is_untitled(tab: &TabInfo) -> bool {

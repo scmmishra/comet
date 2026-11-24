@@ -81,9 +81,14 @@ impl Comet {
         );
     }
 
+    /// Whether ⌘1 to ⌘9 pick models, not tabs: while the picker is open.
+    pub fn digits_pick_models(&self) -> bool {
+        self.picker.open
+    }
+
     /// ⌘1 to ⌘9 pick one of the models on show while the picker is open. Whether the picker took the shortcut.
     pub fn pick_model_by_number(&mut self, index: usize) -> bool {
-        if !self.picker.open {
+        if !self.digits_pick_models() {
             return false;
         }
         let Some(tab) = self.workspace.active_tab().cloned() else { return false };

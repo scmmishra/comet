@@ -38,6 +38,11 @@ const HEADER_HEIGHT: f32 = 46.0;
 /// A project's mark. `@opencode/ui`'s avatar is 16 points: its CSS, outside Tailwind's layers, beats the
 /// header's `size-[18px]`.
 const PROJECT_MARK: f32 = 16.0;
+/// How a tab's mark swaps its initial and its ⌘ number, after OpenCode: 160 ms, easing out,
+/// with a 6 point rise and a 1 point blur.
+const NUMBER_SWAP: rune::Anim = rune::Anim::new(rune::Curve::tween(0.16, rune::Easing::CubicBezier(rune::CubicBezier::new(0.0, 0.0, 0.58, 1.0))));
+const NUMBER_RISE: f32 = 6.0;
+const NUMBER_BLUR: f32 = 1.0;
 
 #[derive(Debug, Default, PartialEq)]
 pub enum CoreState {
@@ -78,6 +83,7 @@ pub struct Comet {
     /// Whether ⌘ is held, so the new tab button opens its tab next to the active one.
     cmd_held: bool,
     pub tab_bar: crate::tab_bar::TabBar,
+    pub tab_numbers: crate::tab_numbers::TabNumbers,
     pub session_menu: crate::session_menu::SessionMenu,
     pub rewind: crate::rewind::Rewind,
     pub branch_notices: crate::branch_notice::BranchNotices,
@@ -348,12 +354,12 @@ pub mod commands {
 }
 
 /// Ticks the clock each second while something with a timer runs. A still window does no work.
-pub fn poll(s: &mut Comet, _: f64, tx: &mut Tx) -> bool {
+pub fn poll(s: &mut Comet, clock: f64, tx: &mut Tx) -> bool {
     s.sync_palette();
     s.sync_plugin_inputs();
     s.sync_branch_notice();
     crate::tab_bar::follow_active(s, tx);
-    let composed = composer::poll(s, tx) | copied_poll(s, tx) | toasts_poll(s, tx) | crate::terminal_view::poll(s, tx) | crate::thread_view::poll(s, tx);
+    let composed = composer::poll(s, tx) | copied_poll(s, tx) | toasts_poll(s, tx) | crate::terminal_view::poll(s, tx) | crate::thread_view::poll(s, tx) | tab_numbers_poll(s, clock, tx);
     if s.status == CoreState::Ready {
         let next = s.refresh_usage();
         tx.wake_after(next);
@@ -375,6 +381,20 @@ fn toasts_poll(s: &mut Comet, tx: &mut Tx) -> bool {
         tx.wake_after(next);
     }
     changed
+}
+
+/// Shows the tab numbers once ⌘ has been held long enough. A wake can come a hair early, so a
+/// hold not yet due asks again.
+fn tab_numbers_poll(s: &mut Comet, clock: f64, tx: &mut Tx) -> bool {
+    let shown = s.tab_numbers.tick(clock);
+    if shown {
+        // Rune lands a change no input caused at once. The numbers swap in on their curve.
+        tx.animated();
+    }
+    if let Some(due) = s.tab_numbers.due() {
+        tx.wake_at(due);
+    }
+    shown
 }
 
 /// How long a copy button says it copied.
@@ -412,8 +432,12 @@ pub fn ime(s: &mut Comet, event: &rune::Ime, _: &mut Tx) -> bool {
 }
 
 /// Hears the modifier keys held down each time they change.
-pub fn modifiers(s: &mut Comet, mods: rune::Mods, _: &mut Tx) {
+pub fn modifiers(s: &mut Comet, mods: rune::Mods, tx: &mut Tx) {
     s.cmd_held = mods.cmd;
+    s.tab_numbers.modifiers(mods, tx.clock());
+    if let Some(due) = s.tab_numbers.due() {
+        tx.wake_at(due);
+    }
 }
 
 pub fn view(s: &Comet, cx: &mut Cx<Comet>) -> El {
@@ -595,19 +619,62 @@ pub fn project_label(s: &Comet, project: &str) -> String {
 /// A project's mark. A folder in a worktree takes its repo's.
 pub fn project_mark(s: &Comet, project: &str, k: &rune_kit::Kit) -> El {
     let project = s.projects.home(project);
-    let icon = s.account.project_icon(project).and_then(|path| s.images.file(&std::path::Path::new(project).join(path)));
-    match icon {
-        // An icon is often a transparent logo, so it shows whole, without the tile.
-        Some(image) => rune::el().size(PROJECT_MARK, PROJECT_MARK).pixels_fit(image.pixels(), rune::SurfaceFit::Fit),
-        None => {
-            let initial = s.account.project_label(project).chars().next().unwrap_or(' ').to_uppercase().to_string();
-            avatar(&initial, s.account.project_color(project).unwrap_or("gray"), PROJECT_MARK, k)
-        }
+    match project_icon(s, project) {
+        Some(icon) => icon,
+        None => avatar(&project_initial(s, project), project_color(s, project), PROJECT_MARK, k),
     }
+}
+
+/// A tab's project mark. While `numbered`, the tab's ⌘ number rises in place of the initial, or
+/// over the icon on a tile of its own, as OpenCode's tabs show it while ⌘ is held. A tab with no
+/// number keeps its mark.
+pub fn tab_mark(s: &Comet, project: &str, number: Option<usize>, numbered: bool, k: &rune_kit::Kit) -> El {
+    let Some(number) = number else { return project_mark(s, project, k) };
+    let project = s.projects.home(project);
+    let color = project_color(s, project);
+    // A face of the mark: shown, or faded out and moved down by `rise` points, up when it is negative.
+    let face = |content: El, shown: bool, rise: f32| {
+        row()
+            .absolute(0.0, 0.0)
+            .size(PROJECT_MARK, PROJECT_MARK)
+            .center()
+            .opacity(if shown { 1.0 } else { 0.0 })
+            .offset(0.0, if shown { 0.0 } else { rise })
+            .blur(if shown { 0.0 } else { NUMBER_BLUR })
+            .opacity_motion(NUMBER_SWAP)
+            .offset_motion(NUMBER_SWAP)
+            .blur_motion(NUMBER_SWAP)
+            .child(content)
+    };
+    let number = avatar_text(&number.to_string(), k);
+    match project_icon(s, project) {
+        Some(icon) => rune::el().size(PROJECT_MARK, PROJECT_MARK).child(icon).child(face(avatar_tile(color, PROJECT_MARK, k).child(number), numbered, NUMBER_RISE).a11y_hidden()),
+        None => avatar_tile(color, PROJECT_MARK, k)
+            .child(face(avatar_text(&project_initial(s, project), k), !numbered, -NUMBER_RISE))
+            .child(face(number, numbered, NUMBER_RISE).a11y_hidden()),
+    }
+}
+
+/// A project's icon, if it has one. An icon is often a transparent logo, so it shows whole, without the tile.
+fn project_icon(s: &Comet, project: &str) -> Option<El> {
+    let image = s.account.project_icon(project).and_then(|path| s.images.file(&std::path::Path::new(project).join(path)))?;
+    Some(rune::el().size(PROJECT_MARK, PROJECT_MARK).pixels_fit(image.pixels(), rune::SurfaceFit::Fit))
+}
+
+fn project_initial(s: &Comet, project: &str) -> String {
+    s.account.project_label(project).chars().next().unwrap_or(' ').to_uppercase().to_string()
+}
+
+fn project_color<'a>(s: &'a Comet, project: &str) -> &'a str {
+    s.account.project_color(project).unwrap_or("gray")
 }
 
 /// `@opencode/ui`'s ProjectAvatar: an initial on a tile in one of its colours, lit from the top.
 pub fn avatar(initial: &str, color: &str, size: f32, k: &rune_kit::Kit) -> El {
+    avatar_tile(color, size, k).child(avatar_text(initial, k))
+}
+
+fn avatar_tile(color: &str, size: f32, k: &rune_kit::Kit) -> El {
     let theme = rune_theme_opencode::theme(k.dark);
     row()
         .size(size, size)
@@ -616,7 +683,11 @@ pub fn avatar(initial: &str, color: &str, size: f32, k: &rune_kit::Kit) -> El {
         .fill(theme.color(&format!("v2-avatar-bg-{color}")))
         .gradient(Color::WHITE.alpha(0.16), Color::WHITE.alpha(0.0))
         .border(0.5, theme.color(&format!("v2-avatar-border-{color}")))
-        .child(text(initial.to_owned()).font(rune::TextStyle::new(11.0, 530.0).lh(11.0).tracking(0.05)).color(theme.color("v2-avatar-fg")))
+}
+
+fn avatar_text(words: &str, k: &rune_kit::Kit) -> El {
+    let theme = rune_theme_opencode::theme(k.dark);
+    text(words.to_owned()).font(rune::TextStyle::new(11.0, 530.0).lh(11.0).tracking(0.05)).color(theme.color("v2-avatar-fg"))
 }
 
 #[cfg(test)]

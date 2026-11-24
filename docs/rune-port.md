@@ -126,6 +126,7 @@ Left:
 - A truncated text draws only its first line, but takes the height of all its lines. Text with newlines makes its row tall, so Comet passes one line to `.truncate()`.
 - rune-kit's `Dialog` draws a 6 point radius. `@opencode/ui`'s dialog now takes 12 px, and its Large size is 680 by 600 px on `bg-base`, with X-large at 880 by 680 px (OpenCode 46744b64, 8bb7fab2, 56625a3e, 40f7e4da).
 - rune-kit's `BadgeVariant` has only Neutral, Accent and Subtle. `@opencode/ui`'s Badge added `danger`: the danger state's fill and ink, with a 0.5 px danger border (OpenCode 9e3290ab). Comet's "N failing" badge draws with its own `tinted_badge` in `native/src/ui.rs`.
+- Rune has no hook that hears every key. A menu's key equivalents never reach the window, a focused field keeps its own keys, and the window's `on_key` hears only the rest. So a shortcut pressed while ⌘ is held, such as ⌘C, does not hide the tab numbers, as it does in OpenCode. Only a change of modifiers does.
 - rune-kit has no resize handle of its own. Its grip lives inside `SplitView`, a whole window of another shape. Comet's handle in `native/src/panes.rs` follows `@opencode/ui`'s `ResizeHandle`.
 
 ## Comet's design rules

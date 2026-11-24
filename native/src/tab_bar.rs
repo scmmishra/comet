@@ -3,7 +3,7 @@
 //! on the active tab and the one under the pointer. Rune's TabStrip sets its titles in the kit's
 //! medium weight and shrinks its tabs to fit, so Comet draws its own.
 
-use crate::shell::{Comet, project_mark};
+use crate::shell::{Comet, tab_mark};
 use crate::workspace::Place;
 use rune::{Anim, Color, Drag, El, Phase, Tx, el, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit, Spinner};
@@ -74,6 +74,8 @@ pub fn tab_bar(s: &Comet, k: &Kit) -> El {
     // Settings show in place of the active tab, so while they are open no tab is marked active.
     let shown = w.active.as_deref().filter(|_| w.settings_page.is_none());
     let dragging = s.tab_bar.drag.as_ref();
+    // While the model picker is open, ⌘1 to ⌘9 pick models, so the tabs show no numbers.
+    let numbered = s.tab_numbers.shown() && !s.digits_pick_models();
     let tabs = w.tabs.iter().enumerate().map(|(index, tab)| {
         let active = shown == Some(tab.id.as_str());
         let busy = s.threads.get(&tab.id).is_some_and(|t| t.busy);
@@ -100,7 +102,7 @@ pub fn tab_bar(s: &Comet, k: &Kit) -> El {
             .items_center()
             .pl(8.0)
             .pr(28.0)
-            .child(project_mark(s, &tab.project, k))
+            .child(tab_mark(s, &tab.project, crate::workspace::tab_number(index), numbered, k))
             .child(title)
             .children(busy.then(|| Spinner::new().size(14.0).color(k.c.text_accent).build(k)));
         let id = tab.id.clone();
