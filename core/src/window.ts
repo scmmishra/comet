@@ -624,7 +624,7 @@ export class Window {
     this.terminals.closeAll()
   }
 
-  private tab(tabId: string): TabInfo {
+  tab(tabId: string): TabInfo {
     const tab = this.state.tabs.find((found) => found.id === tabId)
     if (!tab) throw new Error("Comet could not find the tab.")
     return tab

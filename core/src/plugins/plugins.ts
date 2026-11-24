@@ -1,6 +1,7 @@
 import type { TurnOutcome } from "@comet/plugin"
 import type { FromPlugin, Offers, ToPlugin, ViewRequest, ViewResult } from "@comet/plugin/host"
 import { contributionId, splitContributionId, type CoreMessage, type PanelParams, type PluginContributions, type ProjectSetup, type UiValue } from "@comet/protocol"
+import { errorMessage } from "../errors"
 import { isProjectFolder } from "../project-path"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
@@ -9,6 +10,7 @@ import { bundlePlugin } from "./bundle"
 import { checkPlugin, readManifest } from "./manifest"
 import { pluginSettingValues } from "./settings"
 import { pluginProjects, pluginsOn } from "./config"
+import type { PluginRun } from "./runs"
 
 type Send = (message: CoreMessage) => void
 
@@ -26,6 +28,8 @@ interface PluginHooks {
   readonly broadcast: Send
   /** A plugin asked to open a tab's thread for a key. */
   readonly openThread: (tabId: string, thread: KeyedThread) => void
+  /** A plugin asked to run a prompt on a tab's agent. It throws when the run cannot start. */
+  readonly run: (tabId: string, prompt: string) => PluginRun
   /** A plugin asked to open a panel instance in a tab. */
   readonly openPanel: (tabId: string, panel: string, params: PanelParams) => void
   /** A panel asked to close itself. */
@@ -39,6 +43,8 @@ interface Running {
   readonly offers: Offers
   /** `show` asks waiting for the plugin's answer, by sequence number. */
   readonly showing: Map<number, { readonly resolve: (views: readonly ViewResult[]) => void; readonly reject: (error: Error) => void }>
+  /** The runs the plugin started that have not ended, by the id the plugin gave each. */
+  readonly runs: Map<number, { readonly tabId: string; readonly run: PluginRun }>
 }
 
 /** What the plugins on in a project offer, by kind, each under its full id, `<plugin>.<name>`. */
@@ -195,7 +201,10 @@ export class Plugins {
 
   /** A closed tab's views and plugin state go. */
   dropTab(tabId: string) {
-    this.each((found) => this.post(found, { type: "drop", tabId }))
+    this.each((found) => {
+      this.post(found, { type: "drop", tabId })
+      for (const { tabId: runIn, run } of found.runs.values()) if (runIn === tabId) run.stop()
+    })
   }
 
   /** Sends every running plugin's whole UI again, for a client that just connected. */
@@ -204,7 +213,10 @@ export class Plugins {
   }
 
   stop() {
-    this.each((found) => found.worker.terminate())
+    this.each((found) => {
+      closeRuns(found)
+      found.worker.terminate()
+    })
   }
 
   /** Does something with every plugin that runs. One that failed to start has nothing to hear. */
@@ -227,6 +239,7 @@ export class Plugins {
       void running.then((found) => {
         // The tabs lay out again with the new worker, so what waited on the old one draws nothing.
         for (const waiting of found.showing.values()) waiting.resolve([])
+        closeRuns(found)
         found.worker.terminate()
       }, () => undefined)
     }
@@ -282,7 +295,7 @@ export class Plugins {
         const message = event.data
         if (stale() && message.type !== "ready" && message.type !== "failed") return
         if (message.type === "ready") {
-          running = { worker, offers: message.offers, showing: new Map() }
+          running = { worker, offers: message.offers, showing: new Map(), runs: new Map() }
           resolve(running)
         } else if (message.type === "failed") {
           worker.terminate()
@@ -295,6 +308,7 @@ export class Plugins {
         if (stale()) return
         const error = new Error(event.message)
         for (const waiting of running.showing.values()) waiting.reject(error)
+        closeRuns(running)
         this.fail(plugin, error, "stopped")
         // The app's copy of a stopped plugin's nodes draws nothing anyone can use.
         this.hooks.broadcast({ type: "plugin.ops", plugin, ops: [], reset: true })
@@ -313,13 +327,39 @@ export class Plugins {
       const { tabId, key, title, prompt } = message
       // A thread key belongs to its plugin, so two plugins in one project never share a thread.
       this.hooks.openThread(tabId, { key: contributionId(plugin, key), ...(title ? { title } : {}), ...(prompt ? { prompt } : {}) })
-    } else if (message.type === "open") this.hooks.openPanel(message.tabId, message.panel, message.params ?? {})
+    } else if (message.type === "run") this.run(running, message.id, message.tabId, message.prompt)
+    else if (message.type === "stopRun") running.runs.get(message.id)?.run.stop()
+    else if (message.type === "open") this.hooks.openPanel(message.tabId, message.panel, message.params ?? {})
     else if (message.type === "close") this.hooks.closePanel(message.tabId, message.id)
     else if (message.type === "toast") this.hooks.broadcast({ type: "notice", message: message.message })
     else if (message.type === "error") this.hooks.broadcast({ type: "error", message: `Something in the ${plugin} plugin failed`, detail: message.message })
   }
 
+  /** Starts a run a plugin asked for, and answers it once the run ends. */
+  private run(running: Running, id: number, tabId: string, prompt: string) {
+    let run: PluginRun
+    try {
+      run = this.hooks.run(tabId, prompt)
+    } catch (error) {
+      return this.post(running, { type: "ran", id, error: errorMessage(error) })
+    }
+    running.runs.set(id, { tabId, run })
+    void run.done
+      .then(
+        (reply): ToPlugin => ({ type: "ran", id, reply }),
+        (error): ToPlugin => ({ type: "ran", id, error: errorMessage(error) }),
+      )
+      // A run closed with its plugin has no one left to answer.
+      .then((answer) => running.runs.delete(id) && this.post(running, answer))
+  }
+
   private post(running: Running, message: ToPlugin) {
     running.worker.postMessage(message)
   }
+}
+
+/** Ends a stopping plugin's runs at once. */
+function closeRuns(running: Running) {
+  for (const { run } of running.runs.values()) run.close()
+  running.runs.clear()
 }

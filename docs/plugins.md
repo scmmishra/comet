@@ -177,7 +177,21 @@ Each view and command gets a `ctx` for its tab:
 | `ctx.open(panel, params?)` | Opens a panel instance in the tab, or brings the open one to the front. The view pane opens. |
 | `ctx.isOpen(panel, params?)` | Whether that instance is open in the tab. It updates as panels open and close. |
 | `ctx.openThread({ key, title?, prompt? })` | Opens or resumes the tab's thread for `key`, on the tab's agent. Keys belong to the plugin, so two plugins never share a thread. |
+| `ctx.run(prompt, { signal? })` | Runs a prompt on the tab's agent and resolves with its final reply. No thread shows the run. |
 | `ctx.toast(message)` | Shows a short message. |
+
+`ctx.run` runs a prompt on the tab's agent and model, in the tab's folder, in a session no thread shows or lists. It adds nothing to the tab's thread. It resolves with the agent's final reply as text, so a plugin can ask for JSON and parse it.
+
+- The run is in Supervised mode, so the agent asks before it edits a file or runs a command that may change something. No thread shows its requests, so Comet declines each one. The agent may still read files and run commands it treats as read-only, such as `git diff`, without asking.
+- It rejects when the run fails or ends without an answer, when `signal` aborts, and when the tab closes. A reload of the plugins ends its runs, and their promises never settle.
+- Each run uses the user's agent plan. Start one when the user asks for it, such as from a button, not when a view shows.
+- It needs the plugin API 0.2.1, so a plugin that calls it declares `"api": "^0.2.1"`.
+
+```tsx
+const [guide, setGuide] = createSignal<string>()
+const generate = () => ctx.run(`Write a review guide for this diff:\n\n${diff}`).then(setGuide, (error) => ctx.toast(error.message))
+<Button label="Generate guide" onClick={generate} />
+```
 
 A view's context also has `ctx.visible()`. It is true while the view is on screen: its tab is the active tab and Comet's window has focus. A panel must also be the panel in front, with the view pane open. It updates as that changes, so an effect can start work when the view shows and stop it when the view hides:
 

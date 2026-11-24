@@ -23,6 +23,8 @@ export function harness() {
   const sent: CoreMessage[] = []
   const threads: { tabId: string; key: string; title?: string; prompt?: string }[] = []
   const nodes: Record<string, Record<number, UiNode>> = {}
+  /** Each run a plugin started. A test ends one with `answer` or `fail`, as its agent would. */
+  const runs: { tabId: string; prompt: string; stopped: boolean; closed: boolean; answer: (reply: string) => void; fail: (error: Error) => void }[] = []
   /** The tab the window shows. A test sets it, then calls `layouts.sendVisible()` as the core does on a save. */
   const screen: { active?: TabInfo } = {}
   /** The full key of the plugin thread each tab shows. `showThread` moves a tab, as the window does. */
@@ -36,6 +38,19 @@ export function harness() {
   const ui = startPlugins({
     broadcast,
     openThread: (tabId, thread) => threads.push({ tabId, ...thread }),
+    run: (tabId, prompt) => {
+      const { promise, resolve, reject } = Promise.withResolvers<string>()
+      const run = { tabId, prompt, stopped: false, closed: false, answer: resolve, fail: reject }
+      runs.push(run)
+      return {
+        done: promise,
+        stop: () => {
+          run.stopped = true
+          reject(new Error("The run was stopped before it finished."))
+        },
+        close: () => void (run.closed = true),
+      }
+    },
     store: { projectOf: () => project, layout: (tabId) => saved[tabId], setLayout: (tabId, layout) => (saved[tabId] = layout), activeTab: () => screen.active, threadKeyOf: (tabId) => shownThreads[tabId] },
     report: () => {},
   })
@@ -61,5 +76,5 @@ export function harness() {
   const errors = () => sent.flatMap((message) => (message.type === "error" ? [[message.message, message.detail].filter(Boolean).join(": ")] : []))
   const ids = (found: TabLayout | undefined) => ({ sidebar: found?.sidebar?.id, panels: found?.panels.map((panel) => panel.id), cards: found?.cards.map((card) => card.id) })
 
-  return { project, plugins, layouts, reload: ui.reload, saved, sent, threads, nodes, screen, showThread, layout, textOf, handler, errors, ids }
+  return { project, plugins, layouts, reload: ui.reload, saved, sent, threads, runs, nodes, screen, showThread, layout, textOf, handler, errors, ids }
 }

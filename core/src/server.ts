@@ -8,6 +8,7 @@ import { errorMessage } from "./errors"
 import { findNamedFile, openableFile, openInEditor, readForView } from "./files"
 import { checkImages } from "./images"
 import { startPlugins } from "./plugins"
+import { runForPlugin } from "./plugins/runs"
 import { watchInstalls, watchSettings } from "./plugins/watch"
 import { pluginManager } from "./plugins/manage"
 import { searchFiles } from "./project-files"
@@ -61,7 +62,7 @@ export function startCore({ token }: { readonly token: string }): CoreServer {
     spaceStale: (dir) => void Promise.resolve(read(dir, "space", broadcast)).catch(report),
     threadShown: (tabId, threadKey) => plugins.threadShown(tabId, threadKey),
   })
-  const ui = startPlugins({ broadcast, openThread: (tabId, thread) => void window.openKey(tabId, thread).catch(report), store: window, report })
+  const ui = startPlugins({ broadcast, openThread: (tabId, thread) => void window.openKey(tabId, thread).catch(report), run: (tabId, prompt) => runForPlugin(agents, window.tab(tabId), prompt), store: window, report })
   const { plugins, layouts } = ui
   const manager = pluginManager(broadcast)
   // A plugin installed or removed while Comet runs, such as with `comet plugin`, takes effect at once.

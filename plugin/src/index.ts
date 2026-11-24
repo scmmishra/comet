@@ -25,6 +25,14 @@ export interface TabContext {
   isOpen(panel: string, params?: PanelParams): boolean
   /** Opens or resumes the tab's thread for `key`, on the tab's agent. A new thread starts with `prompt`, when given. */
   openThread(thread: { readonly key: string; readonly title?: string; readonly prompt?: string }): void
+  /**
+   * Runs `prompt` on the tab's agent and model, in the tab's folder, and resolves with the agent's final
+   * reply. No thread shows the run, so it adds nothing to the tab's thread. The agent asks before it edits
+   * a file or runs a command that may change something, and Comet declines every request. It may still
+   * read files and run commands it treats as read-only, such as `git diff`. It rejects when the run
+   * fails, or when `signal` aborts or the tab closes, which stops it.
+   */
+  run(prompt: string, options?: { readonly signal?: AbortSignal }): Promise<string>
   /** Shows a short message. */
   toast(message: string): void
 }

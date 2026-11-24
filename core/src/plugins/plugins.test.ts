@@ -268,6 +268,64 @@ test("tells a plugin when a turn ends in a thread it opened, under its own key, 
   plugins.stop()
 }, 20_000)
 
+/** A plugin that runs what it is given on its tab's agent, and toasts the reply or the error. */
+const RUNNER = `
+import { definePlugin } from "@comet/plugin"
+
+export default definePlugin((comet) => {
+  let controller = new AbortController()
+  const ask = (ctx, input) => ctx.run(input, { signal: controller.signal }).then((reply) => ctx.toast("reply " + reply), (error) => ctx.toast("error " + error.message))
+  comet.command("ask", { title: "Ask", input: "Prompt", run: ask })
+  comet.command("cancel", { title: "Cancel", run: () => { controller.abort(); controller = new AbortController() } })
+})
+`
+
+test("runs a plugin's prompt for its tab, and gives the plugin the reply or why there is none", async () => {
+  installPlugin("runner", RUNNER)
+  turnOn({ everywhere: ["runner"] })
+  const { plugins, project, sent, runs } = harness()
+  const notices = () => sent.flatMap((message) => (message.type === "notice" ? [message.message] : []))
+
+  await plugins.command("tab-1", project, "runner.ask", "Write a guide.")
+  await until(() => runs.length === 1)
+  expect(runs[0]).toMatchObject({ tabId: "tab-1", prompt: "Write a guide." })
+  runs[0]!.answer("The guide.")
+  await until(() => notices().length === 1)
+  expect(notices()).toEqual(["reply The guide."])
+
+  await plugins.command("tab-1", project, "runner.ask", "Again.")
+  await until(() => runs.length === 2)
+  runs[1]!.fail(new Error("The run failed: the agent exited."))
+  await until(() => notices().length === 2)
+  expect(notices().at(-1)).toBe("error The run failed: the agent exited.")
+  plugins.stop()
+}, 20_000)
+
+test("stops a run when its plugin aborts it or its tab closes, and ends a stopping plugin's runs", async () => {
+  installPlugin("runner", RUNNER)
+  turnOn({ everywhere: ["runner"] })
+  const { plugins, project, sent, runs, reload } = harness()
+  const notices = () => sent.flatMap((message) => (message.type === "notice" ? [message.message] : []))
+
+  await plugins.command("tab-1", project, "runner.ask", "One.")
+  await until(() => runs.length === 1)
+  await plugins.command("tab-1", project, "runner.cancel")
+  await until(() => notices().length === 1)
+  expect(runs[0]!.stopped).toBe(true)
+  expect(notices()).toEqual(["error The run was stopped before it finished."])
+
+  await plugins.command("tab-1", project, "runner.ask", "Two.")
+  await plugins.command("tab-2", project, "runner.ask", "Three.")
+  await until(() => runs.length === 3)
+  plugins.dropTab("tab-2")
+  await until(() => runs[2]!.stopped)
+  expect(runs[1]!.stopped).toBe(false)
+
+  await reload()
+  expect(runs[1]!.closed).toBe(true)
+  plugins.stop()
+}, 20_000)
+
 /** A card that draws a variable from its environment. */
 const ENVIRONMENT = `
 import { definePlugin, Text } from "@comet/plugin"

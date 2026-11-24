@@ -55,6 +55,9 @@ export type ToPlugin =
   | { readonly type: "threadShown"; readonly tabId: string; readonly key?: string }
   /** A turn ended in a thread the plugin opened. `key` is the plugin's own, without its prefix. */
   | { readonly type: "turnEnd"; readonly tabId: string; readonly key: string; readonly outcome: TurnOutcome }
+  /** A run the plugin started ended, with the agent's reply or why there is none. */
+  | { readonly type: "ran"; readonly id: number; readonly reply: string }
+  | { readonly type: "ran"; readonly id: number; readonly error: string }
 
 /** Messages from a plugin's worker to the core. */
 export type FromPlugin =
@@ -67,6 +70,9 @@ export type FromPlugin =
   | { readonly type: "shown"; readonly seq: number; readonly views: readonly ViewResult[] }
   | { readonly type: "thread"; readonly tabId: string; readonly key: string; readonly title?: string; readonly prompt?: string }
   | { readonly type: "open"; readonly tabId: string; readonly panel: string; readonly params?: PanelParams }
+  /** Runs a prompt on a tab's agent. `id` is the plugin's own, and the answer names it. */
+  | { readonly type: "run"; readonly id: number; readonly tabId: string; readonly prompt: string }
+  | { readonly type: "stopRun"; readonly id: number }
   | { readonly type: "close"; readonly tabId: string; readonly id: string }
   | { readonly type: "toast"; readonly message: string }
   /** Something the plugin did failed. The core shows it, named after the plugin. */
@@ -149,6 +155,18 @@ function run(plugin: PluginDefinition, initial: Readonly<Record<string, PluginSe
   registering = false
 
   const tabs = new Map<string, Tab>()
+  // The runs that wait for the core's answer, by id.
+  const runs = new Map<number, { readonly resolve: (reply: string) => void; readonly reject: (error: Error) => void }>()
+  let runIds = 0
+  const runIn = (tabId: string, prompt: string, signal?: AbortSignal) => {
+    if (signal?.aborted) return Promise.reject(new Error("The run was stopped before it started."))
+    const id = ++runIds
+    return new Promise<string>((resolve, reject) => {
+      runs.set(id, { resolve, reject })
+      post({ type: "run", id, tabId, prompt })
+      signal?.addEventListener("abort", () => post({ type: "stopRun", id }), { once: true })
+    })
+  }
   // One signal for the whole plugin, since only one tab is on screen at a time.
   const [onScreen, setOnScreen] = solidRoot(() => createSignal<{ readonly tabId?: string; readonly keys: ReadonlySet<string> }>({ keys: new Set() }))
   const tabOf = (tabId: string): Tab => {
@@ -167,6 +185,7 @@ function run(plugin: PluginDefinition, initial: Readonly<Record<string, PluginSe
     open: (panel, params) => post({ type: "open", tabId, panel, ...(params ? { params } : {}) }),
     isOpen: (panel, params) => tabOf(tabId).open().has(panelInstanceId(panel, params)),
     openThread: (thread) => post({ type: "thread", tabId, ...thread }),
+    run: (prompt, options) => runIn(tabId, prompt, options?.signal),
     toast: comet.toast,
   })
   const undraw = (tab: Tab, key: string) => {
@@ -264,6 +283,12 @@ function run(plugin: PluginDefinition, initial: Readonly<Record<string, PluginSe
       else if (message.type === "threadShown") tabs.get(message.tabId)?.setThread(message.key)
       else if (message.type === "visible") setOnScreen({ ...(message.tabId ? { tabId: message.tabId } : {}), keys: new Set(message.keys) })
       else if (message.type === "settings") setSettings(message.settings)
+      else if (message.type === "ran") {
+        const waiting = runs.get(message.id)
+        runs.delete(message.id)
+        if ("reply" in message) waiting?.resolve(message.reply)
+        else waiting?.reject(new Error(message.error))
+      }
       else if (message.type === "turnEnd") {
         const turn: TurnEnd = { key: message.key, tabId: message.tabId, outcome: message.outcome }
         // One failing handler does not keep the others from running.

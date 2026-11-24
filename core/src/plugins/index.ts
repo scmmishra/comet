@@ -1,12 +1,15 @@
 import type { CoreMessage } from "@comet/protocol"
 import { Layouts, type LayoutStore } from "./layouts"
 import { Plugins, type KeyedThread } from "./plugins"
+import type { PluginRun } from "./runs"
 
 interface PluginHost {
   /** Sends to every client. */
   readonly broadcast: (message: CoreMessage) => void
   /** Shows the thread for a key in a tab, as a plugin asked. */
   readonly openThread: (tabId: string, thread: KeyedThread) => void
+  /** Runs a prompt on a tab's agent, in a session no thread shows, as a plugin asked. */
+  readonly run: (tabId: string, prompt: string) => PluginRun
   /** Where each tab's layout is kept. */
   readonly store: LayoutStore
   /** Tells the user about a failure in something a plugin asked for. */
@@ -17,10 +20,11 @@ interface PluginHost {
  * The plugins and the layouts that draw them. A plugin opens and closes panels through the layouts, and
  * the layouts draw what the plugins offer, so the two are made together.
  */
-export function startPlugins({ broadcast, openThread, store, report }: PluginHost) {
+export function startPlugins({ broadcast, openThread, run, store, report }: PluginHost) {
   const plugins: Plugins = new Plugins({
     broadcast,
     openThread,
+    run,
     openPanel: (tabId, panel, params) => void layouts.openPanel(tabId, panel, params).catch(report),
     closePanel: (tabId, id) => void layouts.closePanel(tabId, id).catch(report),
     stopped: () => void layouts.resendAll().catch(report),
