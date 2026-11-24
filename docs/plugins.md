@@ -132,12 +132,12 @@ A command names a plugin by its name, such as `reviews`, or by the package it wa
 | Contribution | Shows when |
 |---|---|
 | Sidebar | A setup opens it. |
-| Panel | A view or command opens it with `ctx.open`, a setup opens it, or the user opens it from the palette. |
+| Panel | A view or command opens it with `ctx.open`, a setup opens it, or the user opens it from the palette or the view pane's new menu. |
 | Card | Always, unless the tab's setup leaves it out. A card that draws nothing is left out. The Space card always shows. |
 | Setup | The user opens it from the palette. It opens a new tab. |
 | Command | The user runs it from the palette. |
 
-- The palette's "Open panel…" lists only panels that need no parameters.
+- The palette's "Open panel…" and the view pane's new menu list only panels that need no parameters. The new menu is the arrow beside the new terminal button.
 - Every panel instance has a close button.
 
 ## API
@@ -237,6 +237,8 @@ import logo from "./logo.svg"
 <Item title="Docs" icon="link" href={docs} />
 ```
 
+`Markdown` scrolls, so it fills the space a stack that grows gives it. In a stack that does not grow it draws nothing. Use `Text` for a short note beside other views.
+
 `Markdown` draws images from local files, named by absolute path: `![Before](/path/to/before.png)`. The app fetches nothing from the network, so a plugin downloads an image first, as the PR review plugin does with a description's screenshots. Any other image draws as its alt text.
 
 `Diff` draws a unified diff, as `git diff` writes it, with the diff view Review uses. It fills the space it is given, so it suits a panel of its own. Its files fold, and it follows Review's choice of unified or split. A new `patch` resets the folds. Past 8 files, every file starts folded, as in Review.
@@ -301,7 +303,6 @@ A panel's context also has `ctx.params` and `ctx.close()`. A command's context h
 ## Later
 
 - A switcher for sidebars, so the user can open one without a setup.
-- A "+" menu in the view pane for panels, beside the new terminal button.
 - Pinned panels, for a project or a setup, that every new tab opens.
 - Hiding and ordering cards per project.
 - Plugin settings, with a page in Settings.

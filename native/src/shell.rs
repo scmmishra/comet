@@ -85,6 +85,7 @@ pub struct Comet {
     pub tab_bar: crate::tab_bar::TabBar,
     pub tab_numbers: crate::tab_numbers::TabNumbers,
     pub session_menu: crate::session_menu::SessionMenu,
+    pub new_menu: crate::new_menu::NewMenu,
     pub rewind: crate::rewind::Rewind,
     pub branch_notices: crate::branch_notice::BranchNotices,
     pub worktrees: crate::worktrees::Worktrees,

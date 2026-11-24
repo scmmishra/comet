@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- The view pane's new terminal button has an arrow beside it. The arrow opens a menu with New terminal and the panels the project's plugins offer that need no parameters, such as a branch guide. A press on the button itself still opens a terminal.
 - A plugin can run a prompt with `ctx.run`, and gets the agent's final reply back. It runs on the agent, model and effort the plugin names, else the tab's. With a JSON schema, Claude Code and Codex give a reply that follows it, and the plugin gets the parsed JSON. No thread shows the run, so it adds nothing to the tab's thread. The run is in Supervised mode, and Comet declines every request it makes, so the agent cannot edit files. It may still run commands it treats as read-only, such as `git diff`. It stops when the plugin aborts it or the tab closes. The plugin API is now 0.2.1.
 - Hold ⌘ alone for a moment, and each of the first nine tabs shows its ⌘1 to ⌘9 number in place of its project mark. The numbers hide when you let go, press another modifier or leave the window. They do not show while the model picker is open, since ⌘1 to ⌘9 pick models there.
 - Comet runs on a newer Rune. The first window shows sooner at launch. Metal recovers from more GPU failures, where before the window could get stuck. Trackpad scrolling no longer stalls when it starts after a pause. The thread's minimap lights its marks at once.

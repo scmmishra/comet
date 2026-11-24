@@ -394,7 +394,6 @@ pub fn panel(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
             .role("tab")
             .on_press_tx(move |s: &mut Comet, tx| s.show_panel_tab(&show_tab, Some(show_id.clone()), tx))
     });
-    let new_terminal = IconButton::new(&ic::PLUS).variant(IconButtonVariant::GhostMuted).control_size(ControlSize::Large).label("New terminal").help("New terminal").on_press(|s: &mut Comet| s.new_terminal()).build(k);
     let header = row()
         .key("panel-header")
         .w_full()
@@ -407,10 +406,10 @@ pub fn panel(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> El {
         .child(review)
         .children(terminals)
         .children(files)
-        // The tabs take the free width, so the new terminal button sits at the end, beside the toggle.
+        // The tabs take the free width, so the new button sits at the end, beside the toggle.
         .child(row().grow(1.0))
-        .child(new_terminal)
-        // The toggle sits in the pane's corner, 11 points past the new terminal button.
+        .child(crate::new_menu::button(s, tab, k, layer))
+        // The toggle sits in the pane's corner, 11 points past the new button.
         .child(toggle(true, k).ml(7.0));
     // Each tab of the pane is its own element, which swaps in at once: unkeyed, Rune would morph one tab's
     // parts into the next one's, and keyed with its default fade, it would crossfade them.

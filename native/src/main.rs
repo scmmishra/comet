@@ -24,6 +24,7 @@ mod meters;
 mod minimap;
 mod model_picker;
 mod models;
+mod new_menu;
 mod opening;
 mod palette;
 mod panes;
