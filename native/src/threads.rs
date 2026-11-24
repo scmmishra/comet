@@ -23,7 +23,8 @@ pub struct Thread {
     revisions: Vec<u64>,
     /// The items laid out as rows, as the core sends them.
     pub rows: Vec<ThreadRow>,
-    /// Moves whenever `rows` changes.
+    /// Moves when a row's id changes, so the list reads every row's key again. It stays when rows only
+    /// add to the end, so the list reads only the new keys.
     pub rows_version: u64,
     pub busy: bool,
     /// The model that ran, as the session reported it.
@@ -122,6 +123,13 @@ impl Thread {
     }
 }
 
+/// Whether `new` keeps every row of `old` by id, in place, and only adds rows after them. A row's
+/// content may change. Rune's append-only list holds for these without reading every key again. An
+/// empty `old` never keeps, so a thread made again for a tab starts its list afresh.
+fn keeps_ids(old: &[ThreadRow], new: &[ThreadRow]) -> bool {
+    !old.is_empty() && new.len() >= old.len() && old.iter().zip(new).all(|(a, b)| a.id() == b.id())
+}
+
 /// Every tab's thread. A revision counter, shared by all, marks each change.
 #[derive(Default)]
 pub struct Threads {
@@ -163,10 +171,13 @@ impl Threads {
     }
 
     pub fn rows(&mut self, tab: &str, rows: Vec<ThreadRow>) {
-        let revision = self.next();
+        let keeps = self.get(tab).is_some_and(|thread| keeps_ids(&thread.rows, &rows));
+        let revision = if keeps { None } else { Some(self.next()) };
         let thread = self.get_mut(tab);
         thread.rows = rows;
-        thread.rows_version = revision;
+        if let Some(revision) = revision {
+            thread.rows_version = revision;
+        }
     }
 
     pub fn apply(&mut self, tab: &str, event: ThreadEvent) {
@@ -361,6 +372,41 @@ mod tests {
         threads.apply("t", retry(5));
         threads.apply("t", ThreadEvent::Status { busy: false });
         assert!(threads.get("t").unwrap().retry.is_none(), "the turn's end clears it");
+    }
+
+    fn item(id: &str) -> ThreadRow {
+        ThreadRow::Item { id: id.into() }
+    }
+
+    fn group(id: &str, steps: &[&str], live: bool) -> ThreadRow {
+        ThreadRow::Group { id: id.into(), steps: steps.iter().map(|&s| s.into()).collect(), live, summary: format!("{} steps", steps.len()) }
+    }
+
+    /// Sends `before`, then `after`, and says whether the rows' version moved.
+    fn bumps(before: Vec<ThreadRow>, after: Vec<ThreadRow>) -> bool {
+        let mut threads = Threads::default();
+        threads.rows("t", before);
+        let version = threads.get("t").unwrap().rows_version;
+        threads.rows("t", after);
+        threads.get("t").unwrap().rows_version != version
+    }
+
+    #[test]
+    fn rows_that_keep_their_ids_keep_the_version() {
+        let turn = || vec![item("u1"), item("working:u1"), group("group:t1", &["t1"], true)];
+        assert!(!bumps(turn(), turn()), "the same rows");
+        assert!(!bumps(turn(), vec![item("u1"), item("working:u1"), group("group:t1", &["t1", "t2"], true)]), "the last row grew");
+        assert!(!bumps(turn(), [turn(), vec![item("x1")]].concat()), "a row added at the end");
+        assert!(!bumps(turn(), vec![item("u1"), item("working:u1"), group("group:t1", &["t1"], false), item("x1"), group("group:t3", &["t3"], true)]), "rows added while an earlier row changed");
+    }
+
+    #[test]
+    fn rows_that_change_an_id_move_the_version() {
+        let rows = || vec![item("u1"), item("working:u1"), group("group:t1", &["t1"], true), item("c1")];
+        assert!(bumps(rows(), vec![item("u1"), item("working:u1")]), "rows taken off the end");
+        assert!(bumps(rows(), vec![item("u1"), item("fold:u1"), group("group:t1", &["t1"], true), item("c1")]), "a middle row replaced");
+        assert!(bumps(rows(), vec![item("u1"), item("working:u1"), group("group:t1", &["t1"], true), item("x1"), item("c1")]), "a row added before the last");
+        assert!(bumps(vec![], rows()), "a thread's first rows");
     }
 
     #[test]

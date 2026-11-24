@@ -115,6 +115,8 @@ pub fn thread(s: &Comet, tab: &str, dark: bool, lane: Option<Lane>) -> El {
             move |s: &Comet, i| lane_row(s, i, dark, lane),
         )
         .virtual_rows_version(thread.rows_version)
+        // `rows_version` moves unless the rows only grow at the end, so a new row reads only its own key.
+        .virtual_rows_append_only()
         // The minimap darkens the marks of the turns on screen.
         .on_visible_rows(|s: &mut Comet, rows| {
             let changed = s.minimap.visible != rows;
@@ -704,4 +706,84 @@ fn permission_view(c: &Ctx, request_id: &str, kind: &str, detail: &str, reason: 
         // The command wraps in the lane: a row grows to its text unless it is held to the lane and the text may shrink.
         .child(row().w_full().gap(8.0).child(row().h(20.0).items_center().child(icon(mark, STEP_ICON).color(k.c.text_faint))).child(text(detail.to_owned()).font(crate::theme::mono(12.0).lh(20.0)).color(k.c.text_base).wrap_anywhere().selectable(true).max_h(160.0).shrink().min_w(0.0)))
         .child(col().pl(DETAIL_INDENT).gap(4.0).children(reason.map(|r| text(r.to_owned()).font(crate::theme::text(12.0)).color(k.c.text_faint).wrap_anywhere().selectable(true))).child(answers))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::Comet;
+    use crate::core::Event;
+    use crate::protocol::CoreMessage;
+    use crate::shell::{CoreState, view};
+    use rune::{Env, Runtime};
+    use serde_json::{Value, json};
+
+    const THREAD: &str = "thread-a";
+
+    fn send(rt: &mut Runtime<Comet>, message: Value) {
+        let message = serde_json::from_value::<CoreMessage>(message).unwrap();
+        rt.update(move |s, tx| s.receive_in(Event::Message(message), tx));
+    }
+
+    fn settle(rt: &mut Runtime<Comet>) {
+        for _ in 0..30 {
+            rt.frame(1.0 / 60.0);
+        }
+    }
+
+    fn text(id: &str) -> Value {
+        json!({ "type": "text", "id": id, "text": format!("Reply {id}, long enough to wrap the lane once or twice so each row has some height to it."), "done": true })
+    }
+
+    /// Sends text `id` and the rows `x0` to `x{count - 1}` that follow it.
+    fn add(rt: &mut Runtime<Comet>, count: usize) {
+        let id = format!("x{}", count - 1);
+        send(rt, json!({ "type": "session.event", "tabId": "a", "event": { "kind": "item", "item": text(&id) } }));
+        let rows: Vec<Value> = (0..count).map(|i| json!({ "type": "item", "id": format!("x{i}") })).collect();
+        send(rt, json!({ "type": "session.rows", "tabId": "a", "rows": rows }));
+        settle(rt);
+    }
+
+    fn runtime(count: usize) -> Runtime<Comet> {
+        let mut comet = Comet::default();
+        comet.status = CoreState::Ready;
+        let mut rt = Runtime::new(comet, view, (1280.0, 820.0), Env { system_dark: true, scale: 2.0 });
+        send(&mut rt, json!({ "type": "tabs", "active": "a", "tabs": [{ "id": "a", "title": "A", "project": "/code/a", "terminals": [], "agent": "claude", "model": "default", "permissionMode": "auto" }] }));
+        let items: Vec<Value> = (0..count).map(|i| text(&format!("x{i}"))).collect();
+        send(&mut rt, json!({ "type": "session.history", "tabId": "a", "items": items }));
+        let rows: Vec<Value> = (0..count).map(|i| json!({ "type": "item", "id": format!("x{i}") })).collect();
+        send(&mut rt, json!({ "type": "session.rows", "tabId": "a", "rows": rows }));
+        rt.frame(0.0);
+        settle(&mut rt);
+        rt
+    }
+
+    #[test]
+    fn rows_added_at_the_end_keep_a_thread_at_its_end() {
+        let mut rt = runtime(40);
+        assert_eq!(rt.scroll_at_bottom(THREAD), Some(true));
+        let version = rt.state.threads.get("a").unwrap().rows_version;
+        add(&mut rt, 41);
+        assert_eq!(rt.state.threads.get("a").unwrap().rows_version, version, "an added row keeps the version");
+        assert_eq!(rt.scroll_at_bottom(THREAD), Some(true), "the thread follows its end");
+        assert!(rt.find("x40").is_some(), "the new row shows");
+        send(&mut rt, json!({ "type": "session.rows", "tabId": "a", "rows": [{ "type": "item", "id": "x5" }, { "type": "item", "id": "x40" }] }));
+        settle(&mut rt);
+        assert_ne!(rt.state.threads.get("a").unwrap().rows_version, version, "a changed row moves the version");
+        assert!(rt.find("x5").is_some() && rt.find("x39").is_none(), "the list reads the new rows");
+    }
+
+    #[test]
+    fn rows_added_at_the_end_keep_a_scrolled_up_thread_in_place() {
+        let mut rt = runtime(40);
+        let (x, y) = rt.find(THREAD).unwrap();
+        rt.wheel(x, y, 1500.0);
+        settle(&mut rt);
+        assert_eq!(rt.scroll_at_bottom(THREAD), Some(false), "the wheel scrolled up");
+        let shown = rt.state.minimap.visible.clone();
+        let row = format!("x{}", shown.start + 1);
+        let before = rt.find(&row).expect("a row in view");
+        add(&mut rt, 41);
+        assert_eq!(rt.scroll_at_bottom(THREAD), Some(false));
+        assert_eq!(rt.find(&row), Some(before), "the rows in view stay put");
+    }
 }
