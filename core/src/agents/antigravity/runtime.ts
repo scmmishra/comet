@@ -61,7 +61,12 @@ export function launch(runtime: Runtime, dir: string): Process {
   return explainEnd(run([runtime.command, "acp", "--gemini-dir", geminiHome(), "--app-data-dir", APP_DATA], { cwd: dir, env: environment() }), "Antigravity")
 }
 
-/** The variables the CLI starts with, on top of the core's. A variable set to undefined is removed. */
+/**
+ * The variables the CLI starts with, on top of the core's. A variable set to undefined is removed. Every run
+ * of the CLI takes them. Comet installs and updates the CLI itself, so the CLI must not replace its own
+ * program. agy 1.5.15 did not update itself in ACP mode, but its interactive CLI did, unless
+ * AGY_CLI_DISABLE_AUTO_UPDATE was set. So every run sets it.
+ */
 export function environment(): Record<string, string | undefined> {
-  return { ...Object.fromEntries(REMOVED.map((name) => [name, undefined])), BROWSER: BROWSER_COMMAND }
+  return { ...Object.fromEntries(REMOVED.map((name) => [name, undefined])), BROWSER: BROWSER_COMMAND, AGY_CLI_DISABLE_AUTO_UPDATE: "true" }
 }

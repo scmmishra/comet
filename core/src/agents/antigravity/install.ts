@@ -5,6 +5,7 @@ import { join } from "node:path"
 import { spawn } from "../../environment"
 import { antigravityHome, EXECUTABLE, markInstalled, runtimeFolder, serverTemp, versionFolders } from "./home"
 import { latestRelease, RELEASE_PLATFORM, type Release } from "./release"
+import { environment } from "./runtime"
 
 const TAR = "/usr/bin/tar"
 const NOTHING_INSTALLED = "Nothing was installed."
@@ -127,7 +128,7 @@ async function tar(args: string[]) {
 /** The version a program says it is, from `--version`. Empty when it does not run. */
 async function versionOf(program: string) {
   try {
-    const child = spawn([program, "--version"], { stdout: "pipe", stderr: "ignore", timeout: VERSION_TIMEOUT_MS })
+    const child = spawn([program, "--version"], { stdout: "pipe", stderr: "ignore", timeout: VERSION_TIMEOUT_MS, env: environment() })
     const [output, code] = await Promise.all([new Response(child.stdout).text(), child.exited])
     return code === 0 ? output.trim() : ""
   } catch {

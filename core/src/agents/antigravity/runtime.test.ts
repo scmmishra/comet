@@ -65,4 +65,5 @@ test("starts the CLI's ACP server in Comet's own Gemini folder, without the user
   // A variable set to undefined is removed from what the CLI inherits.
   for (const name of ["GEMINI_API_KEY", "GOOGLE_APPLICATION_CREDENTIALS"]) expect(name in env && env[name] === undefined).toBe(true)
   expect(env.BROWSER).toBe(BROWSER_COMMAND)
+  expect(env.AGY_CLI_DISABLE_AUTO_UPDATE).toBe("true")
 })

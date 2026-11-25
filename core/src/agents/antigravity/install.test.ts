@@ -26,7 +26,8 @@ const copyFrom = (archive: string) => async (_url: string, path: string) => copy
 const noDownloadLeft = () => !readdirSync(antigravityHome()).some((name) => name.startsWith("download-"))
 
 test("installs the CLI as a program and marks the install finished", async () => {
-  const built = release({ [EXECUTABLE]: cli("9.0.0") }, "9.0.0")
+  // The CLI prints its version only when told not to update itself, so the check runs it the way Comet always does.
+  const built = release({ [EXECUTABLE]: `#!/bin/sh\n[ "$AGY_CLI_DISABLE_AUTO_UPDATE" = true ] && echo 9.0.0\n` }, "9.0.0")
   await installRuntime({ release: built.release, download: copyFrom(built.archive) })
   expect(statSync(join(runtimeFolder("9.0.0"), EXECUTABLE)).mode & 0o777).toBe(0o755)
   expect(isInstalled("9.0.0")).toBe(true)
