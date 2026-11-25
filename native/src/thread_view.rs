@@ -8,7 +8,7 @@ use crate::shell::Comet;
 use crate::theme;
 use crate::cards::Lane;
 use crate::threads::Thread;
-use rune::{El, GrowthSpec, Icon, ScrollSpec, Tx, col, el, icon, memo, row, text};
+use rune::{El, GrowthSpec, Icon, Link, ScrollSpec, Span, Tx, col, el, icon, memo, row, text};
 use rune_kit::{ButtonVariant, IconButton, IconButtonVariant, Kit, Menu, MenuItem, Placement, Spinner};
 use rune_theme_opencode::icons as ic;
 use std::borrow::Cow;
@@ -293,13 +293,7 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
             col().w_full().gap(4.0).hover_group().child(reply).children(cut).children(done.then(|| message_meta(c, item.id(), words, *at, [])))
         }
         ThreadItem::Compaction { status, pre_tokens, post_tokens, error, .. } => compaction_view(c, status, *pre_tokens, *post_tokens, error.as_deref()),
-        ThreadItem::Error { message, .. } => el()
-            .w_full()
-            .fill(k.c.danger.bg)
-            .radius(BOX_RADIUS)
-            .px(12.0)
-            .py(8.0)
-            .child(text(message.clone()).wrap().shrink().min_w(0.0).font(theme::thread_text(k, c.size)).color(k.c.danger.fg).selectable(true)),
+        ThreadItem::Error { message, .. } => error_view(c, message),
         ThreadItem::Notice { text: words, warning, .. } => {
             let (mark, color) = if *warning { (&ic::WARNING, k.c.warning.fg) } else { (&ic::INFO, k.c.text_faint) };
             row().w_full().gap(6.0).items_start().child(icon(mark, crate::icons::SIZE).color(color).mt(2.0)).child(c.small(words.clone()).color(color).wrap().shrink().min_w(0.0).selectable(true))
@@ -311,6 +305,24 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
         // Results end turns and questions show in the composer. Neither draws in the thread.
         ThreadItem::Result { .. } | ThreadItem::Question { .. } => el(),
     }
+}
+
+/// An error, in the danger colours. It is plain text, since an error can hold a stack trace or a JSON
+/// body that Markdown would mangle. Its bare links are underlined, and open in the browser as a reply's do.
+fn error_view(c: &Ctx, message: &str) -> El {
+    let k = c.k;
+    let ink = k.c.danger.fg;
+    let links = format::bare_links(message);
+    let words = text(message.to_owned())
+        .wrap()
+        .shrink()
+        .min_w(0.0)
+        .font(theme::thread_text(k, c.size))
+        .color(ink)
+        .selectable(true)
+        .spans(links.iter().map(|r| Span::new(r.start, r.end).underline(ink)).collect::<Vec<_>>());
+    let words = links.into_iter().fold(words, |words, r| words.link(Link::new(r.clone(), &message[r]))).on_link(crate::reply::open_link);
+    el().w_full().fill(k.c.danger.bg).radius(BOX_RADIUS).px(12.0).py(8.0).child(words)
 }
 
 /// A message's copy button, its other `actions` and its time, after T3 Code. They stay hidden until the
@@ -755,6 +767,17 @@ mod tests {
         rt.frame(0.0);
         settle(&mut rt);
         rt
+    }
+
+    #[test]
+    fn an_error_links_its_bare_link() {
+        let mut rt = runtime(1);
+        let url = "https://accounts.google.com/v3/signin/continue?plt=fixture";
+        let error = json!({ "type": "error", "id": "e1", "message": format!("Google asks you to verify your Google account. Verify it, then send again.\n{url}") });
+        send(&mut rt, json!({ "type": "session.event", "tabId": "a", "event": { "kind": "item", "item": error } }));
+        send(&mut rt, json!({ "type": "session.rows", "tabId": "a", "rows": [{ "type": "item", "id": "x0" }, { "type": "item", "id": "e1" }] }));
+        settle(&mut rt);
+        assert!(rt.find(url).is_some(), "the link shows as a link of its own");
     }
 
     #[test]

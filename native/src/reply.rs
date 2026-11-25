@@ -175,11 +175,14 @@ pub fn document(text: &str) -> Markdown {
 /// Markdown that comes from outside an agent, such as a plugin's: a single newline breaks the line, as in
 /// a reply, and a link opens in the browser. Inline code stays code, since it names no file of the tab's.
 pub fn outside(text: &str) -> Markdown {
-    Markdown::new(break_lines(text, false)).scroll_wide(true).on_link_tx(|s: &mut Comet, url: &str, tx: &mut Tx| {
-        if let Err(e) = tx.open_url(url) {
-            s.toasts.show(e.to_string(), true);
-        }
-    })
+    Markdown::new(break_lines(text, false)).scroll_wide(true).on_link_tx(open_link)
+}
+
+/// Opens a link in the browser, and says so in a toast if it cannot.
+pub fn open_link(s: &mut Comet, url: &str, tx: &mut Tx) {
+    if let Err(e) = tx.open_url(url) {
+        s.toasts.show(e.to_string(), true);
+    }
 }
 
 /// `document` with its links and code blocks working: a file link opens the file it names in the tab's view pane,
@@ -204,11 +207,7 @@ pub fn interactive(markdown: Markdown, tab: &str, id: &str, copied: Option<&str>
                 let (path, line) = split_position(target);
                 s.open_named_file(&tab, path, line);
             }
-            None => {
-                if let Err(e) = tx.open_url(url) {
-                    s.toasts.show(e.to_string(), true);
-                }
-            }
+            None => open_link(s, url, tx),
         })
         .code_frame(move |card, frame| {
             let key = format!("{id}#code{}", frame.index);

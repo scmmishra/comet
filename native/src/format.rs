@@ -170,6 +170,36 @@ pub fn short_path(path: &str) -> String {
     }
 }
 
+/// Where each bare `https://` or `http://` link in `text` starts and ends, in bytes. A link starts the text
+/// or follows a space, a line break or an opening bracket or quote, and runs to the next space or angle
+/// bracket. Punctuation that ends a sentence, and a closing bracket the link did not open, stay out of it.
+pub fn bare_links(text: &str) -> Vec<std::ops::Range<usize>> {
+    let mut links = Vec::new();
+    let mut from = 0;
+    while let Some(found) = text[from..].find("http").map(|i| from + i) {
+        let rest = &text[found..];
+        let starts = rest.starts_with("https://") || rest.starts_with("http://");
+        let opens = text[..found].chars().next_back().is_none_or(|c| c.is_whitespace() || "([{<\"'".contains(c));
+        if !(starts && opens) {
+            from = found + 4;
+            continue;
+        }
+        let mut end = found + rest.find(|c: char| c.is_whitespace() || c.is_control() || c == '<' || c == '>').unwrap_or(rest.len());
+        while let Some(last) = text[found..end].chars().next_back() {
+            let unopened = last == ')' && text[found..end].matches('(').count() < text[found..end].matches(')').count();
+            if !(".,:;!?'\"]}".contains(last) || unopened) {
+                break;
+            }
+            end -= last.len_utf8();
+        }
+        if !text[found..end].ends_with("//") {
+            links.push(found..end);
+        }
+        from = end.max(found + 4);
+    }
+    links
+}
+
 /// Now, in milliseconds since the epoch, as the core times messages.
 pub fn now_ms() -> f64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |d| d.as_secs_f64() * 1000.0)
@@ -178,6 +208,22 @@ pub fn now_ms() -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn links_in(text: &str) -> Vec<&str> {
+        bare_links(text).into_iter().map(|r| &text[r]).collect()
+    }
+
+    #[test]
+    fn finds_bare_links_and_leaves_the_punctuation_around_them() {
+        let check = "https://accounts.google.com/v3/signin/continue?plt=fixture&flowName=GlifWebSignIn";
+        assert_eq!(links_in(&format!("Google asks you to verify your Google account. Verify it, then send again.\n{check}")), [check]);
+        assert_eq!(links_in("See https://example.com/a. Or (http://example.com/b), or <https://example.com/c>."), ["https://example.com/a", "http://example.com/b", "https://example.com/c"]);
+        assert_eq!(links_in("https://en.wikipedia.org/wiki/Rust_(language)"), ["https://en.wikipedia.org/wiki/Rust_(language)"]);
+        assert_eq!(links_in("\"https://example.com/q?a=1\","), ["https://example.com/q?a=1"]);
+        for text in ["no link", "xhttps://example.com", "https://", "httpx://a", "ftp://example.com", "Error 429, Message: Quota exhausted., Status: RESOURCE_EXHAUSTED"] {
+            assert!(bare_links(text).is_empty(), "{text}");
+        }
+    }
 
     #[test]
     fn one_line_joins_lines_with_single_spaces() {
