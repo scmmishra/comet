@@ -2,7 +2,7 @@
 
 All notable changes to Comet are listed here. Changes go under `## Unreleased` until they ship. The release workflow publishes the section for the version in `native/Cargo.toml` as that release's notes.
 
-## Unreleased
+## 0.3.0
 
 ### Threads and the composer
 
