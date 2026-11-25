@@ -15,13 +15,22 @@ pub struct Trigger {
     pub query: String,
 }
 
-/// The trigger the caret is in. A command starts the message. A file mention starts it or follows a space.
+impl Trigger {
+    /// Whether the trigger opens the message. Only there does a command of Comet's own run, since it replaces the draft.
+    pub fn starts_message(&self) -> bool {
+        self.start == 0
+    }
+}
+
+/// The trigger the caret is in. A command or a file mention starts the message or follows a space. A
+/// word that holds another `/`, such as `/usr/bin`, is a path, not a command.
 pub fn trigger_at(text: &str, caret: usize) -> Option<Trigger> {
     let before = text.get(..caret)?;
-    if let Some(query) = before.strip_prefix('/')
-        && !query.chars().any(char::is_whitespace)
+    let word = before.rfind(char::is_whitespace).map_or(0, |at| at + before[at..].chars().next().map_or(1, char::len_utf8));
+    if let Some(query) = before[word..].strip_prefix('/')
+        && !query.contains('/')
     {
-        return Some(Trigger { kind: TriggerKind::Command, start: 0, query: query.to_owned() });
+        return Some(Trigger { kind: TriggerKind::Command, start: word, query: query.to_owned() });
     }
     let at = before.rfind('@')?;
     let query = &before[at + 1..];
@@ -70,6 +79,9 @@ mod tests {
     fn finds_the_trigger_the_caret_is_in() {
         assert_eq!(trigger_at("/com", 4), Some(Trigger { kind: TriggerKind::Command, start: 0, query: "com".into() }));
         assert_eq!(trigger_at("/compact now", 12), None);
+        assert_eq!(trigger_at("fix it with /rev", 16), Some(Trigger { kind: TriggerKind::Command, start: 12, query: "rev".into() }), "a command may follow a space");
+        assert_eq!(trigger_at("open /usr/bin", 13), None, "a path is not a command");
+        assert_eq!(trigger_at("and/or", 6), None, "a / inside a word is not a command");
         assert_eq!(trigger_at("look at @src/ma", 15), Some(Trigger { kind: TriggerKind::File, start: 8, query: "src/ma".into() }));
         assert_eq!(trigger_at("mail me@home", 12), None, "an @ inside a word is not a mention");
         assert_eq!(trigger_at("@", 1), Some(Trigger { kind: TriggerKind::File, start: 0, query: String::new() }));

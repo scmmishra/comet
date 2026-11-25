@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- A `/` that starts a word later in the message lists the agent's skills and commands, not only a `/` at the very start. Picking one puts it in place, and it goes to the agent as part of the text. Comet's own commands, such as /model, still list only at the start.
 - When Google asks you to verify your account before an Antigravity turn can run, the error says so and shows the link to Google's check. Before, it said only "Verify your account to continue." Comet shows the link only when it leads to Google's sign-in on accounts.google.com.
 - When an Antigravity turn stops on a used-up quota, the error says when the quota resets, such as "It resets in 4m42s." Before, Comet dropped the reset time that Antigravity gave.
 - A Codex command no longer shows as running for good when its turn ends without its result. Once a turn ends, Comet asks Codex which commands still run in the background. A command that does not run anymore shows that it did not finish. A command that still runs shows its result once it ends.

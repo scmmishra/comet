@@ -312,7 +312,9 @@ impl Comet {
                 // An agent that does not run skills from a `/` offers none here, such as Codex, which takes `$` and a skill input.
                 let slash = self.account.can(&info.agent, "slash-commands");
                 let skills = self.projects.get(&info.project).and_then(|p| p.skills_of(&info.agent)).filter(|_| slash).unwrap_or(&[]);
-                let all: Vec<Suggestion> = COMET_COMMANDS.iter().map(|(n, d)| Suggestion::Comet(n, d)).chain(skills.iter().cloned().map(Suggestion::Skill)).collect();
+                // Comet's own commands replace the draft, so a `/` later in the message offers only the agent's.
+                let comet = COMET_COMMANDS.iter().filter(|_| trigger.starts_message()).map(|(n, d)| Suggestion::Comet(n, d));
+                let all: Vec<Suggestion> = comet.chain(skills.iter().cloned().map(Suggestion::Skill)).collect();
                 triggers::match_commands(&all, &trigger.query, suggestion_name, suggestion_description).into_iter().cloned().collect()
             }
         }
@@ -1115,6 +1117,23 @@ mod tests {
         s.receive(Event::Message(serde_json::from_value(agents).unwrap())).unwrap();
         let names: Vec<String> = s.suggestions("t").iter().map(|x| suggestion_name(x).to_owned()).collect();
         assert_eq!(names, ["pdf"]);
+    }
+
+    #[test]
+    fn a_slash_later_in_the_message_offers_skills_and_inserts_one_in_place() {
+        let mut s = comet();
+        let messages = serde_json::json!([
+            { "type": "project", "project": "/code/x", "part": "skills", "value": { "claude": [{ "name": "review", "description": "Reviews a diff", "ownProject": false, "group": "User" }] } },
+            { "type": "agents", "agents": [{ "id": "claude", "name": "Claude Code", "state": "ready", "features": ["slash-commands"], "models": [] }] }
+        ]);
+        for m in serde_json::from_value::<Vec<CoreMessage>>(messages).unwrap() {
+            s.receive(Event::Message(m)).unwrap();
+        }
+        type_focused(&mut s, "check this with /");
+        let names: Vec<String> = s.suggestions("t").iter().map(|x| suggestion_name(x).to_owned()).collect();
+        assert_eq!(names, ["review"], "only the agent's commands, since Comet's own replace the draft");
+        s.pick_suggestion("t", 0);
+        assert_eq!(s.drafts.text("t"), "check this with /review ");
     }
 
     #[test]
