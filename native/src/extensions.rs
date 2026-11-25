@@ -2,8 +2,8 @@
 //! context ring opens a menu with a row for each list, and a row opens its list beside the menu. It shows
 //! what the tab's agent loads in the project, for an agent that has `mcp`.
 //!
-//! The list is a `PopupList`, not the menu's own submenu: Rune does not fit a surface beside its anchor
-//! to the window, and a submenu takes no height limit, so a long list would run off the window.
+//! The list is a `PopupList`, not the menu's own submenu. A submenu takes no height limit, so a long list
+//! would grow as tall as the window, where OpenCode's stops at `LIST_HEIGHT` and scrolls.
 
 use crate::protocol::{ClientMessage, McpServer, Skill, TabInfo};
 use crate::shell::Comet;

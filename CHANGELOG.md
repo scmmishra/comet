@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- Comet runs on a newer Rune. After Rename or Delete from the session menu, focus returns to where you were. A click inside a popover as it opens no longer closes it. A right-click outside a menu or popover closes it. A physical mouse wheel scrolls smoothly. Panels that open beside their anchor fit in the window. A subagent's detail opens to the left of its row, lined up with its top. The settings gear in the model picker is taller.
 - A code fence closes only on a bare run of its own character, at least as long as the one that opened it. Before, a ```` ```ruby ```` line inside a four-backtick block counted as a close. Comet then added line breaks to the code and turned file names in it into links.
 - A plugin's `Diff` can split its files under headings, with `sections`. Each section has a title, a label and a note, over a patch of its own, and every section scrolls as one diff. A guide to a pull request reads as one page this way. The plugin API is now 0.2.2.
 - The view pane's new terminal button has an arrow beside it. The arrow opens a menu with New terminal and the panels the project's plugins offer that need no parameters, such as a branch guide. A press on the button itself still opens a terminal.

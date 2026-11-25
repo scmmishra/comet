@@ -10,7 +10,7 @@ mod commands_card;
 mod composer;
 mod core;
 mod diff;
-// A copy of rune-kit's diff view, kept whole so it can be swapped back once anomalyco/rune#576 lands.
+// A copy of rune-kit's diff view, for what rune-kit's does not do. `diff_view/mod.rs` says what that is.
 // Its options Review does not use yet, such as annotations and comments, stay with it.
 #[allow(dead_code)]
 mod diff_view;

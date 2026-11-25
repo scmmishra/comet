@@ -112,21 +112,20 @@ Left:
 ## Rune gaps
 
 - No terminal engine. Rune's `grid` draws a terminal's screen and reads it to a screen reader, but Rune parses no output. Comet uses `alacritty_terminal` until Rune adds an engine. libghostty-vt was set aside: its build needs Zig 0.15.2 and an SDK pin. The grid pins a wide character to its column's left edge, where it cannot be centred in its two cells.
-- Rune keeps winit's Quit on ⌘Q, so the press-twice quit cannot take that key.
+- Rune now gives ⌘Q to an app menu item that claims it (f6e9b956). Comet has not built its press-twice quit yet.
 - Markdown messages are their own selection group, so a drag stops at a message's end. `.selection_group(false)` works around it.
 - `Collapsible` builds its content even when closed.
 - `DiffView` scrolls on its own, so it needs a height inside a thread row.
-- `DiffView` draws its own file headers and fixes its syntax colours and code font. Comet keeps a copy of it in `native/src/diff_view`, with hooks for all three, so Review matches the Electron app. anomalyco/rune#576 asks for the hooks upstream. Once they land, Comet goes back to rune-kit's.
-- Markdown block margins are fixed in rune-kit: 12 points where the Electron app sets 10.4.
+- rune-kit's `DiffView` now takes a file header, a syntax theme and a code font (78a590a0, 5e70c2ef). Comet still keeps a copy of it in `native/src/diff_view`. The copy splits a diff into sections (`set_sections`, `section`). It draws a 40 point file header, hairlines between files, and a fade for rows that leave. Upstream's `code_font` also sets the row height from the font, which the copy does not.
+- rune-kit's Markdown now takes paragraph, heading and image margins (46f334ef). Tables, lists and quotes still have fixed margins: 12 points where the Electron app sets 10.4.
 - rune-kit's Markdown draws an icon only before a link to a web page, so a file link in a reply has no file icon.
 - A growth stack cannot grow virtual rows open, and holds removed rows 0.15 s before it closes up. Review's files fold at once for this.
 - Text has no unbreakable span, so inline code wraps at its spaces. No-break spaces would keep it whole, but a copied command would then carry them.
-- Rune has no left-start placement, so a subagent's detail centres beside its row.
-- A surface anchored beside its anchor is not fitted to the window, only one above or below it, and a rune-kit `Menu` takes no maximum height. A submenu opens beside its row, so a long one runs off the window. The header's MCP servers and skills open their lists beside the menu in a `PopupList`, which takes a maximum height, not in a submenu.
+- A rune-kit `Menu` takes no maximum height, so a long submenu grows as tall as the window. The header's MCP servers and skills open their lists beside the menu in a `PopupList`, which takes a maximum height, not in a submenu.
 - A truncated text draws only its first line, but takes the height of all its lines. Text with newlines makes its row tall, so Comet passes one line to `.truncate()`.
 - rune-kit's `Dialog` draws a 6 point radius. `@opencode/ui`'s dialog now takes 12 px, and its Large size is 680 by 600 px on `bg-base`, with X-large at 880 by 680 px (OpenCode 46744b64, 8bb7fab2, 56625a3e, 40f7e4da).
 - rune-kit's `BadgeVariant` has only Neutral, Accent and Subtle. `@opencode/ui`'s Badge added `danger`: the danger state's fill and ink, with a 0.5 px danger border (OpenCode 9e3290ab). Comet's "N failing" badge draws with its own `tinted_badge` in `native/src/ui.rs`.
-- Rune has no hook that hears every key. A menu's key equivalents never reach the window, a focused field keeps its own keys, and the window's `on_key` hears only the rest. So a shortcut pressed while ⌘ is held, such as ⌘C, does not hide the tab numbers, as it does in OpenCode. Only a change of modifiers does.
+- `El::on_key_preview` (dd9f9886) hears a key before a focused field does. It is not shown to hear a native menu's key equivalents, such as ⌘C. So a shortcut pressed while ⌘ is held, such as ⌘C, may not hide the tab numbers, as it does in OpenCode. Today only a change of modifiers does.
 - rune-kit has no resize handle of its own. Its grip lives inside `SplitView`, a whole window of another shape. Comet's handle in `native/src/panes.rs` follows `@opencode/ui`'s `ResizeHandle`.
 
 ## Comet's design rules

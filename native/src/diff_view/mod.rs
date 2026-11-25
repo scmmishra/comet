@@ -1,6 +1,6 @@
-//! Rune's diff view (`rune-kit/src/diff` at bbe7324), copied so Comet can draw its own file headers,
-//! syntax colours and code font, which rune-kit's `DiffView` fixes. anomalyco/rune#576 asks for those
-//! hooks upstream. When it lands, Comet goes back to rune-kit's.
+//! Rune's diff view (`rune-kit/src/diff` at bbe7324), copied for what rune-kit's `DiffView` does not do:
+//! sections of a diff (`set_sections`, `section`), a 40 point file header, hairlines between files and a
+//! fade for rows that leave. rune-kit's own now takes a file header, a syntax theme and a code font.
 //!
 //! Copyright (c) 2026 Anomaly. MIT License: the permission notice in Rune's LICENSE applies to this
 //! module, which is a modified copy of Rune's.

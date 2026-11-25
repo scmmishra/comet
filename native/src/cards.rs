@@ -267,7 +267,7 @@ fn subagents_card(s: &Comet, tab: &TabInfo, k: &Kit, layer: &mut Vec<El>) -> Opt
         let key = format!("subagent-{}", subagent.id);
         if open {
             let detail = crate::ui::popover(k, subagent_detail(s, subagent, &tab.agent, now, k)).modal(true, |s: &mut Comet| s.cards.open_subagent = None);
-            layer.push(popover::anchored(k, detail, &key, Placement::Left, 12.0));
+            layer.push(popover::anchored(k, detail, &key, Placement::LeftStart, 12.0));
         }
         row()
             .key(key)
