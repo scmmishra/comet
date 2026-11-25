@@ -11,6 +11,9 @@ const SETUP = /^(cd|pushd|popd|export|source|\.|set|unset|alias)$/
 /** Words that run the command after them, such as `sudo npm test`. */
 const WRAPPERS = new Set(["sudo", "env", "time", "nice", "nohup", "exec", "command"])
 
+/** How a call that updates the agent's plan reads, in every agent's thread. */
+export const PLAN_UPDATED = "Updated the plan"
+
 /** Tool output beyond this many characters is cut. The thread shows a summary, not a log. */
 const MAX_TOOL_OUTPUT = 4000
 

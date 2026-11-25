@@ -1,7 +1,7 @@
 import type { Step, StepKind } from "@comet/protocol"
 import { SERVER_NAME } from "../../tools/mcp"
 import { cometToolLabel } from "../../tools/rows"
-import { commandLabel, tool, type BareStep } from "../steps"
+import { commandLabel, PLAN_UPDATED, tool, type BareStep } from "../steps"
 import { ASK_USER_QUESTION } from "./requests"
 
 type Tool = Extract<Step, { type: "tool" }>
@@ -49,7 +49,7 @@ function label(step: BareTool): string {
     case "WebFetch":
       return `Fetched ${target}`
     case "TodoWrite":
-      return "Updated the plan"
+      return PLAN_UPDATED
     case ASK_USER_QUESTION:
       return step.result ? "Asked a question" : "Asking a question"
     case "Task":

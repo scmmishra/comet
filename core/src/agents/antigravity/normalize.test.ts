@@ -12,3 +12,15 @@ test("reads a command and its output from Antigravity's own field names", () => 
   expect(antigravityTools.command({ toolCallId: "t3", rawOutput: { commandLine: "pwd" } })).toBe("pwd")
   expect(antigravityTools.output({ toolCallId: "t4", content: [{ type: "content", content: { type: "text", text: "plain" } }] })).toBe("plain")
 })
+
+test("names agy's update_steps call as Claude's plan updates are named, through the update that names it only by id", () => {
+  const mapper = new UpdateMapper("/repo", antigravityTools)
+  const steps = [{ title: "Create a.txt", status: "in_progress" }]
+  const [started] = mapper.map({ sessionUpdate: "tool_call", toolCallId: "u1", title: "Run update_steps", kind: "other", status: "in_progress", rawInput: { steps } }, 1)
+  expect(started).toMatchObject({ item: { kind: "other", label: "Updated the plan" } })
+  const [done] = mapper.map({ sessionUpdate: "tool_call_update", toolCallId: "u1", status: "completed" }, 2)
+  expect(done).toMatchObject({ item: { label: "Updated the plan", result: { isError: false } } })
+  // A command whose title looks like it still reads as a command.
+  const [command] = mapper.map({ sessionUpdate: "tool_call", toolCallId: "u2", title: "Run update_steps", kind: "execute", rawInput: { CommandLine: "ls" } }, 3)
+  expect(command).toMatchObject({ item: { kind: "command", label: "Running ls" } })
+})

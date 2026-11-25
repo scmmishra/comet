@@ -1,5 +1,5 @@
 import type { StepKind, TextEdit, ThreadItem } from "@comet/protocol"
-import { commandLabel, cutOutput, relativeTo, tool } from "../steps"
+import { commandLabel, cutOutput, PLAN_UPDATED, relativeTo, tool } from "../steps"
 import type { ToolCall, ToolKind } from "./protocol"
 
 type ToolItem = Extract<ThreadItem, { type: "tool" }>
@@ -7,14 +7,17 @@ type ToolItem = Extract<ThreadItem, { type: "tool" }>
 const EDIT_VERBS = { edit: "Edited", delete: "Deleted", move: "Moved" } as const
 
 /**
- * Where an agent keeps what a tool call ran and printed. ACP has no field for either, so each agent puts
- * them in its own `rawInput` and `rawOutput`, or in the call's content.
+ * Where an agent keeps what a tool call ran and printed, and which of its calls update its plan. ACP has no
+ * field for any of them, so each agent puts the first two in its own `rawInput` and `rawOutput`, or in the
+ * call's content, and names its plan's tool in its own way.
  */
 export interface ToolReader {
   /** The shell command an execute call runs. */
   command(call: ToolCall): string | undefined
   /** What the call printed or answered. */
   output(call: ToolCall): string | undefined
+  /** Whether the call updates the agent's plan. */
+  updatesPlan?(call: ToolCall): boolean
 }
 
 /** How an agent that follows ACP's own fields reports a call: the command in `rawInput.command`, the output as text content. */
@@ -46,6 +49,7 @@ export function toolItem(dir: string, call: ToolCall, reader: ToolReader): ToolI
   const result = call.status === "completed" || call.status === "failed" ? { output: cutOutput(reader.output(call) ?? ""), isError: call.status === "failed" } : undefined
   const step = (name: string, stepKind: StepKind, summary: string, label: string, extra: Pick<ToolItem, "file" | "edits"> = {}) =>
     tool({ type: "tool", id: call.toolCallId, name, summary, ...extra, ...(result ? { result } : {}) }, stepKind, label)
+  if (reader.updatesPlan?.(call)) return step(title, "other", title, PLAN_UPDATED)
   switch (kind) {
     case "execute":
       return step("Bash", "command", command ?? title, commandLabel(command ?? title, result))
