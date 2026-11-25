@@ -20,6 +20,8 @@ pub const PAGES: [(&str, &str, &rune::Icon); 4] = [
 ];
 /// The draft of the source Plugins installs from.
 const PLUGIN_SOURCE: &str = "plugin-source";
+/// How a nav row's colours change on hover, as OpenCode's 120 ms ease-in-out.
+const NAV_HOVER: rune::Anim = rune::Anim::new(rune::Curve::tween(0.12, rune::Easing::EASE_IN_OUT));
 /// The thread text sizes Appearance offers, Comet's `FONT_SIZES`.
 const FONT_SIZES: std::ops::RangeInclusive<u32> = 11..=20;
 /// The colours a project's letter can take, Comet's `PROJECT_COLORS`.
@@ -138,40 +140,45 @@ impl Comet {
 /// The settings screen, filling the main card.
 pub fn screen(s: &Comet, k: &Kit, layer: &mut Vec<El>) -> El {
     let page = s.workspace.settings_page.as_deref().unwrap_or("providers");
+    // `.settings-back`: on hover it fills with `bg-layer-01` and its text turns to `text-base`.
     let back = row()
         .key("settings-back")
-        .gap(6.0)
+        .gap(8.0)
         .items_center()
         .h(28.0)
         .px(6.0)
         .mb(20.0)
-        .radius(4.0)
-        .hover(k.c.hover)
+        .radius(6.0)
+        .hover_fill(k.c.layer_01)
+        .hover_group()
         .role("button")
         .on_press(|s: &mut Comet| s.close_settings())
-        .child(icon(&ic::OUTLINE_ARROW_LEFT, 15.0).color(k.c.text_muted))
-        .child(text("Back to app").font(crate::theme::text(13.0)).color(k.c.text_muted));
+        .child(icon(&ic::OUTLINE_ARROW_LEFT, 15.0).color(k.c.text_muted).group_color(k.c.text_base))
+        .child(text("Back to app").font(crate::theme::text(13.0)).color(k.c.text_muted).group_color(k.c.text_base));
     let nav = PAGES.iter().map(|(id, title, mark)| {
         let selected = *id == page;
         let id = *id;
-        row()
+        let ink = if selected { k.c.text_base } else { k.c.text_muted };
+        let tab = row()
             .key(format!("settings-{id}"))
             .w_full()
             .h(28.0)
-            .gap(6.0)
+            .gap(8.0)
             .items_center()
             .px(6.0)
-            .radius(4.0)
-            .fill(if selected { k.c.layer_03 } else { rune::Color::TRANSPARENT })
-            .hover(k.c.hover)
-            .role("tab")
+            .radius(6.0)
+            .fill(if selected { k.c.layer_03 } else { rune::Color::TRANSPARENT });
+        // A page that is not chosen fills with `bg-layer-01` on hover, a step below the chosen page's
+        // `bg-layer-03`, and its text turns to `text-base`.
+        let tab = if selected { tab } else { tab.hover_fill(k.c.layer_01).hover_group().hover_motion(NAV_HOVER, NAV_HOVER) };
+        tab.role("tab")
             .on_press_tx(move |s: &mut Comet, tx| {
                 s.open_settings(id);
                 // The new page shows whole, with no fade or slide of its parts.
                 tx.instant();
             })
-            .child(icon(mark, 15.0).color(if selected { k.c.text_base } else { k.c.text_muted }))
-            .child(text(*title).font(crate::theme::text(13.0)).color(if selected { k.c.text_base } else { k.c.text_muted }))
+            .child(icon(mark, 15.0).color(ink).group_color(k.c.text_base))
+            .child(text(*title).font(crate::theme::text(13.0)).color(ink).group_color(k.c.text_base))
     });
     // `.settings-nav`: Back, 20 points and a 16 point gap, then the pages 2 points apart.
     let sidebar = col().w(280.0).h_full().pt(40.0).pl(24.0).pr(40.0).gap(16.0).child(back).child(col().w_full().gap(2.0).children(nav.collect::<Vec<_>>()));
