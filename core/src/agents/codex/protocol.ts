@@ -48,6 +48,8 @@ export type CodexItem = { readonly startedAtMs?: number | null; readonly complet
       readonly status: "inProgress" | "completed" | "failed" | "declined"
       readonly aggregatedOutput: string | null
       readonly exitCode: number | null
+      /** The terminal session the command runs in, which may outlive its turn in the background. */
+      readonly processId?: string | null
     }
   | { readonly type: "fileChange"; readonly id: string; readonly changes: readonly FileUpdate[]; readonly status: "inProgress" | "completed" | "failed" | "declined" }
   | {
@@ -180,4 +182,10 @@ export interface HookCompleted {
     readonly status: "running" | "completed" | "failed" | "blocked" | "stopped"
     readonly entries: readonly { readonly kind: "warning" | "stop" | "feedback" | "context" | "error"; readonly text: string }[]
   }
+}
+
+/** A page of the terminals a thread still runs in the background, as `thread/backgroundTerminals/list` gives it. */
+export interface BackgroundTerminals {
+  readonly data: readonly { readonly processId: string }[]
+  readonly nextCursor: string | null
 }

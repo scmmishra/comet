@@ -3,7 +3,7 @@ import { SERVER_NAME } from "../../tools/mcp"
 import { cometToolLabel, cometToolSummary } from "../../tools/rows"
 import { visualItem } from "../../visuals/show"
 import { firstLine, textStart } from "../../text"
-import { commandLabel, cutOutput, relativeTo, thought, tool } from "../steps"
+import { commandLabel, cutOutput, relativeTo, thought, tool, unfinishedResult } from "../steps"
 import { fileEdits } from "./diff"
 import type { CodexItem, CodexTurn, FileUpdate } from "./protocol"
 import { shellScript } from "./shell"
@@ -67,15 +67,23 @@ export function threadItems(dir: string, item: CodexItem, done: boolean, at?: nu
   }
 }
 
-/** Whether Codex may start the item and never complete it, so the thread shows it running after its turn ended. */
+/**
+ * Whether Codex may start the item and never complete it, so the thread shows it running after its turn ended.
+ * A command may also stay open, but it may still run in the background, so the session checks its terminal.
+ */
 export const mayStayOpen = (item: CodexItem) => item.type === "webSearch" || item.type === "contextCompaction"
 
 /**
  * An item the turn left open, as it shows once the turn ended. A search that did not finish has no result
  * to show, so its step says so. It is an error when the turn failed or the user stopped it, after T3 Code.
+ * A command's result is not known, so it shows as failed, or as stopped when the user stopped the turn.
  */
 export function unfinishedItems(dir: string, item: CodexItem, turn: CodexTurn["status"]): ThreadItem[] {
   if (item.type === "contextCompaction") return [{ type: "compaction", id: item.id, status: turn === "failed" ? "failed" : "stopped" }]
+  if (item.type === "commandExecution") {
+    const result = unfinishedResult(turn === "interrupted" ? "stopped" : "failed")
+    return threadItems(dir, item, true).map((found) => (found.type === "tool" ? tool({ ...found, result }, "command", commandLabel(found.summary, result)) : found))
+  }
   return threadItems(dir, item, true).map((found) =>
     found.type === "tool"
       ? tool({ ...found, result: { output: "The search did not finish.", isError: turn !== "completed", ...(turn === "interrupted" ? { stopped: true } : {}) } }, "web", `Did not finish searching the web for ${found.summary}`)

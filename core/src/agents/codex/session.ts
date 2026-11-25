@@ -10,7 +10,7 @@ import { userInput } from "./input"
 import { changedPaths, mayStayOpen, threadItems, unfinishedItems } from "./items"
 import { modelName, turnModel, type ModelCatalog } from "./models"
 import { acceptsPrompts, runPolicy, threadPolicy } from "./permissions"
-import type { CodexConfigRead, CodexItem, CodexModel, CodexTurn, HookCompleted, McpStartup, ReasoningSummary, TokenUsage } from "./protocol"
+import type { BackgroundTerminals, CodexConfigRead, CodexItem, CodexModel, CodexTurn, HookCompleted, McpStartup, ReasoningSummary, TokenUsage } from "./protocol"
 import { asksApproval, readRequest, type CodexRequest } from "./requests"
 import type { AppServer, ThreadOwner, ThreadParams } from "./server"
 
@@ -44,7 +44,7 @@ class Turn {
   answer?: string
   /** Why a hook stopped the turn, once one has. */
   hookStop?: string
-  /** The items the turn started and has not completed, which may stay open for good, by id. */
+  /** The items the turn started and has not completed, which may stay open for good, by id. Commands are tracked apart, since they may outlive the turn. */
   readonly open = new Map<string, CodexItem>()
   readonly started: Promise<string | undefined>
   private resolve!: (id: string | undefined) => void
@@ -78,6 +78,9 @@ class Turn {
   }
 }
 
+/** A command Codex reports. */
+type Command = Extract<CodexItem, { type: "commandExecution" }>
+
 /** A request waiting for the user, with what answers Codex and the request's JSON-RPC id. */
 type WaitingRequest = CodexRequest & { readonly resolve: (reply: unknown) => void; readonly rpcId: RequestId }
 
@@ -107,6 +110,8 @@ export class CodexSession implements AgentSession, ThreadOwner {
   private files = new Map<string, readonly string[]>()
   /** The MCP servers whose failure to start the thread shows, until each starts. */
   private failedServers = new Set<string>()
+  /** The commands Codex started and has not completed, by id. A command in a background terminal outlives its turn. */
+  private commands = new Map<string, Command>()
 
   constructor(
     private readonly dir: string,
@@ -231,6 +236,8 @@ export class CodexSession implements AgentSession, ThreadOwner {
     this.loading = undefined
     this.releases = []
     this.children.clear()
+    // The commands ran in the app-server that ended, so none of them completes.
+    this.settleCommands([...this.commands.keys()], "failed")
     if (this.turn) this.fail(error)
     else this.dismissRequests()
   }
@@ -334,6 +341,10 @@ export class CodexSession implements AgentSession, ThreadOwner {
   private item(item: CodexItem, done: boolean) {
     this.claimAgents(item)
     if (item.type === "fileChange") this.files.set(item.id, changedPaths(this.dir, item.changes))
+    if (item.type === "commandExecution") {
+      if (done) this.commands.delete(item.id)
+      else this.commands.set(item.id, item)
+    }
     if (mayStayOpen(item)) {
       if (done) this.turn?.open.delete(item.id)
       else this.turn?.open.set(item.id, item)
@@ -398,7 +409,10 @@ export class CodexSession implements AgentSession, ThreadOwner {
     if (request) this.requests.settle(request, request.dismissed)
   }
 
-  /** The turn ended. Requests it left open are over, a failed turn shows its error, and its result closes it. */
+  /**
+   * The turn ended. Requests it left open are over, a failed turn shows its error, and its result closes it.
+   * Then the commands still open are checked against the thread's terminals.
+   */
   private complete(ended: CodexTurn) {
     const turn = this.turn
     if (!turn || (turn.id !== undefined && turn.id !== ended.id)) return
@@ -410,6 +424,49 @@ export class CodexSession implements AgentSession, ThreadOwner {
     const output = this.options.outputSchema && ended.status === "completed" ? parsedOutput(turn.answer) : undefined
     this.emit({ kind: "item", item: output === undefined ? result : { ...result, output } })
     this.endTurn()
+    if (this.commands.size && this.threadId) void this.settleExited(this.threadId, [...this.commands.keys()], ended.status)
+  }
+
+  /**
+   * Codex may end a turn without completing a command whose terminal already ended, after T3 Code. A command
+   * in a background terminal goes on, and Codex completes it once it ends. So each of `ids` that still has no
+   * terminal settles as unfinished. A command with no process id settles only when every terminal belongs to
+   * another command. An older Codex, which cannot list the terminals, leaves them all open.
+   */
+  private async settleExited(threadId: string, ids: readonly string[], status: CodexTurn["status"]) {
+    const live = await this.liveTerminals(threadId).catch(() => undefined)
+    if (!live) return
+    const claimed = new Set([...this.commands.values()].flatMap((command) => (command.processId ? [command.processId] : [])))
+    const unclaimed = [...live].some((processId) => !claimed.has(processId))
+    this.settleCommands(
+      ids.filter((id) => {
+        const processId = this.commands.get(id)?.processId
+        return processId ? !live.has(processId) : !unclaimed
+      }),
+      status,
+    )
+  }
+
+  /** The process ids of the terminals the thread still runs. */
+  private async liveTerminals(threadId: string): Promise<Set<string>> {
+    const live = new Set<string>()
+    let cursor: string | null = null
+    do {
+      const page: BackgroundTerminals = await this.server.request("thread/backgroundTerminals/list", { threadId, ...(cursor === null ? {} : { cursor }) })
+      for (const terminal of page.data) live.add(terminal.processId)
+      cursor = page.nextCursor
+    } while (cursor !== null)
+    return live
+  }
+
+  /** Shows each command of `ids` that is still open as unfinished. A late completion still shows its result. */
+  private settleCommands(ids: readonly string[], status: CodexTurn["status"]) {
+    for (const id of ids) {
+      const command = this.commands.get(id)
+      if (!command) continue
+      this.commands.delete(id)
+      for (const item of unfinishedItems(this.dir, command, status)) this.emit({ kind: "item", item })
+    }
   }
 
   /**

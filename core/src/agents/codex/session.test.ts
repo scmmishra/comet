@@ -284,6 +284,62 @@ test.each([
   expect(s.items().findIndex((found) => found.id === "w1" && found.type === "tool" && found.result)).toBeLessThan(s.items().findIndex((found) => found.type === "result"))
 })
 
+const runningCommand = (id: string, processId: string | null) => ({ type: "commandExecution", id, command: "/bin/zsh -lc 'sleep 40'", cwd: DIR, status: "inProgress", commandActions: [], aggregatedOutput: null, exitCode: null, processId })
+const commandResults = (s: ReturnType<typeof setup>, id: string) => s.items().filter((found) => found.id === id && found.type === "tool" && found.result)
+
+test("a command whose terminal is gone when its turn ends settles, and one still in a terminal stays running until Codex completes it", async () => {
+  const s = setup()
+  const pages: Record<string, unknown> = { first: { data: [{ processId: "p-other" }], nextCursor: "next" }, next: { data: [{ processId: "p-live" }], nextCursor: null } }
+  s.codex.answer("thread/backgroundTerminals/list", (params: { cursor?: string }) => pages[params.cursor ?? "first"])
+  await started(s)
+  s.codex.notify(...item("item/started", runningCommand("gone", "p-gone")))
+  s.codex.notify(...item("item/started", runningCommand("live", "p-live")))
+  // A command with no process id may own the terminal no other command claims.
+  s.codex.notify(...item("item/started", runningCommand("unknown", null)))
+  s.codex.notify("turn/completed", { threadId: THREAD, turn: turn("completed") })
+  await until(() => commandResults(s, "gone").length > 0)
+  expect(s.codex.sent("thread/backgroundTerminals/list")).toEqual([{ threadId: THREAD }, { threadId: THREAD, cursor: "next" }])
+  expect(commandResults(s, "gone")).toEqual([expect.objectContaining({ result: { output: "The tool call did not finish.", isError: true }, label: "Failed sleep" })])
+  expect(commandResults(s, "live")).toEqual([])
+  expect(commandResults(s, "unknown")).toEqual([])
+  s.codex.notify(...item("item/completed", { ...runningCommand("live", "p-live"), status: "completed", aggregatedOutput: "done", exitCode: 0 }))
+  await until(() => commandResults(s, "live").length > 0)
+  expect(commandResults(s, "live")).toEqual([expect.objectContaining({ result: { output: "done", isError: false }, label: "Ran sleep" })])
+})
+
+test("a command settles as stopped when the user stopped its turn, and not when Codex completes it while the terminals are listed", async () => {
+  const s = setup()
+  let list!: (page: unknown) => void
+  s.codex.answer("thread/backgroundTerminals/list", () => new Promise((resolve) => (list = resolve)))
+  await started(s)
+  s.codex.notify(...item("item/started", runningCommand("late", "p-late")))
+  s.codex.notify(...item("item/started", runningCommand("gone", "p-gone")))
+  s.codex.notify("turn/completed", { threadId: THREAD, turn: turn("interrupted") })
+  await until(() => !s.session.busy && s.codex.sent("thread/backgroundTerminals/list").length > 0)
+  s.codex.notify(...item("item/completed", { ...runningCommand("late", "p-late"), status: "completed", aggregatedOutput: "", exitCode: 0 }))
+  await until(() => commandResults(s, "late").length > 0)
+  list({ data: [], nextCursor: null })
+  await until(() => commandResults(s, "gone").length > 0)
+  expect(commandResults(s, "gone")).toEqual([expect.objectContaining({ result: { output: "The tool call did not finish.", isError: true, stopped: true }, label: "Stopped sleep" })])
+  expect(commandResults(s, "late")).toEqual([expect.objectContaining({ result: { output: "", isError: false } })])
+})
+
+test("an open command stays running when Codex cannot list the terminals, and settles when the app-server dies", async () => {
+  const s = setup()
+  s.codex.answer("thread/backgroundTerminals/list", () => {
+    throw new Error("Unknown method")
+  })
+  await started(s)
+  s.codex.notify(...item("item/started", runningCommand("open", "p-open")))
+  s.codex.notify("turn/completed", { threadId: THREAD, turn: turn("completed") })
+  await until(() => !s.session.busy && s.codex.sent("thread/backgroundTerminals/list").length > 0)
+  await Bun.sleep(10)
+  expect(commandResults(s, "open")).toEqual([])
+  s.codex.hangUp()
+  await until(() => commandResults(s, "open").length > 0)
+  expect(commandResults(s, "open")).toEqual([expect.objectContaining({ result: { output: "The tool call did not finish.", isError: true }, label: "Failed sleep" })])
+})
+
 test("a turn that failed on a request too large reads as one sentence, not the provider's HTML page", async () => {
   const s = setup()
   await started(s)
