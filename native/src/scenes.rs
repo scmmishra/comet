@@ -78,28 +78,27 @@ fn settings_plugins(s: &mut Comet) {
     s.take_plugins(serde_json::from_value(plugins).expect("the scene's plugins decode"));
 }
 
-/// Settings on Appearance, in Comet's colours, dark.
+/// Settings on Appearance, in Comet's colours.
 fn settings_appearance(s: &mut Comet) {
     settings(s);
     s.open_settings("appearance");
 }
 
-/// Settings on Appearance in Verdigris, following the system, so `--theme` picks its flavour.
+/// Settings on Appearance in Verdigris.
 fn settings_verdigris(s: &mut Comet) {
     settings_in(s, crate::protocol::ColorTheme::Verdigris);
 }
 
-/// Settings on Appearance in Dracula, following the system, so `--theme` picks its flavour.
+/// Settings on Appearance in Dracula.
 fn settings_dracula(s: &mut Comet) {
     settings_in(s, crate::protocol::ColorTheme::Dracula);
 }
 
-/// Settings on Appearance in `theme`, following the system.
+/// Settings on Appearance in `theme`.
 fn settings_in(s: &mut Comet, theme: crate::protocol::ColorTheme) {
     settings_appearance(s);
     if let Some(settings) = s.account.settings.as_mut() {
         settings.appearance.color_theme = theme;
-        settings.appearance.theme = crate::protocol::ThemeChoice::Auto;
     }
 }
 
@@ -294,13 +293,13 @@ fn models_signing_in(s: &mut Comet) {
 }
 
 /// The settings and the agents every scene with a picker or a settings page starts from: Claude Code
-/// and Codex ready, each on a plan, and Antigravity not installed.
+/// and Codex ready, each on a plan, and Antigravity not installed. The theme follows the system, so `--theme` picks it.
 fn agents(s: &mut Comet) {
     let modes = ["default", "acceptEdits", "auto", "bypassPermissions"];
     let codex_efforts = ["low", "medium", "high", "xhigh", "max", "ultra"];
     let messages = serde_json::json!([
         { "type": "settings", "settings": {
-            "appearance": { "theme": "dark", "fontSize": 14 },
+            "appearance": { "theme": "auto", "fontSize": 14 },
             "threads": { "agent": "claude", "followUp": "steer", "compactIdle": false },
             "agents": { "claude": { "model": "default", "permissionMode": "auto" }, "codex": { "model": "default", "effort": "medium", "permissionMode": "auto" }, "antigravity": { "model": "default", "permissionMode": "default" } },
             "projects": { "/Users/me/code/web": { "name": "Web", "color": "blue" } },
