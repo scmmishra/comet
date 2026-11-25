@@ -4,34 +4,50 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
-- A `/` that starts a word later in the message lists the agent's skills and commands, not only a `/` at the very start. Picking one puts it in place, and it goes to the agent as part of the text. Comet's own commands, such as /model, still list only at the start.
-- When Google asks you to verify your account before an Antigravity turn can run, the error says so and links to Google's check. A click on the link opens it in the browser. Before, it said only "Verify your account to continue." Comet shows the link only when it leads to Google's sign-in on accounts.google.com.
-- When an Antigravity turn stops on a used-up quota, the error says when the quota resets, such as "It resets in 4m42s." Before, Comet dropped the reset time that Antigravity gave.
-- A Codex command no longer shows as running for good when its turn ends without its result. Once a turn ends, Comet asks Codex which commands still run in the background. A command that does not run anymore shows that it did not finish. A command that still runs shows its result once it ends.
-- Comet runs on a newer Rune. After Rename or Delete from the session menu, focus returns to where you were. A click inside a popover as it opens no longer closes it. A right-click outside a menu or popover closes it. A physical mouse wheel scrolls smoothly. Panels that open beside their anchor fit in the window. A subagent's detail opens to the left of its row, lined up with its top. The settings gear in the model picker is taller.
-- A code fence closes only on a bare run of its own character, at least as long as the one that opened it. Before, a ```` ```ruby ```` line inside a four-backtick block counted as a close. Comet then added line breaks to the code and turned file names in it into links.
-- A plugin's `Diff` can split its files under headings, with `sections`. Each section has a title, a label and a note, over a patch of its own, and every section scrolls as one diff. A guide to a pull request reads as one page this way. The plugin API is now 0.2.2.
-- The view pane's new terminal button has an arrow beside it. The arrow opens a menu with New terminal and the panels the project's plugins offer that need no parameters, such as a branch guide. A press on the button itself still opens a terminal.
-- A plugin can run a prompt with `ctx.run`, and gets the agent's final reply back. It runs on the agent, model and effort the plugin names, else the tab's. With a JSON schema, Claude Code and Codex give a reply that follows it, and the plugin gets the parsed JSON. No thread shows the run, so it adds nothing to the tab's thread. The run is in Supervised mode, and Comet declines every request it makes, so the agent cannot edit files. It may still run commands it treats as read-only, such as `git diff`. It stops when the plugin aborts it or the tab closes. The plugin API is now 0.2.1.
-- Hold ⌘ alone for a moment, and each of the first nine tabs shows its ⌘1 to ⌘9 number in place of its project mark. The numbers hide when you let go, press another modifier or leave the window. They do not show while the model picker is open, since ⌘1 to ⌘9 pick models there.
-- Comet runs on a newer Rune. The first window shows sooner at launch. Metal recovers from more GPU failures, where before the window could get stuck. Trackpad scrolling no longer stalls when it starts after a pause. The thread's minimap lights its marks at once.
-- A Codex approval says what it approves. A command that needs the network names the host it wants to reach. A permissions request names every path it asks for, including the ones only Codex 0.169's new list carries. Before, such a request could show only "Allow more access".
-- A thread's context ring stays after a rewind, after a plugin switches the tab back to one of its threads, and when a reply ends while Comet reads a long thread at start. Before, the ring went missing until the next reply ended.
-- An agent can open a file or a diff in the view pane beside its thread. `open_file` shows a file at a line. `open_diff` opens Review on a scope, uncommitted changes unless the agent names another, and scrolls to a changed file. Review reads the changes again first, so it shows the edits the agent just made. What an agent opens comes to the front of its own tab's view pane. It does not switch your tab or close Settings. Every agent gets both tools.
-- Comet has a third colour theme, Dracula. Its dark flavour takes Dracula Classic's colours, and its light flavour takes Alucard Classic's, both from the Dracula spec. Both sit on darker, cooler surfaces than the spec's.
-- Comet closes a Claude Code process that has sat idle for 20 minutes, which frees hundreds of megabytes per tab. The tab and its thread stay. The next message resumes the same conversation, with its model, effort, mode and the approvals you gave for the session. A turn, a waiting request or background work keeps the process up. Before, every open tab kept its process for as long as the tab was open.
-- A message sent while Claude Code worked goes back to the queue when Claude Code exits or you Force stop the turn before Claude Code reads it. The queue pauses, as after a Stop or an error, so you can send, edit or drop it. Before, it stayed marked as waiting and was lost.
-- Antigravity runs Comet's own tools, such as handing a task to another agent, without asking, in every mode. Before, it asked before each call.
-- A thread whose cut text ended inside an emoji shows again. Comet cuts long tool output, summaries and terminal output between whole characters. Before, half an emoji made the app drop the message, and a restored Claude thread could open empty.
-- An Antigravity turn fails with an error when Antigravity does not answer within 90 seconds as it starts, and Comet ends Antigravity's process. Stop also ends a turn whose agent is still starting. Before, the turn stayed busy, and only Force stop ended it.
-- An Antigravity turn that an HTTP error stopped, such as a 502 from Google, shows the error's message. Before, it showed only that an error stopped the turn.
-- An Antigravity turn stays open while a command Antigravity left running in the background still runs, and Stop ends that command. A reply Antigravity starts by itself, once such a command ends, shows as its own turn, and a permission it asks for there waits for you. Before, the tab showed idle and that reply was never finished.
-- A task handed to Codex or Claude passes on why a hook stopped its turn, along with its answer. Before, the agent that asked got the answer alone.
-- Codex in Full access runs a command it deems dangerous, such as `rm -rf`, without asking. Before, it asked first. It still asks before network access that Codex's network settings do not allow.
-- Comet runs on a newer Rune. It fixes a crash on macOS 26, a window left black after a GPU hang, and input method and dead-key bugs. A pointer move that changes nothing no longer redraws, and long replies lay out links and text faster. The Window menu gains Zoom and Bring All to Front, and the Edit menu gains Start Dictation and Emoji & Symbols.
-- A plugin's sidebar and the view pane resize. Drag the edge between two panes. One width serves every tab, and Comet keeps it across restarts. The sidebar drags from 136 to 640 points. The session keeps at least 400 points beside the view pane, and the view pane keeps at least 320.
-- Thread search matches a thread's branch, and the pull request of that branch: its number, its title and its link. A pasted link to one of the pull request's tabs, such as Files, matches too. A row that matches only through one of these says which, such as "Branch: feat/inbox-search". Comet asks GitHub through `gh` for the pull requests, and skips the repo's default branch.
-- A search from the palette's root finds threads in every recent project, not only the active one. It shows at most 100 threads. ⌘⇧O still searches one project.
+### Threads and the composer
+
+- An agent can open a file at a line, or Review on a diff, in the view pane beside its thread. Review reads the changes again first, so it shows the agent's latest edits.
+- A `/` that starts any word in the message lists the agent's skills and commands. Comet's own commands, such as /model, still list only at the start.
+- A message sent while an agent worked goes back to the queue if the agent exits or you Force stop the turn before it reads the message. Before, it was lost.
+- A link in an error opens in the browser.
+- A thread whose cut text ended inside an emoji shows again. Before, half an emoji made the app drop the message, and a restored Claude thread could open empty.
+- A code fence closes only on a bare run at least as long as its opener, so a ```` ```ruby ```` line inside a four-backtick block stays code.
+- A thread's context ring stays after a rewind, a thread switch by a plugin, or a reply that ends while a long thread loads.
+- Thread search matches a thread's branch and that branch's pull request: its number, title and link. A search from the palette's root covers every recent project, up to 100 threads.
+
+### Agents
+
+- Comet closes a Claude Code process that has sat idle for 20 minutes, which frees hundreds of megabytes per tab. The next message resumes the same conversation, with its settings and the approvals you gave for the session. A turn, a waiting request or background work keeps the process up.
+- A task handed to Claude or Codex passes on why a hook stopped its turn, along with its answer.
+- Codex in Full access runs commands it deems dangerous, such as `rm -rf`, without asking. It still asks about network access its settings do not allow.
+- A Codex approval names the host a command wants to reach, and every path a permissions request asks for.
+- A Codex command whose turn ended without its result shows that it did not finish, unless it still runs in the background.
+- An Antigravity turn stays open while a command it left in the background runs, and Stop ends that command. A reply Antigravity starts by itself shows as its own turn.
+- Antigravity runs Comet's own tools, such as handing a task to another agent, without asking.
+- Antigravity's errors read better. An HTTP error shows its message, a used-up quota says when it resets, and an account check links to Google's page for it.
+- An Antigravity turn fails if Antigravity does not answer within 90 seconds as it starts. Stop also ends a turn whose agent is still starting.
+
+### Plugins
+
+- A plugin can run a prompt with `ctx.run` and get the agent's final reply, as parsed JSON when it gives a schema. The run shows in no thread, and Comet declines every request it makes, so it cannot edit files.
+- A plugin's `Diff` can split its files under headings with `sections`, which scroll as one diff.
+- The view pane's terminal button has a menu with New terminal and the panels the project's plugins offer.
+- A plugin's sidebar and the view pane resize by dragging the edge between panes. Comet keeps the widths across restarts.
+- The plugin API is now 0.2.2.
+
+### The app
+
+- Hold ⌘ alone for a moment, and the first nine tabs show their ⌘1 to ⌘9 numbers.
+- Comet has a third colour theme, Dracula, with Alucard as its light flavour.
+- Settings' sidebar rows light up on hover as OpenCode's do.
+- Comet runs on a newer Rune:
+  - It fixes a crash on macOS 26.
+  - A GPU hang or failure no longer leaves the window black or stuck.
+  - The first window shows sooner.
+  - Long replies lay out faster.
+  - Scrolling is smoother.
+  - Popovers and menus behave better: focus returns after a dialog, a right-click outside closes them, and panels beside their anchor fit the window.
+  - The Window and Edit menus gain Zoom, Bring All to Front, Start Dictation and Emoji & Symbols.
 
 ## 0.2.0
 
