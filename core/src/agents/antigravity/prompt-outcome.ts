@@ -19,6 +19,17 @@ const SESSION_ID = /^[\w-]+$/
 /** Claude's answer for a thinking block without a valid signature, as T3 Code reads it. */
 const SIGNATURE = /\bmessages\.\d+\.content\.\d+(?:\.thinking\.signature: Field required|: Invalid `signature` in `thinking` block)/
 const QUOTA = /\breason:QUOTA_EXHAUSTED\b/
+/** A Go duration, such as `4m42s` or `3600s`. */
+const GO_DURATION = String.raw`(?:\d+(?:\.\d+)?(?:ns|us|µs|μs|ms|h|m|s))+`
+/**
+ * Where a quota error says when the quota resets, after T3 Code, in the order it reads them: Google's reset
+ * time, its delay, the delay to retry after, and the CLI's own words, such as "Resets in 4m42s.".
+ */
+const RESET_TIME = /\bquotaResetTimeStamp:([^\s\]]+)/
+const RESET_DELAYS = [new RegExp(String.raw`\bquotaResetDelay:(${GO_DURATION})(?=[\s\]])`), new RegExp(String.raw`\bretryDelay:(${GO_DURATION})(?=[\s\]])`), new RegExp(String.raw`\bResets in (${GO_DURATION})(?!\w|\.\d)`)]
+/** One part of a Go duration, and how many milliseconds each of its units is. */
+const DURATION_PART = /(\d+(?:\.\d+)?)(ns|us|µs|μs|ms|h|m|s)/g
+const UNIT_MS: Record<string, number> = { ns: 1e-6, us: 1e-3, µs: 1e-3, μs: 1e-3, ms: 1, s: 1_000, m: 60_000, h: 3_600_000 }
 /**
  * A Google API error, as the CLI writes it, after T3 Code. Its status is a gRPC code, or an HTTP status
  * line such as `502 Bad Gateway`. The message stops at the next error, so a match never spans two.
@@ -63,9 +74,33 @@ function failure(text: string): PromptFailure {
     return line.startsWith(REPLY_MARK) && error.length > 0 && !error.includes("\n") && text.includes(error)
   }
   if (SIGNATURE.test(text)) return { message: SIGNATURE_REJECTED, repeats }
-  if (QUOTA.test(text)) return { message: QUOTA_REACHED, repeats }
+  if (QUOTA.test(text)) {
+    const reset = resetDelay(text)
+    return { message: reset ? `${QUOTA_REACHED} It resets in ${duration(reset)}.` : QUOTA_REACHED, repeats }
+  }
   const message = API_ERROR.exec(text)?.[1] ?? ERROR_LINE.exec(text)?.[1]
   return { message: message?.trim() || STOPPED_BY_ERROR, repeats }
+}
+
+/** How long until the quota resets, in milliseconds. A reset time that has passed or does not parse gives way to a delay. */
+function resetDelay(text: string): number | undefined {
+  const time = Date.parse(RESET_TIME.exec(text)?.[1] ?? "")
+  if (time > Date.now()) return time - Date.now()
+  const delay = RESET_DELAYS.map((pattern) => pattern.exec(text)?.[1]).find((found) => found !== undefined)
+  if (delay === undefined) return undefined
+  const ms = [...delay.matchAll(DURATION_PART)].reduce((sum, [, amount, unit]) => sum + Number(amount) * UNIT_MS[unit!]!, 0)
+  return ms > 0 ? ms : undefined
+}
+
+/** A wait in hours, minutes and seconds, such as `1h` or `4m42s`. It rounds up to a second. */
+function duration(ms: number): string {
+  const seconds = Math.ceil(ms / 1000)
+  const parts: [number, string][] = [
+    [Math.floor(seconds / 3600), "h"],
+    [Math.floor((seconds % 3600) / 60), "m"],
+    [seconds % 60, "s"],
+  ]
+  return parts.flatMap(([amount, unit]) => (amount ? [`${amount}${unit}`] : [])).join("")
 }
 
 /** Reads the log read-only. Undefined when it cannot be read. */

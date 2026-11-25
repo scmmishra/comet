@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- When an Antigravity turn stops on a used-up quota, the error says when the quota resets, such as "It resets in 4m42s." Before, Comet dropped the reset time that Antigravity gave.
 - A Codex command no longer shows as running for good when its turn ends without its result. Once a turn ends, Comet asks Codex which commands still run in the background. A command that does not run anymore shows that it did not finish. A command that still runs shows its result once it ends.
 - Comet runs on a newer Rune. After Rename or Delete from the session menu, focus returns to where you were. A click inside a popover as it opens no longer closes it. A right-click outside a menu or popover closes it. A physical mouse wheel scrolls smoothly. Panels that open beside their anchor fit in the window. A subagent's detail opens to the left of its row, lined up with its top. The settings gear in the model picker is taller.
 - A code fence closes only on a bare run of its own character, at least as long as the one that opened it. Before, a ```` ```ruby ```` line inside a four-backtick block counted as a close. Comet then added line breaks to the code and turned file names in it into links.

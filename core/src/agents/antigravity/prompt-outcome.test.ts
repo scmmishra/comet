@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite"
-import { expect, test } from "bun:test"
+import { expect, setSystemTime, test } from "bun:test"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 import { useTempHome } from "../../test-support"
@@ -63,7 +63,7 @@ test("reads the message of an error, without the stack trace, else says only tha
   const cases: [string, string][] = [
     ["UNAVAILABLE (code 503): The model is overloaded. Try again later.", "The model is overloaded. Try again later."],
     ["Error 429, Message: Too many requests, Status: RESOURCE_EXHAUSTED", "Too many requests"],
-    ["RESOURCE_EXHAUSTED (code 429): quota [reason:QUOTA_EXHAUSTED quotaResetDelay:1h]", QUOTA_REACHED],
+    ["RESOURCE_EXHAUSTED (code 429): quota [reason:QUOTA_EXHAUSTED quotaResetDelay:1h]", `${QUOTA_REACHED} It resets in 1h.`],
     ["Something broke", STOPPED_BY_ERROR],
   ]
   for (const [line, message] of cases) {
@@ -72,6 +72,35 @@ test("reads the message of an error, without the stack trace, else says only tha
     add(id, [[USER_STEP, plain("hi")], [ERROR_STEP, errorPayload(line)]])
     expect(check()?.message).toBe(message)
   }
+})
+
+/** The message a quota error step gives. */
+function quotaMessage(line: string) {
+  const id = sessionWith()
+  const check = watchPrompt(id)!
+  add(id, [[USER_STEP, plain("hi")], [ERROR_STEP, errorPayload(line)]])
+  return check()?.message
+}
+
+test("says when the quota resets, from the first place the error says it", () => {
+  // agy 1.5.16 says it only in its message, as T3 Code found.
+  const captured =
+    "Error 429, Message: Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 4m42s., Status: RESOURCE_EXHAUSTED, Details: [map[@type:type.googleapis.com/google.rpc.ErrorInfo domain:cloudcode-pa.googleapis.com reason:QUOTA_EXHAUSTED]]"
+  expect(quotaMessage(captured)).toBe(`${QUOTA_REACHED} It resets in 4m42s.`)
+  // T3 Code's fixture: a reset time that does not parse gives way to the reset delay, and a retry delay does not outrank it.
+  const details = (metadata: string) =>
+    `Error 429, Message: Quota exhausted for test model., Status: RESOURCE_EXHAUSTED, Details: [map[@type:type.googleapis.com/google.rpc.RetryInfo retryDelay:42s] map[@type:type.googleapis.com/google.rpc.ErrorInfo domain:googleapis.com metadata:map[${metadata}] reason:QUOTA_EXHAUSTED]]`
+  expect(quotaMessage(details("quotaResetDelay:3600s quotaResetTimeStamp:soon"))).toBe(`${QUOTA_REACHED} It resets in 1h.`)
+  expect(quotaMessage(details("quotaResetTimeStamp:soon"))).toBe(`${QUOTA_REACHED} It resets in 42s.`)
+  setSystemTime(new Date("2026-11-25T10:00:00Z"))
+  try {
+    expect(quotaMessage(details("quotaResetDelay:3600s quotaResetTimeStamp:2026-11-25T12:30:05.2Z"))).toBe(`${QUOTA_REACHED} It resets in 2h30m6s.`)
+    // A reset time that has passed gives way to the delay.
+    expect(quotaMessage(details("quotaResetDelay:90.5s quotaResetTimeStamp:2026-11-09T01:05:00Z"))).toBe(`${QUOTA_REACHED} It resets in 1m31s.`)
+  } finally {
+    setSystemTime()
+  }
+  expect(quotaMessage("Error 429, Message: Quota exhausted., Status: RESOURCE_EXHAUSTED, Details: [reason:QUOTA_EXHAUSTED]")).toBe(QUOTA_REACHED)
 })
 
 test("reads the message of an HTTP error, and of the one error a match may not run past", () => {
