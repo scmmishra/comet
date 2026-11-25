@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 import { useTempHome } from "../../test-support"
 import { sessionLog } from "./home"
-import { QUOTA_REACHED, SIGNATURE_REJECTED, STOPPED_BY_ERROR, watchPrompt } from "./prompt-outcome"
+import { QUOTA_REACHED, SIGNATURE_REJECTED, STOPPED_BY_ERROR, VERIFY_ACCOUNT, watchPrompt } from "./prompt-outcome"
 
 useTempHome()
 
@@ -101,6 +101,47 @@ test("says when the quota resets, from the first place the error says it", () =>
     setSystemTime()
   }
   expect(quotaMessage("Error 429, Message: Quota exhausted., Status: RESOURCE_EXHAUSTED, Details: [reason:QUOTA_EXHAUSTED]")).toBe(QUOTA_REACHED)
+})
+
+/** A 403 that asks for Google's account check, as T3 Code's fixture has it, with its body indented or compact. */
+function verificationPayload(url: string | undefined, compact = false) {
+  const response = {
+    error: {
+      code: 403,
+      details: [
+        { "@type": "type.googleapis.com/google.rpc.Help", links: [] },
+        { "@type": "type.googleapis.com/google.rpc.ErrorInfo", domain: "cloudcode-pa.googleapis.com", metadata: { validation_url: url }, reason: "VALIDATION_REQUIRED" },
+      ],
+      message: "Verify your account to continue.",
+      status: "PERMISSION_DENIED",
+    },
+  }
+  const body = compact ? JSON.stringify(response) : JSON.stringify(response, null, 2)
+  return errorPayload("PERMISSION_DENIED (code 403): Verify your account to continue.", `HTTP 403 Forbidden\n\n${body}\ngoroutine 1 [running]:\nmain.main()`)
+}
+
+test("links to Google's account check when a turn needs it, and only to a link on accounts.google.com", () => {
+  const cases: [string | undefined, boolean, boolean][] = [
+    ["https://accounts.google.com/v3/signin/continue?plt=fixture&flowName=GlifWebSignIn", false, true],
+    ["https://accounts.google.com/signin/continue?sarp=1&scc=1&plt=fixture&flowName=GlifWebSignIn", true, true],
+    [undefined, false, false],
+    ["https://accounts.google.com.example.invalid/v3/signin/continue?plt=fixture", false, false],
+    ["https://accounts.google.com/v3/signin/continue?plt=fixture\u0007", false, false],
+    ["https://accounts.google.com/v3/signin/continue?plt=fixture#frag", true, false],
+    ["https://accounts.google.com/logout?continue=https://example.invalid", true, false],
+    ["http://accounts.google.com/v3/signin/continue?plt=fixture", true, false],
+  ]
+  for (const [url, compact, linked] of cases) {
+    const id = sessionWith()
+    const check = watchPrompt(id)!
+    add(id, [[USER_STEP, plain("hi")], [ERROR_STEP, verificationPayload(url, compact)]])
+    expect(check()?.message).toBe(linked ? `${VERIFY_ACCOUNT}\n${url}` : VERIFY_ACCOUNT)
+  }
+  // The same body in the model's reply is not an error.
+  const id = sessionWith()
+  const check = watchPrompt(id)!
+  add(id, [[USER_STEP, plain("hi")], [15, verificationPayload(cases[0]![0])]])
+  expect(check()).toBeUndefined()
 })
 
 test("reads the message of an HTTP error, and of the one error a match may not run past", () => {

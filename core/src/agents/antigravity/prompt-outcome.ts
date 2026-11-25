@@ -7,6 +7,8 @@ import { sessionLog } from "./home"
 export const SIGNATURE_REJECTED = "This Antigravity thread can no longer go on. The model rejects a thinking block saved in it. Start a new thread."
 /** What a turn says when the account used up its quota. */
 export const QUOTA_REACHED = "You have reached your Antigravity quota for this period."
+/** What a turn says when Google asks the user to verify the account. A link to Google's check follows it when the error has one. */
+export const VERIFY_ACCOUNT = "Google asks you to verify your Google account. Verify it, then send again."
 /** What a turn says when the error has no message Comet can read. */
 export const STOPPED_BY_ERROR = "Antigravity stopped this turn because of an error."
 
@@ -30,6 +32,19 @@ const RESET_DELAYS = [new RegExp(String.raw`\bquotaResetDelay:(${GO_DURATION})(?
 /** One part of a Go duration, and how many milliseconds each of its units is. */
 const DURATION_PART = /(\d+(?:\.\d+)?)(ns|us|µs|μs|ms|h|m|s)/g
 const UNIT_MS: Record<string, number> = { ns: 1e-6, us: 1e-3, µs: 1e-3, μs: 1e-3, ms: 1, s: 1_000, m: 60_000, h: 3_600_000 }
+/** Where the HTTP body of an error starts. The CLI writes it as JSON, compact or indented, and a stack trace may follow it. */
+const ERROR_BODY = /\{\s*"error"\s*:/g
+/**
+ * The link to Google's account check that Comet shows, as T3 Code accepts it: a sign-in that continues on
+ * accounts.google.com, with no control characters, spaces or fragment.
+ */
+const VERIFICATION_URL = /^https:\/\/accounts\.google\.com\/(?:v3\/)?signin\/continue\?[^\s\p{Cc}\\#]+$/u
+/** The longest link to Google's account check that Comet shows. */
+const MAX_URL = 4096
+/** The detail of a Google API error that asks for an account check. */
+const ERROR_INFO = "type.googleapis.com/google.rpc.ErrorInfo"
+const CHECK_DOMAIN = "cloudcode-pa.googleapis.com"
+const CHECK_REASON = "VALIDATION_REQUIRED"
 /**
  * A Google API error, as the CLI writes it, after T3 Code. Its status is a gRPC code, or an HTTP status
  * line such as `502 Bad Gateway`. The message stops at the next error, so a match never spans two.
@@ -42,6 +57,18 @@ const API_ERROR = /Error \d{3}, Message: ((?:(?!, Status: |Error \d{3}, Message:
 const ERROR_LINE = /\(code \d{3}\): ([^\x00-\x1f]+)/
 /** How the CLI marks the error line it sends as the reply. */
 const REPLY_MARK = "⚠ "
+
+/** The parts of an HTTP error's body that ask for an account check. */
+interface ErrorBody {
+  readonly error?: { readonly code?: unknown; readonly status?: unknown; readonly details?: unknown }
+}
+
+interface ErrorInfo {
+  readonly "@type"?: unknown
+  readonly domain?: unknown
+  readonly reason?: unknown
+  readonly metadata?: { readonly validation_url?: unknown } | null
+}
 
 interface Step {
   readonly type: number
@@ -78,8 +105,54 @@ function failure(text: string): PromptFailure {
     const reset = resetDelay(text)
     return { message: reset ? `${QUOTA_REACHED} It resets in ${duration(reset)}.` : QUOTA_REACHED, repeats }
   }
+  const check = accountCheck(text)
+  if (check) return { message: check.link ? `${VERIFY_ACCOUNT}\n${check.link}` : VERIFY_ACCOUNT, repeats }
   const message = API_ERROR.exec(text)?.[1] ?? ERROR_LINE.exec(text)?.[1]
   return { message: message?.trim() || STOPPED_BY_ERROR, repeats }
+}
+
+/**
+ * Whether the error's body asks the user to verify the account, after T3 Code, with the link to Google's
+ * check when Comet trusts it. Google answers 403 with an ErrorInfo of reason VALIDATION_REQUIRED, and puts
+ * the link in its `validation_url`.
+ */
+function accountCheck(text: string): { readonly link?: string } | undefined {
+  for (const start of text.matchAll(ERROR_BODY)) {
+    const error = (parsed(jsonObject(text, start.index)) as ErrorBody | undefined)?.error
+    if (error?.code !== 403 || error.status !== "PERMISSION_DENIED" || !Array.isArray(error.details)) continue
+    const info = (error.details as (ErrorInfo | null)[]).find((detail) => detail?.["@type"] === ERROR_INFO && detail.domain === CHECK_DOMAIN && detail.reason === CHECK_REASON)
+    if (!info) continue
+    const link = info.metadata?.validation_url
+    return typeof link === "string" && link.length <= MAX_URL && VERIFICATION_URL.test(link) ? { link } : {}
+  }
+  return undefined
+}
+
+/** The JSON object that starts at `start`, up to its closing brace. Undefined when the text ends first. */
+function jsonObject(text: string, start: number): string | undefined {
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (let index = start; index < text.length; index++) {
+    const char = text[index]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (char === "\\") escaped = true
+      else if (char === '"') inString = false
+    } else if (char === '"') inString = true
+    else if (char === "{") depth++
+    else if (char === "}" && --depth === 0) return text.slice(start, index + 1)
+  }
+  return undefined
+}
+
+function parsed(json: string | undefined): unknown {
+  if (json === undefined) return undefined
+  try {
+    return JSON.parse(json)
+  } catch {
+    return undefined
+  }
 }
 
 /** How long until the quota resets, in milliseconds. A reset time that has passed or does not parse gives way to a delay. */
