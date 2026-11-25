@@ -106,15 +106,14 @@ pub fn prepare(text: &str) -> String {
 fn break_lines(text: &str, files: bool) -> String {
     let lines: Vec<&str> = text.split('\n').collect();
     let mut out = String::with_capacity(text.len() + 16);
-    let mut fence: Option<&str> = None;
+    let mut fence: Option<(char, usize)> = None;
     for (i, line) in lines.iter().enumerate() {
-        let trimmed = line.trim_start();
-        let marker = ["```", "~~~"].into_iter().find(|m| trimmed.starts_with(m));
-        // A fence opens with ``` or ~~~ and closes with the same marker.
+        let marker = fence_marker(line);
         let in_code = fence.is_some();
-        match fence {
-            Some(open) if trimmed.starts_with(open) => fence = None,
-            None => fence = marker,
+        match (fence, marker) {
+            // A fence closes on a bare run of its own character, at least as long as the one that opened it.
+            (Some((open, len)), Some((c, n, rest))) if c == open && n >= len && rest.trim().is_empty() => fence = None,
+            (None, Some((c, n, _))) => fence = Some((c, n)),
             _ => {}
         }
         let fenced = in_code || marker.is_some();
@@ -129,6 +128,15 @@ fn break_lines(text: &str, files: bool) -> String {
         }
     }
     out
+}
+
+/// The fence character, the length of its run and the text after it, when the line starts with three or
+/// more backticks or tildes.
+fn fence_marker(line: &str) -> Option<(char, usize, &str)> {
+    let trimmed = line.trim_start();
+    let c = trimmed.chars().next().filter(|c| *c == '`' || *c == '~')?;
+    let n = trimmed.len() - trimmed.trim_start_matches(c).len();
+    (n >= 3).then(|| (c, n, &trimmed[n..]))
 }
 
 /// The line with each inline code span that names a file turned into a link to it.
@@ -263,6 +271,14 @@ mod tests {
     fn single_newlines_break_outside_code() {
         assert_eq!(prepare("one\ntwo\n\nthree"), "one  \ntwo\n\nthree");
         assert_eq!(prepare("```\na\nb\n```\nc\nd"), "```\na\nb\n```\nc  \nd");
+    }
+
+    #[test]
+    fn a_fence_closes_only_on_a_bare_run_as_long_as_its_opener() {
+        let nested = "````md\n```ruby\n`src/a.ts`\nb\n```\n````\nc\nd";
+        assert_eq!(prepare(nested), "````md\n```ruby\n`src/a.ts`\nb\n```\n````\nc  \nd");
+        assert_eq!(prepare("```\n```ruby\na\nb\n```\nc\nd"), "```\n```ruby\na\nb\n```\nc  \nd");
+        assert_eq!(prepare("~~~\n```\na\nb\n~~~\nc\nd"), "~~~\n```\na\nb\n~~~\nc  \nd");
     }
 
     #[test]

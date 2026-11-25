@@ -4,6 +4,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 
 ## Unreleased
 
+- A code fence closes only on a bare run of its own character, at least as long as the one that opened it. Before, a ```` ```ruby ```` line inside a four-backtick block counted as a close. Comet then added line breaks to the code and turned file names in it into links.
 - A plugin's `Diff` can split its files under headings, with `sections`. Each section has a title, a label and a note, over a patch of its own, and every section scrolls as one diff. A guide to a pull request reads as one page this way. The plugin API is now 0.2.2.
 - The view pane's new terminal button has an arrow beside it. The arrow opens a menu with New terminal and the panels the project's plugins offer that need no parameters, such as a branch guide. A press on the button itself still opens a terminal.
 - A plugin can run a prompt with `ctx.run`, and gets the agent's final reply back. It runs on the agent, model and effort the plugin names, else the tab's. With a JSON schema, Claude Code and Codex give a reply that follows it, and the plugin gets the parsed JSON. No thread shows the run, so it adds nothing to the tab's thread. The run is in Supervised mode, and Comet declines every request it makes, so the agent cannot edit files. It may still run commands it treats as read-only, such as `git diff`. It stops when the plugin aborts it or the tab closes. The plugin API is now 0.2.1.
