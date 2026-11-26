@@ -5,6 +5,7 @@ All notable changes to Comet are listed here. Changes go under `## Unreleased` u
 ## Unreleased
 
 - Review's scope menu and the menus in Settings show their options again. In 0.3.0 they opened as an empty strip with only a check mark.
+- A link in your own message opens in the browser, as a link in an error does.
 
 ## 0.3.0
 

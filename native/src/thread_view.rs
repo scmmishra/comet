@@ -8,7 +8,7 @@ use crate::shell::Comet;
 use crate::theme;
 use crate::cards::Lane;
 use crate::threads::Thread;
-use rune::{El, GrowthSpec, Icon, Link, ScrollSpec, Span, Tx, col, el, icon, memo, row, text};
+use rune::{Color, El, GrowthSpec, Icon, Link, ScrollSpec, Span, Tx, col, el, icon, memo, row, text};
 use rune_kit::{ButtonVariant, IconButton, IconButtonVariant, Kit, Menu, MenuItem, Placement, Spinner};
 use rune_theme_opencode::icons as ic;
 use std::borrow::Cow;
@@ -263,14 +263,18 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
             });
             // The text shrinks and wraps inside the bubble's cap, as `w-fit max-w-[80%]` lays it out.
             let bubble = el().max_w(c.bubble_max).min_w(0.0).fill(k.c.layer_02).radius(BUBBLE_RADIUS).px(BUBBLE_PAD_X).py(9.0).child(
-                text(words.clone())
-                    .wrap_anywhere()
-                    .shrink()
-                    .min_w(0.0)
-                    .font(theme::thread_text(k, c.size))
-                    .color(k.c.text_base)
-                    .selectable(true)
-                    .selection_color(k.selection()),
+                with_links(
+                    text(words.clone())
+                        .wrap_anywhere()
+                        .shrink()
+                        .min_w(0.0)
+                        .font(theme::thread_text(k, c.size))
+                        .color(k.c.text_base)
+                        .selectable(true)
+                        .selection_color(k.selection()),
+                    words,
+                    k.c.text_base,
+                ),
             );
             let pictures = (!images.is_empty()).then(|| row().gap(8.0).wrap().justify_end().max_w(c.bubble_max).children(images.iter().map(|image| message_image(c, image))));
             col()
@@ -308,21 +312,20 @@ fn item_view(c: &Ctx, item: &ThreadItem) -> El {
 }
 
 /// An error, in the danger colours. It is plain text, since an error can hold a stack trace or a JSON
-/// body that Markdown would mangle. Its bare links are underlined, and open in the browser as a reply's do.
+/// body that Markdown would mangle.
 fn error_view(c: &Ctx, message: &str) -> El {
     let k = c.k;
     let ink = k.c.danger.fg;
+    let words = text(message.to_owned()).wrap().shrink().min_w(0.0).font(theme::thread_text(k, c.size)).color(ink).selectable(true);
+    el().w_full().fill(k.c.danger.bg).radius(BOX_RADIUS).px(12.0).py(8.0).child(with_links(words, message, ink))
+}
+
+/// Plain text `words` that draws `message` with its bare links underlined in `ink`. A link opens in the
+/// browser, as a reply's does.
+fn with_links(words: El, message: &str, ink: Color) -> El {
     let links = format::bare_links(message);
-    let words = text(message.to_owned())
-        .wrap()
-        .shrink()
-        .min_w(0.0)
-        .font(theme::thread_text(k, c.size))
-        .color(ink)
-        .selectable(true)
-        .spans(links.iter().map(|r| Span::new(r.start, r.end).underline(ink)).collect::<Vec<_>>());
-    let words = links.into_iter().fold(words, |words, r| words.link(Link::new(r.clone(), &message[r]))).on_link(crate::reply::open_link);
-    el().w_full().fill(k.c.danger.bg).radius(BOX_RADIUS).px(12.0).py(8.0).child(words)
+    let words = words.spans(links.iter().map(|r| Span::new(r.start, r.end).underline(ink)).collect::<Vec<_>>());
+    links.into_iter().fold(words, |words, r| words.link(Link::new(r.clone(), &message[r]))).on_link(crate::reply::open_link)
 }
 
 /// A message's copy button, its other `actions` and its time, after T3 Code. They stay hidden until the
