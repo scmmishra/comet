@@ -2,6 +2,10 @@
 
 All notable changes to Comet are listed here. Changes go under `## Unreleased` until they ship. The release workflow publishes the section for the version in `native/Cargo.toml` as that release's notes.
 
+## Unreleased
+
+- Review's scope menu and the menus in Settings show their options again. In 0.3.0 they opened as an empty strip with only a check mark.
+
 ## 0.3.0
 
 ### Threads and the composer
