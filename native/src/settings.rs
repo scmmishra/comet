@@ -904,4 +904,14 @@ mod tests {
         let change = sent.iter().find(|m| m["type"] == "settings.update").expect("a settings update");
         assert_eq!(change["change"], json!({ "project": { "dir": "/code/web", "settings": { "name": "Web", "color": "blue", "icon": "web.png" } } }));
     }
+
+    #[test]
+    fn the_follow_ups_menu_shows_both_choices() {
+        let mut s = comet();
+        s.open_settings("providers");
+        s.settings.open_select = Some("follow-ups".into());
+        let widths = crate::shell::select_label_widths(s, "follow-ups");
+        assert_eq!(widths.len(), 2);
+        assert!(widths.iter().all(|w| *w > 0.0), "each choice's label draws: {widths:?}");
+    }
 }

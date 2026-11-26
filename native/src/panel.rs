@@ -784,4 +784,14 @@ mod tests {
         assert!(third.iter().all(|s| s.end <= 12), "spans stay inside the line: {third:?}");
         assert!(third.iter().any(|s| s.start == 8 && s.end == 11));
     }
+
+    #[test]
+    fn the_scope_menu_shows_every_scope() {
+        let mut s = comet();
+        s.toggle_panel();
+        s.panel.scope_open = true;
+        let widths = crate::shell::select_label_widths(s, "review-scope");
+        assert_eq!(widths.len(), SCOPES.len());
+        assert!(widths.iter().all(|w| *w > 0.0), "each scope's label draws: {widths:?}");
+    }
 }

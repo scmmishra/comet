@@ -445,6 +445,20 @@ pub fn modifiers(s: &mut Comet, mods: rune::Mods, tx: &mut Tx) {
     }
 }
 
+/// Draws `s` once, as if its core were ready, and reads how wide each option's label draws in the
+/// open Select keyed `select`. A test checks with it that a menu shows its options, which a change
+/// in Rune's layout can hide.
+#[cfg(test)]
+pub fn select_label_widths(mut s: Comet, select: &str) -> Vec<f32> {
+    s.status = CoreState::Ready;
+    let mut rt = rune::Runtime::new(s, view, (1280.0, 820.0), rune::Env { system_dark: true, scale: 2.0 });
+    rt.frame(0.0);
+    let elements = rt.elements();
+    let Some(menu) = elements.iter().find(|e| e.key.as_deref() == Some(&format!("{select}-content"))) else { return Vec::new() };
+    let inside = format!("{}/", menu.path);
+    elements.iter().filter(|e| e.path.starts_with(&inside) && e.key.as_deref() == Some("label")).map(|e| e.rect[2]).collect()
+}
+
 pub fn view(s: &Comet, cx: &mut Cx<Comet>) -> El {
     cx.time_scale(ANIMATION_SPEED);
     theme::use_color_theme(s.account.color_theme());
